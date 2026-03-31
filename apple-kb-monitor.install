@@ -1,11 +1,14 @@
 post_install() {
     echo ">>> Add your user to the 'input' group for non-root access:"
     echo "      sudo usermod -aG input \$USER"
+    echo ">>> Enable RSSI without sudo:"
+    echo "      sudo setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper"
     echo ">>> Then enable the user service:"
     echo "      systemctl --user enable --now apple-kb-monitor.service"
     echo ">>> Quick test:"
-    echo "      sudo apple-kb-monitor --status"
+    echo "      apple-kb-monitor --status"
     udevadm control --reload-rules 2>/dev/null || true
+    setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper 2>/dev/null || true
 }
 
 post_upgrade() {

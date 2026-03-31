@@ -361,6 +361,31 @@ def read_all_reports(devpath):
             if primary and thresholds != primary:
                 r[f"{key}_mismatch"] = True
 
+    # Interpolated battery % from voltage + calibration curve
+    volts = r.get("voltage")
+    thresholds = r.get("calib_thresholds_mv")
+    if volts is not None and thresholds and len(thresholds) == 4:
+        mv = int(volts * 1000)
+        # Thresholds: [100%, 75%, 50%, 25%] in mV (descending)
+        # Interpolate linearly between segments
+        pct_levels = [100, 75, 50, 25, 0]
+        mv_levels = thresholds + [0]  # add 0 mV = 0%
+        if mv >= mv_levels[0]:
+            r["battery_interpolated"] = 100
+        elif mv <= 0:
+            r["battery_interpolated"] = 0
+        else:
+            for i in range(len(mv_levels) - 1):
+                if mv >= mv_levels[i + 1]:
+                    hi_pct, lo_pct = pct_levels[i], pct_levels[i + 1]
+                    hi_mv, lo_mv = mv_levels[i], mv_levels[i + 1]
+                    if hi_mv == lo_mv:
+                        r["battery_interpolated"] = hi_pct
+                    else:
+                        frac = (mv - lo_mv) / (hi_mv - lo_mv)
+                        r["battery_interpolated"] = round(lo_pct + frac * (hi_pct - lo_pct))
+                    break
+
     return r
 
 
@@ -465,13 +490,38 @@ def dump_all_reports(devpath):
 # BlueZ MGMT (RSSI / TX Power)
 # ---------------------------------------------------------------------------
 
-def get_conn_info(mac):
-    """Get RSSI and TX power via BlueZ MGMT GET_CONN_INFO.
+RSSI_HELPER = Path(__file__).parent / "rssi-helper"
+RSSI_HELPER_INSTALLED = Path("/usr/lib/apple-kb-monitor/rssi-helper")
 
-    Sends MGMT opcode 0x0031 which triggers HCI Read_RSSI + Read_TX_Power
-    on the ACL connection handle. Safe on uhid BR/EDR connections.
+
+def get_conn_info(mac):
+    """Get RSSI and TX power via rssi-helper (CAP_NET_ADMIN) or raw MGMT socket.
+
+    Tries the setcap'd rssi-helper binary first (works without root),
+    falls back to direct MGMT socket (requires CAP_NET_ADMIN / root).
     RSSI=0 dBm is valid (optimal signal, "golden range").
     """
+    # Try rssi-helper binary (setcap'd, no root needed)
+    for helper in [RSSI_HELPER_INSTALLED, RSSI_HELPER]:
+        if helper.is_file():
+            try:
+                r = subprocess.run(
+                    [str(helper), mac],
+                    capture_output=True, text=True, timeout=3,
+                )
+                if r.returncode == 0:
+                    d = json.loads(r.stdout)
+                    return {
+                        "rssi_dbm": d["rssi"],
+                        "tx_power_dbm": d["tx_power"],
+                        "max_tx_power_dbm": d["max_tx_power"],
+                    }
+            except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError,
+                    FileNotFoundError):
+                pass
+            break
+
+    # Fallback: direct MGMT socket (needs CAP_NET_ADMIN)
     try:
         sock = socket.socket(31, socket.SOCK_RAW, BTPROTO_HCI)
         sock.bind((0xFFFF, HCI_CHANNEL_CONTROL))
@@ -623,6 +673,7 @@ async def collect_report(bus, dev):
         "battery": {
             "percentage": reps.get("battery_pct"),
             "percentage_fine": reps.get("battery_fine"),
+            "percentage_interpolated": reps.get("battery_interpolated"),
             "adc_raw": reps.get("adc_raw"),
             "voltage": reps.get("voltage"),
             "adc_ref": reps.get("adc_ref"),
@@ -672,6 +723,10 @@ async def collect_report(bus, dev):
             "0x13_type": "Input (Vendor FF01: wake/connection)",
             "0x13_usages": {"0x0A": "device_ready (1 bit)", "0x0C": "connection_request (1 bit, relative)"},
             "note": "Captured async via HidrawMonitor in daemon mode",
+        },
+        "analysis": {
+            "battery_type": detect_battery_type(reps.get("voltage")),
+            "discharge": estimate_discharge(),
         },
     }
     return report
@@ -743,9 +798,13 @@ def print_report(r):
     volts = b.get("voltage")
     adc = b.get("adc_raw")
 
+    interp = b.get("percentage_interpolated")
+
     print(f"\n  BATTERY")
     print(f"  {'Reported (0x47)':22s} {pct}% {bar(pct)}" if pct is not None else f"  {'Reported':22s} N/A")
     print(f"  {'Precise  (0xEA)':22s} {fine}%" if fine is not None else f"  {'Precise':22s} N/A")
+    if interp is not None:
+        print(f"  {'Interpolated (V+0x5A)':22s} {interp}% {bar(interp)}")
     if volts is not None:
         print(f"  {'Voltage  (0xF5)':22s} {volts:.3f} V  (ADC raw: {adc})")
         print(f"  {'Cell health':22s} {voltage_health(volts)}")
@@ -835,6 +894,17 @@ def print_report(r):
         for uid, desc in usages.items():
             print(f"  {'  Usage ' + uid:22s} {desc}")
         print(f"  {'Capture':22s} Async via hidraw (daemon mode)")
+
+    analysis = r.get("analysis", {})
+    btype = analysis.get("battery_type", {})
+    discharge = analysis.get("discharge")
+    if btype or discharge:
+        print(f"\n  ANALYSIS")
+        if btype.get("detail"):
+            print(f"  {'Battery type':22s} {btype['detail']} ({btype.get('confidence', 0)}%)")
+        if discharge:
+            print(f"  {'Discharge rate':22s} {discharge['rate_mv_per_hour']:.2f} mV/h ({discharge['samples']} samples over {discharge['window_hours']:.1f}h)")
+            print(f"  {'Remaining':22s} {discharge['remaining_display']}")
 
     print(f"\n{'=' * W}")
 
@@ -958,6 +1028,277 @@ def print_history():
             print(f"  {t:20s} {str(bat):>5s} {str(fine):>6s} {volt_s:>8s} {rssi_s:>6s}")
         except json.JSONDecodeError:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Battery type detection
+# ---------------------------------------------------------------------------
+
+def detect_battery_type(voltage):
+    """Detect battery chemistry from voltage profile (2xAA in series).
+    Nominal voltages per cell:
+      Alkaline:  1.5V  → 2x = 3.0V fresh, ~2.4V nominal, 1.8V cutoff
+      NiMH:      1.2V  → 2x = 2.4V fresh, ~2.4V nominal (flat), 2.0V cutoff
+      Lithium:   1.5V  → 2x = 3.0V fresh, ~2.8V nominal (very flat), 1.8V cutoff
+    """
+    if voltage is None:
+        return {"type": "unknown", "confidence": 0}
+    if voltage >= 3.1:
+        return {"type": "lithium_fresh", "confidence": 80,
+                "detail": "Lithium (1.5V/cell) or fresh alkaline"}
+    if voltage >= 2.85:
+        return {"type": "alkaline_fresh", "confidence": 70,
+                "detail": "Alkaline fresh or lithium nominal"}
+    if voltage >= 2.5:
+        # Ambiguous zone — alkaline declining or NiMH/lithium nominal
+        return {"type": "alkaline_or_nimh", "confidence": 40,
+                "detail": "Alkaline declining or NiMH/lithium nominal range"}
+    if 2.3 <= voltage < 2.5:
+        # NiMH flat discharge curve sits here
+        return {"type": "nimh_likely", "confidence": 60,
+                "detail": "NiMH likely (flat 1.2V/cell discharge curve)"}
+    if 2.0 <= voltage < 2.3:
+        return {"type": "depleted", "confidence": 80,
+                "detail": "Any chemistry near end of life"}
+    return {"type": "critical", "confidence": 90,
+            "detail": "Below cutoff — replace immediately"}
+
+
+# ---------------------------------------------------------------------------
+# Discharge rate & remaining time estimation
+# ---------------------------------------------------------------------------
+
+def estimate_discharge(history_file=HISTORY_FILE, window_hours=24):
+    """Estimate discharge rate and remaining time from history data."""
+    if not history_file.exists():
+        return None
+    try:
+        lines = history_file.read_text().splitlines()
+    except OSError:
+        return None
+
+    # Parse entries with voltage data
+    entries = []
+    for line in lines:
+        try:
+            e = json.loads(line)
+            v = e.get("volt")
+            t = e.get("t")
+            if v and t:
+                ts = datetime.fromisoformat(t)
+                entries.append((ts, v))
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    if len(entries) < 2:
+        return None
+
+    # Filter to window
+    now = datetime.now()
+    cutoff = now.replace(hour=0, minute=0, second=0) if window_hours >= 24 else now
+    recent = [(t, v) for t, v in entries if (now - t).total_seconds() < window_hours * 3600]
+    if len(recent) < 2:
+        recent = entries[-50:]  # fallback to last 50 entries
+    if len(recent) < 2:
+        return None
+
+    first_t, first_v = recent[0]
+    last_t, last_v = recent[-1]
+    hours = (last_t - first_t).total_seconds() / 3600
+    if hours < 0.01:
+        return None
+
+    rate_mvh = (first_v - last_v) * 1000 / hours  # mV/h (positive = discharging)
+    result = {
+        "rate_mv_per_hour": round(rate_mvh, 2),
+        "window_hours": round(hours, 2),
+        "samples": len(recent),
+        "start_voltage": first_v,
+        "end_voltage": last_v,
+    }
+
+    # Estimate remaining time to 2.0V cutoff (25% threshold)
+    if rate_mvh > 0.1:
+        remaining_mv = (last_v - 2.0) * 1000
+        if remaining_mv > 0:
+            hours_left = remaining_mv / rate_mvh
+            result["remaining_hours"] = round(hours_left, 1)
+            if hours_left < 24:
+                result["remaining_display"] = f"{hours_left:.1f}h"
+            else:
+                result["remaining_display"] = f"{hours_left / 24:.1f} days"
+        else:
+            result["remaining_hours"] = 0
+            result["remaining_display"] = "Replace now"
+    else:
+        result["remaining_display"] = "Stable (no measurable drain)"
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Graph (terminal sparklines)
+# ---------------------------------------------------------------------------
+
+SPARK_CHARS = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
+
+
+def print_graph(history_file=HISTORY_FILE):
+    """Print voltage/battery history as terminal sparkline graph."""
+    if not history_file.exists():
+        print("No history yet.", file=sys.stderr)
+        return
+    try:
+        lines = history_file.read_text().splitlines()
+    except OSError:
+        return
+
+    entries = []
+    for line in lines:
+        try:
+            e = json.loads(line)
+            entries.append(e)
+        except json.JSONDecodeError:
+            pass
+
+    if not entries:
+        print("No data in history.", file=sys.stderr)
+        return
+
+    W = 70
+
+    # Voltage sparkline
+    volts = [e.get("volt") for e in entries if e.get("volt")]
+    if volts:
+        vmin, vmax = min(volts), max(volts)
+        vrange = vmax - vmin if vmax > vmin else 0.1
+        spark = ""
+        # Sample to fit width
+        step = max(1, len(volts) // W)
+        sampled = volts[::step][-W:]
+        for v in sampled:
+            idx = min(7, int((v - vmin) / vrange * 7))
+            spark += SPARK_CHARS[idx]
+        print(f"  VOLTAGE ({vmin:.3f}V - {vmax:.3f}V)")
+        print(f"  {spark}")
+        print(f"  {'oldest':<{len(spark)//2}}{'latest':>{len(spark) - len(spark)//2}}")
+        print()
+
+    # Battery % sparkline
+    bats = [e.get("fine") or e.get("bat") for e in entries if e.get("fine") or e.get("bat")]
+    if bats:
+        bmin, bmax = min(bats), max(bats)
+        brange = bmax - bmin if bmax > bmin else 1
+        spark = ""
+        step = max(1, len(bats) // W)
+        sampled = bats[::step][-W:]
+        for b in sampled:
+            idx = min(7, int((b - bmin) / brange * 7))
+            spark += SPARK_CHARS[idx]
+        print(f"  BATTERY ({bmin}% - {bmax}%)")
+        print(f"  {spark}")
+        print(f"  {'oldest':<{len(spark)//2}}{'latest':>{len(spark) - len(spark)//2}}")
+        print()
+
+    # RSSI sparkline
+    rssis = [e.get("rssi") for e in entries if e.get("rssi") is not None]
+    if rssis:
+        rmin, rmax = min(rssis), max(rssis)
+        rrange = rmax - rmin if rmax > rmin else 1
+        spark = ""
+        step = max(1, len(rssis) // W)
+        sampled = rssis[::step][-W:]
+        for r in sampled:
+            idx = min(7, int((r - rmin) / rrange * 7))
+            spark += SPARK_CHARS[idx]
+        print(f"  RSSI ({rmin} dBm - {rmax} dBm)")
+        print(f"  {spark}")
+        print(f"  {'oldest':<{len(spark)//2}}{'latest':>{len(spark) - len(spark)//2}}")
+        print()
+
+    # Stats
+    discharge = estimate_discharge(history_file)
+    if discharge:
+        print(f"  DISCHARGE RATE")
+        print(f"  {'Rate':22s} {discharge['rate_mv_per_hour']:.2f} mV/h")
+        print(f"  {'Window':22s} {discharge['window_hours']:.1f}h ({discharge['samples']} samples)")
+        print(f"  {'Remaining':22s} {discharge['remaining_display']}")
+        btype = detect_battery_type(discharge["end_voltage"])
+        print(f"  {'Battery type':22s} {btype['detail']} ({btype['confidence']}% confidence)")
+    print()
+    print(f"  Total entries: {len(entries)}")
+
+
+# ---------------------------------------------------------------------------
+# Export CSV
+# ---------------------------------------------------------------------------
+
+def export_csv(history_file=HISTORY_FILE):
+    """Export history to CSV on stdout."""
+    if not history_file.exists():
+        print("No history yet.", file=sys.stderr)
+        return
+    lines = history_file.read_text().splitlines()
+    print("timestamp,mac,battery_pct,battery_fine,voltage,adc_raw,rssi_dbm,tx_power_dbm")
+    for line in lines:
+        try:
+            e = json.loads(line)
+            print(",".join([
+                e.get("t", ""),
+                e.get("mac", ""),
+                str(e.get("bat", "")),
+                str(e.get("fine", "")),
+                str(e.get("volt", "")),
+                str(e.get("adc", "")),
+                str(e.get("rssi", "")),
+                str(e.get("tx", "")),
+            ]))
+        except json.JSONDecodeError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+
+def print_metrics(devices):
+    """Output Prometheus text format metrics."""
+    for dev in devices:
+        mac = dev["mac"]
+        labels = f'mac="{mac}",model="{dev["model"]}"'
+        reps = read_all_reports(dev["path"])
+        conn = get_conn_info(mac) if mac else None
+
+        pct = reps.get("battery_pct")
+        fine = reps.get("battery_fine")
+        volts = reps.get("voltage")
+        interp = reps.get("battery_interpolated")
+
+        if pct is not None:
+            print(f"apple_kb_battery_percent{{{labels}}} {pct}")
+        if fine is not None:
+            print(f"apple_kb_battery_fine_percent{{{labels}}} {fine}")
+        if interp is not None:
+            print(f"apple_kb_battery_interpolated_percent{{{labels}}} {interp}")
+        if volts is not None:
+            print(f"apple_kb_battery_voltage{{{labels}}} {volts}")
+        adc = reps.get("adc_raw")
+        if adc is not None:
+            print(f"apple_kb_battery_adc_raw{{{labels}}} {adc}")
+        state = reps.get("state_flag")
+        if state is not None:
+            print(f"apple_kb_state_ok{{{labels}}} {1 if state == 1 else 0}")
+        if conn:
+            if conn.get("rssi_dbm") is not None:
+                print(f"apple_kb_rssi_dbm{{{labels}}} {conn['rssi_dbm']}")
+            if conn.get("tx_power_dbm") is not None:
+                print(f"apple_kb_tx_power_dbm{{{labels}}} {conn['tx_power_dbm']}")
+        interval = reps.get("bt_interval")
+        if interval is not None:
+            print(f"apple_kb_bt_interval_ms{{{labels}}} {interval * 1.25}")
+        latency = reps.get("bt_latency")
+        if latency is not None:
+            print(f"apple_kb_bt_latency{{{labels}}} {latency}")
 
 
 # ---------------------------------------------------------------------------
@@ -1292,6 +1633,13 @@ async def daemon_loop(threshold, interval, no_provider=False):
                 flags.append("conn_request")
             if flags:
                 print(f"[input] Report 0x13: {', '.join(flags)} (raw=0x{event['raw']:02X})", file=sys.stderr)
+                # Log wake event to history
+                append_history({
+                    "t": datetime.now().isoformat(),
+                    "event": "wake",
+                    "flags": flags,
+                    "raw": event["raw"],
+                })
 
     for dev in find_devices():
         mon = HidrawMonitor(dev["path"])
@@ -1436,6 +1784,9 @@ license: GPL-2.0-or-later
     mode.add_argument("--json", action="store_true", help="JSON output")
     mode.add_argument("--waybar", action="store_true", help="Waybar/polybar JSON output")
     mode.add_argument("--history", action="store_true", help="Show battery/voltage log")
+    mode.add_argument("--graph", action="store_true", help="Voltage/battery sparkline graphs")
+    mode.add_argument("--export-csv", action="store_true", help="Export history as CSV")
+    mode.add_argument("--metrics", action="store_true", help="Prometheus text format metrics")
 
     p.add_argument("--threshold", type=int, default=15, help="Low battery notification %% (default: 15)")
     p.add_argument("--interval", type=int, default=300, help="Daemon poll interval in seconds (default: 300)")
@@ -1478,6 +1829,22 @@ license: GPL-2.0-or-later
 
     if args.waybar:
         waybar_output(find_devices())
+        return
+
+    if args.graph:
+        print_graph()
+        return
+
+    if args.export_csv:
+        export_csv()
+        return
+
+    if args.metrics:
+        devices = find_devices()
+        if not devices:
+            print("# no device", file=sys.stderr)
+            sys.exit(1)
+        print_metrics(devices)
         return
 
     # --- Async modes (D-Bus) ---
