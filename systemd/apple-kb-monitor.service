@@ -1,0 +1,13 @@
+[Unit]
+Description=Apple Wireless Keyboard battery and telemetry monitor
+Documentation=https://github.com/agenceapi/apple-kb-monitor
+After=bluetooth.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/apple-kb-monitor --threshold 15 --interval 300
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
