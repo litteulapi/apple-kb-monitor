@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Watches Apple keyboard brightness keys and controls monitor via DDC/CI."""
+import struct, subprocess, os, glob
+
+def find_apple_evdev():
+    for inp in sorted(glob.glob("/sys/class/input/input*")):
+        try:
+            uniq = open(os.path.join(inp, "uniq")).read().strip()
+            if ":" in uniq and len(uniq) == 17:  # MAC address
+                name = open(os.path.join(inp, "name")).read().strip()
+                if "Apple" in name:
+                    for ev in glob.glob(os.path.join(inp, "event*")):
+                        return f"/dev/input/{os.path.basename(ev)}"
+        except OSError:
+            pass
+    return None
+
+def get_brightness():
+    r = subprocess.run(["ddcutil", "getvcp", "10", "--brief"],
+                       capture_output=True, text=True, timeout=5)
+    if r.returncode == 0:
+        parts = r.stdout.split()
+        if len(parts) >= 4:
+            return int(parts[3])
+    return 50
+
+def set_brightness(val):
+    val = max(0, min(100, val))
+    subprocess.run(["ddcutil", "setvcp", "10", str(val)],
+                   capture_output=True, timeout=5)
+
+KEY_BRIGHTNESSDOWN = 224
+KEY_BRIGHTNESSUP = 225
+KEY_KBDILLUMDOWN = 229
+KEY_KBDILLUMUP = 230
+EV_KEY = 1
+STEP = 10
+
+evdev = find_apple_evdev()
+if not evdev:
+    print("No Apple keyboard found")
+    exit(1)
+
+print(f"Watching {evdev} for brightness keys (DDC step={STEP}%)")
+fd = os.open(evdev, os.O_RDONLY)
+EVENT_SIZE = 24  # sizeof(struct input_event) on 64-bit
+
+try:
+    while True:
+        data = os.read(fd, EVENT_SIZE)
+        if len(data) < EVENT_SIZE:
+            continue
+        tv_sec, tv_usec, typ, code, value = struct.unpack("qqHHi", data)
+        if typ != EV_KEY or value != 1:  # only key press, not release/repeat
+            continue
+        if code == KEY_BRIGHTNESSDOWN:
+            b = get_brightness()
+            set_brightness(b - STEP)
+            print(f"Brightness: {b} → {max(0,b-STEP)}")
+        elif code == KEY_BRIGHTNESSUP:
+            b = get_brightness()
+            set_brightness(b + STEP)
+            print(f"Brightness: {b} → {min(100,b+STEP)}")
+        elif code == KEY_KBDILLUMDOWN:
+            # F5 repurposed: lock screen
+            subprocess.run(["loginctl", "lock-session"], timeout=3)
+            print("Screen locked")
+        elif code == KEY_KBDILLUMUP:
+            # F6 repurposed: toggle DND (simplified)
+            subprocess.run(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService",
+                           "org.kde.osdService.brightnessChanged", "0"], 
+                          capture_output=True, timeout=3)
+            print("F6 pressed")
+except KeyboardInterrupt:
+    pass
+finally:
+    os.close(fd)

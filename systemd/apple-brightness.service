@@ -1,0 +1,12 @@
+[Unit]
+Description=Apple Keyboard DDC Brightness Control
+After=apple-kb-monitor.service
+
+[Service]
+Type=simple
+ExecStart=/home/adminapi/.local/bin/apple-brightness-daemon
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
