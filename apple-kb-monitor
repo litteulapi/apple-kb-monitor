@@ -898,7 +898,7 @@ def read_sysfs(ps_path):
     if not ps_path or not os.path.isdir(ps_path):
         return {}
     result = {}
-    for attr in ["capacity", "status", "present", "scope", "model_name", "type"]:
+    for attr in ["capacity", "status", "present", "online", "scope", "model_name", "type"]:
         try:
             result[attr] = (Path(ps_path) / attr).read_text().strip()
         except OSError:
@@ -991,6 +991,11 @@ async def collect_report(bus, dev):
             "trusted": bluez.get("Trusted", False),
             "legacy_pairing": bluez.get("LegacyPairing", False),
             "wake_allowed": bluez.get("WakeAllowed", False),
+            "blocked": bluez.get("Blocked", False),
+            "address_type": bluez.get("AddressType"),
+            "adapter": bluez.get("Adapter"),
+            "icon": bluez.get("Icon"),
+            "services_resolved": bluez.get("ServicesResolved", False),
             "class": f"0x{bluez['Class']:08X}" if isinstance(bluez.get("Class"), int) else None,
             "interval": reps.get("bt_interval"),
             "latency": reps.get("bt_latency"),
