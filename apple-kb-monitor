@@ -565,6 +565,298 @@ def rssi_quality(rssi):
 
 
 # ---------------------------------------------------------------------------
+# SDP record parsing (via BlueZ D-Bus)
+# ---------------------------------------------------------------------------
+
+SDP_ATTR_NAMES = {
+    0x0000: "ServiceRecordHandle",
+    0x0001: "ServiceClassIDList",
+    0x0004: "ProtocolDescriptorList",
+    0x0005: "BrowseGroupList",
+    0x0006: "LanguageBaseAttributeIDList",
+    0x0009: "ProfileDescriptorList",
+    0x000D: "AdditionalProtocolDescriptorLists",
+    0x0100: "ServiceName",
+    0x0101: "ServiceDescription",
+    0x0102: "ProviderName",
+    0x0200: "HIDDeviceReleaseNumber",
+    0x0201: "HIDParserVersion",
+    0x0202: "HIDDeviceSubclass",
+    0x0203: "HIDCountryCode",
+    0x0204: "HIDVirtualCable",
+    0x0205: "HIDReconnectInitiate",
+    0x0206: "HIDDescriptorList",
+    0x0207: "HIDLangIDBaseList",
+    0x0208: "HIDSDPDisable",
+    0x0209: "HIDBatteryPower",
+    0x020A: "HIDRemoteWake",
+    0x020B: "HIDProfileVersion",
+    0x020C: "HIDSupervisionTimeout",
+    0x020D: "HIDNormallyConnectable",
+    0x020E: "HIDBootDevice",
+    0x020F: "HIDSSRHostMaxLatency",
+    0x0210: "HIDSSRHostMinTimeout",
+}
+
+UUID16_NAMES = {
+    0x0001: "SDP",
+    0x0003: "RFCOMM",
+    0x0011: "HIDP",
+    0x0017: "AVCTP",
+    0x0019: "AVDTP",
+    0x0100: "L2CAP",
+    0x1124: "HID",
+    0x1200: "PnPInformation",
+}
+
+
+def parse_sdp_records(raw_records):
+    """Parse SDP binary records into structured data.
+    raw_records: list of bytes objects (from GetServiceRecords)."""
+    results = []
+    for rec_bytes in raw_records:
+        record = _parse_sdp_record(bytes(rec_bytes))
+        if record:
+            results.append(record)
+    return results
+
+
+def _parse_sdp_record(data):
+    """Parse a single SDP record (simplified TLV parser)."""
+    record = {}
+    i = 0
+    while i < len(data):
+        # SDP Data Element: type (3 bits) + size descriptor (5 bits)
+        if i + 3 > len(data):
+            break
+        # Read attribute ID (uint16 big-endian) prefixed by type header
+        try:
+            attr_id, val, consumed = _read_sdp_attribute(data, i)
+            if attr_id is not None:
+                name = SDP_ATTR_NAMES.get(attr_id, f"0x{attr_id:04X}")
+                record[name] = val
+            i += consumed
+        except (IndexError, ValueError):
+            break
+    return record
+
+
+def _read_sdp_element(data, offset):
+    """Read one SDP Data Element, return (value, bytes_consumed)."""
+    if offset >= len(data):
+        return None, 0
+    header = data[offset]
+    dtype = (header >> 3) & 0x1F
+    dsize = header & 0x07
+
+    # Size descriptor
+    if dsize == 0:
+        size, hdr_len = 1, 1
+    elif dsize == 1:
+        size, hdr_len = 2, 1
+    elif dsize == 2:
+        size, hdr_len = 4, 1
+    elif dsize == 3:
+        size, hdr_len = 8, 1
+    elif dsize == 4:
+        size, hdr_len = 16, 1
+    elif dsize == 5:
+        if offset + 2 > len(data): return None, 1
+        size = data[offset + 1]
+        hdr_len = 2
+    elif dsize == 6:
+        if offset + 3 > len(data): return None, 1
+        size = (data[offset + 1] << 8) | data[offset + 2]
+        hdr_len = 3
+    elif dsize == 7:
+        if offset + 5 > len(data): return None, 1
+        size = int.from_bytes(data[offset + 1:offset + 5], 'big')
+        hdr_len = 5
+    else:
+        return None, 1
+
+    start = offset + hdr_len
+    end = start + size
+
+    # Type decode
+    if dtype == 0:  # Nil
+        return None, hdr_len
+    elif dtype == 1:  # Unsigned int
+        if size == 1: return data[start], hdr_len + size
+        elif size == 2: return int.from_bytes(data[start:end], 'big'), hdr_len + size
+        elif size == 4: return int.from_bytes(data[start:end], 'big'), hdr_len + size
+        return int.from_bytes(data[start:end], 'big'), hdr_len + size
+    elif dtype == 2:  # Signed int
+        return int.from_bytes(data[start:end], 'big', signed=True), hdr_len + size
+    elif dtype == 3:  # UUID
+        if size == 2:
+            uuid16 = int.from_bytes(data[start:end], 'big')
+            return UUID16_NAMES.get(uuid16, f"UUID-0x{uuid16:04X}"), hdr_len + size
+        elif size == 4:
+            return f"UUID-0x{int.from_bytes(data[start:end], 'big'):08X}", hdr_len + size
+        return data[start:end].hex(), hdr_len + size
+    elif dtype == 4:  # Text string
+        return data[start:end].decode('utf-8', errors='replace').rstrip('\x00'), hdr_len + size
+    elif dtype == 5:  # Boolean
+        return bool(data[start]) if size >= 1 else False, hdr_len + size
+    elif dtype == 6:  # Sequence
+        items = []
+        pos = start
+        while pos < end:
+            val, consumed = _read_sdp_element(data, pos)
+            if consumed == 0: break
+            items.append(val)
+            pos += consumed
+        return items, hdr_len + size
+    elif dtype == 7:  # Alternative
+        items = []
+        pos = start
+        while pos < end:
+            val, consumed = _read_sdp_element(data, pos)
+            if consumed == 0: break
+            items.append(val)
+            pos += consumed
+        return items, hdr_len + size
+    elif dtype == 8:  # URL
+        return data[start:end].decode('ascii', errors='replace'), hdr_len + size
+
+    return data[start:end].hex(), hdr_len + size
+
+
+def _read_sdp_attribute(data, offset):
+    """Read attribute ID + value pair from SDP record."""
+    # Attribute ID is always a uint16 in a Data Element
+    val, consumed = _read_sdp_element(data, offset)
+    if consumed == 0:
+        return None, None, 1
+    # In a record, attributes come as: uint16(id), element(value)
+    # The raw record from GetServiceRecords is already a sequence
+    # We just return position-based pairs
+    return None, val, consumed
+
+
+async def get_sdp_records(bus, mac):
+    """Get parsed SDP service records via BlueZ D-Bus."""
+    obj_path = "/org/bluez/hci0/dev_" + mac.upper().replace(":", "_")
+    reply = await bus.call(Message(
+        destination=BLUEZ_SERVICE,
+        path=obj_path,
+        interface="org.bluez.Device1",
+        member="GetServiceRecords",
+    ))
+    if reply.message_type == MessageType.ERROR:
+        return []
+
+    parsed = []
+    for rec in reply.body[0]:
+        data = bytes(rec)
+        pos = 0
+        elements = []
+        while pos < len(data):
+            val, consumed = _read_sdp_element(data, pos)
+            if consumed == 0:
+                break
+            elements.append(val)
+            pos += consumed
+        # Unwrap outer sequence if present
+        if len(elements) == 1 and isinstance(elements[0], list):
+            elements = elements[0]
+        # Group into attr_id: value pairs
+        record = {}
+        for idx in range(0, len(elements) - 1, 2):
+            attr_id = elements[idx]
+            attr_val = elements[idx + 1]
+            if isinstance(attr_id, int):
+                name = SDP_ATTR_NAMES.get(attr_id, f"0x{attr_id:04X}")
+                record[name] = attr_val
+        if record:
+            parsed.append(record)
+    return parsed
+
+
+# ---------------------------------------------------------------------------
+# LED control (HID Output Report)
+# ---------------------------------------------------------------------------
+
+LED_BITS = {
+    "numlock": 0x01,
+    "capslock": 0x02,
+    "scrolllock": 0x04,
+    "compose": 0x08,
+    "kana": 0x10,
+}
+
+
+def read_leds(evdev):
+    """Read current LED state from sysfs, matching by evdev input number."""
+    if not evdev:
+        return {}
+    # Extract input number from evdev path, e.g. /dev/input/event29 → find parent inputN
+    evname = os.path.basename(evdev)  # event29
+    # Find which inputN owns this eventN
+    input_num = None
+    for inp in glob.glob("/sys/class/input/input*"):
+        if os.path.exists(os.path.join(inp, evname)):
+            input_num = os.path.basename(inp)  # e.g. "input35"
+            break
+    if not input_num:
+        return {}
+
+    result = {}
+    for led_dir in glob.glob(f"/sys/class/leds/{input_num}::*"):
+        name = os.path.basename(led_dir)
+        try:
+            brightness = int(Path(led_dir, "brightness").read_text().strip())
+            led_name = name.split("::")[-1]  # e.g. "capslock"
+            if led_name in LED_BITS:
+                result[led_name] = brightness > 0
+        except (OSError, ValueError):
+            pass
+    return result
+
+
+def set_led(devpath, led_name, state):
+    """Set a keyboard LED via HID Output Report write."""
+    if led_name not in LED_BITS:
+        return False, f"Unknown LED: {led_name}. Valid: {', '.join(LED_BITS)}"
+
+    # Read current LED state to preserve other LEDs
+    # Build output report: report_id=0x01, led_byte
+    fd = None
+    try:
+        fd = os.open(devpath, os.O_RDWR)
+        # Current state not easily readable via output report
+        # Construct the LED byte
+        bit = LED_BITS[led_name]
+        # We need the current state of ALL LEDs to set just one
+        # Read from sysfs
+        current = 0
+        for lname, lbit in LED_BITS.items():
+            led_sysfs = glob.glob(f"/sys/class/leds/*{lname}*")
+            for p in led_sysfs:
+                try:
+                    if int(Path(p, "brightness").read_text().strip()) > 0:
+                        current |= lbit
+                except (OSError, ValueError):
+                    pass
+
+        if state:
+            current |= bit
+        else:
+            current &= ~bit
+
+        # Write HID Output Report: [report_id, led_byte]
+        buf = bytes([0x01, current])
+        os.write(fd, buf)
+        return True, f"{led_name} {'ON' if state else 'OFF'}"
+    except OSError as e:
+        return False, str(e)
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
+# ---------------------------------------------------------------------------
 # BlueZ D-Bus (async via dbus-fast)
 # ---------------------------------------------------------------------------
 
@@ -652,6 +944,8 @@ async def collect_report(bus, dev):
     sysfs = read_sysfs(dev.get("ps_path"))
     inp = read_input_caps(dev.get("evdev"))
     fw_modal = parse_modalias(bluez.get("Modalias", ""))
+    sdp = await get_sdp_records(bus, dev["mac"]) if dev["mac"] else []
+    leds = read_leds(dev.get("evdev"))
 
     report = {
         "timestamp": datetime.now().isoformat(),
@@ -728,6 +1022,8 @@ async def collect_report(bus, dev):
             "battery_type": detect_battery_type(reps.get("voltage")),
             "discharge": estimate_discharge(),
         },
+        "sdp_records": sdp,
+        "leds": leds,
     }
     return report
 
@@ -905,6 +1201,26 @@ def print_report(r):
         if discharge:
             print(f"  {'Discharge rate':22s} {discharge['rate_mv_per_hour']:.2f} mV/h ({discharge['samples']} samples over {discharge['window_hours']:.1f}h)")
             print(f"  {'Remaining':22s} {discharge['remaining_display']}")
+
+    leds = r.get("leds", {})
+    if leds:
+        print(f"\n  LEDS")
+        for led_name, led_on in sorted(leds.items()):
+            print(f"  {led_name:22s} {'ON' if led_on else 'OFF'}")
+
+    sdp = r.get("sdp_records", [])
+    if sdp:
+        print(f"\n  SDP SERVICE RECORDS ({len(sdp)} services)")
+        for i, rec in enumerate(sdp):
+            svc_name = rec.get("ServiceName", rec.get("0x0100", f"Service {i}"))
+            print(f"  --- {svc_name} ---")
+            for attr, val in rec.items():
+                if attr == "ServiceName":
+                    continue
+                val_str = str(val)
+                if len(val_str) > 50:
+                    val_str = val_str[:50] + "..."
+                print(f"    {attr:30s} {val_str}")
 
     print(f"\n{'=' * W}")
 
@@ -1788,6 +2104,9 @@ license: GPL-2.0-or-later
     mode.add_argument("--export-csv", action="store_true", help="Export history as CSV")
     mode.add_argument("--metrics", action="store_true", help="Prometheus text format metrics")
 
+    mode.add_argument("--led", nargs=2, metavar=("NAME", "STATE"),
+                      help="Control LED: --led capslock on/off")
+
     p.add_argument("--threshold", type=int, default=15, help="Low battery notification %% (default: 15)")
     p.add_argument("--interval", type=int, default=300, help="Daemon poll interval in seconds (default: 300)")
     p.add_argument("--watch-interval", type=int, default=5, help="Watch refresh in seconds (default: 5)")
@@ -1846,6 +2165,17 @@ license: GPL-2.0-or-later
             sys.exit(1)
         print_metrics(devices)
         return
+
+    if args.led:
+        devices = find_devices()
+        if not devices:
+            print("No Apple Bluetooth keyboard found.", file=sys.stderr)
+            sys.exit(1)
+        led_name = args.led[0].lower()
+        led_state = args.led[1].lower() in ("on", "1", "true")
+        ok, msg = set_led(devices[0]["path"], led_name, led_state)
+        print(msg)
+        sys.exit(0 if ok else 1)
 
     # --- Async modes (D-Bus) ---
 
