@@ -18,13 +18,13 @@ The Linux `hid-apple` kernel driver only exposes basic battery percentage via st
 | `0xFF` | Build/revision number | |
 | `0x51-53` | Device name string | 3 chunks from chip ROM |
 | `0x4C` | Device identity (128-bit) | Internal key |
-| `0x46` | BT connection interval + latency | Live values, renegotiated |
+| `0x46` | BT connection interval + latency | Live values, renegotiated by controller |
 | `0x49` | BT supervision timeout | |
 | `0x4A` | Power management config | |
 | `0x4B` | Device mode/class | |
 | `0x09` | Device state flag | 1=OK, 0=LOW |
 | `0xF6-F7` | Config registers | |
-| MGMT | RSSI, TX power | Via BlueZ management socket |
+| MGMT | RSSI, TX power | Via BlueZ MGMT socket (requires `CAP_NET_ADMIN`) |
 | D-Bus | Connection state, pairing | Via `org.bluez.Device1` |
 
 ## Supported keyboards
@@ -45,7 +45,7 @@ Should work (same Broadcom HID register map):
 yay -S apple-kb-monitor
 
 # Or manually
-git clone https://github.com/agenceapi/apple-kb-monitor.git
+git clone https://github.com/litteulapi/apple-kb-monitor.git
 cd apple-kb-monitor
 makepkg -si
 ```
@@ -66,6 +66,7 @@ systemctl --user enable --now apple-kb-monitor.service
 ```bash
 # Quick battery + voltage check
 apple-kb-monitor --once
+# Output: Apple Wireless Keyboard (A1314, aluminum, ISO)   100% (fine:98%)  2.981V
 
 # Full decoded device report
 apple-kb-monitor --status
@@ -73,7 +74,7 @@ apple-kb-monitor --status
 # Raw Feature Report dump (for RE work)
 apple-kb-monitor --dump
 
-# Live dashboard
+# Live dashboard (auto-refresh)
 apple-kb-monitor --watch
 
 # JSON output (for scripts, widgets, Home Assistant, etc.)
@@ -82,16 +83,29 @@ apple-kb-monitor --json
 # Battery/voltage history log
 apple-kb-monitor --history
 
+# RSSI (requires sudo for MGMT socket)
+sudo apple-kb-monitor --status
+
 # Daemon mode (used by systemd service)
 apple-kb-monitor --threshold 15 --interval 300
 ```
+
+## Permissions
+
+| Feature | Required | How |
+|---------|----------|-----|
+| Battery, voltage, firmware, all HID reports | `input` group | `sudo usermod -aG input $USER` + re-login |
+| RSSI, TX power | `CAP_NET_ADMIN` | Run with `sudo` |
+| Desktop notifications | `libnotify` | `pacman -S libnotify` |
+
+The udev rule (`99-apple-kb-hidraw.rules`) grants `input` group read/write access to Apple hidraw devices, including Bluetooth HID devices connected via uhid (matched by `DEVPATH` since uhid devices have no `idVendor` attribute).
 
 ## How it works
 
 1. Discovers Apple Bluetooth keyboards via `/sys/class/hidraw/*/device/uevent`
 2. Opens the `hidraw` device and sends `HIDIOCGFEATURE` ioctls for each known report ID
 3. Decodes the binary responses based on our reverse-engineering of the BCM2042 register map
-4. Optionally queries BlueZ for RSSI (via MGMT socket) and connection properties (via D-Bus)
+4. Queries BlueZ for RSSI via MGMT socket (`GET_CONN_INFO`, opcode `0x0031`) and connection properties via D-Bus
 5. In daemon mode, logs readings to `$XDG_RUNTIME_DIR/apple-kb-monitor/history.jsonl` and sends desktop notifications via `notify-send` when battery drops below threshold
 
 ## Reverse engineering notes
@@ -112,6 +126,10 @@ The discharge calibration curve in Report 0x5A stores 4 voltage thresholds in mi
  50% >= 2350 mV (2.350 V)
  25% >= 2000 mV (2.000 V)
 ```
+
+### RSSI
+
+RSSI is read via BlueZ MGMT `GET_CONN_INFO` (opcode `0x0031`), which triggers `HCI Read_RSSI` and `HCI Read_TX_Power` on the ACL connection handle. RSSI = 0 dBm is a valid measurement meaning optimal signal strength ("golden range"), not "unavailable". Stress-tested with 10 consecutive reads at 2s intervals with zero disconnects.
 
 ## License
 

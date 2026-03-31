@@ -1,0 +1,21 @@
+pkgbase = apple-kb-monitor
+	pkgdesc = Full telemetry monitor for Apple Wireless Keyboards (BCM2042/BCM20733) — battery, voltage, RSSI, firmware, calibration curve via reverse-engineered HID Feature Reports
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/litteulapi/apple-kb-monitor
+	install = apple-kb-monitor.install
+	arch = any
+	license = GPL-2.0-or-later
+	depends = python
+	depends = bluez
+	depends = dbus
+	optdepends = bluez-utils: bluetoothctl CLI for BT management
+	optdepends = libnotify: desktop notifications on low battery
+	source = apple-kb-monitor
+	source = apple-kb-monitor.service
+	source = 99-apple-kb-hidraw.rules
+	sha256sums = SKIP
+	sha256sums = SKIP
+	sha256sums = SKIP
+
+pkgname = apple-kb-monitor
