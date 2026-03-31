@@ -1,5 +1,0 @@
-# Apple Wireless Keyboard — grant input group access to hidraw for battery/telemetry reading
-# Used by apple-kb-monitor (https://github.com/litteulapi/apple-kb-monitor)
-# Matches USB HID (ATTRS{idVendor}) and Bluetooth HID (uhid, via DEVPATH)
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="05ac", MODE="0660", GROUP="input"
-SUBSYSTEM=="hidraw", DEVPATH=="*05AC*", MODE="0660", GROUP="input"
