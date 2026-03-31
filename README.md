@@ -2,6 +2,8 @@
 
 Full telemetry monitor for Apple Wireless Keyboards on Linux, built by reverse-engineering the undocumented HID Feature Reports exposed by the Broadcom BCM2042/BCM20733 controllers.
 
+**v2.0** — native BlueZ Battery Provider integration: your keyboard's precise battery percentage appears directly in KDE Plasma, GNOME, and any desktop environment that reads `org.bluez.Battery1`.
+
 ## What it reads
 
 The Linux `hid-apple` kernel driver only exposes basic battery percentage via standard HID Battery Strength (Report 0x47). This tool reads **21 undocumented Feature Reports** to extract:
@@ -27,6 +29,25 @@ The Linux `hid-apple` kernel driver only exposes basic battery percentage via st
 | MGMT | RSSI, TX power | Via BlueZ MGMT socket (requires `CAP_NET_ADMIN`) |
 | D-Bus | Connection state, pairing | Via `org.bluez.Device1` |
 
+## Desktop integration (v2.0)
+
+In daemon mode, `apple-kb-monitor` registers as a **BlueZ Battery Provider** via the `BatteryProviderManager1` D-Bus API. This causes BlueZ to expose `org.bluez.Battery1` on the device path with the **precise** battery percentage from HID report `0xEA`.
+
+The integration chain:
+
+```
+apple-kb-monitor daemon
+    -> registers BatteryProvider1 on system D-Bus
+        -> BlueZ creates Battery1 on /org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX
+            -> UPower discovers Battery1 (type: keyboard)
+                -> KDE Plasma battery applet shows it
+                -> KDE Bluedevil shows battery in BT panel
+                -> GNOME power indicator shows it
+                -> Any D-Bus consumer can read it
+```
+
+The daemon also monitors BlueZ `PropertiesChanged` signals for real-time device connect/disconnect detection.
+
 ## Supported keyboards
 
 Tested:
@@ -49,6 +70,16 @@ git clone https://github.com/litteulapi/apple-kb-monitor.git
 cd apple-kb-monitor
 makepkg -si
 ```
+
+### Dependencies
+
+- `python` (>= 3.10)
+- `bluez` (>= 5.56 for Battery Provider API)
+- `python-dbus-fast` (async D-Bus library)
+
+Optional:
+- `libnotify` — desktop notifications on low battery
+- `bluez-utils` — `bluetoothctl` for BT management
 
 ## Setup
 
@@ -80,14 +111,34 @@ apple-kb-monitor --watch
 # JSON output (for scripts, widgets, Home Assistant, etc.)
 apple-kb-monitor --json
 
+# Waybar/polybar JSON output
+apple-kb-monitor --waybar
+
 # Battery/voltage history log
 apple-kb-monitor --history
 
 # RSSI (requires sudo for MGMT socket)
 sudo apple-kb-monitor --status
 
-# Daemon mode (used by systemd service)
+# Daemon mode with Battery Provider (used by systemd service)
 apple-kb-monitor --threshold 15 --interval 300
+
+# Daemon without Battery Provider registration
+apple-kb-monitor --no-provider
+```
+
+### Waybar integration
+
+Add to your waybar config:
+
+```json
+"custom/apple-kb": {
+    "exec": "apple-kb-monitor --waybar",
+    "return-type": "json",
+    "interval": 60,
+    "format": "{}",
+    "tooltip": true
+}
 ```
 
 ## Permissions
@@ -97,6 +148,7 @@ apple-kb-monitor --threshold 15 --interval 300
 | Battery, voltage, firmware, all HID reports | `input` group | `sudo usermod -aG input $USER` + re-login |
 | RSSI, TX power | `CAP_NET_ADMIN` | Run with `sudo` |
 | Desktop notifications | `libnotify` | `pacman -S libnotify` |
+| Battery Provider (KDE/UPower) | system D-Bus | Automatic (no policy file needed) |
 
 The udev rule (`99-apple-kb-hidraw.rules`) grants `input` group read/write access to Apple hidraw devices, including Bluetooth HID devices connected via uhid (matched by `DEVPATH` since uhid devices have no `idVendor` attribute).
 
@@ -106,7 +158,11 @@ The udev rule (`99-apple-kb-hidraw.rules`) grants `input` group read/write acces
 2. Opens the `hidraw` device and sends `HIDIOCGFEATURE` ioctls for each known report ID
 3. Decodes the binary responses based on our reverse-engineering of the BCM2042 register map
 4. Queries BlueZ for RSSI via MGMT socket (`GET_CONN_INFO`, opcode `0x0031`) and connection properties via D-Bus
-5. In daemon mode, logs readings to `$XDG_RUNTIME_DIR/apple-kb-monitor/history.jsonl` and sends desktop notifications via `notify-send` when battery drops below threshold
+5. In daemon mode:
+   - Registers as a BlueZ Battery Provider via `BatteryProviderManager1` D-Bus API
+   - Monitors `PropertiesChanged` signals for device connect/disconnect events
+   - Logs readings to `$XDG_RUNTIME_DIR/apple-kb-monitor/history.jsonl`
+   - Sends desktop notifications via `notify-send` when battery drops below threshold
 
 ## Reverse engineering notes
 

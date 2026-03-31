@@ -1,5 +1,5 @@
 [Unit]
-Description=Apple Wireless Keyboard battery and telemetry monitor
+Description=Apple Wireless Keyboard telemetry monitor and BlueZ battery provider
 Documentation=https://github.com/litteulapi/apple-kb-monitor
 After=bluetooth.target
 
