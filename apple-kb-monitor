@@ -43,7 +43,7 @@ Usage:
     apple-kb-monitor --history              # battery/voltage log
 """
 
-__version__ = "2.0.0"
+__version__ = "2.3.0"
 __author__ = "Han (AgenceAPI)"
 __license__ = "GPL-2.0-or-later"
 

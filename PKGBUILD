@@ -1,6 +1,6 @@
 # Maintainer: Han <han@agenceapi.com>
 pkgname=apple-kb-monitor
-pkgver=2.0.0
+pkgver=2.3.0
 pkgrel=1
 pkgdesc="Full telemetry monitor for Apple Wireless Keyboards (BCM2042/BCM20733) — battery, voltage, RSSI, firmware via reverse-engineered HID Feature Reports. Native BlueZ/KDE integration via Battery Provider API."
 arch=('any')
