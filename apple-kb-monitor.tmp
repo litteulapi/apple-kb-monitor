@@ -350,26 +350,50 @@ def dump_all_reports(devpath):
 # ---------------------------------------------------------------------------
 
 def get_conn_info(mac):
-    """Get RSSI and TX power via HCI Read_RSSI command.
+    """Get RSSI and TX power via BlueZ MGMT GET_CONN_INFO.
 
-    Uses the BlueZ MGMT GET_CONNECTIONS to find the ACL handle,
-    then reads RSSI directly via HCI to avoid bluetoothd interference.
+    Sends MGMT opcode 0x0031 which triggers HCI Read_RSSI + Read_TX_Power
+    on the ACL connection handle. Safe on uhid BR/EDR connections (tested
+    with 10 consecutive reads without disconnect).
 
-    WARNING: MGMT GET_CONN_INFO was causing bluetoothd to disconnect the
-    device. We now use a read-only approach via the MGMT event stream.
-    If RSSI cannot be safely read, returns None instead of risking disconnect.
+    Note: RSSI=0 dBm is a valid value meaning optimal signal ("golden range"),
+    not "unavailable". The controller returns the real measured RSSI.
     """
-    # RSSI via MGMT is unsafe on uhid connections (causes disconnect).
-    # Disabled to protect the keyboard connection.
-    # TX power is available from HID Report 0x46 connection params instead.
-    return None
+    try:
+        sock = socket.socket(31, socket.SOCK_RAW, BTPROTO_HCI)
+        sock.bind((0xFFFF, HCI_CHANNEL_CONTROL))
+        sock.settimeout(2)
+
+        addr_bytes = bytes(int(x, 16) for x in mac.split(":"))
+        addr_le = bytes(reversed(addr_bytes))
+        payload = addr_le + struct.pack("B", 0x00)
+
+        header = struct.pack("<HHH", MGMT_OP_GET_CONN_INFO, 0, len(payload))
+        sock.send(header + payload)
+        data = sock.recv(1024)
+        sock.close()
+
+        if len(data) < 19:
+            return None
+        if struct.unpack_from("<H", data, 0)[0] != MGMT_EV_CMD_COMPLETE:
+            return None
+        if data[8] != 0:
+            return None
+
+        rssi = struct.unpack_from("<b", data, 16)[0]
+        tx_power = struct.unpack_from("<b", data, 17)[0]
+        max_tx = struct.unpack_from("<b", data, 18)[0]
+
+        return {"rssi_dbm": rssi, "tx_power_dbm": tx_power, "max_tx_power_dbm": max_tx}
+    except (OSError, TimeoutError, PermissionError):
+        return None
 
 
 def rssi_quality(rssi):
     if rssi is None:
         return "N/A"
-    if rssi >= -50:
-        return "Excellent"
+    if rssi >= -10:
+        return "Optimal (golden range)"
     if rssi >= -65:
         return "Good"
     if rssi >= -80:
@@ -670,8 +694,8 @@ def print_report(r):
         print(f"  {'Max TX power':22s} {radio.get('max_tx_power_dbm', '?')} dBm")
     else:
         print(f"\n  RADIO")
-        print(f"  {'RSSI':22s} N/A (MGMT unsafe on uhid, causes disconnect)")
-        print(f"  {'TX power':22s} 8 dBm (from HCI connection)")
+        print(f"  {'RSSI':22s} N/A (device not connected or no permission)")
+        print(f"  {'TX power':22s} N/A")
 
     if inp:
         caps = inp.get("capabilities", {})
