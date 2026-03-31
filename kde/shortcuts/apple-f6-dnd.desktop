@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Apple F6 Do Not Disturb
+Exec=qdbus6 org.freedesktop.Notifications /org/freedesktop/Notifications org.freedesktop.Notifications.Inhibit "Apple KB" "DND toggle"
+NoDisplay=true
+X-KDE-GlobalAccel-CommandShortcut=true

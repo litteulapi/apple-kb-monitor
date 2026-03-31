@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Apple Brightness Up (DDC)
+Exec=/home/adminapi/.local/bin/apple-brightness-up
+NoDisplay=true
+X-KDE-GlobalAccel-CommandShortcut=true

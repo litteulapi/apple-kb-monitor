@@ -1,0 +1,5 @@
+#!/bin/bash
+current=$(ddcutil getvcp 10 --brief 2>/dev/null | awk '{print $4}')
+new=$((current + 10))
+[ "$new" -gt 100 ] && new=100
+ddcutil setvcp 10 "$new" 2>/dev/null
