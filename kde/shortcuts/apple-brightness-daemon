@@ -1,230 +1,73 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""
-apple-brightness-daemon — Direct I2C DDC/CI brightness for Apple Keyboards.
-
-20x faster than ddcutil (23ms vs 500ms) by writing DDC/CI VCP commands
-directly to /dev/i2c-* via ioctl. Supports key repeat without I2C flood.
-
-Design:
-  - Direct I2C: open once, write VCP Set packets, no subprocess fork
-  - Rate limited: 50ms min between DDC writes (DDC/CI spec)
-  - Non-blocking evdev via select()
-  - Coalescing: rapid keypresses merged into single I2C write
-  - KDE OSD via qdbus6
-"""
-
-import fcntl
+"""Apple Keyboard F1/F2 brightness — uses ddc-tool Rust binary."""
 import os
 import signal
 import struct
 import subprocess
 import sys
-import time
 from select import select
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+os.environ.setdefault("DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus")
 
-VERSION = "2.4.0"
 KEYD_VIRTUAL_KB = "/dev/input/event30"
-
-# DDC/CI
-DDC_ADDR = 0x37          # I2C slave address for DDC/CI
-I2C_SLAVE = 0x0703       # ioctl I2C_SLAVE
-VCP_BRIGHTNESS = 0x10    # VCP code for brightness
-DDC_MIN_INTERVAL = 0.05  # 50ms — DDC/CI spec minimum between commands
-STEP = 5
-
-# evdev
-EV_KEY = 0x01
 KEY_BRIGHTNESSDOWN = 224
 KEY_BRIGHTNESSUP = 225
 EVENT_FMT = "qqHHi"
 EVENT_SIZE = struct.calcsize(EVENT_FMT)
+STEP = 5
 
+_brightness = None
 
-# ---------------------------------------------------------------------------
-# I2C DDC/CI
-# ---------------------------------------------------------------------------
-
-class DDCBrightness:
-    """Direct I2C DDC/CI brightness control."""
-
-    __slots__ = ("_fd", "_value", "_last_write", "_i2c_path")
-
-    def __init__(self, i2c_path: str):
-        self._i2c_path = i2c_path
-        self._fd = -1
-        self._value = self._read()
-        self._last_write = 0.0
-
-    def _read(self) -> int:
-        """Read current brightness via ddcutil (one-time at startup)."""
-        try:
-            r = subprocess.run(
-                ["ddcutil", "getvcp", str(VCP_BRIGHTNESS), "--brief",
-                 "--noverify", "--bus", self._i2c_path.split("-")[-1]],
-                capture_output=True, text=True, timeout=5,
-            )
-            if r.returncode == 0:
-                parts = r.stdout.split()
-                if len(parts) >= 4:
-                    return int(parts[3])
-        except (subprocess.TimeoutExpired, ValueError, IndexError):
-            pass
-        return 50
-
-    def _write_vcp(self, code: int, value: int) -> None:
-        """Send DDC/CI VCP Set — open/write/close to avoid locking I2C bus."""
-        payload = bytes([
-            0x51,
-            0x80 | 4,
-            0x03,
-            code,
-            value >> 8,
-            value & 0xFF,
-        ])
-        chk = 0x6E
-        for b in payload:
-            chk ^= b
-        fd = os.open(self._i2c_path, os.O_RDWR)
-        fcntl.ioctl(fd, I2C_SLAVE, DDC_ADDR)
-        os.write(fd, payload + bytes([chk & 0xFF]))
-        os.close(fd)
-
-    def adjust(self, delta: int) -> int:
-        """Adjust brightness by delta. Returns new value."""
-        self._value = max(0, min(100, self._value + delta))
-        now = time.monotonic()
-        if now - self._last_write >= DDC_MIN_INTERVAL:
-            self._write_vcp(VCP_BRIGHTNESS, self._value)
-            self._last_write = now
-        return self._value
-
-    def flush(self) -> None:
-        """Write pending brightness if rate limit has passed."""
-        now = time.monotonic()
-        if now - self._last_write >= DDC_MIN_INTERVAL:
-            self._write_vcp(VCP_BRIGHTNESS, self._value)
-            self._last_write = now
-
-    def close(self) -> None:
-        pass  # fd opened/closed per write, nothing to clean up
-
-    @property
-    def value(self) -> int:
-        return self._value
-
-
-# ---------------------------------------------------------------------------
-# I2C bus detection
-# ---------------------------------------------------------------------------
-
-def find_ddc_i2c() -> str:
-    """Find the I2C bus with a DDC/CI capable display."""
+def init():
+    global _brightness
     try:
-        r = subprocess.run(
-            ["ddcutil", "detect", "--brief"],
-            capture_output=True, text=True, timeout=10,
-        )
-        for line in r.stdout.splitlines():
-            if "I2C bus:" in line or "i2c-" in line:
-                for part in line.split():
-                    if part.startswith("/dev/i2c-") or part.startswith("i2c-"):
-                        bus = part if part.startswith("/dev/") else f"/dev/{part}"
-                        return bus
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        r = subprocess.run(["ddc-tool", "read", "6", "0x10"],
+                           capture_output=True, text=True, timeout=3)
+        if r.returncode == 0:
+            _brightness = int(r.stdout.split()[0])
+            return
+    except Exception:
         pass
-    return "/dev/i2c-6"
+    _brightness = 50
 
+def adjust(delta):
+    global _brightness
+    _brightness = max(0, min(100, _brightness + delta))
+    subprocess.Popen(["ddc-tool", "write", "6", "0x10", str(_brightness)],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService",
+                      "org.kde.osdService.brightnessChanged", str(_brightness)],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-# ---------------------------------------------------------------------------
-# OSD
-# ---------------------------------------------------------------------------
+if not os.path.exists(KEYD_VIRTUAL_KB):
+    sys.exit(1)
 
-def show_osd(value: int) -> None:
-    subprocess.Popen(
-        ["qdbus6", "org.kde.plasmashell", "/org/kde/osdService",
-         "org.kde.osdService.brightnessChanged", str(value)],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
+init()
+print(f"[brightness] ddc-tool backend, current={_brightness}% step={STEP}%", file=sys.stderr)
 
+fd = os.open(KEYD_VIRTUAL_KB, os.O_RDONLY | os.O_NONBLOCK)
+stop = False
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-def main() -> int:
-    os.environ.setdefault(
-        "DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus"
-    )
-
-    if not os.path.exists(KEYD_VIRTUAL_KB):
-        print(f"[brightness] {KEYD_VIRTUAL_KB} not found", file=sys.stderr)
-        return 1
-
-    i2c_bus = find_ddc_i2c()
-    try:
-        brightness = DDCBrightness(i2c_bus)
-    except PermissionError:
-        print(f"[brightness] {i2c_bus}: permission denied (add user to i2c group)", file=sys.stderr)
-        return 1
-    except OSError as e:
-        print(f"[brightness] {i2c_bus}: {e}", file=sys.stderr)
-        return 1
-
-    print(
-        f"[brightness] v{VERSION} i2c={i2c_bus} current={brightness.value}% "
-        f"step={STEP}% latency=~23ms",
-        file=sys.stderr,
-    )
-
-    fd = os.open(KEYD_VIRTUAL_KB, os.O_RDONLY | os.O_NONBLOCK)
-    stop = False
-    pending_osd = False
-
-    def shutdown(signum, frame):
-        nonlocal stop
-        stop = True
-
-    signal.signal(signal.SIGTERM, shutdown)
-    signal.signal(signal.SIGINT, shutdown)
-
-    try:
-        while not stop:
-            ready, _, _ = select([fd], [], [], DDC_MIN_INTERVAL)
-
-            if ready:
-                try:
-                    while True:
-                        raw = os.read(fd, EVENT_SIZE)
-                        if len(raw) < EVENT_SIZE:
-                            break
-                        _, _, ev_type, ev_code, ev_value = struct.unpack(EVENT_FMT, raw)
-                        if ev_type != EV_KEY or ev_value not in (1, 2):
-                            continue
-                        if ev_code == KEY_BRIGHTNESSDOWN:
-                            brightness.adjust(-STEP)
-                            pending_osd = True
-                        elif ev_code == KEY_BRIGHTNESSUP:
-                            brightness.adjust(STEP)
-                            pending_osd = True
-                except BlockingIOError:
-                    pass
-
-            # Flush coalesced writes + show OSD
-            brightness.flush()
-            if pending_osd:
-                show_osd(brightness.value)
-                pending_osd = False
-    finally:
-        brightness.close()
-        os.close(fd)
-
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+try:
+    while not stop:
+        ready, _, _ = select([fd], [], [], 1.0)
+        if not ready:
+            continue
+        try:
+            while True:
+                data = os.read(fd, EVENT_SIZE)
+                if len(data) < EVENT_SIZE:
+                    break
+                _, _, typ, code, value = struct.unpack(EVENT_FMT, data)
+                if typ == 1 and value in (1, 2):
+                    if code == KEY_BRIGHTNESSDOWN:
+                        adjust(-STEP)
+                    elif code == KEY_BRIGHTNESSUP:
+                        adjust(STEP)
+        except BlockingIOError:
+            pass
+finally:
+    os.close(fd)

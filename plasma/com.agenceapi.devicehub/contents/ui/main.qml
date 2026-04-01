@@ -40,7 +40,7 @@ PlasmoidItem {
         running: true
         repeat: true
         triggeredOnStart: true
-        onTriggered: monSource.connectSource("ddcutil getvcp 0x10 0x12 0x16 0x18 0x1A 0x62 0x15 0x60 0x8D 0xC0 --brief --noverify 2>/dev/null")
+        onTriggered: monSource.connectSource("ddc-tool json 6 2>/dev/null")
     }
 
     function fetchData() {
@@ -48,7 +48,7 @@ PlasmoidItem {
     }
 
     function fetchMonitor() {
-        monSource.connectSource("ddcutil getvcp 0x10 0x12 0x16 0x18 0x1A 0x62 0x15 0x60 0x8D 0xC0 --brief --noverify 2>/dev/null")
+        monSource.connectSource("ddc-tool json 6 2>/dev/null")
     }
 
     property int monRedGain: 50
@@ -61,7 +61,7 @@ PlasmoidItem {
     property int monUsageHours: 0
 
     function setMonitorValue(vcp, value) {
-        ddcWrite.connectSource("python3 -c \"import os,fcntl;fd=os.open('/dev/i2c-6',os.O_RDWR);fcntl.ioctl(fd,0x0703,0x37);p=bytes([0x51,0x84,0x03," + vcp + ",0x00," + value + "]);c=0x6E\nfor b in p:c^=b\nos.write(fd,p+bytes([c&0xFF]));os.close(fd)\"")
+        ddcWrite.connectSource("ddc-tool write 6 " + vcp + " " + value)
     }
 
     P5.DataSource {
@@ -94,24 +94,19 @@ PlasmoidItem {
         onNewData: function(source, data) {
             var stdout = data["stdout"]
             if (!stdout) { disconnectSource(source); return }
-            var lines = stdout.split("\n")
-            for (var i = 0; i < lines.length; i++) {
-                var parts = lines[i].trim().split(/\s+/)
-                if (parts.length >= 4) {
-                    var vcp = parts[1]
-                    var val = parseInt(parts[3])
-                    if (vcp === "0x10") root.monBrightness = val
-                    else if (vcp === "0x12") root.monContrast = val
-                    else if (vcp === "0x16") root.monRedGain = val
-                    else if (vcp === "0x18") root.monGreenGain = val
-                    else if (vcp === "0x1A" || vcp === "0x1a") root.monBlueGain = val
-                    else if (vcp === "0x62") root.monVolume = val
-                    else if (vcp === "0x15") root.monPictureMode = val
-                    else if (vcp === "0x60") root.monInput = val
-                    else if (vcp === "0x8D" || vcp === "0x8d") root.monMute = val
-                    else if (vcp === "0xC0" || vcp === "0xc0") root.monUsageHours = val
-                }
-            }
+            try {
+                var m = JSON.parse(stdout)
+                if (m.brightness) root.monBrightness = m.brightness.current
+                if (m.contrast) root.monContrast = m.contrast.current
+                if (m.red_gain) root.monRedGain = m.red_gain.current
+                if (m.green_gain) root.monGreenGain = m.green_gain.current
+                if (m.blue_gain) root.monBlueGain = m.blue_gain.current
+                if (m.volume) root.monVolume = m.volume.current
+                if (m.picture_mode) root.monPictureMode = m.picture_mode.current
+                if (m.input_source) root.monInput = m.input_source.current
+                if (m.audio_mute) root.monMute = m.audio_mute.current
+                if (m.usage_hours) root.monUsageHours = m.usage_hours.current
+            } catch(e) {}
             disconnectSource(source)
         }
     }
