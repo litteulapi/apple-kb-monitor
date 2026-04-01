@@ -628,7 +628,7 @@ ColumnLayout {
                                     }
                                     PlasmaComponents3.Label {
                                         text: parent.parent.active ? "ON" : "OFF"
-                                        font: Kirigami.Theme.smallFont
+                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
                                         font.bold: true
                                         color: parent.parent.active
                                             ? Kirigami.Theme.positiveTextColor
