@@ -189,7 +189,101 @@ ColumnLayout {
         }
     }
 
-    // Status line
+    // Status indicators (row 1)
+    Flow {
+        Layout.fillWidth: true
+        Layout.leftMargin: Kirigami.Units.largeSpacing
+        Layout.rightMargin: Kirigami.Units.largeSpacing
+        spacing: Kirigami.Units.smallSpacing
+
+        // FreeSync badge
+        Rectangle {
+            width: fsLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+            height: fsLabel.implicitHeight + Kirigami.Units.smallSpacing
+            radius: height / 2
+            color: root.monFreeSync === 1
+                ? Kirigami.Theme.positiveBackgroundColor
+                : "transparent"
+            border.color: root.monFreeSync === 1
+                ? Kirigami.Theme.positiveTextColor
+                : Kirigami.Theme.disabledTextColor
+            border.width: 1
+
+            PlasmaComponents3.Label {
+                id: fsLabel
+                anchors.centerIn: parent
+                text: "FreeSync"
+                font: Kirigami.Theme.smallFont
+                color: root.monFreeSync === 1
+                    ? Kirigami.Theme.positiveTextColor
+                    : Kirigami.Theme.disabledTextColor
+            }
+        }
+
+        // HDR badge
+        Rectangle {
+            width: hdrLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+            height: hdrLabel.implicitHeight + Kirigami.Units.smallSpacing
+            radius: height / 2
+            color: root.monFreeSync === 1
+                ? Kirigami.Theme.positiveBackgroundColor
+                : "transparent"
+            border.color: Kirigami.Theme.disabledTextColor
+            border.width: 1
+
+            PlasmaComponents3.Label {
+                id: hdrLabel
+                anchors.centerIn: parent
+                text: "HDR"
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+            }
+        }
+
+        // Response Time badge
+        Rectangle {
+            width: rtLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+            height: rtLabel.implicitHeight + Kirigami.Units.smallSpacing
+            radius: height / 2
+            color: "transparent"
+            border.color: Kirigami.Theme.disabledTextColor
+            border.width: 1
+
+            PlasmaComponents3.Label {
+                id: rtLabel
+                anchors.centerIn: parent
+                text: {
+                    var names = {0: "RT Off", 1: "RT Fast", 2: "RT Normal", 3: "RT Slow"}
+                    return names[root.monResponseTime] || "RT " + root.monResponseTime
+                }
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+            }
+        }
+
+        // Gamma badge
+        Rectangle {
+            width: gaLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
+            height: gaLabel.implicitHeight + Kirigami.Units.smallSpacing
+            radius: height / 2
+            color: "transparent"
+            border.color: Kirigami.Theme.disabledTextColor
+            border.width: 1
+
+            PlasmaComponents3.Label {
+                id: gaLabel
+                anchors.centerIn: parent
+                text: {
+                    var names = {0: "Gamma Off", 1: "G0", 2: "G1", 3: "G2"}
+                    return names[root.monGamma] || "G" + root.monGamma
+                }
+                font: Kirigami.Theme.smallFont
+                color: Kirigami.Theme.disabledTextColor
+            }
+        }
+    }
+
+    // Status line (row 2)
     RowLayout {
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
@@ -203,15 +297,15 @@ ColumnLayout {
         }
 
         PlasmaComponents3.Label {
-            text: "FreeSync " + (root.monFreeSync === 1 ? "ON" : "OFF")
+            text: fullRep.inputName(root.monInput)
             font: Kirigami.Theme.smallFont
-            color: root.monFreeSync === 1
-                ? Kirigami.Theme.positiveTextColor
-                : Kirigami.Theme.disabledTextColor
+            color: Kirigami.Theme.disabledTextColor
         }
 
+        Item { Layout.fillWidth: true }
+
         PlasmaComponents3.Label {
-            text: fullRep.inputName(root.monInput)
+            text: root.monUsageHours + "h"
             font: Kirigami.Theme.smallFont
             color: Kirigami.Theme.disabledTextColor
         }

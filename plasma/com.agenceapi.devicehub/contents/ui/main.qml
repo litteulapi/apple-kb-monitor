@@ -89,7 +89,7 @@ PlasmoidItem {
     }
 
     function openSettings() {
-        settingsLauncher.connectSource("apihub-settings &")
+        settingsLauncher.connectSource("/usr/bin/apihub-settings")
     }
 
     // ── Keyboard data source ──
