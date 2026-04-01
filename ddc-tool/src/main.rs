@@ -74,7 +74,7 @@ fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16, u8), String> {
         return Err("I2C write failed".into());
     }
 
-    thread::sleep(Duration::from_millis(50));
+    thread::sleep(Duration::from_millis(60));
 
     // Read response via I2C_RDWR
     let mut read_buf = [0u8; 12];
@@ -157,6 +157,7 @@ fn main() {
         }
         "read" => {
             if args[3] == "all" {
+                thread::sleep(Duration::from_millis(100));
                 for v in KNOWN_VCPS {
                     match ddc_read_vcp(&path, v.code) {
                         Ok((cur, max, _)) => println!("0x{:02X} {:20} {:5} {:5}", v.code, v.name, cur, max),
@@ -173,6 +174,7 @@ fn main() {
             }
         }
         "json" => {
+            thread::sleep(Duration::from_millis(100)); // Let I2C bus settle
             print!("{{");
             let mut first = true;
             for v in KNOWN_VCPS {
