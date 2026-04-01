@@ -4,267 +4,348 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as P5
 
-ColumnLayout {
+Rectangle {
     id: full
-    Layout.preferredWidth: Kirigami.Units.gridUnit * 22
-    Layout.preferredHeight: Kirigami.Units.gridUnit * 28
-    spacing: 0
+    Layout.preferredWidth: 380
+    Layout.preferredHeight: 500
+    Layout.minimumWidth: 340
+    Layout.minimumHeight: 440
+    color: "#05080F"
 
-    // ═══ HEADER ═══
-    Rectangle {
-        Layout.fillWidth: true
-        height: Kirigami.Units.gridUnit * 3
-        color: "#0A0E17"
-        radius: 4
+    // Scanlines
+    Canvas {
+        anchors.fill: parent
+        opacity: 0.02
+        onPaint: {
+            var ctx = getContext("2d")
+            ctx.strokeStyle = "#00D4FF"
+            ctx.lineWidth = 0.5
+            for (var y = 0; y < height; y += 2) {
+                ctx.beginPath()
+                ctx.moveTo(0, y)
+                ctx.lineTo(width, y)
+                ctx.stroke()
+            }
+        }
+    }
 
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.margins: 12
+        spacing: 8
+
+        // ═══ HEADER ═══
         RowLayout {
-            anchors.fill: parent
-            anchors.margins: Kirigami.Units.smallSpacing * 2
-
-            // Logo
-            Rectangle {
-                width: Kirigami.Units.gridUnit * 2
-                height: width
-                radius: width / 2
-                color: root.connected ? "#00D4FF" : "#444"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "⌨"
-                    font.pixelSize: parent.height * 0.5
+            Layout.fillWidth: true
+            Canvas {
+                width: 18
+                height: 18
+                property real p: 0
+                NumberAnimation on p { from: 0; to: 1; duration: 2000; loops: Animation.Infinite }
+                onPChanged: requestPaint()
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.clearRect(0, 0, 18, 18)
+                    var g = ctx.createRadialGradient(9, 9, 0, 9, 9, 9)
+                    g.addColorStop(0, "rgba(0,212,255," + (0.4 + p * 0.5) + ")")
+                    g.addColorStop(1, "rgba(0,0,0,0)")
+                    ctx.fillStyle = g
+                    ctx.fillRect(0, 0, 18, 18)
+                    ctx.fillStyle = "#00D4FF"
+                    ctx.fillRect(7, 3, 4, 3)
+                    ctx.fillRect(5, 6, 8, 4)
+                    ctx.fillRect(7, 10, 4, 4)
                 }
             }
-
-            ColumnLayout {
-                spacing: 0
-                Text {
-                    text: "APIHUB"
-                    color: "#00D4FF"
-                    font { pixelSize: 14; bold: true; family: "monospace"; letterSpacing: 2 }
-                }
-                Text {
-                    text: "v2.4.0 · AgenceAPI"
-                    color: "#555"
-                    font { pixelSize: 10; family: "monospace" }
-                }
+            Text {
+                text: "APIHUB"
+                color: "#00D4FF"
+                font.pixelSize: 16
+                font.bold: true
+                font.family: "monospace"
+                font.letterSpacing: 4
             }
-
             Item { Layout.fillWidth: true }
-
-            // Status indicator
             Rectangle {
-                width: 8; height: 8; radius: 4
+                width: 8
+                height: 8
+                radius: 4
                 color: root.connected ? "#00FF88" : "#FF4444"
-
                 SequentialAnimation on opacity {
                     loops: Animation.Infinite
-                    NumberAnimation { to: 0.3; duration: 1000 }
-                    NumberAnimation { to: 1.0; duration: 1000 }
+                    NumberAnimation { to: 0.2; duration: 800 }
+                    NumberAnimation { to: 1.0; duration: 800 }
                 }
             }
         }
-    }
 
-    // ═══ KEYBOARD SECTION ═══
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.topMargin: 2
-        height: childrenRect.height + Kirigami.Units.gridUnit
-        color: "#0D1117"
-        radius: 4
+        Rectangle { Layout.fillWidth: true; height: 1; color: "#12182A"; opacity: 0.6 }
 
-        ColumnLayout {
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: Kirigami.Units.smallSpacing * 2 }
-            spacing: Kirigami.Units.smallSpacing
+        // ═══ TELEMETRY GRID (SpaceX style: big values, tiny labels) ═══
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 3
+            rowSpacing: 2
+            columnSpacing: 2
 
-            // Section title
-            Text {
-                text: "⌨  APPLE WIRELESS KEYBOARD"
-                color: "#00D4FF"
-                font { pixelSize: 11; bold: true; family: "monospace"; letterSpacing: 1 }
-            }
-
-            Text {
-                text: root.connected ? root.model : "Not connected"
-                color: root.connected ? "#888" : "#FF4444"
-                font { pixelSize: 10; family: "monospace" }
-            }
-
-            // Battery bar
-            Rectangle {
+            // Battery %
+            TelemetryTile {
+                label: "BATTERY"
+                value: root.batteryPercent.toString()
+                unit: "%"
+                accent: root.batteryPercent <= 15 ? "#FF4444"
+                      : root.batteryPercent <= 50 ? "#FFaa00"
+                      : "#00D4FF"
                 Layout.fillWidth: true
-                height: 24
-                color: "#1A1F2E"
-                radius: 4
+                Layout.columnSpan: 1
+            }
+
+            // Voltage
+            TelemetryTile {
+                label: "VOLTAGE"
+                value: root.voltage.toFixed(2)
+                unit: "V"
+                accent: "#FFFFFF"
+                Layout.fillWidth: true
+            }
+
+            // RSSI
+            TelemetryTile {
+                label: "RSSI"
+                value: root.rssi.toString()
+                unit: "dBm"
+                accent: "#FFFFFF"
+                Layout.fillWidth: true
+            }
+        }
+
+        // Battery bar
+        Rectangle {
+            Layout.fillWidth: true
+            height: 4
+            color: "#0E1420"
+            radius: 2
+            Rectangle {
+                width: parent.width * root.batteryPercent / 100
+                height: parent.height
+                radius: 2
+                color: root.batteryPercent <= 15 ? "#FF4444"
+                     : root.batteryPercent <= 50 ? "#FFaa00"
+                     : "#00D4FF"
+                opacity: 0.7
+                Behavior on width { NumberAnimation { duration: 400 } }
+            }
+        }
+
+        // Status row
+        RowLayout {
+            Layout.fillWidth: true
+            Text {
+                text: root.kbModel
+                color: "#2A3040"
+                font.pixelSize: 10
+                font.family: "monospace"
+            }
+            Item { Layout.fillWidth: true }
+            Text {
+                text: root.connected ? "ALL SYSTEMS NOMINAL" : "NO SIGNAL"
+                color: root.connected ? "#00FF88" : "#FF4444"
+                font.pixelSize: 9
+                font.family: "monospace"
+                font.letterSpacing: 1
+            }
+        }
+
+        Rectangle { Layout.fillWidth: true; height: 1; color: "#12182A"; opacity: 0.6 }
+
+        // ═══ MONITOR ═══
+        Text {
+            text: "MONITOR · DDC/CI"
+            color: "#2A3040"
+            font.pixelSize: 9
+            font.family: "monospace"
+            font.letterSpacing: 2
+        }
+
+        // Brightness + Contrast tiles
+        GridLayout {
+            Layout.fillWidth: true
+            columns: 2
+            rowSpacing: 2
+            columnSpacing: 2
+
+            TelemetryTile {
+                label: "BRIGHTNESS"
+                value: root.monBrightness.toString()
+                unit: "%"
+                accent: "#00D4FF"
+                Layout.fillWidth: true
+                clickable: true
+                onTileClicked: function(ratio) {
+                    root.monBrightness = Math.round(ratio * 100)
+                    root.setMonitorValue(16, root.monBrightness)
+                }
+            }
+
+            TelemetryTile {
+                label: "CONTRAST"
+                value: root.monContrast.toString()
+                unit: "%"
+                accent: "#FF6B35"
+                Layout.fillWidth: true
+                clickable: true
+                onTileClicked: function(ratio) {
+                    root.monContrast = Math.round(ratio * 100)
+                    root.setMonitorValue(18, root.monContrast)
+                }
+            }
+        }
+
+        // Input grid
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 2
+
+            Repeater {
+                model: [
+                    {"label": "DP-1", "val": 15},
+                    {"label": "DP-2", "val": 16},
+                    {"label": "HDMI-1", "val": 17},
+                    {"label": "HDMI-2", "val": 18}
+                ]
 
                 Rectangle {
-                    width: parent.width * (root.batteryPercent / 100)
-                    height: parent.height
-                    radius: 4
-                    color: root.batteryPercent <= 15 ? "#FF4444"
-                         : root.batteryPercent <= 50 ? "#FFaa00"
-                         : "#00D4FF"
-                    opacity: 0.8
-
-                    Behavior on width { NumberAnimation { duration: 300 } }
-                }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: root.batteryPercent + "%"
-                    color: "#FFF"
-                    font { pixelSize: 12; bold: true; family: "monospace" }
-                }
-            }
-
-            // Telemetry grid
-            GridLayout {
-                Layout.fillWidth: true
-                columns: 2
-                rowSpacing: 2
-                columnSpacing: Kirigami.Units.gridUnit
-
-                DataRow { label: "VOLTAGE"; value: root.voltage.toFixed(3) + " V" }
-                DataRow { label: "RSSI"; value: root.rssi + " dBm" }
-                DataRow { label: "BATTERY"; value: root.batteryPercent + "% (fine)" }
-                DataRow { label: "STATUS"; value: root.connected ? "ONLINE" : "OFFLINE"; valueColor: root.connected ? "#00FF88" : "#FF4444" }
-            }
-        }
-    }
-
-    // ═══ MONITOR SECTION ═══
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.topMargin: 2
-        height: childrenRect.height + Kirigami.Units.gridUnit
-        color: "#0D1117"
-        radius: 4
-
-        ColumnLayout {
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: Kirigami.Units.smallSpacing * 2 }
-            spacing: Kirigami.Units.smallSpacing
-
-            Text {
-                text: "🖥  LG 34GN850 · DDC/CI"
-                color: "#FF6B35"
-                font { pixelSize: 11; bold: true; family: "monospace"; letterSpacing: 1 }
-            }
-
-            // Brightness slider
-            RowLayout {
-                Layout.fillWidth: true
-                Text { text: "BRI"; color: "#888"; font { pixelSize: 10; family: "monospace" }; Layout.preferredWidth: 30 }
-                QQC2.Slider {
-                    id: briSlider
                     Layout.fillWidth: true
-                    from: 0; to: 100; stepSize: 1
-                    value: root.monBrightness
-                    onMoved: {
-                        root.monBrightness = value
-                        root.setMonitorValue(16, Math.round(value))
-                    }
-                }
-                Text { text: root.monBrightness + "%"; color: "#00D4FF"; font { pixelSize: 10; bold: true; family: "monospace" }; Layout.preferredWidth: 35 }
-            }
+                    height: 28
+                    color: inputMa.pressed ? "#12182A" : "#0A0F1A"
+                    radius: 2
 
-            // Contrast slider
-            RowLayout {
-                Layout.fillWidth: true
-                Text { text: "CON"; color: "#888"; font { pixelSize: 10; family: "monospace" }; Layout.preferredWidth: 30 }
-                QQC2.Slider {
-                    id: conSlider
-                    Layout.fillWidth: true
-                    from: 0; to: 100; stepSize: 1
-                    value: root.monContrast
-                    onMoved: {
-                        root.monContrast = value
-                        root.setMonitorValue(18, Math.round(value))
-                    }
-                }
-                Text { text: root.monContrast + "%"; color: "#FF6B35"; font { pixelSize: 10; bold: true; family: "monospace" }; Layout.preferredWidth: 35 }
-            }
-
-            // Input source buttons
-            Text {
-                text: "INPUT"
-                color: "#888"
-                font { pixelSize: 10; family: "monospace" }
-                Layout.topMargin: Kirigami.Units.smallSpacing
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Kirigami.Units.smallSpacing
-
-                Repeater {
-                    model: [
-                        { label: "DP-1", vcp: 96, val: 15 },
-                        { label: "DP-2", vcp: 96, val: 16 },
-                        { label: "HDMI-1", vcp: 96, val: 17 },
-                        { label: "HDMI-2", vcp: 96, val: 18 }
-                    ]
-
-                    QQC2.Button {
+                    Text {
+                        anchors.centerIn: parent
                         text: modelData.label
-                        Layout.fillWidth: true
-                        font { pixelSize: 9; family: "monospace" }
-                        onClicked: root.setMonitorValue(modelData.vcp, modelData.val)
+                        color: "#445566"
+                        font.pixelSize: 11
+                        font.family: "monospace"
+                        font.letterSpacing: 1
+                    }
+
+                    MouseArea {
+                        id: inputMa
+                        anchors.fill: parent
+                        onClicked: root.setMonitorValue(96, modelData.val)
                     }
                 }
             }
         }
-    }
 
-    // ═══ ACTIONS ═══
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.topMargin: 2
-        height: childrenRect.height + Kirigami.Units.gridUnit
-        color: "#0D1117"
-        radius: 4
+        Rectangle { Layout.fillWidth: true; height: 1; color: "#12182A"; opacity: 0.6 }
 
+        // ═══ ACTIONS ═══
         RowLayout {
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: Kirigami.Units.smallSpacing * 2 }
-            spacing: Kirigami.Units.smallSpacing
+            Layout.fillWidth: true
+            spacing: 2
 
-            QQC2.Button {
-                text: "⟳ Refresh"
-                font { pixelSize: 10; family: "monospace" }
-                onClicked: { root.fetchData(); root.fetchMonitor() }
+            Repeater {
+                model: ["REFRESH", "STATUS", "GRAPH"]
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 26
+                    color: actMa.pressed ? "#12182A" : "#0A0F1A"
+                    radius: 2
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: modelData
+                        color: "#334455"
+                        font.pixelSize: 10
+                        font.family: "monospace"
+                        font.letterSpacing: 2
+                    }
+
+                    MouseArea {
+                        id: actMa
+                        anchors.fill: parent
+                        onClicked: {
+                            if (modelData === "REFRESH") {
+                                root.fetchData()
+                                root.fetchMonitor()
+                            } else if (modelData === "STATUS") {
+                                actSource.connectSource("konsole -e 'apple-kb-monitor --status; read'")
+                            } else {
+                                actSource.connectSource("konsole -e 'apple-kb-monitor --graph; read'")
+                            }
+                        }
+                    }
+                }
             }
-
-            QQC2.Button {
-                text: "📊 Status"
-                font { pixelSize: 10; family: "monospace" }
-                onClicked: statusSource.exec("konsole -e 'apple-kb-monitor --status; read'")
-            }
-
-            QQC2.Button {
-                text: "📈 Graph"
-                font { pixelSize: 10; family: "monospace" }
-                onClicked: statusSource.exec("konsole -e 'apple-kb-monitor --graph; read'")
-            }
-
-            Item { Layout.fillWidth: true }
         }
+
+        Item { Layout.fillHeight: true }
     }
 
-    Item { Layout.fillHeight: true }
-
-    // Status source for action buttons
-    P5.DataSource {
-        id: statusSource
-        engine: "executable"
-        function exec(cmd) { connectSource(cmd) }
-    }
-
-    // DataRow component
-    component DataRow: RowLayout {
+    // ═══ TELEMETRY TILE COMPONENT ═══
+    component TelemetryTile: Rectangle {
         property string label: ""
         property string value: ""
-        property color valueColor: "#00D4FF"
+        property string unit: ""
+        property color accent: "#FFFFFF"
+        property bool clickable: false
+        signal tileClicked(real ratio)
 
-        Text { text: label; color: "#555"; font { pixelSize: 10; family: "monospace" }; Layout.preferredWidth: 70 }
-        Text { text: value; color: valueColor; font { pixelSize: 10; bold: true; family: "monospace" } }
+        height: 64
+        color: "#0A0F1A"
+        radius: 2
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 6
+            spacing: 0
+
+            Text {
+                text: label
+                color: "#2A3545"
+                font.pixelSize: 9
+                font.family: "monospace"
+                font.letterSpacing: 1
+            }
+
+            Item { Layout.fillHeight: true }
+
+            RowLayout {
+                spacing: 2
+                Layout.alignment: Qt.AlignBottom
+
+                Text {
+                    text: value
+                    color: accent
+                    font.pixelSize: 28
+                    font.bold: true
+                    font.family: "monospace"
+                }
+                Text {
+                    text: unit
+                    color: "#2A3545"
+                    font.pixelSize: 12
+                    font.family: "monospace"
+                    Layout.alignment: Qt.AlignBottom
+                    Layout.bottomMargin: 4
+                }
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            visible: clickable
+            onClicked: function(mouse) {
+                tileClicked(mouse.x / parent.width)
+            }
+        }
+    }
+
+    P5.DataSource {
+        id: actSource
+        engine: "executable"
+        onNewData: function(source, data) { disconnectSource(source) }
     }
 }
