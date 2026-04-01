@@ -9,10 +9,11 @@ import org.kde.plasma.plasma5support as P5
 ColumnLayout {
     id: fullRep
 
-    Layout.preferredWidth: Kirigami.Units.gridUnit * 24
-    Layout.preferredHeight: Kirigami.Units.gridUnit * 36
-    Layout.minimumWidth: Kirigami.Units.gridUnit * 20
-    Layout.minimumHeight: Kirigami.Units.gridUnit * 24
+    Layout.preferredWidth: Kirigami.Units.gridUnit * 22
+    Layout.preferredHeight: Kirigami.Units.gridUnit * 30
+    Layout.minimumWidth: Kirigami.Units.gridUnit * 18
+    Layout.minimumHeight: Kirigami.Units.gridUnit * 20
+    Layout.maximumHeight: Kirigami.Units.gridUnit * 40
 
     spacing: 0
 
