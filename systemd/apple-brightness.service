@@ -1,10 +1,10 @@
 [Unit]
-Description=Apple Keyboard DDC Brightness Control
-After=apple-kb-monitor.service
+Description=Apple Keyboard DDC Brightness (F1/F2) + KDE OSD
+After=keyd.service graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/home/adminapi/.local/bin/apple-brightness-daemon
+ExecStart=/usr/bin/apple-brightness-daemon
 Restart=on-failure
 RestartSec=5
 

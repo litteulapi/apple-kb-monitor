@@ -1,20 +1,63 @@
 post_install() {
-    echo ">>> Add your user to the 'input' group for non-root access:"
+    # RSSI helper needs CAP_NET_ADMIN
+    setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper 2>/dev/null || true
+
+    # Reload udev rules
+    udevadm control --reload-rules 2>/dev/null || true
+
+    # Reload keyd config
+    systemctl restart keyd 2>/dev/null || true
+
+    # Apply fnmode immediately (persistent via modprobe.d)
+    echo 1 > /sys/module/hid_apple/parameters/fnmode 2>/dev/null || true
+
+    # KDE Bluedevil patch (backup + apply)
+    local qml="/usr/share/plasma/plasmoids/org.kde.plasma.bluetooth/contents/ui/DeviceItem.qml"
+    if [ -f "$qml" ] && ! grep -q "model.Battery" "$qml" 2>/dev/null; then
+        cp "$qml" "${qml}.orig"
+        cp /usr/share/apple-kb-monitor/kde/DeviceItem.qml "$qml"
+        echo ">>> KDE Bluedevil panel patched (backup at DeviceItem.qml.orig)"
+    fi
+
+    echo ""
+    echo ">>> apple-kb-monitor v2.4.0 installed"
+    echo ""
+    echo ">>> Setup:"
     echo "      sudo usermod -aG input \$USER"
-    echo ">>> Enable RSSI without sudo:"
-    echo "      sudo setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper"
-    echo ">>> Then enable the user service:"
     echo "      systemctl --user enable --now apple-kb-monitor.service"
+    echo "      systemctl --user enable --now apple-brightness.service"
+    echo ""
+    echo ">>> Special keys (via keyd):"
+    echo "      F1/F2 = Monitor brightness (DDC/CI + OSD)"
+    echo "      F3    = Overview (Exposé)"
+    echo "      F4    = Grid View (Launchpad)"
+    echo "      F5    = Lock Screen"
+    echo "      F6    = Show Desktop"
+    echo "      F7-F9 = Media controls"
+    echo "      F10-F12 = Volume"
+    echo ""
     echo ">>> Quick test:"
     echo "      apple-kb-monitor --status"
-    udevadm control --reload-rules 2>/dev/null || true
-    setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper 2>/dev/null || true
 }
 
 post_upgrade() {
-    udevadm control --reload-rules 2>/dev/null || true
+    post_install
 }
 
 post_remove() {
     udevadm control --reload-rules 2>/dev/null || true
+
+    # Restore original Bluedevil QML
+    local qml="/usr/share/plasma/plasmoids/org.kde.plasma.bluetooth/contents/ui/DeviceItem.qml"
+    if [ -f "${qml}.orig" ]; then
+        mv "${qml}.orig" "$qml"
+        echo ">>> KDE Bluedevil panel restored to original"
+    fi
+
+    # Remove capabilities
+    setcap -r /usr/lib/apple-kb-monitor/rssi-helper 2>/dev/null || true
+
+    echo ">>> Disable services:"
+    echo "      systemctl --user disable apple-kb-monitor.service"
+    echo "      systemctl --user disable apple-brightness.service"
 }
