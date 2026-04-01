@@ -1,6 +1,403 @@
-#!/usr/bin/env bash
-# ApiHub Settings — placeholder launcher
-# Will be replaced by a Kirigami standalone window later.
-# For now, opens a terminal with full device status.
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
+"""
+ApiHub Settings — Desktop app for Apple Keyboard + LG Monitor control.
 
-exec konsole --noclose -e bash -c 'echo "=== ApiHub Device Status ==="; echo; apple-kb-monitor --status 2>/dev/null || echo "Keyboard: not available"; echo; echo "=== Monitor DDC Status ==="; echo; ddc-tool json 6 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Monitor: not available"; echo; echo "--- Press any key to close ---"; read -n1'
+System tray icon + full settings window.
+Style: LG OnScreen Control inspired for monitor, Apple-clean for keyboard.
+"""
+
+import json
+import os
+import subprocess
+import sys
+from functools import partial
+
+from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtGui import QIcon, QAction, QFont, QColor, QPalette
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QSystemTrayIcon, QMenu,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QLabel, QSlider, QPushButton, QGroupBox,
+    QTabWidget, QFrame, QProgressBar,
+    QStatusBar, QScrollArea,
+)
+
+
+def ddc_read_all():
+    try:
+        r = subprocess.run(["ddc-tool", "json", "6"],
+                           capture_output=True, text=True, timeout=10)
+        if r.returncode == 0:
+            return json.loads(r.stdout)
+    except Exception:
+        pass
+    return {}
+
+
+def ddc_write(vcp, value):
+    subprocess.Popen(["ddc-tool", "write", "6", str(vcp), str(value)],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def kb_read():
+    try:
+        r = subprocess.run(["apple-kb-monitor", "--json"],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            return json.loads(r.stdout)
+    except Exception:
+        pass
+    return {}
+
+
+class StatusBadge(QFrame):
+    def __init__(self, text, parent=None):
+        super().__init__(parent)
+        self.setFrameShape(QFrame.StyledPanel)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 2, 8, 2)
+        self.label = QLabel(text)
+        self.label.setFont(QFont("monospace", 9))
+        layout.addWidget(self.label)
+        self.set_active(False)
+
+    def set_active(self, active):
+        if active:
+            self.setStyleSheet("QFrame{background:#1a3a1a;border:1px solid #4CAF50;border-radius:10px}QLabel{color:#4CAF50}")
+        else:
+            self.setStyleSheet("QFrame{background:transparent;border:1px solid #555;border-radius:10px}QLabel{color:#888}")
+
+
+class ValueSlider(QWidget):
+    def __init__(self, label, vcp, max_val=100, parent=None):
+        super().__init__(parent)
+        self.vcp = vcp
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.name_label = QLabel(label)
+        self.name_label.setFixedWidth(100)
+        self.slider = QSlider(Qt.Horizontal)
+        self.slider.setMinimum(0)
+        self.slider.setMaximum(max_val)
+        self.slider.valueChanged.connect(self._on_change)
+        self.value_label = QLabel("0%")
+        self.value_label.setFixedWidth(45)
+        self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.value_label.setFont(QFont("monospace", 11, QFont.Bold))
+        layout.addWidget(self.name_label)
+        layout.addWidget(self.slider)
+        layout.addWidget(self.value_label)
+
+    def set_value(self, val):
+        self.slider.blockSignals(True)
+        self.slider.setValue(val)
+        self.slider.blockSignals(False)
+        self.value_label.setText(f"{val}%")
+
+    def _on_change(self, val):
+        self.value_label.setText(f"{val}%")
+        ddc_write(self.vcp, val)
+
+
+class ButtonGroup(QWidget):
+    def __init__(self, label, vcp, options, parent=None):
+        super().__init__(parent)
+        self.vcp = vcp
+        self.buttons = []
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        name = QLabel(label)
+        name.setFixedWidth(100)
+        layout.addWidget(name)
+        for text, val in options:
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setMinimumHeight(28)
+            btn.clicked.connect(partial(self._on_click, val))
+            self.buttons.append((btn, val))
+            layout.addWidget(btn)
+
+    def set_active(self, current_val):
+        for btn, val in self.buttons:
+            btn.setChecked(val == current_val)
+
+    def _on_click(self, val):
+        ddc_write(self.vcp, val)
+        self.set_active(val)
+
+
+class ApiHubWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("ApiHub Settings")
+        self.setWindowIcon(QIcon.fromTheme("preferences-desktop-peripherals"))
+        self.setMinimumSize(600, 500)
+        self.resize(700, 600)
+        self._apply_dark_theme()
+
+        tabs = QTabWidget()
+        self.setCentralWidget(tabs)
+
+        self.kb_tab = self._build_keyboard_tab()
+        self.mon_tab = self._build_monitor_tab()
+        self.adv_tab = self._build_advanced_tab()
+        self.sys_tab = self._build_system_tab()
+
+        tabs.addTab(self.kb_tab, QIcon.fromTheme("input-keyboard"), "Keyboard")
+        tabs.addTab(self.mon_tab, QIcon.fromTheme("video-display"), "Display")
+        tabs.addTab(self.adv_tab, QIcon.fromTheme("configure"), "Advanced")
+        tabs.addTab(self.sys_tab, QIcon.fromTheme("documentinfo"), "System")
+
+        self.status = QStatusBar()
+        self.setStatusBar(self.status)
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.refresh)
+        self.timer.start(30000)
+        QTimer.singleShot(500, self.refresh)
+
+    def _apply_dark_theme(self):
+        p = QPalette()
+        p.setColor(QPalette.Window, QColor(30, 30, 30))
+        p.setColor(QPalette.WindowText, QColor(220, 220, 220))
+        p.setColor(QPalette.Base, QColor(25, 25, 25))
+        p.setColor(QPalette.AlternateBase, QColor(35, 35, 35))
+        p.setColor(QPalette.Text, QColor(220, 220, 220))
+        p.setColor(QPalette.Button, QColor(45, 45, 45))
+        p.setColor(QPalette.ButtonText, QColor(220, 220, 220))
+        p.setColor(QPalette.Highlight, QColor(0, 120, 215))
+        p.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+        QApplication.instance().setPalette(p)
+
+    def _build_keyboard_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(12)
+
+        grp = QGroupBox("Battery")
+        g = QGridLayout(grp)
+        self.kb_bat = QLabel("--")
+        self.kb_bat.setFont(QFont("monospace", 48, QFont.Bold))
+        self.kb_bat.setAlignment(Qt.AlignCenter)
+        g.addWidget(self.kb_bat, 0, 0, 2, 1)
+        self.kb_volt = QLabel("-- V")
+        self.kb_volt.setFont(QFont("monospace", 14))
+        g.addWidget(self.kb_volt, 0, 1)
+        self.kb_rssi = QLabel("-- dBm")
+        self.kb_rssi.setFont(QFont("monospace", 14))
+        g.addWidget(self.kb_rssi, 1, 1)
+        self.kb_bar = QProgressBar()
+        self.kb_bar.setRange(0, 100)
+        self.kb_bar.setTextVisible(False)
+        self.kb_bar.setFixedHeight(6)
+        g.addWidget(self.kb_bar, 2, 0, 1, 2)
+        layout.addWidget(grp)
+
+        grp2 = QGroupBox("Device")
+        g2 = QGridLayout(grp2)
+        self.kb_info = {}
+        for i, (k, l) in enumerate([("model", "Model"), ("firmware", "Firmware"),
+                                     ("status", "Status"), ("type", "Battery Type"),
+                                     ("drain", "Discharge"), ("chip", "Controller")]):
+            la = QLabel(l + ":")
+            la.setStyleSheet("color:#888")
+            v = QLabel("--")
+            v.setFont(QFont("sans-serif", 10, QFont.Bold))
+            g2.addWidget(la, i, 0)
+            g2.addWidget(v, i, 1)
+            self.kb_info[k] = v
+        layout.addWidget(grp2)
+        layout.addStretch()
+        return w
+
+    def _build_monitor_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(8)
+
+        grp = QGroupBox("Display Controls")
+        g = QVBoxLayout(grp)
+        self.bri = ValueSlider("Brightness", 16)
+        self.con = ValueSlider("Contrast", 18)
+        self.sha = ValueSlider("Sharpness", 135)
+        self.vol = ValueSlider("Volume", 98)
+        self.bst = ValueSlider("Black Stab.", 249)
+        for s in [self.bri, self.con, self.sha, self.vol, self.bst]:
+            g.addWidget(s)
+        layout.addWidget(grp)
+
+        grp2 = QGroupBox("Color Balance")
+        g2 = QVBoxLayout(grp2)
+        self.red = ValueSlider("Red", 22)
+        self.grn = ValueSlider("Green", 24)
+        self.blu = ValueSlider("Blue", 26)
+        for s in [self.red, self.grn, self.blu]:
+            g2.addWidget(s)
+        layout.addWidget(grp2)
+
+        self.pic = ButtonGroup("Mode", 21, [
+            ("Reader", 1), ("Gamer2", 6), ("Custom", 17), ("RTS", 19),
+            ("Vivid", 20), ("sRGB", 21), ("FPS1", 40), ("FPS2", 41)])
+        layout.addWidget(self.pic)
+
+        self.inp = ButtonGroup("Input", 96, [
+            ("DP-1", 15), ("DP-2", 16), ("HDMI-1", 17), ("HDMI-2", 18)])
+        layout.addWidget(self.inp)
+
+        self.cpre = ButtonGroup("Color", 20, [("6500K", 5), ("9300K", 8), ("User", 11)])
+        layout.addWidget(self.cpre)
+
+        layout.addStretch()
+        return w
+
+    def _build_advanced_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(8)
+
+        self.rt = ButtonGroup("Response", 247, [("Off", 0), ("Fast", 1), ("Normal", 2), ("Slow", 3)])
+        self.fs = ButtonGroup("FreeSync", 248, [("Off", 0), ("On", 1)])
+        self.gm = ButtonGroup("Gamma", 254, [("Off", 0), ("M0", 1), ("M1", 2), ("M2", 3)])
+        self.se = ButtonGroup("Energy", 246, [("Off", 0), ("Low", 1), ("High", 2)])
+        self.ar = ButtonGroup("Aspect", 245, [("Wide", 1), ("Original", 2), ("Cinema1", 3), ("Cinema2", 4)])
+        self.pl = ButtonGroup("LED", 253, [("Off", 0), ("On", 1)])
+        self.sp = ButtonGroup("Split", 215, [("Off", 1), ("50/50", 5), ("66/33", 3), ("PBP", 0)])
+        self.mu = ButtonGroup("Audio", 141, [("Mute", 1), ("Unmute", 2)])
+        self.lang = ButtonGroup("Language", 204, [("EN", 0), ("FR", 2), ("DE", 3)])
+        self.osd = ButtonGroup("OSD Lock", 202, [("Lock", 1), ("Unlock", 2)])
+
+        for g in [self.rt, self.fs, self.gm, self.se, self.ar, self.pl, self.sp, self.mu, self.lang, self.osd]:
+            layout.addWidget(g)
+
+        grp = QGroupBox("Reset")
+        h = QHBoxLayout(grp)
+        for t, v in [("Factory", 4), ("Bri/Con", 5), ("Color", 8)]:
+            b = QPushButton(t)
+            b.setStyleSheet("QPushButton{color:#F44;border:1px solid #F44;padding:6px}QPushButton:hover{background:#3a1a1a}")
+            b.clicked.connect(partial(ddc_write, v, 1))
+            h.addWidget(b)
+        layout.addWidget(grp)
+        layout.addStretch()
+        return w
+
+    def _build_system_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+
+        grp = QGroupBox("Monitor")
+        g = QGridLayout(grp)
+        self.sys = {}
+        for i, (k, l) in enumerate([("model", "Model"), ("panel", "Panel"), ("fw", "Firmware"),
+                                     ("hz", "Refresh"), ("hours", "Usage"), ("ctrl", "Controller")]):
+            la = QLabel(l + ":")
+            la.setStyleSheet("color:#888")
+            v = QLabel("--")
+            v.setFont(QFont("monospace", 10))
+            g.addWidget(la, i, 0)
+            g.addWidget(v, i, 1)
+            self.sys[k] = v
+        layout.addWidget(grp)
+
+        grp2 = QGroupBox("Status")
+        h = QHBoxLayout(grp2)
+        self.badges = {}
+        for n in ["FreeSync", "HDR", "SmartEnergy"]:
+            b = StatusBadge(n)
+            h.addWidget(b)
+            self.badges[n] = b
+        layout.addWidget(grp2)
+
+        btn = QPushButton("Refresh All")
+        btn.setIcon(QIcon.fromTheme("view-refresh"))
+        btn.clicked.connect(self.refresh)
+        layout.addWidget(btn)
+        layout.addStretch()
+        return w
+
+    def refresh(self):
+        mon = ddc_read_all()
+        if mon:
+            def g(k):
+                return mon.get(k, {}).get("current", 0)
+
+            self.bri.set_value(g("brightness"))
+            self.con.set_value(g("contrast"))
+            self.sha.set_value(g("sharpness"))
+            self.vol.set_value(g("volume"))
+            self.bst.set_value(g("black_stabilizer"))
+            self.red.set_value(g("red_gain"))
+            self.grn.set_value(g("green_gain"))
+            self.blu.set_value(g("blue_gain"))
+            self.pic.set_active(g("picture_mode"))
+            self.inp.set_active(g("input_source"))
+            self.cpre.set_active(g("color_preset"))
+            self.rt.set_active(g("response_time"))
+            self.fs.set_active(g("freesync"))
+            self.gm.set_active(g("gamma"))
+            self.se.set_active(g("smart_energy"))
+            self.ar.set_active(g("aspect_ratio"))
+            self.pl.set_active(g("power_led"))
+            self.mu.set_active(g("audio_mute"))
+
+            fw = g("firmware")
+            self.sys["model"].setText("LG 34GN850")
+            self.sys["panel"].setText("IPS 3440x1440 10-bit")
+            self.sys["fw"].setText(f"{fw >> 8}.{fw & 0xFF}")
+            self.sys["hz"].setText(f"{g('v_freq') / 100:.1f} Hz")
+            self.sys["hours"].setText(f"{g('usage_hours')} h")
+            self.sys["ctrl"].setText("Myson Century (ID=6)")
+            self.badges["FreeSync"].set_active(g("freesync") == 1)
+            self.badges["SmartEnergy"].set_active(g("smart_energy") > 0)
+
+        kb = kb_read()
+        if kb:
+            bat = kb.get("battery", {})
+            pct = bat.get("percentage_fine") or bat.get("percentage") or 0
+            self.kb_bat.setText(f"{pct}%")
+            self.kb_bar.setValue(pct)
+            self.kb_volt.setText(f"{bat.get('voltage', 0):.3f} V")
+            r = kb.get("radio", {})
+            self.kb_rssi.setText(f"{r.get('rssi_dbm', '--')} dBm")
+            d = kb.get("device", {})
+            self.kb_info["model"].setText(d.get("model", "--"))
+            self.kb_info["firmware"].setText(kb.get("firmware", {}).get("version", "--"))
+            self.kb_info["status"].setText("Connected" if d.get("mac") else "Offline")
+            self.kb_info["chip"].setText(d.get("chip", "--"))
+            a = kb.get("analysis", {})
+            bt = a.get("battery_type", {})
+            self.kb_info["type"].setText(bt.get("detail", "--") if bt else "--")
+            dr = a.get("discharge", {})
+            self.kb_info["drain"].setText(dr.get("remaining_display", "--") if dr else "--")
+
+            self.status.showMessage(f"Keyboard: {pct}% | Monitor: {len(mon)} VCPs")
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("ApiHub Settings")
+    app.setWindowIcon(QIcon.fromTheme("preferences-desktop-peripherals"))
+
+    window = ApiHubWindow()
+
+    tray = QSystemTrayIcon(QIcon.fromTheme("preferences-desktop-peripherals"), app)
+    menu = QMenu()
+    sa = QAction("Open ApiHub Settings")
+    sa.triggered.connect(window.show)
+    menu.addAction(sa)
+    ra = QAction("Refresh")
+    ra.triggered.connect(window.refresh)
+    menu.addAction(ra)
+    menu.addSeparator()
+    qa = QAction("Quit")
+    qa.triggered.connect(app.quit)
+    menu.addAction(qa)
+    tray.setContextMenu(menu)
+    tray.activated.connect(lambda r: window.show() if r == QSystemTrayIcon.Trigger else None)
+    tray.show()
+    window.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
