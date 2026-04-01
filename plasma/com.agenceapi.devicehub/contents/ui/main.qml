@@ -40,6 +40,9 @@ PlasmoidItem {
     property string monFirmware: ""
     property int monHFreq: 0
     property int monVFreq: 0
+    property int monOsdLock: 2
+    property int monLanguage: 2
+    property int monSplitMode: 1
 
     // ── Representations ──
     preferredRepresentation: compactRepresentation
@@ -141,6 +144,9 @@ PlasmoidItem {
                 if (m.firmware) root.monFirmware = (m.firmware.current >> 8) + "." + (m.firmware.current & 0xFF);
                 if (m.h_freq) root.monHFreq = m.h_freq.current;
                 if (m.v_freq) root.monVFreq = m.v_freq.current;
+                if (m.osd_lock) root.monOsdLock = m.osd_lock.current;
+                if (m.language) root.monLanguage = m.language.current;
+                if (m.split_mode) root.monSplitMode = m.split_mode.current;
             } catch(e) {}
             disconnectSource(source);
         }

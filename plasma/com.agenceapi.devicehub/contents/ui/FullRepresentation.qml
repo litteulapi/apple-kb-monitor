@@ -994,6 +994,224 @@ ColumnLayout {
                         }
                     }
 
+                    // ── Split Screen section ──
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                    }
+
+                    PlasmaExtras.Heading {
+                        text: "Split Screen"
+                        level: 4
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Repeater {
+                            model: [
+                                {"t": "OFF", "v": 1},
+                                {"t": "LR 50/50", "v": 5},
+                                {"t": "LR 66/33", "v": 3},
+                                {"t": "PBP ON", "v": 0}
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+
+                                Layout.fillWidth: true
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                border.width: 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: Kirigami.Theme.textColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setMonitorValue(215, modelData.v)
+                                }
+                            }
+                        }
+                    }
+
+                    // ── OSD section ──
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                    }
+
+                    PlasmaExtras.Heading {
+                        text: "OSD"
+                        level: 4
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    // OSD Lock toggle
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.smallSpacing
+
+                        PlasmaComponents3.Label {
+                            text: "OSD Lock"
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Repeater {
+                            model: [
+                                {"t": "LOCK", "v": 1},
+                                {"t": "UNLOCK", "v": 2}
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+                                property bool active: root.monOsdLock === modelData.v
+
+                                implicitWidth: Kirigami.Units.gridUnit * 4
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: active
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                    : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                border.width: active ? 2 : 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: active
+                                        ? Kirigami.Theme.highlightedTextColor
+                                        : Kirigami.Theme.textColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        root.monOsdLock = modelData.v;
+                                        root.setMonitorValue(202, modelData.v);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Language selector
+                    PlasmaComponents3.Label {
+                        text: "Language"
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Repeater {
+                            model: [
+                                {"t": "EN", "v": 0},
+                                {"t": "FR", "v": 2},
+                                {"t": "DE", "v": 3}
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+                                property bool active: root.monLanguage === modelData.v
+
+                                Layout.fillWidth: true
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: active
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                    : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                border.width: active ? 2 : 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: active
+                                        ? Kirigami.Theme.highlightedTextColor
+                                        : Kirigami.Theme.textColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        root.monLanguage = modelData.v;
+                                        root.setMonitorValue(204, modelData.v);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Reset section ──
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                    }
+
+                    PlasmaExtras.Heading {
+                        text: "Reset"
+                        level: 4
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Repeater {
+                            model: [
+                                {"t": "FACTORY", "vcp": 4, "v": 1},
+                                {"t": "BRI/CON", "vcp": 5, "v": 1},
+                                {"t": "COLOR", "vcp": 8, "v": 1}
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+
+                                Layout.fillWidth: true
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.08)
+                                border.width: 0
+                                border.color: Kirigami.Theme.negativeTextColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: Kirigami.Theme.negativeTextColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setMonitorValue(modelData.vcp, modelData.v)
+                                }
+                            }
+                        }
+                    }
+
                     Item { Layout.fillHeight: true }
                 }
             }
