@@ -108,6 +108,7 @@ const KNOWN_VCPS: &[VcpInfo] = &[
     VcpInfo { code: 0x1A, name: "blue_gain" },
     VcpInfo { code: 0x60, name: "input_source" },
     VcpInfo { code: 0x62, name: "volume" },
+    VcpInfo { code: 0x87, name: "sharpness" },
     VcpInfo { code: 0x8D, name: "audio_mute" },
     VcpInfo { code: 0xAC, name: "h_freq" },
     VcpInfo { code: 0xAE, name: "v_freq" },
@@ -118,13 +119,14 @@ const KNOWN_VCPS: &[VcpInfo] = &[
     VcpInfo { code: 0xD6, name: "power_mode" },
     VcpInfo { code: 0xDF, name: "vcp_version" },
     VcpInfo { code: 0xF4, name: "lg_custom_1" },
-    VcpInfo { code: 0xF5, name: "lg_custom_2" },
-    VcpInfo { code: 0xF6, name: "lg_custom_3" },
-    VcpInfo { code: 0xF7, name: "lg_custom_4" },
-    VcpInfo { code: 0xF8, name: "lg_custom_5" },
-    VcpInfo { code: 0xF9, name: "lg_custom_6" },
+    VcpInfo { code: 0xF5, name: "aspect_ratio" },
+    VcpInfo { code: 0xF6, name: "smart_energy" },
+    VcpInfo { code: 0xF7, name: "response_time" },
+    VcpInfo { code: 0xF8, name: "freesync" },
+    VcpInfo { code: 0xF9, name: "black_stabilizer" },
     VcpInfo { code: 0xFA, name: "lg_custom_7" },
-    VcpInfo { code: 0xFE, name: "lg_custom_8" },
+    VcpInfo { code: 0xFD, name: "power_led" },
+    VcpInfo { code: 0xFE, name: "gamma" },
 ];
 
 fn parse_vcp(s: &str) -> Option<u8> {

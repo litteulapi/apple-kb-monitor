@@ -29,12 +29,14 @@ PlasmoidItem {
     property int monMute: 2
     property int monUsageHours: 0
     property int monColorPreset: 0
-    property int monFreeSync: 0
-    property int monHDR: 0
-    property int monDAS: 0
-    property int monGamma: 50
+    property int monSharpness: 50
+    property int monAspect: 1
+    property int monSmartEnergy: 0
     property int monResponseTime: 0
-    property int monBlackLevel: 0
+    property int monFreeSync: 0
+    property int monBlackStabilizer: 50
+    property int monGamma: 0
+    property int monPowerLed: 0
     property string monFirmware: ""
     property int monHFreq: 0
     property int monVFreq: 0
@@ -128,12 +130,14 @@ PlasmoidItem {
                 if (m.audio_mute) root.monMute = m.audio_mute.current;
                 if (m.usage_hours) root.monUsageHours = m.usage_hours.current;
                 if (m.color_preset) root.monColorPreset = m.color_preset.current;
-                if (m.lg_custom_1) root.monResponseTime = m.lg_custom_1.current;
-                if (m.lg_custom_4) root.monFreeSync = m.lg_custom_4.current;
-                if (m.lg_custom_5) root.monHDR = m.lg_custom_5.current;
-                if (m.lg_custom_3) root.monDAS = m.lg_custom_3.current;
-                if (m.lg_custom_6) root.monGamma = m.lg_custom_6.current;
-                if (m.lg_custom_8) root.monBlackLevel = m.lg_custom_8.current;
+                if (m.sharpness) root.monSharpness = m.sharpness.current;
+                if (m.aspect_ratio) root.monAspect = m.aspect_ratio.current;
+                if (m.smart_energy) root.monSmartEnergy = m.smart_energy.current;
+                if (m.response_time) root.monResponseTime = m.response_time.current;
+                if (m.freesync) root.monFreeSync = m.freesync.current;
+                if (m.black_stabilizer) root.monBlackStabilizer = m.black_stabilizer.current;
+                if (m.gamma) root.monGamma = m.gamma.current;
+                if (m.power_led) root.monPowerLed = m.power_led.current;
                 if (m.firmware) root.monFirmware = (m.firmware.current >> 8) + "." + (m.firmware.current & 0xFF);
                 if (m.h_freq) root.monHFreq = m.h_freq.current;
                 if (m.v_freq) root.monVFreq = m.v_freq.current;

@@ -10,7 +10,7 @@ ColumnLayout {
     id: fullRep
 
     Layout.preferredWidth: Kirigami.Units.gridUnit * 24
-    Layout.preferredHeight: Kirigami.Units.gridUnit * 32
+    Layout.preferredHeight: Kirigami.Units.gridUnit * 36
     Layout.minimumWidth: Kirigami.Units.gridUnit * 20
     Layout.minimumHeight: Kirigami.Units.gridUnit * 24
 
@@ -23,7 +23,11 @@ ColumnLayout {
     }
 
     function picModeName(v) {
-        var map = {1: "Gamer 1", 6: "Gamer 2", 17: "FPS", 19: "RTS", 20: "Vivid", 21: "Reader", 22: "HDR", 24: "sRGB", 45: "Custom"};
+        var map = {
+            1: "Reader", 6: "Gamer 2", 17: "Custom", 19: "RTS",
+            20: "Vivid", 21: "sRGB", 25: "EBU", 32: "Photo",
+            40: "FPS 1", 41: "FPS 2", 45: "Custom 2", 72: "Cinema"
+        };
         return map[v] || "Mode " + v;
     }
 
@@ -227,12 +231,78 @@ ColumnLayout {
                     width: parent.width
                     spacing: Kirigami.Units.smallSpacing
 
-                    // ── Display section ──
+                    // ── Picture Mode section ──
                     PlasmaExtras.Heading {
-                        text: "Display"
+                        text: "Picture Mode"
                         level: 4
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                         Layout.topMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    GridLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        columns: 4
+                        columnSpacing: Kirigami.Units.smallSpacing
+                        rowSpacing: Kirigami.Units.smallSpacing
+
+                        Repeater {
+                            model: [
+                                {"t": "READER", "v": 1},
+                                {"t": "GAMER 2", "v": 6},
+                                {"t": "CUSTOM", "v": 17},
+                                {"t": "RTS", "v": 19},
+                                {"t": "VIVID", "v": 20},
+                                {"t": "sRGB", "v": 21},
+                                {"t": "FPS 1", "v": 40},
+                                {"t": "FPS 2", "v": 41},
+                                {"t": "PHOTO", "v": 32},
+                                {"t": "CINEMA", "v": 72},
+                                {"t": "EBU", "v": 25},
+                                {"t": "CUSTOM 2", "v": 45}
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+                                property bool active: root.monPictureMode === modelData.v
+
+                                Layout.fillWidth: true
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: active
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                    : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                border.width: active ? 2 : 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: active
+                                        ? Kirigami.Theme.highlightedTextColor
+                                        : Kirigami.Theme.textColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setMonitorValue(21, modelData.v)
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Brightness / Contrast section ──
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                    }
+
+                    PlasmaExtras.Heading {
+                        text: "Backlight"
+                        level: 4
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
                     }
 
                     // Brightness
@@ -535,46 +605,96 @@ ColumnLayout {
                         }
                     }
 
-                    // ── Picture Mode section ──
+                    // ── Display section ──
                     Kirigami.Separator {
                         Layout.fillWidth: true
                         Layout.topMargin: Kirigami.Units.smallSpacing
                     }
 
                     PlasmaExtras.Heading {
-                        text: "Picture Mode"
+                        text: "Display"
                         level: 4
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                     }
 
-                    GridLayout {
+                    // Sharpness slider
+                    ColumnLayout {
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                         Layout.rightMargin: Kirigami.Units.largeSpacing
-                        columns: 4
-                        columnSpacing: Kirigami.Units.smallSpacing
-                        rowSpacing: Kirigami.Units.smallSpacing
+                        spacing: 0
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            PlasmaComponents3.Label {
+                                text: "Sharpness"
+                            }
+                            Item { Layout.fillWidth: true }
+                            PlasmaComponents3.Label {
+                                text: root.monSharpness + "%"
+                                font.bold: true
+                            }
+                        }
+
+                        PlasmaComponents3.Slider {
+                            Layout.fillWidth: true
+                            from: 0
+                            to: 100
+                            value: root.monSharpness
+                            stepSize: 1
+                            onMoved: {
+                                root.monSharpness = value;
+                                root.setMonitorValue(135, value);
+                            }
+                        }
+                    }
+
+                    // Aspect Ratio buttons
+                    PlasmaComponents3.Label {
+                        text: "Aspect Ratio"
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.smallSpacing
 
                         Repeater {
                             model: [
-                                {"t": "GAMER 1", "v": 1},
-                                {"t": "GAMER 2", "v": 6},
-                                {"t": "FPS", "v": 17},
-                                {"t": "RTS", "v": 19},
-                                {"t": "VIVID", "v": 20},
-                                {"t": "READER", "v": 21},
-                                {"t": "HDR", "v": 22},
-                                {"t": "sRGB", "v": 24},
-                                {"t": "CUSTOM", "v": 45}
+                                {"t": "WIDE", "v": 1},
+                                {"t": "ORIGINAL", "v": 2},
+                                {"t": "CINEMA 1", "v": 3},
+                                {"t": "CINEMA 2", "v": 4}
                             ]
 
-                            PlasmaComponents3.Button {
+                            Rectangle {
                                 required property var modelData
+                                property bool active: root.monAspect === modelData.v
+
                                 Layout.fillWidth: true
-                                text: modelData.t
-                                checked: root.monPictureMode === modelData.v
-                                highlighted: root.monPictureMode === modelData.v
-                                onClicked: root.setMonitorValue(21, modelData.v)
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: active
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                    : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                border.width: active ? 2 : 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: active
+                                        ? Kirigami.Theme.highlightedTextColor
+                                        : Kirigami.Theme.textColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setMonitorValue(245, modelData.v)
+                                }
                             }
                         }
                     }
@@ -591,7 +711,12 @@ ColumnLayout {
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                     }
 
-                    // Feature toggles row
+                    // Response Time buttons
+                    PlasmaComponents3.Label {
+                        text: "Response Time"
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing
@@ -600,63 +725,272 @@ ColumnLayout {
 
                         Repeater {
                             model: [
-                                {"t": "FreeSync", "v": root.monFreeSync, "on": 2},
-                                {"t": "HDR", "v": root.monHDR, "on": 1},
-                                {"t": "DAS", "v": root.monDAS, "on": 1}
+                                {"t": "OFF", "v": 0},
+                                {"t": "FAST", "v": 1},
+                                {"t": "NORMAL", "v": 2},
+                                {"t": "SLOW", "v": 3}
                             ]
 
                             Rectangle {
                                 required property var modelData
-                                property bool active: modelData.v === modelData.on
+                                property bool active: root.monResponseTime === modelData.v
+
                                 Layout.fillWidth: true
-                                height: Kirigami.Units.gridUnit * 2.5
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
                                 radius: Kirigami.Units.cornerRadius
                                 color: active
                                     ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
                                     : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
-                                border.width: active ? 1 : 0
+                                border.width: active ? 2 : 0
                                 border.color: Kirigami.Theme.highlightColor
 
-                                ColumnLayout {
+                                PlasmaComponents3.Label {
                                     anchors.centerIn: parent
-                                    spacing: 0
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: active
+                                        ? Kirigami.Theme.highlightedTextColor
+                                        : Kirigami.Theme.textColor
+                                }
 
-                                    PlasmaComponents3.Label {
-                                        text: modelData.t
-                                        font: Kirigami.Theme.smallFont
-                                        Layout.alignment: Qt.AlignHCenter
-                                    }
-                                    PlasmaComponents3.Label {
-                                        text: parent.parent.active ? "ON" : "OFF"
-                                        font.pointSize: Kirigami.Theme.smallFont.pointSize
-                                        font.bold: true
-                                        color: parent.parent.active
-                                            ? Kirigami.Theme.positiveTextColor
-                                            : Kirigami.Theme.disabledTextColor
-                                        Layout.alignment: Qt.AlignHCenter
-                                    }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setMonitorValue(247, modelData.v)
                                 }
                             }
                         }
                     }
 
-                    // Gamma, Black Level, Response Time
-                    Kirigami.FormLayout {
+                    // FreeSync toggle
+                    RowLayout {
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.largeSpacing
                         Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing
 
                         PlasmaComponents3.Label {
-                            Kirigami.FormData.label: "Gamma:"
-                            text: root.monGamma.toString()
+                            text: "FreeSync"
                         }
-                        PlasmaComponents3.Label {
-                            Kirigami.FormData.label: "Black Level:"
-                            text: root.monBlackLevel.toString()
+
+                        Item { Layout.fillWidth: true }
+
+                        Repeater {
+                            model: [
+                                {"t": "OFF", "v": 0},
+                                {"t": "ON", "v": 1}
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+                                property bool active: root.monFreeSync === modelData.v
+
+                                implicitWidth: Kirigami.Units.gridUnit * 4
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: active
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                    : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                border.width: active ? 2 : 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: active
+                                        ? Kirigami.Theme.highlightedTextColor
+                                        : Kirigami.Theme.textColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setMonitorValue(248, modelData.v)
+                                }
+                            }
                         }
+                    }
+
+                    // Smart Energy buttons
+                    PlasmaComponents3.Label {
+                        text: "Smart Energy"
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Repeater {
+                            model: [
+                                {"t": "OFF", "v": 0},
+                                {"t": "LOW", "v": 1},
+                                {"t": "HIGH", "v": 2}
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+                                property bool active: root.monSmartEnergy === modelData.v
+
+                                Layout.fillWidth: true
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: active
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                    : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                border.width: active ? 2 : 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: active
+                                        ? Kirigami.Theme.highlightedTextColor
+                                        : Kirigami.Theme.textColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setMonitorValue(246, modelData.v)
+                                }
+                            }
+                        }
+                    }
+
+                    // Black Stabilizer slider
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                        spacing: 0
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            PlasmaComponents3.Label {
+                                text: "Black Stabilizer"
+                            }
+                            Item { Layout.fillWidth: true }
+                            PlasmaComponents3.Label {
+                                text: root.monBlackStabilizer + "%"
+                                font.bold: true
+                            }
+                        }
+
+                        PlasmaComponents3.Slider {
+                            Layout.fillWidth: true
+                            from: 0
+                            to: 100
+                            value: root.monBlackStabilizer
+                            stepSize: 1
+                            onMoved: {
+                                root.monBlackStabilizer = value;
+                                root.setMonitorValue(249, value);
+                            }
+                        }
+                    }
+
+                    // Gamma buttons
+                    PlasmaComponents3.Label {
+                        text: "Gamma"
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Repeater {
+                            model: [
+                                {"t": "OFF", "v": 0},
+                                {"t": "MODE 0", "v": 1},
+                                {"t": "MODE 1", "v": 2},
+                                {"t": "MODE 2", "v": 3}
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+                                property bool active: root.monGamma === modelData.v
+
+                                Layout.fillWidth: true
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: active
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                    : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                border.width: active ? 2 : 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: active
+                                        ? Kirigami.Theme.highlightedTextColor
+                                        : Kirigami.Theme.textColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setMonitorValue(254, modelData.v)
+                                }
+                            }
+                        }
+                    }
+
+                    // Power LED toggle
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.leftMargin: Kirigami.Units.largeSpacing
+                        Layout.rightMargin: Kirigami.Units.largeSpacing
+                        Layout.topMargin: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing
+
                         PlasmaComponents3.Label {
-                            Kirigami.FormData.label: "Response Time:"
-                            text: root.monResponseTime.toString()
+                            text: "Power LED"
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Repeater {
+                            model: [
+                                {"t": "OFF", "v": 0},
+                                {"t": "ON", "v": 1}
+                            ]
+
+                            Rectangle {
+                                required property var modelData
+                                property bool active: root.monPowerLed === modelData.v
+
+                                implicitWidth: Kirigami.Units.gridUnit * 4
+                                implicitHeight: Kirigami.Units.gridUnit * 1.8
+                                radius: Kirigami.Units.cornerRadius
+                                color: active
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                    : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
+                                border.width: active ? 2 : 0
+                                border.color: Kirigami.Theme.highlightColor
+
+                                PlasmaComponents3.Label {
+                                    anchors.centerIn: parent
+                                    text: modelData.t
+                                    font: Kirigami.Theme.smallFont
+                                    color: active
+                                        ? Kirigami.Theme.highlightedTextColor
+                                        : Kirigami.Theme.textColor
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: root.setMonitorValue(253, modelData.v)
+                                }
+                            }
                         }
                     }
 
