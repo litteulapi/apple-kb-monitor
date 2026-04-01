@@ -1,0 +1,119 @@
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.plasmoid
+import org.kde.plasma.core as PlasmaCore
+import org.kde.kirigami as Kirigami
+
+PlasmoidItem {
+    id: root
+
+    // Data from apple-kb-monitor
+    property int batteryPercent: 0
+    property real voltage: 0
+    property int rssi: 0
+    property string model: ""
+    property bool connected: false
+
+    // Monitor data
+    property int monBrightness: 50
+    property int monContrast: 50
+
+    preferredRepresentation: compactRepresentation
+    compactRepresentation: CompactRepresentation {}
+    fullRepresentation: FullRepresentation {}
+
+    toolTipMainText: connected ? model : "No device"
+    toolTipSubText: connected
+        ? batteryPercent + "% · " + voltage.toFixed(3) + "V · RSSI " + rssi + "dBm"
+        : "Waiting for Apple Keyboard..."
+
+    Plasmoid.status: connected ? PlasmaCore.Types.ActiveStatus : PlasmaCore.Types.PassiveStatus
+
+    // Refresh data every 30s
+    Timer {
+        id: refreshTimer
+        interval: 30000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: fetchData()
+    }
+
+    // Monitor refresh every 60s
+    Timer {
+        id: monitorTimer
+        interval: 60000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: fetchMonitor()
+    }
+
+    function fetchData() {
+        dataSource.exec("apple-kb-monitor --json 2>/dev/null")
+    }
+
+    function fetchMonitor() {
+        monSource.exec("ddcutil getvcp 10 12 --brief --noverify 2>/dev/null")
+    }
+
+    function setMonitorValue(vcp, value) {
+        ddcWrite.exec("python3 -c \"" +
+            "import os,fcntl;" +
+            "fd=os.open('/dev/i2c-6',os.O_RDWR);" +
+            "fcntl.ioctl(fd,0x0703,0x37);" +
+            "p=bytes([0x51,0x84,0x03," + vcp + ",0x00," + value + "]);" +
+            "c=0x6E;" +
+            "[c:=c^b for b in p];" +
+            "os.write(fd,p+bytes([c&0xFF]));" +
+            "os.close(fd)\"")
+    }
+
+    // Data source for keyboard
+    PlasmaCore.DataSource {
+        id: dataSource
+        engine: "executable"
+        onNewData: function(source, data) {
+            var stdout = data["stdout"]
+            if (!stdout) return
+            try {
+                var d = JSON.parse(stdout)
+                root.connected = true
+                root.batteryPercent = d.battery.percentage_fine || d.battery.percentage || 0
+                root.voltage = d.battery.voltage || 0
+                root.model = d.device.model || "Apple Keyboard"
+                if (d.radio && d.radio.rssi_dbm !== undefined)
+                    root.rssi = d.radio.rssi_dbm
+            } catch(e) {
+                root.connected = false
+            }
+        }
+        function exec(cmd) { connectSource(cmd) }
+    }
+
+    // Data source for monitor
+    PlasmaCore.DataSource {
+        id: monSource
+        engine: "executable"
+        onNewData: function(source, data) {
+            var stdout = data["stdout"]
+            if (!stdout) return
+            var lines = stdout.split("\n")
+            for (var i = 0; i < lines.length; i++) {
+                var parts = lines[i].trim().split(/\s+/)
+                if (parts.length >= 4) {
+                    if (parts[1] === "0x10") root.monBrightness = parseInt(parts[3])
+                    if (parts[1] === "0x12") root.monContrast = parseInt(parts[3])
+                }
+            }
+        }
+        function exec(cmd) { connectSource(cmd) }
+    }
+
+    // DDC write source
+    PlasmaCore.DataSource {
+        id: ddcWrite
+        engine: "executable"
+        function exec(cmd) { connectSource(cmd) }
+    }
+}

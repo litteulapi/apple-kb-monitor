@@ -1,0 +1,21 @@
+{
+    "KPlugin": {
+        "Id": "com.agenceapi.devicehub",
+        "Name": "Device Hub",
+        "Description": "Apple Keyboard telemetry + Monitor DDC/CI control",
+        "Icon": "preferences-desktop-peripherals",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "Han (AgenceAPI)",
+                "Email": "han@agenceapi.com"
+            }
+        ],
+        "Version": "2.4.0",
+        "License": "GPL-2.0-or-later",
+        "Website": "https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
+    },
+    "X-Plasma-API": "declarativeappletscript",
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "KPackageStructure": "Plasma/Applet"
+}
