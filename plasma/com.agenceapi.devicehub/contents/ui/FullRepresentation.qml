@@ -63,7 +63,7 @@ ColumnLayout {
             id: keyboardTab
 
             Flickable {
-                contentWidth: availableWidth
+                contentWidth: parent.width
                 contentHeight: kbCol.implicitHeight + Kirigami.Units.largeSpacing * 2
 
                 ColumnLayout {
@@ -219,7 +219,7 @@ ColumnLayout {
             id: monitorTab
 
             Flickable {
-                contentWidth: availableWidth
+                contentWidth: parent.width
                 contentHeight: monCol.implicitHeight + Kirigami.Units.largeSpacing * 2
 
                 ColumnLayout {
@@ -672,7 +672,7 @@ ColumnLayout {
             id: systemTab
 
             Flickable {
-                contentWidth: availableWidth
+                contentWidth: parent.width
                 contentHeight: sysCol.implicitHeight + Kirigami.Units.largeSpacing * 2
 
                 ColumnLayout {
