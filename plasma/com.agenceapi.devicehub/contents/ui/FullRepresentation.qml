@@ -37,7 +37,7 @@ ColumnLayout {
             ColumnLayout {
                 spacing: 0
                 Text {
-                    text: "DEVICE HUB"
+                    text: "APIHUB"
                     color: "#00D4FF"
                     font { pixelSize: 14; bold: true; family: "monospace"; letterSpacing: 2 }
                 }

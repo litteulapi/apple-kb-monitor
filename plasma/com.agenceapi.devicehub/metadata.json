@@ -1,7 +1,7 @@
 {
     "KPlugin": {
         "Id": "com.agenceapi.devicehub",
-        "Name": "Device Hub",
+        "Name": "ApiHub",
         "Description": "Apple Keyboard telemetry + Monitor DDC/CI control",
         "Icon": "preferences-desktop-peripherals",
         "Category": "System Information",
