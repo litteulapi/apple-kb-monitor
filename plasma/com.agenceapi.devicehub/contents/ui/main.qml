@@ -78,6 +78,9 @@ PlasmoidItem {
 
     function setMonitorValue(vcp, value) {
         ddcWrite.connectSource("ddc-tool write 6 " + vcp + " " + value);
+        if (vcp == 16) {
+            ddcWrite.connectSource("qdbus6 org.kde.plasmashell /org/kde/osdService org.kde.osdService.brightnessChanged " + value);
+        }
     }
 
     // ── Keyboard data source ──
