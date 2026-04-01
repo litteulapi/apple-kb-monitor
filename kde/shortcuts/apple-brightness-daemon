@@ -56,8 +56,7 @@ class DDCBrightness:
 
     def __init__(self, i2c_path: str):
         self._i2c_path = i2c_path
-        self._fd = os.open(i2c_path, os.O_RDWR)
-        fcntl.ioctl(self._fd, I2C_SLAVE, DDC_ADDR)
+        self._fd = -1
         self._value = self._read()
         self._last_write = 0.0
 
@@ -78,19 +77,22 @@ class DDCBrightness:
         return 50
 
     def _write_vcp(self, code: int, value: int) -> None:
-        """Send DDC/CI VCP Set command directly over I2C."""
+        """Send DDC/CI VCP Set — open/write/close to avoid locking I2C bus."""
         payload = bytes([
-            0x51,                          # source address
-            0x80 | 4,                      # length: 4 bytes | flag
-            0x03,                          # opcode: VCP Set
-            code,                          # VCP code
-            value >> 8,                    # value high
-            value & 0xFF,                  # value low
+            0x51,
+            0x80 | 4,
+            0x03,
+            code,
+            value >> 8,
+            value & 0xFF,
         ])
-        chk = 0x6E                         # destination address
+        chk = 0x6E
         for b in payload:
             chk ^= b
-        os.write(self._fd, payload + bytes([chk & 0xFF]))
+        fd = os.open(self._i2c_path, os.O_RDWR)
+        fcntl.ioctl(fd, I2C_SLAVE, DDC_ADDR)
+        os.write(fd, payload + bytes([chk & 0xFF]))
+        os.close(fd)
 
     def adjust(self, delta: int) -> int:
         """Adjust brightness by delta. Returns new value."""
@@ -109,9 +111,7 @@ class DDCBrightness:
             self._last_write = now
 
     def close(self) -> None:
-        if self._fd >= 0:
-            os.close(self._fd)
-            self._fd = -1
+        pass  # fd opened/closed per write, nothing to clean up
 
     @property
     def value(self) -> int:
