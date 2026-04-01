@@ -14,6 +14,9 @@ PlasmoidItem {
     property bool connected: false
     property int monBrightness: 50
     property int monContrast: 50
+    property string fwVersion: ""
+    property string batteryType: ""
+    property string dischargeRate: ""
 
     preferredRepresentation: compactRepresentation
     compactRepresentation: CompactRepresentation {}
@@ -66,6 +69,9 @@ PlasmoidItem {
                 root.kbModel = d.device.model || "Apple Keyboard"
                 if (d.radio && d.radio.rssi_dbm !== undefined)
                     root.rssi = d.radio.rssi_dbm
+                root.fwVersion = (d.firmware && d.firmware.version) ? d.firmware.version : ""
+                root.batteryType = (d.analysis && d.analysis.battery_type) ? d.analysis.battery_type.type : ""
+                root.dischargeRate = (d.analysis && d.analysis.discharge) ? d.analysis.discharge.remaining_display : ""
             } catch(e) {
                 root.connected = false
             }
