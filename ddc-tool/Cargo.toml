@@ -1,0 +1,13 @@
+[package]
+name = "ddc-tool"
+version = "1.0.0"
+edition = "2021"
+description = "Direct I2C DDC/CI monitor control"
+license = "GPL-2.0-or-later"
+
+[dependencies]
+libc = "0.2"
+
+[[bin]]
+name = "ddc-tool"
+path = "src/main.rs"

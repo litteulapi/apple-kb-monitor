@@ -5,3 +5,4 @@ src/apple-kb-monitor.service
 src/99-apple-kb-hidraw.rules
 *.log
 __pycache__/
+ddc-tool/target/
