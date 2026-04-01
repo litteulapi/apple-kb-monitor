@@ -80,3 +80,60 @@ Volume OSD trick: write same value to 0x62 triggers OSD without audio change.
 VCP dispatch table is in SPI flash firmware, not in RAM.
 Cannot patch OSD behavior without physical access to SPI flash.
 OSD brightness via DDC/CI: CONFIRMED IMPOSSIBLE on LG 34GN850.
+
+
+## Capabilities String (parsed from DDC)
+
+Model: GN850, MCCS 2.1
+
+### Picture Modes (VCP 0x15) — 16 modes from capabilities
+| Value | Mode |
+|-------|------|
+| 0x01 (1) | Reader |
+| 0x06 (6) | Color Weakness / Gamer 2 |
+| 0x11 (17) | Custom |
+| 0x13 (19) | RTS |
+| 0x14 (20) | Vivid |
+| 0x15 (21) | sRGB |
+| 0x18 (24) | sRGB/SMPTE-C |
+| 0x19 (25) | EBU |
+| 0x20 (32) | Photo |
+| 0x22 (34) | ? |
+| 0x23 (35) | ? |
+| 0x24 (36) | ? |
+| 0x28 (40) | FPS Game 1 |
+| 0x29 (41) | FPS Game 2 |
+| 0x32 (50) | ? |
+| 0x48 (72) | Cinema |
+
+### All Controllable Features
+| VCP | Feature | Current | Range |
+|-----|---------|---------|-------|
+| 0x10 | Brightness | 50 | 0-100 |
+| 0x12 | Contrast | 50 | 0-100 |
+| 0x14 | Color Preset | User(11) | 5=6500K,8=9300K,B=User |
+| 0x15 | Picture Mode | Custom(45) | 16 modes |
+| 0x16 | Red Gain | 50 | 0-100 |
+| 0x18 | Green Gain | 50 | 0-100 |
+| 0x1A | Blue Gain | 49 | 0-100 |
+| 0x60 | Input Source | DP-1(15) | DP1/DP2/HDMI1/HDMI2 |
+| 0x62 | Volume | 57 | 0-100 (triggers OSD) |
+| 0x87 | Sharpness | 50 | 0-100 |
+| 0x8D | Audio Mute | Off(2) | 1=mute,2=unmute |
+| 0xCA | OSD Lock | Off(2) | 1=lock,2=unlock |
+| 0xCC | Language | FR(2) | 0=EN,2=FR,3=DE... |
+| 0xD6 | Power | On(1) | 1=on,4=off |
+| 0xF5 | Aspect Ratio | 1 | 1=Wide,2=Original,3=Cinema1,4=Cinema2 |
+| 0xF6 | Smart Energy | Low(1) | 0=Off,1=Low,2=High |
+| 0xF7 | Response Time | Middle(2) | 0=Off,1=Fast,2=Normal,3=Slow |
+| 0xF8 | FreeSync | On(1) | 0=Off,1=On |
+| 0xF9 | Black Stabilizer | 50 | 0-100 |
+| 0xFD | Power LED | Off(0) | 0=Off,1=On |
+| 0xFE | Gamma | Mode2(3) | 0=Off,1=Mode0,2=Mode1 |
+
+### LG OnScreen Control SDK Analysis
+- App: .NET WPF (decompilable with dnSpy/ILSpy)
+- DLL: LGMonitorDDCCISDK.dll (in System32)
+- Functions: Get/SetPropertyWithoutOpcodeVerification
+- Protocol: Standard DDC/CI VCP Set/Get (no secret commands)
+- No OSD trigger command exists in SDK
