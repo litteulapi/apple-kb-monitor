@@ -1,77 +1,143 @@
 #!/usr/bin/env python3
-"""Watches Apple keyboard brightness keys and controls monitor via DDC/CI."""
-import struct, subprocess, os, glob
+# SPDX-License-Identifier: GPL-2.0-or-later
+"""
+apple-brightness-daemon — DDC/CI brightness for Apple Wireless Keyboards.
 
-def find_apple_evdev():
-    for inp in sorted(glob.glob("/sys/class/input/input*")):
-        try:
-            uniq = open(os.path.join(inp, "uniq")).read().strip()
-            if ":" in uniq and len(uniq) == 17:  # MAC address
-                name = open(os.path.join(inp, "name")).read().strip()
-                if "Apple" in name:
-                    for ev in glob.glob(os.path.join(inp, "event*")):
-                        return f"/dev/input/{os.path.basename(ev)}"
-        except OSError:
-            pass
-    return None
+Reads evdev events from keyd virtual keyboard (passthrough F1/F2 brightness
+keycodes). Single blocking ddcutil call per keypress. KDE OSD notification.
 
-def get_brightness():
-    r = subprocess.run(["ddcutil", "getvcp", "10", "--brief"],
-                       capture_output=True, text=True, timeout=5)
-    if r.returncode == 0:
-        parts = r.stdout.split()
-        if len(parts) >= 4:
-            return int(parts[3])
-    return 50
+Design:
+  - No threads, no async, no GLib — single-threaded select() loop
+  - No key repeat — one adjustment per physical keypress (prevents I2C flood)
+  - Blocking ddcutil setvcp — guarantees serial I2C access (NVIDIA safe)
+  - Cached brightness — avoids slow getvcp on every keypress
+  - Clean shutdown on SIGTERM/SIGINT
+"""
 
-def set_brightness(val):
-    val = max(0, min(100, val))
-    subprocess.run(["ddcutil", "setvcp", "10", str(val)],
-                   capture_output=True, timeout=5)
+import os
+import signal
+import struct
+import subprocess
+import sys
+from select import select
 
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+VERSION = "2.4.0"
+KEYD_VIRTUAL_KB = "/dev/input/event30"
+DDC_VCP_BRIGHTNESS = "10"
+STEP = 5
+
+# linux/input-event-codes.h
+EV_KEY = 0x01
 KEY_BRIGHTNESSDOWN = 224
 KEY_BRIGHTNESSUP = 225
-KEY_KBDILLUMDOWN = 229
-KEY_KBDILLUMUP = 230
-EV_KEY = 1
-STEP = 10
+KEY_PRESS = 1
 
-evdev = find_apple_evdev()
-if not evdev:
-    print("No Apple keyboard found")
-    exit(1)
+# struct input_event on 64-bit: tv_sec(8) + tv_usec(8) + type(2) + code(2) + value(4)
+EVENT_FMT = "qqHHi"
+EVENT_SIZE = struct.calcsize(EVENT_FMT)
 
-print(f"Watching {evdev} for brightness keys (DDC step={STEP}%)")
-fd = os.open(evdev, os.O_RDONLY)
-EVENT_SIZE = 24  # sizeof(struct input_event) on 64-bit
 
-try:
-    while True:
-        data = os.read(fd, EVENT_SIZE)
-        if len(data) < EVENT_SIZE:
-            continue
-        tv_sec, tv_usec, typ, code, value = struct.unpack("qqHHi", data)
-        if typ != EV_KEY or value != 1:  # only key press, not release/repeat
-            continue
-        if code == KEY_BRIGHTNESSDOWN:
-            b = get_brightness()
-            set_brightness(b - STEP)
-            print(f"Brightness: {b} → {max(0,b-STEP)}")
-        elif code == KEY_BRIGHTNESSUP:
-            b = get_brightness()
-            set_brightness(b + STEP)
-            print(f"Brightness: {b} → {min(100,b+STEP)}")
-        elif code == KEY_KBDILLUMDOWN:
-            # F5 repurposed: lock screen
-            subprocess.run(["loginctl", "lock-session"], timeout=3)
-            print("Screen locked")
-        elif code == KEY_KBDILLUMUP:
-            # F6 repurposed: toggle DND (simplified)
-            subprocess.run(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService",
-                           "org.kde.osdService.brightnessChanged", "0"], 
-                          capture_output=True, timeout=3)
-            print("F6 pressed")
-except KeyboardInterrupt:
-    pass
-finally:
-    os.close(fd)
+# ---------------------------------------------------------------------------
+# DDC/CI brightness control
+# ---------------------------------------------------------------------------
+
+class Brightness:
+    """DDC/CI brightness with cache and KDE OSD."""
+
+    __slots__ = ("_value",)
+
+    def __init__(self):
+        self._value = self._read_ddc()
+
+    def _read_ddc(self) -> int:
+        try:
+            r = subprocess.run(
+                ["ddcutil", "getvcp", DDC_VCP_BRIGHTNESS, "--brief", "--noverify"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if r.returncode == 0:
+                parts = r.stdout.split()
+                if len(parts) >= 4:
+                    return int(parts[3])
+        except (subprocess.TimeoutExpired, ValueError):
+            pass
+        return 50
+
+    def adjust(self, delta: int) -> None:
+        self._value = max(0, min(100, self._value + delta))
+        subprocess.run(
+            ["ddcutil", "setvcp", DDC_VCP_BRIGHTNESS, str(self._value), "--noverify"],
+            capture_output=True, timeout=10,
+        )
+        subprocess.Popen(
+            ["qdbus6", "org.kde.plasmashell", "/org/kde/osdService",
+             "org.kde.osdService.brightnessChanged", str(self._value)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main() -> int:
+    os.environ.setdefault(
+        "DBUS_SESSION_BUS_ADDRESS", f"unix:path=/run/user/{os.getuid()}/bus"
+    )
+
+    if not os.path.exists(KEYD_VIRTUAL_KB):
+        print(f"[brightness] {KEYD_VIRTUAL_KB} not found", file=sys.stderr)
+        return 1
+
+    brightness = Brightness()
+    print(
+        f"[brightness] v{VERSION} listening on {KEYD_VIRTUAL_KB} "
+        f"current={brightness.value}% step={STEP}%",
+        file=sys.stderr,
+    )
+
+    fd = os.open(KEYD_VIRTUAL_KB, os.O_RDONLY | os.O_NONBLOCK)
+    stop = False
+
+    def shutdown(signum, frame):
+        nonlocal stop
+        stop = True
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+
+    try:
+        while not stop:
+            ready, _, _ = select([fd], [], [], 1.0)
+            if not ready:
+                continue
+            try:
+                while True:
+                    raw = os.read(fd, EVENT_SIZE)
+                    if len(raw) < EVENT_SIZE:
+                        break
+                    _, _, ev_type, ev_code, ev_value = struct.unpack(EVENT_FMT, raw)
+                    if ev_type != EV_KEY or ev_value != KEY_PRESS:
+                        continue
+                    if ev_code == KEY_BRIGHTNESSDOWN:
+                        brightness.adjust(-STEP)
+                    elif ev_code == KEY_BRIGHTNESSUP:
+                        brightness.adjust(STEP)
+            except BlockingIOError:
+                pass
+    finally:
+        os.close(fd)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
