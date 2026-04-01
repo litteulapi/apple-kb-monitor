@@ -1,191 +1,216 @@
 # apple-kb-monitor
 
-Full telemetry monitor for Apple Wireless Keyboards on Linux, built by reverse-engineering the undocumented HID Feature Reports exposed by the Broadcom BCM2042/BCM20733 controllers.
+Full telemetry, key mapping, and desktop integration for Apple Wireless Keyboards on Linux. Built by reverse-engineering the undocumented HID Feature Reports of the Broadcom BCM2042/BCM20733 controllers.
 
-**v2.0** — native BlueZ Battery Provider integration: your keyboard's precise battery percentage appears directly in KDE Plasma, GNOME, and any desktop environment that reads `org.bluez.Battery1`.
+## Features
 
-## What it reads
+- **21 HID Feature Reports** decoded — battery (3 methods), voltage, firmware, calibration curve, identity, BT parameters, config registers, ROM mirrors
+- **BlueZ Battery Provider** — precise battery % appears natively in KDE Plasma / GNOME
+- **DDC/CI monitor brightness** — F1/F2 control external monitor brightness with KDE OSD
+- **keyd integration** — all 13 special keys mapped at system level (Wayland compatible)
+- **RSSI without sudo** — C helper binary with `CAP_NET_ADMIN`
+- **SDP service records** — full Bluetooth profile parsing
+- **LED control** — read/write keyboard LEDs
+- **Analytics** — battery type detection, discharge rate, remaining time estimation
+- **KDE Bluedevil patch** — enriched Bluetooth panel (battery, firmware, profiles, BT class)
+- **12 output modes** — CLI, JSON, CSV, Prometheus, Waybar, sparkline graphs
 
-The Linux `hid-apple` kernel driver only exposes basic battery percentage via standard HID Battery Strength (Report 0x47). This tool reads **21 undocumented Feature Reports** to extract:
-
-| Report | Data | Notes |
-|--------|------|-------|
-| `0x47` | Battery % (standard) | Rounded, same as `hid-apple` driver |
-| `0xEA` | Battery % (precise) | Pre-rounding value from ADC |
-| `0xF5` | Battery voltage (raw ADC) | 10-bit, 3.3V reference |
-| `0xF4` | ADC calibration reference | |
-| `0x5A` | Discharge curve (4 thresholds) | Millivolt thresholds for 100/75/50/25% |
-| `0x5B` | Voltage reference pair | |
-| `0x4F` | Firmware version | |
-| `0xFF` | Build/revision number | |
-| `0x51-53` | Device name string | 3 chunks from chip ROM |
-| `0x4C` | Device identity (128-bit) | Internal key |
-| `0x46` | BT connection interval + latency | Live values, renegotiated by controller |
-| `0x49` | BT supervision timeout | |
-| `0x4A` | Power management config | |
-| `0x4B` | Device mode/class | |
-| `0x09` | Device state flag | 1=OK, 0=LOW |
-| `0xF6-F7` | Config registers | |
-| MGMT | RSSI, TX power | Via BlueZ MGMT socket (requires `CAP_NET_ADMIN`) |
-| D-Bus | Connection state, pairing | Via `org.bluez.Device1` |
-
-## Desktop integration (v2.0)
-
-In daemon mode, `apple-kb-monitor` registers as a **BlueZ Battery Provider** via the `BatteryProviderManager1` D-Bus API. This causes BlueZ to expose `org.bluez.Battery1` on the device path with the **precise** battery percentage from HID report `0xEA`.
-
-The integration chain:
-
-```
-apple-kb-monitor daemon
-    -> registers BatteryProvider1 on system D-Bus
-        -> BlueZ creates Battery1 on /org/bluez/hci0/dev_XX_XX_XX_XX_XX_XX
-            -> UPower discovers Battery1 (type: keyboard)
-                -> KDE Plasma battery applet shows it
-                -> KDE Bluedevil shows battery in BT panel
-                -> GNOME power indicator shows it
-                -> Any D-Bus consumer can read it
-```
-
-The daemon also monitors BlueZ `PropertiesChanged` signals for real-time device connect/disconnect detection.
-
-## Supported keyboards
-
-Tested:
-- Apple Wireless Keyboard A1314 (aluminum, ISO) — BCM2042
-
-Should work (same Broadcom HID register map):
-- Apple Wireless Keyboard A1016 (white) — BCM2042
-- Apple Wireless Keyboard A1255 (aluminum) — BCM2042
-- Apple Magic Keyboard A1644 — BCM20733
-- Apple Magic Keyboard A2449 (Touch ID) — BCM20733
-
-## Install (Arch Linux / AUR)
+## Install (Arch Linux / Manjaro)
 
 ```bash
-# From AUR
-yay -S apple-kb-monitor
-
-# Or manually
-git clone https://github.com/litteulapi/apple-kb-monitor.git
+git clone https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor.git
 cd apple-kb-monitor
 makepkg -si
+sudo usermod -aG input $USER
+# Log out and back in, then:
+systemctl --user enable --now apple-kb-monitor.service
+systemctl --user enable --now apple-brightness.service
 ```
+
+### What gets installed
+
+| File | Description |
+|------|-------------|
+| `/usr/bin/apple-kb-monitor` | Main daemon + CLI (Python) |
+| `/usr/bin/apple-brightness-daemon` | F1/F2 DDC brightness + OSD |
+| `/usr/bin/apple-brightness-down` | DDC brightness -1% script |
+| `/usr/bin/apple-brightness-up` | DDC brightness +1% script |
+| `/usr/lib/apple-kb-monitor/rssi-helper` | RSSI binary (CAP_NET_ADMIN) |
+| `/usr/lib/systemd/user/apple-kb-monitor.service` | Battery Provider daemon |
+| `/usr/lib/systemd/user/apple-brightness.service` | Brightness daemon |
+| `/usr/lib/udev/rules.d/99-apple-kb-hidraw.rules` | hidraw permissions |
+| `/etc/keyd/apple-keyboard.conf` | keyd special key mapping |
+| `/etc/modprobe.d/hid_apple.conf` | fnmode=1 (media keys default) |
 
 ### Dependencies
 
-- `python` (>= 3.10)
-- `bluez` (>= 5.56 for Battery Provider API)
-- `python-dbus-fast` (async D-Bus library)
+- `python`, `python-dbus-fast`, `python-dbus` — daemon
+- `bluez` (>= 5.56) — Battery Provider API
+- `keyd` — system-level key remapping
+- `ddcutil` — DDC/CI monitor brightness
 
-Optional:
-- `libnotify` — desktop notifications on low battery
-- `bluez-utils` — `bluetoothctl` for BT management
+## Special Keys
 
-## Setup
+All 13 special keys are functional via `keyd` (system-level, Wayland compatible):
 
-```bash
-# Add user to input group (for non-root hidraw access)
-sudo usermod -aG input $USER
-# Log out and back in
-
-# Enable the background monitor (systemd user service)
-systemctl --user enable --now apple-kb-monitor.service
-```
+| Key | Function | Method |
+|-----|----------|--------|
+| F1 | Monitor brightness down | DDC/CI + KDE OSD |
+| F2 | Monitor brightness up | DDC/CI + KDE OSD |
+| F3 | Overview (Exposé) | keyd macro → Meta+W |
+| F4 | Grid View (Launchpad) | keyd macro → Meta+G |
+| F5 | Lock Screen | keyd macro → Meta+L |
+| F6 | Show Desktop | keyd macro → Meta+D |
+| F7 | Previous Track | Native (kernel) |
+| F8 | Play / Pause | Native (kernel) |
+| F9 | Next Track | Native (kernel) |
+| F10 | Mute | Native (kernel) |
+| F11 | Volume Down | Native (kernel) |
+| F12 | Volume Up | Native (kernel) |
+| Eject | Eject | Native (kernel) |
 
 ## Usage
 
 ```bash
-# Quick battery + voltage check
+# Quick battery check
 apple-kb-monitor --once
-# Output: Apple Wireless Keyboard (A1314, aluminum, ISO)   100% (fine:98%)  2.981V
 
-# Full decoded device report
+# Full decoded report (all 21 registers + SDP + LEDs + analytics)
 apple-kb-monitor --status
 
-# Raw Feature Report dump (for RE work)
-apple-kb-monitor --dump
-
-# Live dashboard (auto-refresh)
-apple-kb-monitor --watch
-
-# JSON output (for scripts, widgets, Home Assistant, etc.)
+# JSON (320+ data points)
 apple-kb-monitor --json
 
-# Waybar/polybar JSON output
+# Raw HID register dump
+apple-kb-monitor --dump
+
+# Live dashboard
+apple-kb-monitor --watch
+
+# Waybar/polybar integration
 apple-kb-monitor --waybar
 
-# Battery/voltage history log
+# Battery/voltage history
 apple-kb-monitor --history
 
-# RSSI (requires sudo for MGMT socket)
-sudo apple-kb-monitor --status
+# Sparkline graphs (voltage, battery, RSSI)
+apple-kb-monitor --graph
 
-# Daemon mode with Battery Provider (used by systemd service)
+# Export CSV
+apple-kb-monitor --export-csv
+
+# Prometheus metrics
+apple-kb-monitor --metrics
+
+# LED control
+apple-kb-monitor --led capslock on
+
+# Daemon with MQTT Home Assistant
+apple-kb-monitor --mqtt 192.168.8.10
+
+# Daemon (systemd service)
 apple-kb-monitor --threshold 15 --interval 300
-
-# Daemon without Battery Provider registration
-apple-kb-monitor --no-provider
 ```
 
-### Waybar integration
-
-Add to your waybar config:
+### Waybar config
 
 ```json
 "custom/apple-kb": {
     "exec": "apple-kb-monitor --waybar",
     "return-type": "json",
-    "interval": 60,
-    "format": "{}",
-    "tooltip": true
+    "interval": 60
 }
 ```
 
-## Permissions
+### MQTT Home Assistant
 
-| Feature | Required | How |
-|---------|----------|-----|
-| Battery, voltage, firmware, all HID reports | `input` group | `sudo usermod -aG input $USER` + re-login |
-| RSSI, TX power | `CAP_NET_ADMIN` | Run with `sudo` |
-| Desktop notifications | `libnotify` | `pacman -S libnotify` |
-| Battery Provider (KDE/UPower) | system D-Bus | Automatic (no policy file needed) |
-
-The udev rule (`99-apple-kb-hidraw.rules`) grants `input` group read/write access to Apple hidraw devices, including Bluetooth HID devices connected via uhid (matched by `DEVPATH` since uhid devices have no `idVendor` attribute).
-
-## How it works
-
-1. Discovers Apple Bluetooth keyboards via `/sys/class/hidraw/*/device/uevent`
-2. Opens the `hidraw` device and sends `HIDIOCGFEATURE` ioctls for each known report ID
-3. Decodes the binary responses based on our reverse-engineering of the BCM2042 register map
-4. Queries BlueZ for RSSI via MGMT socket (`GET_CONN_INFO`, opcode `0x0031`) and connection properties via D-Bus
-5. In daemon mode:
-   - Registers as a BlueZ Battery Provider via `BatteryProviderManager1` D-Bus API
-   - Monitors `PropertiesChanged` signals for device connect/disconnect events
-   - Logs readings to `$XDG_RUNTIME_DIR/apple-kb-monitor/history.jsonl`
-   - Sends desktop notifications via `notify-send` when battery drops below threshold
-
-## Reverse engineering notes
-
-The BCM2042 is a Broadcom single-chip Bluetooth HID controller with:
-- ARM7TDMI core
-- Bluetooth 2.0+EDR radio
-- 10-bit ADC for battery voltage measurement
-- Signed Apple firmware (not flashable from Linux)
-
-The HID report descriptor only declares Reports 0x01 (keyboard), 0x47 (battery), 0x11-0x13 (consumer/vendor), and 0x09 (feature). Reports 0x46, 0x49-0x53, 0x5A-0x5B, 0x60, 0xEA-0xEB, 0xF4-0xF7, 0xFF are **undocumented** and were discovered by brute-force scanning all 256 Feature Report IDs.
-
-The discharge calibration curve in Report 0x5A stores 4 voltage thresholds in millivolts that the firmware uses to map ADC readings to battery percentage. Typical values for 2xAA alkaline:
-
-```
-100% >= 2900 mV (2.900 V)
- 75% >= 2450 mV (2.450 V)
- 50% >= 2350 mV (2.350 V)
- 25% >= 2000 mV (2.000 V)
+```bash
+apple-kb-monitor --mqtt 192.168.8.10 --mqtt-port 1883 --mqtt-topic homeassistant
 ```
 
-### RSSI
+Creates auto-discovery entities: `sensor.apple_kb_battery`, `sensor.apple_kb_voltage`, `sensor.apple_kb_rssi`.
 
-RSSI is read via BlueZ MGMT `GET_CONN_INFO` (opcode `0x0031`), which triggers `HCI Read_RSSI` and `HCI Read_TX_Power` on the ACL connection handle. RSSI = 0 dBm is a valid measurement meaning optimal signal strength ("golden range"), not "unavailable". Stress-tested with 10 consecutive reads at 2s intervals with zero disconnects.
+## HID Register Map
+
+### Feature Reports (21/21 decoded)
+
+| Report | RW | Description |
+|--------|-----|-------------|
+| `0x09` | RO | Device state flag (1=OK, 0=LOW) |
+| `0x46` | RO | BT connection interval + latency |
+| `0x47` | RO | Battery % standard (rounded by firmware) |
+| `0x49` | RO | BT supervision timeout |
+| `0x4A` | RO | Power management config |
+| `0x4B` | RO | Device mode + class |
+| `0x4C` | RO | Identity key (144-bit) |
+| `0x4F` | RO | Firmware version (major.minor) |
+| `0x51` | **RW** | Device name chunk 1 (8 bytes) |
+| `0x52` | **RW** | Device name chunk 2 (8 bytes) |
+| `0x53` | RO | Device name chunk 3 (locked) |
+| `0x5A` | **RW** | Discharge calibration curve (4 × u16 mV) |
+| `0x5B` | RO | Voltage reference pair |
+| `0x60` | **RW** | ROM mirror of 0x5A |
+| `0xEA` | RO | Battery % precise (pre-rounding ADC value) |
+| `0xEB` | RO | ROM mirror of 0x5A (locked) |
+| `0xF4` | **RW** | ADC calibration reference |
+| `0xF5` | **RW** | ADC raw voltage (10-bit, 3.3V ref) |
+| `0xF6` | **RW** | Config register 1 |
+| `0xF7` | **RW** | Config register 2 |
+| `0xFF` | RO | Firmware build/revision number |
+
+### Input Reports
+
+| Report | Description |
+|--------|-------------|
+| `0x01` | Keyboard scancodes (kernel hid-apple) |
+| `0x11` | Consumer: Eject |
+| `0x12` | Consumer: Play/Pause, Next, Prev, FF, Rew |
+| `0x13` | Vendor FF01: wake signal (device_ready, connection_request) |
+
+### Writable Registers (undocumented)
+
+8 registers accept `HIDIOCSFEATURE` writes. **Not yet exploited** — needs BCM2042 flash/EEPROM reverse engineering to understand persistence and safety.
+
+## Compatibility
+
+| Component | Required | Tested |
+|-----------|----------|--------|
+| Kernel | >= 5.15 | 6.19.8 (Manjaro) |
+| Python | >= 3.10 | 3.14.3 |
+| BlueZ | >= 5.56 | 5.86 |
+| KDE Plasma | >= 6.0 | 6.x |
+| keyd | >= 2.5 | 2.6.0 |
+| ddcutil | >= 1.0 | installed |
+
+### Supported keyboards
+
+- **Apple Wireless Keyboard A1314** (aluminum, ISO/ANSI/JIS) — BCM2042 ✅ tested
+- Apple Wireless Keyboard A1016 (white) — BCM2042
+- Apple Wireless Keyboard A1255 (aluminum) — BCM2042
+- Apple Magic Keyboard A1644 — BCM20733 (same register map, untested)
+- Apple Magic Keyboard A2449 (Touch ID) — BCM20733 (untested)
+
+## Architecture
+
+```
+apple-kb-monitor daemon (async, dbus-fast)
+├── HID Feature Reports (hidraw ioctl) → 21 registers decoded
+├── HID Input Report 0x13 (HidrawMonitor) → wake/connection events
+├── BlueZ Battery Provider (BatteryProvider1) → KDE/GNOME battery
+├── BlueZ D-Bus signals (PropertiesChanged, InterfacesAdded)
+├── BlueZ MGMT (rssi-helper CAP_NET_ADMIN) → RSSI, TX Power
+├── BlueZ SDP (GetServiceRecords) → 2 service records parsed
+└── History logging (JSONL) + notifications (notify-send)
+
+apple-brightness-daemon (evdev → keyd virtual keyboard)
+├── F1/F2 → ddcutil setvcp (DDC/CI)
+└── KDE OSD via brightnessChanged D-Bus
+
+keyd (/etc/keyd/apple-keyboard.conf)
+├── F3 → Overview, F4 → Grid View
+├── F5 → Lock, F6 → Show Desktop
+└── F1/F2 passthrough to brightness daemon
+```
 
 ## License
 

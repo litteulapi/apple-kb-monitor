@@ -43,7 +43,7 @@ Usage:
     apple-kb-monitor --history              # battery/voltage log
 """
 
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 __author__ = "Han (AgenceAPI)"
 __license__ = "GPL-2.0-or-later"
 
@@ -1634,6 +1634,102 @@ def print_metrics(devices):
 
 
 # ---------------------------------------------------------------------------
+# MQTT Home Assistant auto-discovery
+# ---------------------------------------------------------------------------
+
+def mqtt_publish(host, port, topic_prefix, devices):
+    """Publish telemetry to MQTT with Home Assistant auto-discovery."""
+    try:
+        import paho.mqtt.client as mqtt_client
+    except ImportError:
+        # Fallback: use mosquitto_pub CLI
+        return _mqtt_publish_cli(host, port, topic_prefix, devices)
+
+    client = mqtt_client.Client(client_id="apple-kb-monitor")
+    try:
+        client.connect(host, port, 10)
+    except Exception as e:
+        print(f"[mqtt] connection failed: {e}", file=sys.stderr)
+        return
+
+    for dev in devices:
+        mac = dev["mac"]
+        mac_id = mac.replace(":", "").lower()
+        reps = read_all_reports(dev["path"])
+        conn = get_conn_info(mac) if mac else None
+
+        pct = reps.get("battery_fine") or reps.get("battery_pct")
+        volts = reps.get("voltage")
+
+        # HA auto-discovery configs
+        ha_sensors = [
+            ("battery", "battery", "%", pct, "mdi:battery-bluetooth"),
+            ("voltage", None, "V", volts, "mdi:flash-triangle"),
+        ]
+        if conn and conn.get("rssi_dbm") is not None:
+            ha_sensors.append(("rssi", "signal_strength", "dBm", conn["rssi_dbm"], "mdi:bluetooth"))
+        if conn and conn.get("tx_power_dbm") is not None:
+            ha_sensors.append(("tx_power", None, "dBm", conn["tx_power_dbm"], "mdi:access-point"))
+
+        device_info = {
+            "identifiers": [f"apple_kb_{mac_id}"],
+            "name": dev["model"],
+            "manufacturer": "Apple",
+            "model": dev["model"],
+            "sw_version": reps.get("fw_version", ""),
+            "via_device": "apple-kb-monitor",
+        }
+
+        for sensor_id, dev_class, unit, value, icon in ha_sensors:
+            if value is None:
+                continue
+            config_topic = f"{topic_prefix}/sensor/apple_kb_{mac_id}/{sensor_id}/config"
+            state_topic = f"{topic_prefix}/sensor/apple_kb_{mac_id}/{sensor_id}/state"
+            config = {
+                "name": f"Apple KB {sensor_id.replace('_', ' ').title()}",
+                "unique_id": f"apple_kb_{mac_id}_{sensor_id}",
+                "state_topic": state_topic,
+                "unit_of_measurement": unit,
+                "icon": icon,
+                "device": device_info,
+            }
+            if dev_class:
+                config["device_class"] = dev_class
+            client.publish(config_topic, json.dumps(config), retain=True)
+            client.publish(state_topic, str(value), retain=True)
+
+    client.disconnect()
+    print(f"[mqtt] published {len(devices)} device(s) to {host}:{port}", file=sys.stderr)
+
+
+def _mqtt_publish_cli(host, port, topic_prefix, devices):
+    """Fallback MQTT publish via mosquitto_pub."""
+    for dev in devices:
+        mac_id = dev["mac"].replace(":", "").lower()
+        reps = read_all_reports(dev["path"])
+        conn = get_conn_info(dev["mac"]) if dev["mac"] else None
+
+        state = {
+            "battery": reps.get("battery_fine") or reps.get("battery_pct"),
+            "voltage": reps.get("voltage"),
+        }
+        if conn:
+            state["rssi"] = conn.get("rssi_dbm")
+            state["tx_power"] = conn.get("tx_power_dbm")
+
+        topic = f"{topic_prefix}/sensor/apple_kb_{mac_id}/state"
+        try:
+            subprocess.run(
+                ["mosquitto_pub", "-h", host, "-p", str(port),
+                 "-t", topic, "-m", json.dumps(state), "-r"],
+                capture_output=True, timeout=5,
+            )
+        except FileNotFoundError:
+            print("[mqtt] neither paho-mqtt nor mosquitto_pub available", file=sys.stderr)
+            return
+
+
+# ---------------------------------------------------------------------------
 # BlueZ Battery Provider
 # ---------------------------------------------------------------------------
 
@@ -1806,7 +1902,7 @@ async def _setup_provider(bus):
     return provider
 
 
-async def daemon_loop(threshold, interval, no_provider=False):
+async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mqtt_port=1883, mqtt_topic="homeassistant"):
     """Main async daemon: Battery Provider + telemetry monitor."""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -2041,6 +2137,13 @@ async def daemon_loop(threshold, interval, no_provider=False):
                 elif level > threshold and NOTIFIED_FILE.exists():
                     NOTIFIED_FILE.unlink(missing_ok=True)
 
+            # MQTT publish
+            if mqtt_host:
+                try:
+                    mqtt_publish(mqtt_host, mqtt_port, mqtt_topic, find_devices())
+                except Exception as e:
+                    print(f"[mqtt] error: {e}", file=sys.stderr)
+
             try:
                 await asyncio.wait_for(stop.wait(), timeout=interval)
                 break
@@ -2127,6 +2230,9 @@ license: GPL-2.0-or-later
     p.add_argument("--interval", type=int, default=300, help="Daemon poll interval in seconds (default: 300)")
     p.add_argument("--watch-interval", type=int, default=5, help="Watch refresh in seconds (default: 5)")
     p.add_argument("--no-provider", action="store_true", help="Disable BlueZ Battery Provider registration")
+    p.add_argument("--mqtt", metavar="HOST", help="Publish to MQTT broker (e.g. 192.168.8.10)")
+    p.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port (default: 1883)")
+    p.add_argument("--mqtt-topic", default="homeassistant", help="MQTT topic prefix (default: homeassistant)")
     args = p.parse_args()
 
     # --- Sync modes (no D-Bus needed) ---
@@ -2242,7 +2348,8 @@ license: GPL-2.0-or-later
         return
 
     # --- Default: daemon mode ---
-    asyncio.run(daemon_loop(args.threshold, args.interval, args.no_provider))
+    asyncio.run(daemon_loop(args.threshold, args.interval, args.no_provider,
+                            args.mqtt, args.mqtt_port, args.mqtt_topic))
 
 
 if __name__ == "__main__":
