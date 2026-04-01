@@ -7,50 +7,19 @@ import org.kde.kirigami as Kirigami
 PlasmoidItem {
     id: root
 
+    // ── Keyboard properties ──
+    property bool connected: false
     property int batteryPercent: 0
     property real voltage: 0
     property int rssi: 0
     property string kbModel: ""
-    property bool connected: false
-    property int monBrightness: 50
-    property int monContrast: 50
     property string fwVersion: ""
     property string batteryType: ""
     property string dischargeRate: ""
 
-    preferredRepresentation: compactRepresentation
-    compactRepresentation: CompactRepresentation {}
-    fullRepresentation: FullRepresentation {}
-
-    toolTipMainText: connected ? kbModel : "No device"
-    toolTipSubText: connected
-        ? batteryPercent + "% · " + voltage.toFixed(3) + "V · RSSI " + rssi + "dBm"
-        : "Waiting for Apple Keyboard..."
-
-    Timer {
-        interval: 30000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: dataSource.connectSource("apple-kb-monitor --json 2>/dev/null")
-    }
-
-    Timer {
-        interval: 60000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: monSource.connectSource("ddc-tool json 6 2>/dev/null")
-    }
-
-    function fetchData() {
-        dataSource.connectSource("apple-kb-monitor --json 2>/dev/null")
-    }
-
-    function fetchMonitor() {
-        monSource.connectSource("ddc-tool json 6 2>/dev/null")
-    }
-
+    // ── Monitor properties ──
+    property int monBrightness: 50
+    property int monContrast: 50
     property int monRedGain: 50
     property int monGreenGain: 50
     property int monBlueGain: 50
@@ -70,70 +39,110 @@ PlasmoidItem {
     property int monHFreq: 0
     property int monVFreq: 0
 
-    function setMonitorValue(vcp, value) {
-        ddcWrite.connectSource("ddc-tool write 6 " + vcp + " " + value)
+    // ── Representations ──
+    preferredRepresentation: compactRepresentation
+    compactRepresentation: CompactRepresentation {}
+    fullRepresentation: FullRepresentation {}
+
+    // ── Tooltip ──
+    toolTipMainText: connected ? kbModel : "No device"
+    toolTipSubText: connected
+        ? batteryPercent + "% \u00B7 " + voltage.toFixed(3) + "V \u00B7 RSSI " + rssi + "dBm"
+        : "Waiting for Apple Keyboard..."
+
+    // ── Polling timers ──
+    Timer {
+        interval: 30000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: dataSource.connectSource("apple-kb-monitor --json 2>/dev/null")
     }
 
+    Timer {
+        interval: 60000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: monSource.connectSource("ddc-tool json 6 2>/dev/null")
+    }
+
+    // ── Public functions ──
+    function fetchData() {
+        dataSource.connectSource("apple-kb-monitor --json 2>/dev/null");
+    }
+
+    function fetchMonitor() {
+        monSource.connectSource("ddc-tool json 6 2>/dev/null");
+    }
+
+    function setMonitorValue(vcp, value) {
+        ddcWrite.connectSource("ddc-tool write 6 " + vcp + " " + value);
+    }
+
+    // ── Keyboard data source ──
     P5.DataSource {
         id: dataSource
         engine: "executable"
         onNewData: function(source, data) {
-            var stdout = data["stdout"]
-            if (!stdout) return
+            var stdout = data["stdout"];
+            if (!stdout) { disconnectSource(source); return; }
             try {
-                var d = JSON.parse(stdout)
-                root.connected = true
-                root.batteryPercent = d.battery.percentage_fine || d.battery.percentage || 0
-                root.voltage = d.battery.voltage || 0
-                root.kbModel = d.device.model || "Apple Keyboard"
+                var d = JSON.parse(stdout);
+                root.connected = true;
+                root.batteryPercent = d.battery.percentage_fine || d.battery.percentage || 0;
+                root.voltage = d.battery.voltage || 0;
+                root.kbModel = d.device.model || "Apple Keyboard";
                 if (d.radio && d.radio.rssi_dbm !== undefined)
-                    root.rssi = d.radio.rssi_dbm
-                root.fwVersion = (d.firmware && d.firmware.version) ? d.firmware.version : ""
-                root.batteryType = (d.analysis && d.analysis.battery_type) ? d.analysis.battery_type.type : ""
-                root.dischargeRate = (d.analysis && d.analysis.discharge) ? d.analysis.discharge.remaining_display : ""
+                    root.rssi = d.radio.rssi_dbm;
+                root.fwVersion = (d.firmware && d.firmware.version) ? d.firmware.version : "";
+                root.batteryType = (d.analysis && d.analysis.battery_type) ? d.analysis.battery_type.type : "";
+                root.dischargeRate = (d.analysis && d.analysis.discharge) ? d.analysis.discharge.remaining_display : "";
             } catch(e) {
-                root.connected = false
+                root.connected = false;
             }
-            disconnectSource(source)
+            disconnectSource(source);
         }
     }
 
+    // ── Monitor data source ──
     P5.DataSource {
         id: monSource
         engine: "executable"
         onNewData: function(source, data) {
-            var stdout = data["stdout"]
-            if (!stdout) { disconnectSource(source); return }
+            var stdout = data["stdout"];
+            if (!stdout) { disconnectSource(source); return; }
             try {
-                var m = JSON.parse(stdout)
-                if (m.brightness) root.monBrightness = m.brightness.current
-                if (m.contrast) root.monContrast = m.contrast.current
-                if (m.red_gain) root.monRedGain = m.red_gain.current
-                if (m.green_gain) root.monGreenGain = m.green_gain.current
-                if (m.blue_gain) root.monBlueGain = m.blue_gain.current
-                if (m.volume) root.monVolume = m.volume.current
-                if (m.picture_mode) root.monPictureMode = m.picture_mode.current
-                if (m.input_source) root.monInput = m.input_source.current
-                if (m.audio_mute) root.monMute = m.audio_mute.current
-                if (m.usage_hours) root.monUsageHours = m.usage_hours.current
-                if (m.color_preset) root.monColorPreset = m.color_preset.current
-                if (m.lg_custom_1) root.monResponseTime = m.lg_custom_1.current
-                if (m.lg_custom_4) root.monFreeSync = m.lg_custom_4.current
-                if (m.lg_custom_5) root.monHDR = m.lg_custom_5.current
-                if (m.lg_custom_3) root.monDAS = m.lg_custom_3.current
-                if (m.lg_custom_6) root.monGamma = m.lg_custom_6.current
-                if (m.lg_custom_8) root.monBlackLevel = m.lg_custom_8.current
-                if (m.firmware) root.monFirmware = (m.firmware.current >> 8) + "." + (m.firmware.current & 0xFF)
-                if (m.h_freq) root.monHFreq = m.h_freq.current
-                if (m.v_freq) root.monVFreq = m.v_freq.current
+                var m = JSON.parse(stdout);
+                if (m.brightness) root.monBrightness = m.brightness.current;
+                if (m.contrast) root.monContrast = m.contrast.current;
+                if (m.red_gain) root.monRedGain = m.red_gain.current;
+                if (m.green_gain) root.monGreenGain = m.green_gain.current;
+                if (m.blue_gain) root.monBlueGain = m.blue_gain.current;
+                if (m.volume) root.monVolume = m.volume.current;
+                if (m.picture_mode) root.monPictureMode = m.picture_mode.current;
+                if (m.input_source) root.monInput = m.input_source.current;
+                if (m.audio_mute) root.monMute = m.audio_mute.current;
+                if (m.usage_hours) root.monUsageHours = m.usage_hours.current;
+                if (m.color_preset) root.monColorPreset = m.color_preset.current;
+                if (m.lg_custom_1) root.monResponseTime = m.lg_custom_1.current;
+                if (m.lg_custom_4) root.monFreeSync = m.lg_custom_4.current;
+                if (m.lg_custom_5) root.monHDR = m.lg_custom_5.current;
+                if (m.lg_custom_3) root.monDAS = m.lg_custom_3.current;
+                if (m.lg_custom_6) root.monGamma = m.lg_custom_6.current;
+                if (m.lg_custom_8) root.monBlackLevel = m.lg_custom_8.current;
+                if (m.firmware) root.monFirmware = (m.firmware.current >> 8) + "." + (m.firmware.current & 0xFF);
+                if (m.h_freq) root.monHFreq = m.h_freq.current;
+                if (m.v_freq) root.monVFreq = m.v_freq.current;
             } catch(e) {}
-            disconnectSource(source)
+            disconnectSource(source);
         }
     }
 
+    // ── DDC write data source ──
     P5.DataSource {
         id: ddcWrite
         engine: "executable"
-        onNewData: function(source, data) { disconnectSource(source) }
+        onNewData: function(source, data) { disconnectSource(source); }
     }
 }
