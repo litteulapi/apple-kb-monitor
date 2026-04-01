@@ -197,9 +197,13 @@ class ApiHubWindow(QMainWindow):
         grp2 = QGroupBox("Device")
         g2 = QGridLayout(grp2)
         self.kb_info = {}
-        for i, (k, l) in enumerate([("model", "Model"), ("firmware", "Firmware"),
-                                     ("status", "Status"), ("type", "Battery Type"),
-                                     ("drain", "Discharge"), ("chip", "Controller")]):
+        for i, (k, l) in enumerate([
+            ("model", "Model"), ("firmware", "Firmware"), ("status", "Status"),
+            ("chip", "Controller"), ("mac", "MAC Address"), ("driver", "Driver"),
+            ("type", "Battery Type"), ("drain", "Discharge"),
+            ("interpolated", "Interpolated %"), ("voltage_health", "Cell Health"),
+            ("bt_interval", "BT Interval"), ("bt_latency", "BT Latency"),
+        ]):
             la = QLabel(l + ":")
             la.setStyleSheet("color:#888")
             v = QLabel("--")
@@ -288,8 +292,13 @@ class ApiHubWindow(QMainWindow):
         grp = QGroupBox("Monitor")
         g = QGridLayout(grp)
         self.sys = {}
-        for i, (k, l) in enumerate([("model", "Model"), ("panel", "Panel"), ("fw", "Firmware"),
-                                     ("hz", "Refresh"), ("hours", "Usage"), ("ctrl", "Controller")]):
+        for i, (k, l) in enumerate([
+            ("model", "Model"), ("panel", "Panel"), ("fw", "Firmware"),
+            ("ctrl", "Controller"), ("vcp", "VCP Version"), ("tech", "Display Tech"),
+            ("hz", "V-Freq"), ("hfreq", "H-Freq"), ("input", "Input"),
+            ("colortemp", "Color Temp"), ("backlight", "Backlight PWM"),
+            ("hours", "Usage"), ("power", "Power"),
+        ]):
             la = QLabel(l + ":")
             la.setStyleSheet("color:#888")
             v = QLabel("--")
@@ -339,14 +348,25 @@ class ApiHubWindow(QMainWindow):
             self.ar.set_active(g("aspect_ratio"))
             self.pl.set_active(g("power_led"))
             self.mu.set_active(g("audio_mute"))
+            self.lang.set_active(g("language"))
+            self.osd.set_active(g("osd_lock"))
+            self.sp.set_active(g("split_mode"))
 
             fw = g("firmware")
+            vcp_v = g("vcp_version")
             self.sys["model"].setText("LG 34GN850")
             self.sys["panel"].setText("IPS 3440x1440 10-bit")
             self.sys["fw"].setText(f"{fw >> 8}.{fw & 0xFF}")
             self.sys["hz"].setText(f"{g('v_freq') / 100:.1f} Hz")
-            self.sys["hours"].setText(f"{g('usage_hours')} h")
+            self.sys["hfreq"].setText(f"{g('h_freq') / 100:.2f} kHz")
+            self.sys["hours"].setText(f"{g('usage_hours')} h ({g('usage_hours') // 24} days)")
             self.sys["ctrl"].setText("Myson Century (ID=6)")
+            self.sys["vcp"].setText(f"{vcp_v >> 8}.{vcp_v & 0xFF}")
+            self.sys["power"].setText("On" if g("power_mode") == 1 else "Standby" if g("power_mode") == 4 else str(g("power_mode")))
+            self.sys["tech"].setText({3: "LCD Active Matrix (IPS)", 5: "OLED"}.get(g("display_tech"), str(g("display_tech"))))
+            self.sys["colortemp"].setText(f"{g('color_temp_kelvin')} K")
+            self.sys["backlight"].setText(f"{g('backlight_pwm')} / 300")
+            self.sys["input"].setText({15: "DP-1", 16: "DP-2", 17: "HDMI-1", 18: "HDMI-2"}.get(g("input_source"), "?"))
             self.badges["FreeSync"].set_active(g("freesync") == 1)
             self.badges["SmartEnergy"].set_active(g("smart_energy") > 0)
 
@@ -364,9 +384,30 @@ class ApiHubWindow(QMainWindow):
             self.kb_info["firmware"].setText(kb.get("firmware", {}).get("version", "--"))
             self.kb_info["status"].setText("Connected" if d.get("mac") else "Offline")
             self.kb_info["chip"].setText(d.get("chip", "--"))
+            self.kb_info["mac"].setText(d.get("mac", "--"))
+            self.kb_info["driver"].setText(d.get("driver", "--"))
+
+            interp = bat.get("percentage_interpolated")
+            self.kb_info["interpolated"].setText(f"{interp}%" if interp else "--")
+
+            voltage = bat.get("voltage")
+            if voltage:
+                health = "Fresh" if voltage >= 2.8 else "Good" if voltage >= 2.4 else "Low" if voltage >= 2.1 else "Critical"
+                self.kb_info["voltage_health"].setText(f"{health} ({voltage:.3f}V)")
+            else:
+                self.kb_info["voltage_health"].setText("--")
+
+            bt_params = kb.get("bluetooth", {})
+            interval = bt_params.get("interval")
+            if interval:
+                self.kb_info["bt_interval"].setText(f"{interval} ({interval * 1.25:.1f} ms)")
+            latency = bt_params.get("latency")
+            if latency is not None:
+                self.kb_info["bt_latency"].setText(str(latency))
+
             a = kb.get("analysis", {})
-            bt = a.get("battery_type", {})
-            self.kb_info["type"].setText(bt.get("detail", "--") if bt else "--")
+            btype = a.get("battery_type", {})
+            self.kb_info["type"].setText(btype.get("detail", "--") if btype else "--")
             dr = a.get("discharge", {})
             self.kb_info["drain"].setText(dr.get("remaining_display", "--") if dr else "--")
 
