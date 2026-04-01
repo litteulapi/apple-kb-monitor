@@ -88,6 +88,10 @@ PlasmoidItem {
         }
     }
 
+    function openSettings() {
+        settingsLauncher.connectSource("apihub-settings &")
+    }
+
     // ── Keyboard data source ──
     P5.DataSource {
         id: dataSource
@@ -155,6 +159,13 @@ PlasmoidItem {
     // ── DDC write data source ──
     P5.DataSource {
         id: ddcWrite
+        engine: "executable"
+        onNewData: function(source, data) { disconnectSource(source); }
+    }
+
+    // ── Settings launcher ──
+    P5.DataSource {
+        id: settingsLauncher
         engine: "executable"
         onNewData: function(source, data) { disconnectSource(source); }
     }

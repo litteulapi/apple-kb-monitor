@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# ApiHub Settings — placeholder launcher
+# Will be replaced by a Kirigami standalone window later.
+# For now, opens a terminal with full device status.
+
+exec konsole --noclose -e bash -c 'echo "=== ApiHub Device Status ==="; echo; apple-kb-monitor --status 2>/dev/null || echo "Keyboard: not available"; echo; echo "=== Monitor DDC Status ==="; echo; ddc-tool json 6 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "Monitor: not available"; echo; echo "--- Press any key to close ---"; read -n1'
