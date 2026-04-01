@@ -59,6 +59,16 @@ PlasmoidItem {
     property int monInput: 15
     property int monMute: 2
     property int monUsageHours: 0
+    property int monColorPreset: 0
+    property int monFreeSync: 0
+    property int monHDR: 0
+    property int monDAS: 0
+    property int monGamma: 50
+    property int monResponseTime: 0
+    property int monBlackLevel: 0
+    property string monFirmware: ""
+    property int monHFreq: 0
+    property int monVFreq: 0
 
     function setMonitorValue(vcp, value) {
         ddcWrite.connectSource("ddc-tool write 6 " + vcp + " " + value)
@@ -106,6 +116,16 @@ PlasmoidItem {
                 if (m.input_source) root.monInput = m.input_source.current
                 if (m.audio_mute) root.monMute = m.audio_mute.current
                 if (m.usage_hours) root.monUsageHours = m.usage_hours.current
+                if (m.color_preset) root.monColorPreset = m.color_preset.current
+                if (m.lg_custom_1) root.monResponseTime = m.lg_custom_1.current
+                if (m.lg_custom_4) root.monFreeSync = m.lg_custom_4.current
+                if (m.lg_custom_5) root.monHDR = m.lg_custom_5.current
+                if (m.lg_custom_3) root.monDAS = m.lg_custom_3.current
+                if (m.lg_custom_6) root.monGamma = m.lg_custom_6.current
+                if (m.lg_custom_8) root.monBlackLevel = m.lg_custom_8.current
+                if (m.firmware) root.monFirmware = (m.firmware.current >> 8) + "." + (m.firmware.current & 0xFF)
+                if (m.h_freq) root.monHFreq = m.h_freq.current
+                if (m.v_freq) root.monVFreq = m.v_freq.current
             } catch(e) {}
             disconnectSource(source)
         }

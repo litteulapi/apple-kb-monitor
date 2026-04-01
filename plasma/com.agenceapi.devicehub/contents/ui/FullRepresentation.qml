@@ -28,9 +28,17 @@ QQC2.ScrollView {
             width: parent.width
             spacing: 8
 
-            property int redGain: 50
-            property int greenGain: 50
-            property int blueGain: 50
+            // Helper function to decode input name from VCP value
+            function inputName(v) {
+                var map = {15: "DP-1", 16: "DP-2", 17: "HDMI-1", 18: "HDMI-2"};
+                return map[v] || "??";
+            }
+
+            // Helper function to decode picture mode name from VCP value
+            function picModeName(v) {
+                var map = {1: "Gamer 1", 6: "Gamer 2", 17: "FPS", 19: "RTS", 20: "Vivid", 21: "Reader", 22: "HDR", 24: "sRGB", 45: "Custom"};
+                return map[v] || "Mode " + v;
+            }
 
             // --- Top spacer ---
             Item {
@@ -436,8 +444,6 @@ QQC2.ScrollView {
 
             // ===== VOLUME =====
             ColumnLayout {
-                id: volumeSection
-                property int vol: 50
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
@@ -458,8 +464,8 @@ QQC2.ScrollView {
                     }
 
                     Text {
-                        text: volumeSection.vol + "%"
-                        color: "#FFF"
+                        text: root.monVolume + "%"
+                        color: root.monMute === 1 ? "#FF3333" : "#FFF"
                         font.pixelSize: 18
                         font.bold: true
                         font.family: "monospace"
@@ -473,11 +479,17 @@ QQC2.ScrollView {
                     radius: 2
 
                     Rectangle {
-                        width: parent.width * volumeSection.vol / 100
+                        width: parent.width * root.monVolume / 100
                         height: 20
                         radius: 2
-                        color: "#8888CC"
+                        color: root.monMute === 1 ? "#FF3333" : "#8888CC"
                         opacity: 0.7
+
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: 150
+                            }
+                        }
                     }
 
                     MouseArea {
@@ -485,14 +497,14 @@ QQC2.ScrollView {
 
                         onPositionChanged: function(m) {
                             if (pressed) {
-                                volumeSection.vol = Math.max(0, Math.min(100, Math.round(m.x / parent.width * 100)));
-                                root.setMonitorValue(98, volumeSection.vol);
+                                root.monVolume = Math.max(0, Math.min(100, Math.round(m.x / parent.width * 100)));
+                                root.setMonitorValue(98, root.monVolume);
                             }
                         }
 
                         onClicked: function(m) {
-                            volumeSection.vol = Math.round(m.x / parent.width * 100);
-                            root.setMonitorValue(98, volumeSection.vol);
+                            root.monVolume = Math.round(m.x / parent.width * 100);
+                            root.setMonitorValue(98, root.monVolume);
                         }
                     }
                 }
@@ -534,15 +546,19 @@ QQC2.ScrollView {
                     ]
 
                     Rectangle {
+                        required property var modelData
+                        property bool active: modelData.v === root.monInput
                         Layout.fillWidth: true
                         height: 34
                         color: inputArea.pressed ? "#1A1A2A" : "#0A0A14"
                         radius: 3
+                        border.width: active ? 2 : 0
+                        border.color: active ? "#00B4D8" : "transparent"
 
                         Text {
                             anchors.centerIn: parent
-                            text: modelData.t
-                            color: "#99AABB"
+                            text: parent.modelData.t
+                            color: parent.active ? "#FFFFFF" : "#99AABB"
                             font.pixelSize: 13
                             font.bold: true
                             font.family: "monospace"
@@ -551,7 +567,7 @@ QQC2.ScrollView {
                         MouseArea {
                             id: inputArea
                             anchors.fill: parent
-                            onClicked: root.setMonitorValue(96, modelData.v)
+                            onClicked: root.setMonitorValue(96, parent.modelData.v)
                         }
                     }
                 }
@@ -568,6 +584,8 @@ QQC2.ScrollView {
             }
 
             // ===== PRESETS BUTTONS =====
+            // TODO: Color preset active state needs root.monColorPreset added to main.qml
+            //       (VCP 0x14). Once available, highlight 6500K/9300K/USER based on match.
             GridLayout {
                 Layout.fillWidth: true
                 Layout.leftMargin: 16
@@ -587,23 +605,34 @@ QQC2.ScrollView {
                     ]
 
                     Rectangle {
+                        required property var modelData
+                        property bool isMuteBtn: modelData.t === "MUTE"
+                        property bool isUnmuteBtn: modelData.t === "UNMUTE"
+                        property bool muteActive: isMuteBtn && root.monMute === 1
+                        property bool unmuteActive: isUnmuteBtn && root.monMute === 2
                         Layout.fillWidth: true
                         height: 34
                         color: presetArea.pressed ? "#1A1A2A" : "#0A0A14"
                         radius: 3
+                        border.width: (muteActive || unmuteActive) ? 2 : 0
+                        border.color: muteActive ? "#FF3333" : unmuteActive ? "#00B4D8" : "transparent"
 
                         Text {
                             anchors.centerIn: parent
-                            text: modelData.t
-                            color: modelData.t === "PWR OFF" ? "#FF3333" : "#99AABB"
+                            text: parent.modelData.t
+                            color: parent.muteActive ? "#FF3333"
+                                : parent.modelData.t === "PWR OFF" ? "#FF3333"
+                                : parent.unmuteActive ? "#FFFFFF"
+                                : "#99AABB"
                             font.pixelSize: 13
+                            font.bold: parent.muteActive
                             font.family: "monospace"
                         }
 
                         MouseArea {
                             id: presetArea
                             anchors.fill: parent
-                            onClicked: root.setMonitorValue(modelData.c, modelData.v)
+                            onClicked: root.setMonitorValue(parent.modelData.c, parent.modelData.v)
                         }
                     }
                 }
@@ -650,7 +679,7 @@ QQC2.ScrollView {
                     }
 
                     Text {
-                        text: col.redGain + "%"
+                        text: root.monRedGain + "%"
                         color: "#FFF"
                         font.pixelSize: 18
                         font.bold: true
@@ -665,7 +694,7 @@ QQC2.ScrollView {
                     radius: 2
 
                     Rectangle {
-                        width: parent.width * col.redGain / 100
+                        width: parent.width * root.monRedGain / 100
                         height: 20
                         radius: 2
                         color: "#FF4444"
@@ -683,14 +712,14 @@ QQC2.ScrollView {
 
                         onPositionChanged: function(m) {
                             if (pressed) {
-                                col.redGain = Math.max(0, Math.min(100, Math.round(m.x / parent.width * 100)));
-                                root.setMonitorValue(22, col.redGain);
+                                root.monRedGain = Math.max(0, Math.min(100, Math.round(m.x / parent.width * 100)));
+                                root.setMonitorValue(22, root.monRedGain);
                             }
                         }
 
                         onClicked: function(m) {
-                            col.redGain = Math.round(m.x / parent.width * 100);
-                            root.setMonitorValue(22, col.redGain);
+                            root.monRedGain = Math.round(m.x / parent.width * 100);
+                            root.setMonitorValue(22, root.monRedGain);
                         }
                     }
                 }
@@ -718,7 +747,7 @@ QQC2.ScrollView {
                     }
 
                     Text {
-                        text: col.greenGain + "%"
+                        text: root.monGreenGain + "%"
                         color: "#FFF"
                         font.pixelSize: 18
                         font.bold: true
@@ -733,7 +762,7 @@ QQC2.ScrollView {
                     radius: 2
 
                     Rectangle {
-                        width: parent.width * col.greenGain / 100
+                        width: parent.width * root.monGreenGain / 100
                         height: 20
                         radius: 2
                         color: "#44FF44"
@@ -751,14 +780,14 @@ QQC2.ScrollView {
 
                         onPositionChanged: function(m) {
                             if (pressed) {
-                                col.greenGain = Math.max(0, Math.min(100, Math.round(m.x / parent.width * 100)));
-                                root.setMonitorValue(24, col.greenGain);
+                                root.monGreenGain = Math.max(0, Math.min(100, Math.round(m.x / parent.width * 100)));
+                                root.setMonitorValue(24, root.monGreenGain);
                             }
                         }
 
                         onClicked: function(m) {
-                            col.greenGain = Math.round(m.x / parent.width * 100);
-                            root.setMonitorValue(24, col.greenGain);
+                            root.monGreenGain = Math.round(m.x / parent.width * 100);
+                            root.setMonitorValue(24, root.monGreenGain);
                         }
                     }
                 }
@@ -786,7 +815,7 @@ QQC2.ScrollView {
                     }
 
                     Text {
-                        text: col.blueGain + "%"
+                        text: root.monBlueGain + "%"
                         color: "#FFF"
                         font.pixelSize: 18
                         font.bold: true
@@ -801,7 +830,7 @@ QQC2.ScrollView {
                     radius: 2
 
                     Rectangle {
-                        width: parent.width * col.blueGain / 100
+                        width: parent.width * root.monBlueGain / 100
                         height: 20
                         radius: 2
                         color: "#4488FF"
@@ -819,14 +848,14 @@ QQC2.ScrollView {
 
                         onPositionChanged: function(m) {
                             if (pressed) {
-                                col.blueGain = Math.max(0, Math.min(100, Math.round(m.x / parent.width * 100)));
-                                root.setMonitorValue(26, col.blueGain);
+                                root.monBlueGain = Math.max(0, Math.min(100, Math.round(m.x / parent.width * 100)));
+                                root.setMonitorValue(26, root.monBlueGain);
                             }
                         }
 
                         onClicked: function(m) {
-                            col.blueGain = Math.round(m.x / parent.width * 100);
-                            root.setMonitorValue(26, col.blueGain);
+                            root.monBlueGain = Math.round(m.x / parent.width * 100);
+                            root.setMonitorValue(26, root.monBlueGain);
                         }
                     }
                 }
@@ -866,22 +895,27 @@ QQC2.ScrollView {
                         {"t": "GAMER 2", "v": 6},
                         {"t": "FPS", "v": 17},
                         {"t": "RTS", "v": 19},
-                        {"t": "VIVID", "v": 21},
-                        {"t": "READER", "v": 22},
-                        {"t": "HDR", "v": 24},
-                        {"t": "sRGB", "v": 32}
+                        {"t": "VIVID", "v": 20},
+                        {"t": "READER", "v": 21},
+                        {"t": "HDR", "v": 22},
+                        {"t": "sRGB", "v": 24},
+                        {"t": "CUSTOM", "v": 45}
                     ]
 
                     Rectangle {
+                        required property var modelData
+                        property bool active: modelData.v === root.monPictureMode
                         Layout.fillWidth: true
                         height: 34
                         color: picModeArea.pressed ? "#1A1A2A" : "#0A0A14"
                         radius: 3
+                        border.width: active ? 2 : 0
+                        border.color: active ? "#00B4D8" : "transparent"
 
                         Text {
                             anchors.centerIn: parent
-                            text: modelData.t
-                            color: "#99AABB"
+                            text: parent.modelData.t
+                            color: parent.active ? "#FFFFFF" : "#99AABB"
                             font.pixelSize: 13
                             font.bold: true
                             font.family: "monospace"
@@ -890,7 +924,7 @@ QQC2.ScrollView {
                         MouseArea {
                             id: picModeArea
                             anchors.fill: parent
-                            onClicked: root.setMonitorValue(21, modelData.v)
+                            onClicked: root.setMonitorValue(21, parent.modelData.v)
                         }
                     }
                 }
@@ -903,6 +937,174 @@ QQC2.ScrollView {
                 color: "#1A1A2A"
                 Layout.leftMargin: 16
                 Layout.rightMargin: 16
+            }
+
+            // ===== LG ADVANCED =====
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: "#1A1A2A"
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+            }
+
+            Text {
+                text: "LG ADVANCED"
+                color: "#334"
+                font.pixelSize: 11
+                font.family: "monospace"
+                font.letterSpacing: 3
+                Layout.leftMargin: 16
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                columns: 4
+                columnSpacing: 4
+                rowSpacing: 4
+
+                Repeater {
+                    model: [
+                        {"t": "FreeSync", "v": root.monFreeSync, "on": 2},
+                        {"t": "HDR", "v": root.monHDR, "on": 1},
+                        {"t": "DAS", "v": root.monDAS, "on": 1},
+                        {"t": "Response", "v": root.monResponseTime, "on": -1}
+                    ]
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 34
+                        radius: 3
+                        color: "#0A0A14"
+                        border.color: modelData.on > 0 && modelData.v === modelData.on ? "#00B4D8" : "transparent"
+                        border.width: modelData.on > 0 && modelData.v === modelData.on ? 2 : 0
+
+                        Column {
+                            anchors.centerIn: parent
+                            spacing: 0
+
+                            Text {
+                                text: modelData.t
+                                color: modelData.on > 0 && modelData.v === modelData.on ? "#00FF88" : "#99AABB"
+                                font.pixelSize: 10
+                                font.family: "monospace"
+                                anchors.horizontalCenter: parent.horizontalCenter
+                            }
+
+                            Text {
+                                text: modelData.on > 0 ? (modelData.v === modelData.on ? "ON" : "OFF") : modelData.v.toString()
+                                color: modelData.on > 0 && modelData.v === modelData.on ? "#00FF88" : "#556"
+                                font.pixelSize: 9
+                                font.bold: true
+                                font.family: "monospace"
+                                anchors.horizontalCenter: parent.horizontalCenter
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Gamma + Black Level
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                spacing: 2
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Text {
+                        text: "GAMMA"
+                        color: "#667"
+                        font.pixelSize: 11
+                        font.family: "monospace"
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Text {
+                        text: root.monGamma.toString()
+                        color: "#FFF"
+                        font.pixelSize: 14
+                        font.bold: true
+                        font.family: "monospace"
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Text {
+                        text: "BLACK LVL"
+                        color: "#667"
+                        font.pixelSize: 11
+                        font.family: "monospace"
+                    }
+
+                    Item {
+                        Layout.fillWidth: true
+                    }
+
+                    Text {
+                        text: root.monBlackLevel.toString()
+                        color: "#FFF"
+                        font.pixelSize: 14
+                        font.bold: true
+                        font.family: "monospace"
+                    }
+                }
+            }
+
+            // Monitor info bar
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                spacing: 1
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    height: 1
+                    color: "#1A1A2A"
+                }
+
+                Text {
+                    text: "MONITOR INFO"
+                    color: "#334"
+                    font.pixelSize: 9
+                    font.family: "monospace"
+                    font.letterSpacing: 2
+                }
+
+                GridLayout {
+                    Layout.fillWidth: true
+                    columns: 2
+                    rowSpacing: 1
+                    columnSpacing: 12
+
+                    Text { text: "MODEL"; color: "#445"; font.pixelSize: 9; font.family: "monospace" }
+                    Text { text: "LG 34GN850"; color: "#778"; font.pixelSize: 9; font.family: "monospace" }
+
+                    Text { text: "PANEL"; color: "#445"; font.pixelSize: 9; font.family: "monospace" }
+                    Text { text: "IPS 3440x1440 10-bit"; color: "#778"; font.pixelSize: 9; font.family: "monospace" }
+
+                    Text { text: "FIRMWARE"; color: "#445"; font.pixelSize: 9; font.family: "monospace" }
+                    Text { text: root.monFirmware || "3.0"; color: "#778"; font.pixelSize: 9; font.family: "monospace" }
+
+                    Text { text: "REFRESH"; color: "#445"; font.pixelSize: 9; font.family: "monospace" }
+                    Text { text: (root.monVFreq / 100).toFixed(1) + " Hz"; color: "#778"; font.pixelSize: 9; font.family: "monospace" }
+
+                    Text { text: "USAGE"; color: "#445"; font.pixelSize: 9; font.family: "monospace" }
+                    Text { text: root.monUsageHours + "h (" + Math.round(root.monUsageHours / 8760 * 10) / 10 + " yrs)"; color: "#778"; font.pixelSize: 9; font.family: "monospace" }
+
+                    Text { text: "GPU"; color: "#445"; font.pixelSize: 9; font.family: "monospace" }
+                    Text { text: "RTX 4070 SUPER"; color: "#778"; font.pixelSize: 9; font.family: "monospace" }
+                }
             }
 
             // ===== ACTIONS =====
@@ -947,6 +1149,29 @@ QQC2.ScrollView {
                         }
                     }
                 }
+            }
+
+            // ===== STATUS BAR =====
+            Rectangle {
+                Layout.fillWidth: true
+                height: 1
+                color: "#1A1A2A"
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+            }
+
+            Text {
+                Layout.fillWidth: true
+                Layout.leftMargin: 16
+                Layout.rightMargin: 16
+                text: col.inputName(root.monInput)
+                    + " \u00B7 " + col.picModeName(root.monPictureMode)
+                    + (root.monMute === 1 ? " \u00B7 MUTED" : "")
+                    + " \u00B7 " + root.monUsageHours + "h"
+                color: "#445"
+                font.pixelSize: 10
+                font.family: "monospace"
+                elide: Text.ElideRight
             }
 
             // --- Bottom spacer ---
