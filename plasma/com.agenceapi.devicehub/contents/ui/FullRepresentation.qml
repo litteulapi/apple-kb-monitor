@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.kde.plasma.plasma5support as P5
 
 ColumnLayout {
     id: full
@@ -251,7 +252,7 @@ ColumnLayout {
     Item { Layout.fillHeight: true }
 
     // Status source for action buttons
-    PlasmaCore.DataSource {
+    P5.DataSource {
         id: statusSource
         engine: "executable"
         function exec(cmd) { connectSource(cmd) }
