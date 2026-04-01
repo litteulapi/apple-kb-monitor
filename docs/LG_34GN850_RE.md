@@ -39,3 +39,44 @@
 Brightness OSD not triggerable via DDC/CI. Firmware hardcoded.
 Volume OSD trick: write same value to 0x62 triggers OSD without audio change.
 256/256 VCPs scanned, 48 with data, 23 undocumented, all decoded.
+
+
+## RAM Map (via sidechannel 0xD1)
+
+### Active Regions
+| Region | Size | Purpose |
+|--------|------|---------|
+| 0x0F00-0x0FFF | 256B | OSD/Settings (dynamic) |
+| 0x1020-0x11BF | 416B | Unknown data |
+| 0x6660-0x67BF | 352B | Unknown data |
+| 0x82D0-0x846F | 416B | Unknown data |
+| 0xBC10-0xBDAF | 416B | Unknown data |
+| 0xF5B0-0xF6BF | 272B | Unknown data |
+
+### OSD Region (0x0F00-0x0FFF) Diff Results
+| Action | Bytes Changed | OSD Displayed |
+|--------|--------------|---------------|
+| Brightness 44→80 | 23 | NO |
+| Volume 50→80 | 11 | YES |
+| Language FR→EN | 38 | NO |
+| Picture Mode 45→1 | 31 | NO |
+
+### Volume-Exclusive RAM Changes (OSD trigger candidates)
+- 0x0F1E: 88→04 (flag set when OSD displays)
+- 0x0F1F: 88→04 (flag set when OSD displays)
+- These are OUTPUT flags (consequence of OSD), not INPUT triggers
+
+### Sidechannel Commands (address 0x50)
+| VCP | Function | Tested |
+|-----|----------|--------|
+| 0xC9 | Firmware version | Returns raw bytes |
+| 0xCA | Model string | Returns "34GN850" |
+| 0xCC | OSD Language | 0=EN, 2=FR, 3=DE (writable!) |
+| 0xD1 | RAM read | Works — full RAM access |
+| 0xD5 | RAM write | Accepted but no visible effect on OSD |
+| 0xF4 | Input switch (LG proprietary) | Not tested (risk) |
+
+### Conclusion
+VCP dispatch table is in SPI flash firmware, not in RAM.
+Cannot patch OSD behavior without physical access to SPI flash.
+OSD brightness via DDC/CI: CONFIRMED IMPOSSIBLE on LG 34GN850.
