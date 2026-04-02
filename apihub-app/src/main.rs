@@ -142,31 +142,31 @@ type State = Arc<Mutex<SharedState>>;
 fn spawn_poll_thread(state: State) {
     thread::spawn(move || {
         loop {
-            // Read DDC
-            let ddc_data = ddc::read_all_essential(ddc::DEFAULT_BUS);
-            let ddc_err = if ddc_data.is_empty() {
-                Some("No DDC data — check /dev/i2c-6 permissions".into())
-            } else {
-                None
-            };
-
-            // Read keyboard
+            // Read keyboard FIRST (fast, ~0.6s)
             let kb = read_keyboard_json();
-            let kb_err = if kb.is_none() {
-                Some("apple-kb-monitor --json failed or not found".into())
-            } else {
-                None
-            };
-
             if let Ok(mut s) = state.lock() {
-                s.ddc.data = ddc_data;
-                s.ddc.last_update = Some(Instant::now());
-                s.ddc.error = ddc_err;
+                s.kb_error = if kb.is_none() {
+                    Some("Keyboard: loading...".into())
+                } else {
+                    None
+                };
                 s.keyboard = kb;
-                s.kb_error = kb_err;
             }
 
-            thread::sleep(Duration::from_secs(5));
+            // Read DDC VCPs ONE BY ONE — UI updates after each
+            for vcp_info in ddc::ESSENTIAL_VCPS {
+                if let Ok((cur, max)) = ddc::ddc_read_vcp(ddc::DEFAULT_BUS, vcp_info.code) {
+                    if let Ok(mut s) = state.lock() {
+                        s.ddc.data.insert(vcp_info.name.to_string(), (cur, max));
+                        s.ddc.last_update = Some(Instant::now());
+                        s.ddc.error = None;
+                    }
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+
+            // Wait before next full cycle
+            thread::sleep(Duration::from_secs(15));
         }
     });
 }
