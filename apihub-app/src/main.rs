@@ -286,19 +286,19 @@ impl ApiHubApp {
                                 egui::Color32::from_rgb(255, 70, 70)
                             };
                             ui.colored_label(color,
-                                egui::RichText::new(format!("{:.0}%", pct)).size(36.0).strong());
+                                egui::RichText::new(format!("{:.0}%", pct)).size(28.0).strong());
                             ui.add(egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0) as f32)
                                 .text(format!("{:.1}%", pct)));
                         });
                         ui.add_space(4.0);
-                        egui::Grid::new("bat_detail").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                        egui::Grid::new("bat_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(v) = kb.battery.voltage {
-                                ui.label(egui::RichText::new("Voltage").weak().size(14.0));
+                                ui.label(egui::RichText::new("Voltage").weak().size(16.0));
                                 ui.label(egui::RichText::new(format!("{:.3} V", v)).strong().size(18.0));
                                 ui.end_row();
                             }
                             if let Some(adc) = kb.battery.adc_raw {
-                                ui.label(egui::RichText::new("ADC").weak().size(14.0));
+                                ui.label(egui::RichText::new("ADC").weak().size(16.0));
                                 ui.label(format!("{}", adc));
                                 ui.end_row();
                             }
@@ -309,10 +309,10 @@ impl ApiHubApp {
                     cols[1].group(|ui| {
                         ui.label(egui::RichText::new("Radio").strong().size(18.0));
                         ui.add_space(4.0);
-                        egui::Grid::new("radio_detail").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                        egui::Grid::new("radio_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             let rssi = kb.radio.rssi_dbm.or(kb.bluetooth.rssi_dbus);
                             if let Some(r) = rssi {
-                                ui.label(egui::RichText::new("RSSI").weak().size(14.0));
+                                ui.label(egui::RichText::new("RSSI").weak().size(16.0));
                                 let color = if r > -60 {
                                     egui::Color32::from_rgb(80, 220, 100)
                                 } else if r > -80 {
@@ -324,11 +324,11 @@ impl ApiHubApp {
                                 ui.end_row();
                             }
                             if let Some(tx) = kb.radio.tx_power_dbm.or(kb.bluetooth.tx_power_dbus) {
-                                ui.label(egui::RichText::new("TX Power").weak().size(14.0));
+                                ui.label(egui::RichText::new("TX Power").weak().size(16.0));
                                 ui.label(format!("{} dBm", tx));
                                 ui.end_row();
                             }
-                            ui.label(egui::RichText::new("Connected").weak().size(14.0));
+                            ui.label(egui::RichText::new("Connected").weak().size(16.0));
                             let (txt, col) = if kb.bluetooth.connected {
                                 ("Yes", egui::Color32::from_rgb(80, 220, 100))
                             } else {
@@ -337,7 +337,7 @@ impl ApiHubApp {
                             ui.colored_label(col, egui::RichText::new(txt).strong());
                             ui.end_row();
 
-                            ui.label(egui::RichText::new("Paired").weak().size(14.0));
+                            ui.label(egui::RichText::new("Paired").weak().size(16.0));
                             ui.label(if kb.bluetooth.paired { "Yes" } else { "No" });
                             ui.end_row();
                         });
@@ -352,19 +352,19 @@ impl ApiHubApp {
                     cols[0].group(|ui| {
                         ui.label(egui::RichText::new("Device").strong().size(18.0));
                         ui.add_space(4.0);
-                        egui::Grid::new("dev_left").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                        egui::Grid::new("dev_left").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(ref model) = kb.device.model {
-                                ui.label(egui::RichText::new("Model").weak().size(14.0));
+                                ui.label(egui::RichText::new("Model").weak().size(16.0));
                                 ui.label(egui::RichText::new(model).strong());
                                 ui.end_row();
                             }
                             if let Some(ref mac) = kb.device.mac {
-                                ui.label(egui::RichText::new("MAC").weak().size(14.0));
+                                ui.label(egui::RichText::new("MAC").weak().size(16.0));
                                 ui.label(egui::RichText::new(mac).monospace());
                                 ui.end_row();
                             }
                             if let Some(ref driver) = kb.device.driver {
-                                ui.label(egui::RichText::new("Driver").weak().size(14.0));
+                                ui.label(egui::RichText::new("Driver").weak().size(16.0));
                                 ui.label(driver);
                                 ui.end_row();
                             }
@@ -375,19 +375,19 @@ impl ApiHubApp {
                     cols[1].group(|ui| {
                         ui.label(egui::RichText::new("Firmware").strong().size(18.0));
                         ui.add_space(4.0);
-                        egui::Grid::new("dev_right").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
+                        egui::Grid::new("dev_right").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(ref chip) = kb.device.chip {
-                                ui.label(egui::RichText::new("Chip").weak().size(14.0));
+                                ui.label(egui::RichText::new("Chip").weak().size(16.0));
                                 ui.label(chip);
                                 ui.end_row();
                             }
                             if let Some(ref fw) = kb.firmware.version {
-                                ui.label(egui::RichText::new("Version").weak().size(14.0));
+                                ui.label(egui::RichText::new("Version").weak().size(16.0));
                                 ui.label(egui::RichText::new(fw).strong().size(18.0));
                                 ui.end_row();
                             }
                             if let Some(ref build) = kb.firmware.build {
-                                ui.label(egui::RichText::new("Build").weak().size(14.0));
+                                ui.label(egui::RichText::new("Build").weak().size(16.0));
                                 ui.label(build.to_string());
                                 ui.end_row();
                             }
@@ -399,7 +399,7 @@ impl ApiHubApp {
     }
 
     fn tab_display(&mut self, ui: &mut egui::Ui, snap: &SharedState) {
-        ui.label(egui::RichText::new("Display Controls").strong().size(20.0));
+        ui.label(egui::RichText::new("Display Controls").strong().size(18.0));
         ui.separator();
 
         if let Some(ref err) = snap.ddc.error {
