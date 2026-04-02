@@ -5,16 +5,14 @@ import org.kde.plasma.components as PlasmaComponents3
 
 MouseArea {
     id: compact
-
     readonly property int size: Math.min(width, height)
-
     onClicked: root.expanded = !root.expanded
 
     Kirigami.Icon {
         anchors.centerIn: parent
         width: compact.size
         height: compact.size
-        source: "preferences-desktop-peripherals"
+        source: "apihub-scarab"
         color: root.connected ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
     }
 

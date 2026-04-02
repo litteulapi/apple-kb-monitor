@@ -131,7 +131,7 @@ class ApiHubWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ApiHub Settings")
-        self.setWindowIcon(QIcon.fromTheme("preferences-desktop-peripherals"))
+        self.setWindowIcon(QIcon.fromTheme("apihub-scarab") if QIcon.hasThemeIcon("apihub-scarab") else QIcon.fromTheme("preferences-desktop-peripherals"))
         self.setMinimumSize(600, 500)
         self.resize(700, 600)
         self._apply_dark_theme()
@@ -417,11 +417,11 @@ class ApiHubWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("ApiHub Settings")
-    app.setWindowIcon(QIcon.fromTheme("preferences-desktop-peripherals"))
+    app.setWindowIcon(QIcon.fromTheme("apihub-scarab") if QIcon.hasThemeIcon("apihub-scarab") else QIcon.fromTheme("preferences-desktop-peripherals"))
 
     window = ApiHubWindow()
 
-    tray = QSystemTrayIcon(QIcon.fromTheme("preferences-desktop-peripherals"), app)
+    tray = QSystemTrayIcon(QIcon.fromTheme("apihub-scarab") if QIcon.hasThemeIcon("apihub-scarab") else QIcon.fromTheme("preferences-desktop-peripherals"), app)
     menu = QMenu()
     sa = QAction("Open ApiHub Settings")
     sa.triggered.connect(window.show)

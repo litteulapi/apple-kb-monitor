@@ -1698,8 +1698,62 @@ def mqtt_publish(host, port, topic_prefix, devices):
             client.publish(config_topic, json.dumps(config), retain=True)
             client.publish(state_topic, str(value), retain=True)
 
+    # Monitor DDC data
+    try:
+        mon_json = subprocess.run(["ddc-tool", "json", "6"],
+                                  capture_output=True, text=True, timeout=10)
+        if mon_json.returncode == 0:
+            mon = json.loads(mon_json.stdout)
+            mon_device = {
+                "identifiers": ["lg_34gn850"],
+                "name": "LG 34GN850",
+                "manufacturer": "LG Electronics",
+                "model": "34GN850",
+                "via_device": "apple-kb-monitor",
+            }
+            mon_sensors = [
+                ("brightness", None, "%", mon.get("brightness", {}).get("current"), "mdi:brightness-6"),
+                ("contrast", None, "%", mon.get("contrast", {}).get("current"), "mdi:contrast-box"),
+                ("volume", None, "%", mon.get("volume", {}).get("current"), "mdi:volume-high"),
+                ("color_temp", None, "K", mon.get("color_temp_kelvin", {}).get("current"), "mdi:thermometer"),
+                ("usage_hours", None, "h", mon.get("usage_hours", {}).get("current"), "mdi:clock-outline"),
+                ("freesync", None, "", 1 if mon.get("freesync", {}).get("current") == 1 else 0, "mdi:monitor"),
+                ("backlight_pwm", None, "", mon.get("backlight_pwm", {}).get("current"), "mdi:lightbulb"),
+            ]
+            for sensor_id, dev_class, unit, value, icon in mon_sensors:
+                if value is None:
+                    continue
+                config_topic = f"{topic_prefix}/sensor/lg_34gn850/{sensor_id}/config"
+                state_topic = f"{topic_prefix}/sensor/lg_34gn850/{sensor_id}/state"
+                config = {
+                    "name": f"LG {sensor_id.replace('_', ' ').title()}",
+                    "unique_id": f"lg_34gn850_{sensor_id}",
+                    "state_topic": state_topic,
+                    "unit_of_measurement": unit,
+                    "icon": icon,
+                    "device": mon_device,
+                }
+                if dev_class:
+                    config["device_class"] = dev_class
+                client.publish(config_topic, json.dumps(config), retain=True)
+                client.publish(state_topic, str(value), retain=True)
+
+            # Auto-brightness recommendation
+            auto_bri = auto_brightness_value()
+            client.publish(f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/state", str(auto_bri), retain=True)
+            client.publish(f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/config", json.dumps({
+                "name": "LG Auto Brightness (Circadian)",
+                "unique_id": "lg_34gn850_auto_brightness",
+                "state_topic": f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/state",
+                "unit_of_measurement": "%",
+                "icon": "mdi:weather-sunny",
+                "device": mon_device,
+            }), retain=True)
+    except Exception as e:
+        print(f"[mqtt] monitor publish error: {e}", file=sys.stderr)
+
     client.disconnect()
-    print(f"[mqtt] published {len(devices)} device(s) to {host}:{port}", file=sys.stderr)
+    print(f"[mqtt] published {len(devices)} keyboard(s) + monitor to {host}:{port}", file=sys.stderr)
 
 
 def _mqtt_publish_cli(host, port, topic_prefix, devices):
@@ -2233,7 +2287,18 @@ license: GPL-2.0-or-later
     p.add_argument("--mqtt", metavar="HOST", help="Publish to MQTT broker (e.g. 192.168.8.10)")
     p.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port (default: 1883)")
     p.add_argument("--mqtt-topic", default="homeassistant", help="MQTT topic prefix (default: homeassistant)")
+    p.add_argument("--auto-brightness", action="store_true", help="Apply circadian brightness to monitor via DDC")
     args = p.parse_args()
+
+    # --- Auto-brightness mode ---
+    if args.auto_brightness:
+        target = auto_brightness_value()
+        print(f"Circadian brightness: {target}% (hour={__import__('datetime').datetime.now().hour})")
+        subprocess.run(["ddc-tool", "write", "6", "16", str(target)], capture_output=True, timeout=5)
+        subprocess.Popen(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService",
+                         "org.kde.osdService.brightnessChanged", str(target)],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
 
     # --- Sync modes (no D-Bus needed) ---
 
@@ -2354,3 +2419,30 @@ license: GPL-2.0-or-later
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# Auto-brightness (circadian rhythm)
+# ---------------------------------------------------------------------------
+
+def auto_brightness_value():
+    """Calculate optimal brightness based on time of day."""
+    from datetime import datetime
+    hour = datetime.now().hour
+    # Circadian curve: bright during day, dim at night
+    # 06:00-08:00: ramp up 30→80
+    # 08:00-18:00: 80 (work hours)
+    # 18:00-21:00: ramp down 80→40
+    # 21:00-23:00: ramp down 40→20
+    # 23:00-06:00: 20 (night)
+    if 6 <= hour < 8:
+        return 30 + (hour - 6) * 25  # 30→80
+    elif 8 <= hour < 18:
+        return 80
+    elif 18 <= hour < 21:
+        return 80 - (hour - 18) * 13  # 80→41
+    elif 21 <= hour < 23:
+        return 40 - (hour - 21) * 10  # 40→20
+    else:
+        return 20
+
