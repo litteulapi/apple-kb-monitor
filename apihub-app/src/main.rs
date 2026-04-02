@@ -259,9 +259,6 @@ fn ddc_has(snap: &SharedState, name: &str) -> bool {
 
 impl ApiHubApp {
     fn tab_keyboard(&self, ui: &mut egui::Ui, snap: &SharedState) {
-        ui.heading("Apple Keyboard");
-        ui.separator();
-
         if let Some(ref err) = snap.kb_error {
             ui.colored_label(egui::Color32::from_rgb(255, 100, 100), err);
         }
@@ -271,135 +268,132 @@ impl ApiHubApp {
                 ui.label("Waiting for keyboard data...");
             }
             Some(kb) => {
-                // Battery big display
                 let pct = kb.battery.percentage_interpolated
                     .or(kb.battery.percentage_fine)
                     .or(kb.battery.percentage)
                     .unwrap_or(0.0);
 
-                ui.vertical_centered(|ui| {
-                    ui.add_space(10.0);
-                    let color = if pct > 50.0 {
-                        egui::Color32::from_rgb(80, 220, 100)
-                    } else if pct > 20.0 {
-                        egui::Color32::from_rgb(255, 200, 50)
-                    } else {
-                        egui::Color32::from_rgb(255, 70, 70)
-                    };
-                    ui.colored_label(
-                        color,
-                        egui::RichText::new(format!("{:.0}%", pct)).size(64.0).strong(),
-                    );
-                    ui.label("Battery");
-                    ui.add_space(5.0);
-
-                    let bar_pct = (pct / 100.0).clamp(0.0, 1.0) as f32;
-                    ui.add(
-                        egui::ProgressBar::new(bar_pct)
-                            .desired_width(300.0)
-                            .text(format!("{:.1}%", pct)),
-                    );
-                });
-
-                ui.add_space(15.0);
-
-                egui::Grid::new("kb_info")
-                    .num_columns(2)
-                    .spacing([20.0, 6.0])
-                    .show(ui, |ui| {
-                        if let Some(v) = kb.battery.voltage {
-                            ui.label("Voltage:");
-                            ui.label(format!("{:.3} V", v));
-                            ui.end_row();
-                        }
-
-                        if let Some(adc) = kb.battery.adc_raw {
-                            ui.label("ADC Raw:");
-                            ui.label(format!("{}", adc));
-                            ui.end_row();
-                        }
-
-                        let rssi = kb.radio.rssi_dbm.or(kb.bluetooth.rssi_dbus);
-                        if let Some(r) = rssi {
-                            ui.label("RSSI:");
-                            let color = if r > -60 {
+                // Top row: battery tile + radio tile side by side
+                ui.columns(2, |cols| {
+                    // LEFT: Battery tile
+                    cols[0].group(|ui| {
+                        ui.vertical_centered(|ui| {
+                            let color = if pct > 50.0 {
                                 egui::Color32::from_rgb(80, 220, 100)
-                            } else if r > -80 {
+                            } else if pct > 20.0 {
                                 egui::Color32::from_rgb(255, 200, 50)
                             } else {
                                 egui::Color32::from_rgb(255, 70, 70)
                             };
-                            ui.colored_label(color, format!("{} dBm", r));
-                            ui.end_row();
-                        }
-
-                        if let Some(tx) = kb.radio.tx_power_dbm.or(kb.bluetooth.tx_power_dbus) {
-                            ui.label("TX Power:");
-                            ui.label(format!("{} dBm", tx));
-                            ui.end_row();
-                        }
-
-                        if let Some(lq) = kb.radio.max_tx_power_dbm {
-                            ui.label("Max TX Power:");
-                            ui.label(format!("{}", lq));
-                            ui.end_row();
-                        }
-
-                        ui.label("Connected:");
-                        let (txt, col) = if kb.bluetooth.connected {
-                            ("Yes", egui::Color32::from_rgb(80, 220, 100))
-                        } else {
-                            ("No", egui::Color32::from_rgb(255, 70, 70))
-                        };
-                        ui.colored_label(col, txt);
-                        ui.end_row();
-
-                        ui.label("Paired:");
-                        ui.label(if kb.bluetooth.paired { "Yes" } else { "No" });
-                        ui.end_row();
-
-                        if let Some(ref model) = kb.device.model {
-                            ui.label("Model:");
-                            ui.label(model);
-                            ui.end_row();
-                        }
-
-                        if let Some(ref name) = kb.device.name {
-                            ui.label("Name:");
-                            ui.label(name);
-                            ui.end_row();
-                        }
-
-                        if let Some(ref mac) = kb.device.mac {
-                            ui.label("MAC:");
-                            ui.label(mac);
-                            ui.end_row();
-                        }
-
-                        if let Some(ref chip) = kb.device.chip {
-                            ui.label("Chip:");
-                            ui.label(chip);
-                            ui.end_row();
-                        }
-
-                        if let Some(ref driver) = kb.device.driver {
-                            ui.label("Driver:");
-                            ui.label(driver);
-                            ui.end_row();
-                        }
-
-                        if let Some(ref fw) = kb.firmware.version {
-                            ui.label("Firmware:");
-                            ui.label(fw);
-                            ui.end_row();
-                        }
-
-                        if let Some(ref build) = kb.firmware.build {
-                            ui.label("Build:");
-                            ui.label(build.to_string());
-                            ui.end_row();
-                        }
+                            ui.colored_label(color,
+                                egui::RichText::new(format!("{:.0}%", pct)).size(52.0).strong());
+                            ui.add(egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0) as f32)
+                                .text(format!("{:.1}%", pct)));
+                        });
+                        ui.add_space(4.0);
+                        egui::Grid::new("bat_detail").num_columns(2).spacing([8.0, 2.0]).show(ui, |ui| {
+                            if let Some(v) = kb.battery.voltage {
+                                ui.label(egui::RichText::new("Voltage").weak());
+                                ui.label(egui::RichText::new(format!("{:.3} V", v)).strong().size(14.0));
+                                ui.end_row();
+                            }
+                            if let Some(adc) = kb.battery.adc_raw {
+                                ui.label(egui::RichText::new("ADC").weak());
+                                ui.label(format!("{}", adc));
+                                ui.end_row();
+                            }
+                        });
                     });
+
+                    // RIGHT: Radio tile
+                    cols[1].group(|ui| {
+                        ui.label(egui::RichText::new("Radio").strong().size(16.0));
+                        ui.add_space(4.0);
+                        egui::Grid::new("radio_detail").num_columns(2).spacing([8.0, 2.0]).show(ui, |ui| {
+                            let rssi = kb.radio.rssi_dbm.or(kb.bluetooth.rssi_dbus);
+                            if let Some(r) = rssi {
+                                ui.label(egui::RichText::new("RSSI").weak());
+                                let color = if r > -60 {
+                                    egui::Color32::from_rgb(80, 220, 100)
+                                } else if r > -80 {
+                                    egui::Color32::from_rgb(255, 200, 50)
+                                } else {
+                                    egui::Color32::from_rgb(255, 70, 70)
+                                };
+                                ui.colored_label(color, egui::RichText::new(format!("{} dBm", r)).strong().size(14.0));
+                                ui.end_row();
+                            }
+                            if let Some(tx) = kb.radio.tx_power_dbm.or(kb.bluetooth.tx_power_dbus) {
+                                ui.label(egui::RichText::new("TX Power").weak());
+                                ui.label(format!("{} dBm", tx));
+                                ui.end_row();
+                            }
+                            ui.label(egui::RichText::new("Connected").weak());
+                            let (txt, col) = if kb.bluetooth.connected {
+                                ("Yes", egui::Color32::from_rgb(80, 220, 100))
+                            } else {
+                                ("No", egui::Color32::from_rgb(255, 70, 70))
+                            };
+                            ui.colored_label(col, egui::RichText::new(txt).strong());
+                            ui.end_row();
+
+                            ui.label(egui::RichText::new("Paired").weak());
+                            ui.label(if kb.bluetooth.paired { "Yes" } else { "No" });
+                            ui.end_row();
+                        });
+                    });
+                });
+
+                ui.add_space(8.0);
+
+                // Bottom: Device info in two columns
+                ui.columns(2, |cols| {
+                    // LEFT: Identity
+                    cols[0].group(|ui| {
+                        ui.label(egui::RichText::new("Device").strong().size(16.0));
+                        ui.add_space(4.0);
+                        egui::Grid::new("dev_left").num_columns(2).spacing([8.0, 2.0]).show(ui, |ui| {
+                            if let Some(ref model) = kb.device.model {
+                                ui.label(egui::RichText::new("Model").weak());
+                                ui.label(egui::RichText::new(model).strong());
+                                ui.end_row();
+                            }
+                            if let Some(ref mac) = kb.device.mac {
+                                ui.label(egui::RichText::new("MAC").weak());
+                                ui.label(egui::RichText::new(mac).monospace());
+                                ui.end_row();
+                            }
+                            if let Some(ref driver) = kb.device.driver {
+                                ui.label(egui::RichText::new("Driver").weak());
+                                ui.label(driver);
+                                ui.end_row();
+                            }
+                        });
+                    });
+
+                    // RIGHT: Firmware
+                    cols[1].group(|ui| {
+                        ui.label(egui::RichText::new("Firmware").strong().size(16.0));
+                        ui.add_space(4.0);
+                        egui::Grid::new("dev_right").num_columns(2).spacing([8.0, 2.0]).show(ui, |ui| {
+                            if let Some(ref chip) = kb.device.chip {
+                                ui.label(egui::RichText::new("Chip").weak());
+                                ui.label(chip);
+                                ui.end_row();
+                            }
+                            if let Some(ref fw) = kb.firmware.version {
+                                ui.label(egui::RichText::new("Version").weak());
+                                ui.label(egui::RichText::new(fw).strong().size(14.0));
+                                ui.end_row();
+                            }
+                            if let Some(ref build) = kb.firmware.build {
+                                ui.label(egui::RichText::new("Build").weak());
+                                ui.label(build.to_string());
+                                ui.end_row();
+                            }
+                        });
+                    });
+                });
             }
         }
     }
