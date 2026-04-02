@@ -1637,15 +1637,16 @@ def print_metrics(devices):
 # MQTT Home Assistant auto-discovery
 # ---------------------------------------------------------------------------
 
-def mqtt_publish(host, port, topic_prefix, devices):
+def mqtt_publish(host, port, topic_prefix, devices, username=None, password=None):
     """Publish telemetry to MQTT with Home Assistant auto-discovery."""
     try:
         import paho.mqtt.client as mqtt_client
     except ImportError:
-        # Fallback: use mosquitto_pub CLI
-        return _mqtt_publish_cli(host, port, topic_prefix, devices)
+        return _mqtt_publish_cli(host, port, topic_prefix, devices, username, password)
 
     client = mqtt_client.Client(client_id="apple-kb-monitor")
+    if username:
+        client.username_pw_set(username, password)
     try:
         client.connect(host, port, 10)
     except Exception as e:
@@ -1756,8 +1757,11 @@ def mqtt_publish(host, port, topic_prefix, devices):
     print(f"[mqtt] published {len(devices)} keyboard(s) + monitor to {host}:{port}", file=sys.stderr)
 
 
-def _mqtt_publish_cli(host, port, topic_prefix, devices):
+def _mqtt_publish_cli(host, port, topic_prefix, devices, username=None, password=None):
     """Fallback MQTT publish via mosquitto_pub."""
+    auth_args = []
+    if username:
+        auth_args = ["-u", username, "-P", password or ""]
     for dev in devices:
         mac_id = dev["mac"].replace(":", "").lower()
         reps = read_all_reports(dev["path"])
@@ -1774,8 +1778,8 @@ def _mqtt_publish_cli(host, port, topic_prefix, devices):
         topic = f"{topic_prefix}/sensor/apple_kb_{mac_id}/state"
         try:
             subprocess.run(
-                ["mosquitto_pub", "-h", host, "-p", str(port),
-                 "-t", topic, "-m", json.dumps(state), "-r"],
+                ["mosquitto_pub", "-h", host, "-p", str(port)] + auth_args +
+                ["-t", topic, "-m", json.dumps(state), "-r"],
                 capture_output=True, timeout=5,
             )
         except FileNotFoundError:
@@ -1956,7 +1960,7 @@ async def _setup_provider(bus):
     return provider
 
 
-async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mqtt_port=1883, mqtt_topic="homeassistant"):
+async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mqtt_port=1883, mqtt_topic="homeassistant", mqtt_user=None, mqtt_pass=None):
     """Main async daemon: Battery Provider + telemetry monitor."""
     STATE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -2194,7 +2198,7 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
             # MQTT publish
             if mqtt_host:
                 try:
-                    mqtt_publish(mqtt_host, mqtt_port, mqtt_topic, find_devices())
+                    mqtt_publish(mqtt_host, mqtt_port, mqtt_topic, find_devices(), mqtt_user, mqtt_pass)
                 except Exception as e:
                     print(f"[mqtt] error: {e}", file=sys.stderr)
 
@@ -2310,9 +2314,11 @@ license: GPL-2.0-or-later
     p.add_argument("--interval", type=int, default=300, help="Daemon poll interval in seconds (default: 300)")
     p.add_argument("--watch-interval", type=int, default=5, help="Watch refresh in seconds (default: 5)")
     p.add_argument("--no-provider", action="store_true", help="Disable BlueZ Battery Provider registration")
-    p.add_argument("--mqtt", metavar="HOST", help="Publish to MQTT broker (e.g. 192.168.8.10)")
+    p.add_argument("--mqtt", metavar="HOST", help="Publish to MQTT broker (e.g. 192.168.8.3)")
     p.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port (default: 1883)")
     p.add_argument("--mqtt-topic", default="homeassistant", help="MQTT topic prefix (default: homeassistant)")
+    p.add_argument("--mqtt-user", default=None, help="MQTT username")
+    p.add_argument("--mqtt-pass", default=None, help="MQTT password")
     p.add_argument("--auto-brightness", action="store_true", help="Apply circadian brightness to monitor via DDC")
     args = p.parse_args()
 
@@ -2440,7 +2446,8 @@ license: GPL-2.0-or-later
 
     # --- Default: daemon mode ---
     asyncio.run(daemon_loop(args.threshold, args.interval, args.no_provider,
-                            args.mqtt, args.mqtt_port, args.mqtt_topic))
+                            args.mqtt, args.mqtt_port, args.mqtt_topic,
+                            args.mqtt_user, args.mqtt_pass))
 
 
 if __name__ == "__main__":
