@@ -57,11 +57,11 @@ struct KbBluetooth {
 #[derive(Debug, Clone, Default, Deserialize)]
 struct KbRadio {
     #[serde(default)]
-    rssi: Option<i32>,
+    rssi_dbm: Option<i32>,
     #[serde(default)]
-    tx_power: Option<i32>,
+    tx_power_dbm: Option<i32>,
     #[serde(default)]
-    lq: Option<u32>,
+    max_tx_power_dbm: Option<i32>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -92,9 +92,21 @@ fn read_keyboard_json() -> Option<KbReport> {
         .output()
         .ok()?;
     if !output.status.success() {
+        eprintln!("[kb] command failed: exit={:?}", output.status.code());
         return None;
     }
-    serde_json::from_slice(&output.stdout).ok()
+    match serde_json::from_slice::<KbReport>(&output.stdout) {
+        Ok(report) => Some(report),
+        Err(e) => {
+            eprintln!("[kb] JSON parse error: {}", e);
+            // Fallback: parse as generic Value
+            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                eprintln!("[kb] JSON is valid, struct mismatch. Top keys: {:?}",
+                    v.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+            }
+            None
+        }
+    }
 }
 
 // ── Shared state ────────────────────────────────────────────────────────────
@@ -307,7 +319,7 @@ impl ApiHubApp {
                             ui.end_row();
                         }
 
-                        let rssi = kb.radio.rssi.or(kb.bluetooth.rssi_dbus);
+                        let rssi = kb.radio.rssi_dbm.or(kb.bluetooth.rssi_dbus);
                         if let Some(r) = rssi {
                             ui.label("RSSI:");
                             let color = if r > -60 {
@@ -321,14 +333,14 @@ impl ApiHubApp {
                             ui.end_row();
                         }
 
-                        if let Some(tx) = kb.radio.tx_power.or(kb.bluetooth.tx_power_dbus) {
+                        if let Some(tx) = kb.radio.tx_power_dbm.or(kb.bluetooth.tx_power_dbus) {
                             ui.label("TX Power:");
                             ui.label(format!("{} dBm", tx));
                             ui.end_row();
                         }
 
-                        if let Some(lq) = kb.radio.lq {
-                            ui.label("Link Quality:");
+                        if let Some(lq) = kb.radio.max_tx_power_dbm {
+                            ui.label("Max TX Power:");
                             ui.label(format!("{}", lq));
                             ui.end_row();
                         }
