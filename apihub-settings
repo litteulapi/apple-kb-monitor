@@ -1,75 +1,54 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""
-ApiHub Settings — Desktop app for Apple Keyboard + LG Monitor control.
-
-System tray icon + full settings window.
-Style: LG OnScreen Control inspired for monitor, Apple-clean for keyboard.
-"""
+"""ApiHub Settings — Desktop app for Apple Keyboard + LG Monitor control."""
 
 import json
-import os
 import subprocess
 import sys
 import threading
 from functools import partial
 
-from PySide6.QtCore import Qt, QTimer, QSize, Signal, QObject
+from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtGui import QIcon, QAction, QFont, QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSystemTrayIcon, QMenu,
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QLabel, QSlider, QPushButton, QGroupBox,
-    QTabWidget, QFrame, QProgressBar,
-    QStatusBar, QScrollArea,
+    QTabWidget, QFrame, QProgressBar, QStatusBar,
 )
 
 
+# ---------------------------------------------------------------------------
+# Data cache — fetch once, use everywhere
+# ---------------------------------------------------------------------------
+
+_cache = {"mon": {}, "kb": {}}
+
+
 class DataLoader(QObject):
-    """Background data loader — prevents UI freeze."""
-    data_ready = Signal(str)
+    done = Signal(str)
 
     def load(self):
-        mon = ddc_read_all()
-        kb = kb_read()
-        self.data_ready.emit(json.dumps({"mon": mon, "kb": kb}))
+        mon = _read_monitor()
+        kb = _read_keyboard()
+        _cache["mon"] = mon
+        _cache["kb"] = kb
+        self.done.emit(json.dumps({"mon": mon, "kb": kb}))
 
 
-def ddc_read_all():
-    """Read essential monitor VCPs via individual reads (faster than json all)."""
-    essential = [
-        (0x10, "brightness"), (0x12, "contrast"), (0x14, "color_preset"),
-        (0x15, "picture_mode"), (0x16, "red_gain"), (0x18, "green_gain"),
-        (0x1A, "blue_gain"), (0x60, "input_source"), (0x62, "volume"),
-        (0x69, "color_temp_kelvin"), (0x87, "sharpness"), (0x8D, "audio_mute"),
-        (0xAE, "v_freq"), (0xAC, "h_freq"), (0xB6, "display_tech"),
-        (0xC0, "usage_hours"), (0xC1, "backlight_pwm"), (0xC9, "firmware"),
-        (0xCA, "osd_lock"), (0xCC, "language"), (0xD6, "power_mode"),
-        (0xD7, "split_mode"), (0xDF, "vcp_version"),
-        (0xF5, "aspect_ratio"), (0xF6, "smart_energy"), (0xF7, "response_time"),
-        (0xF8, "freesync"), (0xF9, "black_stabilizer"),
-        (0xFD, "power_led"), (0xFE, "gamma"),
-    ]
-    result = {}
-    for vcp, name in essential:
-        try:
-            r = subprocess.run(["ddc-tool", "read", "6", f"0x{vcp:02X}"],
-                               capture_output=True, text=True, timeout=3)
-            if r.returncode == 0:
-                parts = r.stdout.strip().split()
-                if len(parts) >= 2:
-                    result[name] = {"current": int(parts[0]), "max": int(parts[1])}
-        except Exception:
-            pass
-    return result
+def _read_monitor():
+    """Read 30 essential VCPs — one subprocess call via ddc-tool json."""
+    try:
+        r = subprocess.run(["ddc-tool", "json", "6"],
+                           capture_output=True, text=True, timeout=15)
+        if r.returncode == 0:
+            return json.loads(r.stdout)
+    except Exception:
+        pass
+    return {}
 
 
-def ddc_write(vcp, value):
-    subprocess.Popen(["ddc-tool", "write", "6", str(vcp), str(value)],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-
-def kb_read():
+def _read_keyboard():
     try:
         r = subprocess.run(["apple-kb-monitor", "--json"],
                            capture_output=True, text=True, timeout=5)
@@ -80,10 +59,18 @@ def kb_read():
     return {}
 
 
+def ddc_write(vcp, value):
+    subprocess.Popen(["ddc-tool", "write", "6", str(vcp), str(value)],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+# ---------------------------------------------------------------------------
+# Widgets
+# ---------------------------------------------------------------------------
+
 class StatusBadge(QFrame):
     def __init__(self, text, parent=None):
         super().__init__(parent)
-        self.setFrameShape(QFrame.StyledPanel)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 2, 8, 2)
         self.label = QLabel(text)
@@ -110,7 +97,7 @@ class ValueSlider(QWidget):
         self.slider.setMinimum(0)
         self.slider.setMaximum(max_val)
         self.slider.valueChanged.connect(self._on_change)
-        self.value_label = QLabel("0%")
+        self.value_label = QLabel("--")
         self.value_label.setFixedWidth(45)
         self.value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.value_label.setFont(QFont("monospace", 11, QFont.Bold))
@@ -122,10 +109,10 @@ class ValueSlider(QWidget):
         self.slider.blockSignals(True)
         self.slider.setValue(val)
         self.slider.blockSignals(False)
-        self.value_label.setText(f"{val}%")
+        self.value_label.setText(f"{val}")
 
     def _on_change(self, val):
-        self.value_label.setText(f"{val}%")
+        self.value_label.setText(f"{val}")
         ddc_write(self.vcp, val)
 
 
@@ -156,103 +143,131 @@ class ButtonGroup(QWidget):
         self.set_active(val)
 
 
+class InfoRow(QWidget):
+    """Label: Value pair for info display."""
+    def __init__(self, label, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        la = QLabel(label + ":")
+        la.setFixedWidth(120)
+        la.setStyleSheet("color:#888")
+        self.val = QLabel("--")
+        self.val.setFont(QFont("sans-serif", 10, QFont.Bold))
+        layout.addWidget(la)
+        layout.addWidget(self.val)
+
+    def setText(self, text):
+        self.val.setText(text)
+
+
+# ---------------------------------------------------------------------------
+# Main Window
+# ---------------------------------------------------------------------------
+
 class ApiHubWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("ApiHub Settings")
         self.setWindowIcon(QIcon.fromTheme("apihub-scarab") if QIcon.hasThemeIcon("apihub-scarab") else QIcon.fromTheme("preferences-desktop-peripherals"))
-        self.setMinimumSize(600, 500)
-        self.resize(700, 600)
+        self.setMinimumSize(620, 520)
+        self.resize(680, 580)
         self._apply_dark_theme()
 
         tabs = QTabWidget()
         self.setCentralWidget(tabs)
 
-        self.kb_tab = self._build_keyboard_tab()
-        self.mon_tab = self._build_monitor_tab()
-        self.adv_tab = self._build_advanced_tab()
-        self.sys_tab = self._build_system_tab()
-
-        tabs.addTab(self.kb_tab, QIcon.fromTheme("input-keyboard"), "Keyboard")
-        tabs.addTab(self.mon_tab, QIcon.fromTheme("video-display"), "Display")
-        tabs.addTab(self.adv_tab, QIcon.fromTheme("configure"), "Advanced")
-        tabs.addTab(self.sys_tab, QIcon.fromTheme("documentinfo"), "System")
+        tabs.addTab(self._build_keyboard_tab(), QIcon.fromTheme("input-keyboard"), "Keyboard")
+        tabs.addTab(self._build_monitor_tab(), QIcon.fromTheme("video-display"), "Display")
+        tabs.addTab(self._build_advanced_tab(), QIcon.fromTheme("configure"), "Advanced")
+        tabs.addTab(self._build_system_tab(), QIcon.fromTheme("documentinfo"), "System")
 
         self.status = QStatusBar()
         self.setStatusBar(self.status)
+        self.status.showMessage("Starting...")
 
         self.loader = DataLoader()
-        self.loader.data_ready.connect(self._on_data_ready)
+        self.loader.done.connect(self._on_data)
 
         self.timer = QTimer()
-        self.timer.timeout.connect(self.refresh)
+        self.timer.timeout.connect(self._bg_load)
         self.timer.start(30000)
-        QTimer.singleShot(500, self.refresh)
+        QTimer.singleShot(100, self._bg_load)
+
+    def _bg_load(self):
+        self.status.showMessage("Loading...")
+        threading.Thread(target=self.loader.load, daemon=True).start()
+
+    def _on_data(self, data_json):
+        try:
+            data = json.loads(data_json)
+            self._update_all(data.get("mon", {}), data.get("kb", {}))
+        except Exception as e:
+            self.status.showMessage(f"Error: {e}")
 
     def _apply_dark_theme(self):
         p = QPalette()
-        p.setColor(QPalette.Window, QColor(30, 30, 30))
-        p.setColor(QPalette.WindowText, QColor(220, 220, 220))
-        p.setColor(QPalette.Base, QColor(25, 25, 25))
-        p.setColor(QPalette.AlternateBase, QColor(35, 35, 35))
-        p.setColor(QPalette.Text, QColor(220, 220, 220))
-        p.setColor(QPalette.Button, QColor(45, 45, 45))
-        p.setColor(QPalette.ButtonText, QColor(220, 220, 220))
-        p.setColor(QPalette.Highlight, QColor(0, 120, 215))
-        p.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+        for role, color in [
+            (QPalette.Window, (30, 30, 30)), (QPalette.WindowText, (220, 220, 220)),
+            (QPalette.Base, (25, 25, 25)), (QPalette.AlternateBase, (35, 35, 35)),
+            (QPalette.Text, (220, 220, 220)), (QPalette.Button, (45, 45, 45)),
+            (QPalette.ButtonText, (220, 220, 220)),
+            (QPalette.Highlight, (0, 120, 215)), (QPalette.HighlightedText, (255, 255, 255)),
+        ]:
+            p.setColor(role, QColor(*color))
         QApplication.instance().setPalette(p)
 
+    # --- KEYBOARD ---
     def _build_keyboard_tab(self):
-        w = QWidget()
-        layout = QVBoxLayout(w)
-        layout.setSpacing(12)
-
-        grp = QGroupBox("Battery")
-        g = QGridLayout(grp)
-        self.kb_bat = QLabel("--")
-        self.kb_bat.setFont(QFont("monospace", 48, QFont.Bold))
-        self.kb_bat.setAlignment(Qt.AlignCenter)
-        g.addWidget(self.kb_bat, 0, 0, 2, 1)
-        self.kb_volt = QLabel("-- V")
-        self.kb_volt.setFont(QFont("monospace", 14))
-        g.addWidget(self.kb_volt, 0, 1)
-        self.kb_rssi = QLabel("-- dBm")
-        self.kb_rssi.setFont(QFont("monospace", 14))
-        g.addWidget(self.kb_rssi, 1, 1)
-        self.kb_bar = QProgressBar()
-        self.kb_bar.setRange(0, 100)
-        self.kb_bar.setTextVisible(False)
-        self.kb_bar.setFixedHeight(6)
-        g.addWidget(self.kb_bar, 2, 0, 1, 2)
-        layout.addWidget(grp)
-
-        grp2 = QGroupBox("Device")
-        g2 = QGridLayout(grp2)
-        self.kb_info = {}
-        for i, (k, l) in enumerate([
-            ("model", "Model"), ("firmware", "Firmware"), ("status", "Status"),
-            ("chip", "Controller"), ("mac", "MAC Address"), ("driver", "Driver"),
-            ("type", "Battery Type"), ("drain", "Discharge"),
-            ("interpolated", "Interpolated %"), ("voltage_health", "Cell Health"),
-            ("bt_interval", "BT Interval"), ("bt_latency", "BT Latency"),
-        ]):
-            la = QLabel(l + ":")
-            la.setStyleSheet("color:#888")
-            v = QLabel("--")
-            v.setFont(QFont("sans-serif", 10, QFont.Bold))
-            g2.addWidget(la, i, 0)
-            g2.addWidget(v, i, 1)
-            self.kb_info[k] = v
-        layout.addWidget(grp2)
-        layout.addStretch()
-        return w
-
-    def _build_monitor_tab(self):
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(8)
 
-        grp = QGroupBox("Display Controls")
+        grp = QGroupBox("Battery")
+        g = QHBoxLayout(grp)
+        self.kb_bat = QLabel("--")
+        self.kb_bat.setFont(QFont("monospace", 42, QFont.Bold))
+        self.kb_bat.setAlignment(Qt.AlignCenter)
+        self.kb_bat.setMinimumWidth(120)
+        g.addWidget(self.kb_bat)
+        right = QVBoxLayout()
+        self.kb_volt = QLabel("-- V")
+        self.kb_volt.setFont(QFont("monospace", 13))
+        self.kb_rssi = QLabel("-- dBm")
+        self.kb_rssi.setFont(QFont("monospace", 13))
+        self.kb_bar = QProgressBar()
+        self.kb_bar.setRange(0, 100)
+        self.kb_bar.setTextVisible(False)
+        self.kb_bar.setFixedHeight(6)
+        right.addWidget(self.kb_volt)
+        right.addWidget(self.kb_rssi)
+        right.addWidget(self.kb_bar)
+        g.addLayout(right)
+        layout.addWidget(grp)
+
+        grp2 = QGroupBox("Device")
+        g2 = QVBoxLayout(grp2)
+        self.kb_info = {}
+        for key in ["model", "firmware", "status", "chip", "mac", "driver",
+                     "type", "drain", "interpolated", "health", "bt_interval", "bt_latency"]:
+            labels = {"model": "Model", "firmware": "Firmware", "status": "Status",
+                      "chip": "Controller", "mac": "MAC", "driver": "Driver",
+                      "type": "Battery Type", "drain": "Discharge", "interpolated": "Interpolated",
+                      "health": "Cell Health", "bt_interval": "BT Interval", "bt_latency": "BT Latency"}
+            row = InfoRow(labels.get(key, key))
+            g2.addWidget(row)
+            self.kb_info[key] = row
+        layout.addWidget(grp2)
+        layout.addStretch()
+        return w
+
+    # --- MONITOR ---
+    def _build_monitor_tab(self):
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(6)
+
+        grp = QGroupBox("Display")
         g = QVBoxLayout(grp)
         self.bri = ValueSlider("Brightness", 16)
         self.con = ValueSlider("Contrast", 18)
@@ -263,7 +278,7 @@ class ApiHubWindow(QMainWindow):
             g.addWidget(s)
         layout.addWidget(grp)
 
-        grp2 = QGroupBox("Color Balance")
+        grp2 = QGroupBox("Color")
         g2 = QVBoxLayout(grp2)
         self.red = ValueSlider("Red", 22)
         self.grn = ValueSlider("Green", 24)
@@ -275,23 +290,19 @@ class ApiHubWindow(QMainWindow):
         self.pic = ButtonGroup("Mode", 21, [
             ("Reader", 1), ("Gamer2", 6), ("Custom", 17), ("RTS", 19),
             ("Vivid", 20), ("sRGB", 21), ("FPS1", 40), ("FPS2", 41)])
-        layout.addWidget(self.pic)
-
-        self.inp = ButtonGroup("Input", 96, [
-            ("DP-1", 15), ("DP-2", 16), ("HDMI-1", 17), ("HDMI-2", 18)])
-        layout.addWidget(self.inp)
-
+        self.inp = ButtonGroup("Input", 96, [("DP-1", 15), ("DP-2", 16), ("HDMI-1", 17), ("HDMI-2", 18)])
         self.cpre = ButtonGroup("Color", 20, [("6500K", 5), ("9300K", 8), ("User", 11)])
+        layout.addWidget(self.pic)
+        layout.addWidget(self.inp)
         layout.addWidget(self.cpre)
-
         layout.addStretch()
         return w
 
+    # --- ADVANCED ---
     def _build_advanced_tab(self):
         w = QWidget()
         layout = QVBoxLayout(w)
-        layout.setSpacing(8)
-
+        layout.setSpacing(6)
         self.rt = ButtonGroup("Response", 247, [("Off", 0), ("Fast", 1), ("Normal", 2), ("Slow", 3)])
         self.fs = ButtonGroup("FreeSync", 248, [("Off", 0), ("On", 1)])
         self.gm = ButtonGroup("Gamma", 254, [("Off", 0), ("M0", 1), ("M1", 2), ("M2", 3)])
@@ -302,7 +313,6 @@ class ApiHubWindow(QMainWindow):
         self.mu = ButtonGroup("Audio", 141, [("Mute", 1), ("Unmute", 2)])
         self.lang = ButtonGroup("Language", 204, [("EN", 0), ("FR", 2), ("DE", 3)])
         self.osd = ButtonGroup("OSD Lock", 202, [("Lock", 1), ("Unlock", 2)])
-
         for g in [self.rt, self.fs, self.gm, self.se, self.ar, self.pl, self.sp, self.mu, self.lang, self.osd]:
             layout.addWidget(g)
 
@@ -317,27 +327,22 @@ class ApiHubWindow(QMainWindow):
         layout.addStretch()
         return w
 
+    # --- SYSTEM ---
     def _build_system_tab(self):
         w = QWidget()
         layout = QVBoxLayout(w)
-
         grp = QGroupBox("Monitor")
-        g = QGridLayout(grp)
-        self.sys = {}
-        for i, (k, l) in enumerate([
-            ("model", "Model"), ("panel", "Panel"), ("fw", "Firmware"),
-            ("ctrl", "Controller"), ("vcp", "VCP Version"), ("tech", "Display Tech"),
-            ("hz", "V-Freq"), ("hfreq", "H-Freq"), ("input", "Input"),
-            ("colortemp", "Color Temp"), ("backlight", "Backlight PWM"),
-            ("hours", "Usage"), ("power", "Power"),
-        ]):
-            la = QLabel(l + ":")
-            la.setStyleSheet("color:#888")
-            v = QLabel("--")
-            v.setFont(QFont("monospace", 10))
-            g.addWidget(la, i, 0)
-            g.addWidget(v, i, 1)
-            self.sys[k] = v
+        g = QVBoxLayout(grp)
+        self.sys_info = {}
+        for key in ["model", "panel", "fw", "ctrl", "vcp", "tech",
+                     "hz", "hfreq", "input", "colortemp", "backlight", "hours", "power"]:
+            labels = {"model": "Model", "panel": "Panel", "fw": "Firmware", "ctrl": "Controller",
+                      "vcp": "VCP Version", "tech": "Display Tech", "hz": "V-Freq", "hfreq": "H-Freq",
+                      "input": "Input", "colortemp": "Color Temp", "backlight": "Backlight PWM",
+                      "hours": "Usage", "power": "Power"}
+            row = InfoRow(labels.get(key, key))
+            g.addWidget(row)
+            self.sys_info[key] = row
         layout.addWidget(grp)
 
         grp2 = QGroupBox("Status")
@@ -351,27 +356,17 @@ class ApiHubWindow(QMainWindow):
 
         btn = QPushButton("Refresh All")
         btn.setIcon(QIcon.fromTheme("view-refresh"))
-        btn.clicked.connect(self.refresh)
+        btn.clicked.connect(self._bg_load)
         layout.addWidget(btn)
         layout.addStretch()
         return w
 
-    def refresh(self):
-        self.status.showMessage("Loading...")
-        t = threading.Thread(target=self.loader.load, daemon=True)
-        t.start()
+    # --- UPDATE ALL ---
+    def _update_all(self, mon, kb):
+        def g(k):
+            return mon.get(k, {}).get("current", 0)
 
-    def _on_data_ready(self, data_json):
-        data = json.loads(data_json)
-        mon = data.get("mon", {})
-        kb = data.get("kb", {})
-        self._apply_data(mon, kb)
-
-    def _apply_data(self, mon, kb):
         if mon:
-            def g(k):
-                return mon.get(k, {}).get("current", 0)
-
             self.bri.set_value(g("brightness"))
             self.con.set_value(g("contrast"))
             self.sha.set_value(g("sharpness"))
@@ -396,19 +391,20 @@ class ApiHubWindow(QMainWindow):
 
             fw = g("firmware")
             vcp_v = g("vcp_version")
-            self.sys["model"].setText("LG 34GN850")
-            self.sys["panel"].setText("IPS 3440x1440 10-bit")
-            self.sys["fw"].setText(f"{fw >> 8}.{fw & 0xFF}")
-            self.sys["hz"].setText(f"{g('v_freq') / 100:.1f} Hz")
-            self.sys["hfreq"].setText(f"{g('h_freq') / 100:.2f} kHz")
-            self.sys["hours"].setText(f"{g('usage_hours')} h ({g('usage_hours') // 24} days)")
-            self.sys["ctrl"].setText("Myson Century (ID=6)")
-            self.sys["vcp"].setText(f"{vcp_v >> 8}.{vcp_v & 0xFF}")
-            self.sys["power"].setText("On" if g("power_mode") == 1 else "Standby" if g("power_mode") == 4 else str(g("power_mode")))
-            self.sys["tech"].setText({3: "LCD Active Matrix (IPS)", 5: "OLED"}.get(g("display_tech"), str(g("display_tech"))))
-            self.sys["colortemp"].setText(f"{g('color_temp_kelvin')} K")
-            self.sys["backlight"].setText(f"{g('backlight_pwm')} / 300")
-            self.sys["input"].setText({15: "DP-1", 16: "DP-2", 17: "HDMI-1", 18: "HDMI-2"}.get(g("input_source"), "?"))
+            self.sys_info["model"].setText("LG 34GN850")
+            self.sys_info["panel"].setText("IPS 3440x1440 10-bit")
+            self.sys_info["fw"].setText(f"{fw >> 8}.{fw & 0xFF}")
+            self.sys_info["ctrl"].setText("Myson Century (ID=6)")
+            self.sys_info["vcp"].setText(f"{vcp_v >> 8}.{vcp_v & 0xFF}")
+            self.sys_info["tech"].setText({3: "LCD Active Matrix (IPS)", 5: "OLED"}.get(g("display_tech"), str(g("display_tech"))))
+            self.sys_info["hz"].setText(f"{g('v_freq') / 100:.1f} Hz")
+            self.sys_info["hfreq"].setText(f"{g('h_freq') / 100:.2f} kHz")
+            self.sys_info["input"].setText({15: "DP-1", 16: "DP-2", 17: "HDMI-1", 18: "HDMI-2"}.get(g("input_source"), "?"))
+            self.sys_info["colortemp"].setText(f"{g('color_temp_kelvin')} K")
+            self.sys_info["backlight"].setText(f"{g('backlight_pwm')} / 300")
+            self.sys_info["hours"].setText(f"{g('usage_hours')} h ({g('usage_hours') // 24} d)")
+            self.sys_info["power"].setText("On" if g("power_mode") == 1 else str(g("power_mode")))
+
             self.badges["FreeSync"].set_active(g("freesync") == 1)
             self.badges["SmartEnergy"].set_active(g("smart_energy") > 0)
 
@@ -418,8 +414,9 @@ class ApiHubWindow(QMainWindow):
             self.kb_bat.setText(f"{pct}%")
             self.kb_bar.setValue(pct)
             self.kb_volt.setText(f"{bat.get('voltage', 0):.3f} V")
-            r = kb.get("radio", {})
-            self.kb_rssi.setText(f"{r.get('rssi_dbm', '--')} dBm")
+            radio = kb.get("radio", {})
+            self.kb_rssi.setText(f"{radio.get('rssi_dbm', '--')} dBm")
+
             d = kb.get("device", {})
             self.kb_info["model"].setText(d.get("model", "--"))
             self.kb_info["firmware"].setText(kb.get("firmware", {}).get("version", "--"))
@@ -428,21 +425,19 @@ class ApiHubWindow(QMainWindow):
             self.kb_info["mac"].setText(d.get("mac", "--"))
             self.kb_info["driver"].setText(d.get("driver", "--"))
 
+            v = bat.get("voltage")
+            if v:
+                health = "Fresh" if v >= 2.8 else "Good" if v >= 2.4 else "Low" if v >= 2.1 else "Critical"
+                self.kb_info["health"].setText(f"{health} ({v:.3f}V)")
+
             interp = bat.get("percentage_interpolated")
             self.kb_info["interpolated"].setText(f"{interp}%" if interp else "--")
 
-            voltage = bat.get("voltage")
-            if voltage:
-                health = "Fresh" if voltage >= 2.8 else "Good" if voltage >= 2.4 else "Low" if voltage >= 2.1 else "Critical"
-                self.kb_info["voltage_health"].setText(f"{health} ({voltage:.3f}V)")
-            else:
-                self.kb_info["voltage_health"].setText("--")
-
-            bt_params = kb.get("bluetooth", {})
-            interval = bt_params.get("interval")
+            bt = kb.get("bluetooth", {})
+            interval = bt.get("interval")
             if interval:
                 self.kb_info["bt_interval"].setText(f"{interval} ({interval * 1.25:.1f} ms)")
-            latency = bt_params.get("latency")
+            latency = bt.get("latency")
             if latency is not None:
                 self.kb_info["bt_latency"].setText(str(latency))
 
@@ -452,23 +447,29 @@ class ApiHubWindow(QMainWindow):
             dr = a.get("discharge", {})
             self.kb_info["drain"].setText(dr.get("remaining_display", "--") if dr else "--")
 
-            self.status.showMessage(f"Keyboard: {pct}% | Monitor: {len(mon)} VCPs")
+        n_mon = len(mon) if mon else 0
+        self.status.showMessage(f"Monitor: {n_mon} VCPs | Keyboard: {'OK' if kb else 'N/A'}")
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main():
     app = QApplication(sys.argv)
     app.setApplicationName("ApiHub Settings")
-    app.setWindowIcon(QIcon.fromTheme("apihub-scarab") if QIcon.hasThemeIcon("apihub-scarab") else QIcon.fromTheme("preferences-desktop-peripherals"))
+    icon = QIcon.fromTheme("apihub-scarab") if QIcon.hasThemeIcon("apihub-scarab") else QIcon.fromTheme("preferences-desktop-peripherals")
+    app.setWindowIcon(icon)
 
     window = ApiHubWindow()
 
-    tray = QSystemTrayIcon(QIcon.fromTheme("apihub-scarab") if QIcon.hasThemeIcon("apihub-scarab") else QIcon.fromTheme("preferences-desktop-peripherals"), app)
+    tray = QSystemTrayIcon(icon, app)
     menu = QMenu()
     sa = QAction("Open ApiHub Settings")
     sa.triggered.connect(window.show)
     menu.addAction(sa)
     ra = QAction("Refresh")
-    ra.triggered.connect(window.refresh)
+    ra.triggered.connect(window._bg_load)
     menu.addAction(ra)
     menu.addSeparator()
     qa = QAction("Quit")
