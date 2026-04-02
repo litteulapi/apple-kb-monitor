@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // serde structs have fields used only for deserialization
 mod ddc;
 
 use std::collections::HashMap;
@@ -87,10 +87,13 @@ struct KbReport {
 }
 
 fn read_keyboard_json() -> Option<KbReport> {
-    let output = Command::new("apple-kb-monitor")
-        .arg("--json")
-        .output()
-        .ok()?;
+    let output = match Command::new("apple-kb-monitor").arg("--json").output() {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("[kb] failed to run apple-kb-monitor: {}", e);
+            return None;
+        }
+    };
     if !output.status.success() {
         eprintln!("[kb] command failed: exit={:?}", output.status.code());
         return None;
@@ -154,6 +157,7 @@ fn spawn_poll_thread(state: State) {
             }
 
             // Read DDC VCPs ONE BY ONE — UI updates after each
+            // ddc_read_vcp validates VCP code in response + auto-retries on aliasing
             for vcp_info in ddc::ESSENTIAL_VCPS {
                 if let Ok((cur, max)) = ddc::ddc_read_vcp(ddc::DEFAULT_BUS, vcp_info.code) {
                     if let Ok(mut s) = state.lock() {
@@ -166,7 +170,7 @@ fn spawn_poll_thread(state: State) {
             }
 
             // Wait before next full cycle
-            thread::sleep(Duration::from_secs(15));
+            thread::sleep(Duration::from_secs(5));
         }
     });
 }
@@ -179,6 +183,36 @@ enum Tab {
     Display,
     Advanced,
     System,
+    Mqtt,
+}
+
+#[derive(Clone)]
+struct MqttConfig {
+    broker: String,
+    port: String,
+    user: String,
+    pass: String,
+    lamp_entity: String,
+    bri_min: f32,
+    bri_max: f32,
+    bridge_running: bool,
+    last_check: Option<Instant>,
+}
+
+impl Default for MqttConfig {
+    fn default() -> Self {
+        Self {
+            broker: "192.168.8.3".to_string(),
+            port: "1883".to_string(),
+            user: "adminapi".to_string(),
+            pass: "12b27g02".to_string(),
+            lamp_entity: "light.bureau".to_string(),
+            bri_min: 2.0,
+            bri_max: 70.0,
+            bridge_running: false,
+            last_check: None,
+        }
+    }
 }
 
 struct ApiHubApp {
@@ -186,6 +220,8 @@ struct ApiHubApp {
     tab: Tab,
     i2c_bus: String,
     pending_writes: Vec<(u8, u16)>,
+    style_initialized: bool,
+    mqtt: MqttConfig,
 }
 
 impl ApiHubApp {
@@ -197,24 +233,58 @@ impl ApiHubApp {
             tab: Tab::Keyboard,
             i2c_bus: ddc::DEFAULT_BUS.to_string(),
             pending_writes: Vec::new(),
+            style_initialized: false,
+            mqtt: MqttConfig::default(),
         }
     }
 }
 
 impl eframe::App for ApiHubApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Process any pending DDC writes
-        for (vcp, val) in self.pending_writes.drain(..) {
-            let bus = self.i2c_bus.clone();
-            thread::spawn(move || {
-                if let Err(e) = ddc::ddc_write_vcp(&bus, vcp, val) {
-                    eprintln!("DDC write 0x{:02X}={}: {}", vcp, val, e);
+        // Process pending DDC writes — deduplicate per VCP, optimistic UI update
+        {
+            // Keep only the LAST value per VCP (dedup rapid slider drags)
+            let mut deduped: HashMap<u8, u16> = HashMap::new();
+            for (vcp, val) in self.pending_writes.drain(..) {
+                deduped.insert(vcp, val);
+            }
+            if !deduped.is_empty() {
+                // Optimistic update: immediately reflect new values in UI
+                if let Ok(mut s) = self.state.lock() {
+                    for (&vcp, &val) in &deduped {
+                        for v in ddc::ESSENTIAL_VCPS {
+                            if v.code == vcp {
+                                let max = s.ddc.data.get(v.name).map(|d| d.1).unwrap_or(255);
+                                s.ddc.data.insert(v.name.to_string(), (val, max));
+                                break;
+                            }
+                        }
+                    }
                 }
-            });
+                // Single thread for all writes (bus lock serializes anyway)
+                let bus = self.i2c_bus.clone();
+                thread::spawn(move || {
+                    for (vcp, val) in deduped {
+                        if let Err(e) = ddc::ddc_write_vcp(&bus, vcp, val) {
+                            eprintln!("DDC write 0x{:02X}={}: {}", vcp, val, e);
+                        }
+                    }
+                });
+            }
         }
 
-        // Dark theme
-        ctx.set_visuals(egui::Visuals::dark());
+        // Dark theme + enforce 16px minimum — once only
+        if !self.style_initialized {
+            ctx.set_visuals(egui::Visuals::dark());
+            let mut style = (*ctx.style()).clone();
+            for (_text_style, font_id) in style.text_styles.iter_mut() {
+                if font_id.size < 16.0 {
+                    font_id.size = 16.0;
+                }
+            }
+            ctx.set_style(style);
+            self.style_initialized = true;
+        }
 
         // Request repaint every second for live data
         ctx.request_repaint_after(Duration::from_secs(1));
@@ -227,6 +297,7 @@ impl eframe::App for ApiHubApp {
                 ui.selectable_value(&mut self.tab, Tab::Display, "Display");
                 ui.selectable_value(&mut self.tab, Tab::Advanced, "Advanced");
                 ui.selectable_value(&mut self.tab, Tab::System, "System");
+                ui.selectable_value(&mut self.tab, Tab::Mqtt, "MQTT");
             });
         });
 
@@ -236,6 +307,7 @@ impl eframe::App for ApiHubApp {
                 Tab::Display => self.tab_display(ui, &snap),
                 Tab::Advanced => self.tab_advanced(ui, &snap),
                 Tab::System => self.tab_system(ui, &snap),
+                Tab::Mqtt => self.tab_mqtt(ui),
             }
         });
     }
@@ -260,12 +332,12 @@ fn ddc_has(snap: &SharedState, name: &str) -> bool {
 impl ApiHubApp {
     fn tab_keyboard(&self, ui: &mut egui::Ui, snap: &SharedState) {
         if let Some(ref err) = snap.kb_error {
-            ui.colored_label(egui::Color32::from_rgb(255, 100, 100), err);
+            ui.label(egui::RichText::new(err.as_str()).size(16.0).color(egui::Color32::from_rgb(255, 100, 100)));
         }
 
         match &snap.keyboard {
             None => {
-                ui.label("Waiting for keyboard data...");
+                ui.label(egui::RichText::new("Waiting for keyboard data...").size(16.0));
             }
             Some(kb) => {
                 let pct = kb.battery.percentage_interpolated
@@ -299,7 +371,7 @@ impl ApiHubApp {
                             }
                             if let Some(adc) = kb.battery.adc_raw {
                                 ui.label(egui::RichText::new("ADC").weak().size(16.0));
-                                ui.label(format!("{}", adc));
+                                ui.label(egui::RichText::new(format!("{}", adc)).size(16.0));
                                 ui.end_row();
                             }
                         });
@@ -325,7 +397,7 @@ impl ApiHubApp {
                             }
                             if let Some(tx) = kb.radio.tx_power_dbm.or(kb.bluetooth.tx_power_dbus) {
                                 ui.label(egui::RichText::new("TX Power").weak().size(16.0));
-                                ui.label(format!("{} dBm", tx));
+                                ui.label(egui::RichText::new(format!("{} dBm", tx)).size(16.0));
                                 ui.end_row();
                             }
                             ui.label(egui::RichText::new("Connected").weak().size(16.0));
@@ -334,11 +406,11 @@ impl ApiHubApp {
                             } else {
                                 ("No", egui::Color32::from_rgb(255, 70, 70))
                             };
-                            ui.colored_label(col, egui::RichText::new(txt).strong());
+                            ui.label(egui::RichText::new(txt).strong().size(16.0).color(col));
                             ui.end_row();
 
                             ui.label(egui::RichText::new("Paired").weak().size(16.0));
-                            ui.label(if kb.bluetooth.paired { "Yes" } else { "No" });
+                            ui.label(egui::RichText::new(if kb.bluetooth.paired { "Yes" } else { "No" }).size(16.0));
                             ui.end_row();
                         });
                     });
@@ -355,17 +427,17 @@ impl ApiHubApp {
                         egui::Grid::new("dev_left").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(ref model) = kb.device.model {
                                 ui.label(egui::RichText::new("Model").weak().size(16.0));
-                                ui.label(egui::RichText::new(model).strong());
+                                ui.label(egui::RichText::new(model).strong().size(16.0));
                                 ui.end_row();
                             }
                             if let Some(ref mac) = kb.device.mac {
                                 ui.label(egui::RichText::new("MAC").weak().size(16.0));
-                                ui.label(egui::RichText::new(mac).monospace());
+                                ui.label(egui::RichText::new(mac).monospace().size(16.0));
                                 ui.end_row();
                             }
                             if let Some(ref driver) = kb.device.driver {
                                 ui.label(egui::RichText::new("Driver").weak().size(16.0));
-                                ui.label(driver);
+                                ui.label(egui::RichText::new(driver.as_str()).size(16.0));
                                 ui.end_row();
                             }
                         });
@@ -378,7 +450,7 @@ impl ApiHubApp {
                         egui::Grid::new("dev_right").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(ref chip) = kb.device.chip {
                                 ui.label(egui::RichText::new("Chip").weak().size(16.0));
-                                ui.label(chip);
+                                ui.label(egui::RichText::new(chip.as_str()).size(16.0));
                                 ui.end_row();
                             }
                             if let Some(ref fw) = kb.firmware.version {
@@ -388,7 +460,7 @@ impl ApiHubApp {
                             }
                             if let Some(ref build) = kb.firmware.build {
                                 ui.label(egui::RichText::new("Build").weak().size(16.0));
-                                ui.label(build.to_string());
+                                ui.label(egui::RichText::new(build.to_string()).size(16.0));
                                 ui.end_row();
                             }
                         });
@@ -403,24 +475,30 @@ impl ApiHubApp {
         ui.separator();
 
         if let Some(ref err) = snap.ddc.error {
-            ui.colored_label(egui::Color32::from_rgb(255, 100, 100), err);
+            ui.label(egui::RichText::new(err.as_str()).size(16.0).color(egui::Color32::from_rgb(255, 100, 100)));
         }
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             // ── Continuous sliders ──────────────────────────────────────
             ui.group(|ui| {
-                ui.label(egui::RichText::new("Image").strong());
+                ui.label(egui::RichText::new("Image").strong().size(18.0));
                 self.vcp_slider(ui, snap, "brightness", 0x10);
                 self.vcp_slider(ui, snap, "contrast", 0x12);
                 self.vcp_slider(ui, snap, "sharpness", 0x87);
-                self.vcp_slider(ui, snap, "volume", 0x62);
                 self.vcp_slider(ui, snap, "black_stabilizer", 0xF9);
             });
 
             ui.add_space(10.0);
 
             ui.group(|ui| {
-                ui.label(egui::RichText::new("RGB Gain").strong());
+                ui.label(egui::RichText::new("Audio").strong().size(18.0));
+                self.vcp_slider(ui, snap, "volume", 0x62);
+            });
+
+            ui.add_space(10.0);
+
+            ui.group(|ui| {
+                ui.label(egui::RichText::new("RGB Gain").strong().size(18.0));
                 self.vcp_slider(ui, snap, "red_gain", 0x16);
                 self.vcp_slider(ui, snap, "green_gain", 0x18);
                 self.vcp_slider(ui, snap, "blue_gain", 0x1A);
@@ -430,21 +508,22 @@ impl ApiHubApp {
 
             // ── Picture mode ────────────────────────────────────────────
             ui.group(|ui| {
-                ui.label(egui::RichText::new("Picture Mode").strong());
+                ui.label(egui::RichText::new("Picture Mode").strong().size(18.0));
                 ui.horizontal_wrapped(|ui| {
-                    let modes = [
-                        (0, "Custom"),
+                    let modes: [(u16, &str); 13] = [
+                        (17, "Custom"),
                         (1, "Reader"),
-                        (2, "Photo"),
-                        (3, "Cinema"),
-                        (4, "Color Weakness"),
-                        (5, "FPS1"),
-                        (6, "FPS2"),
-                        (7, "RTS"),
-                        (8, "Vivid"),
-                        (9, "HDR Effect"),
-                        (10, "sRGB"),
-                        (11, "DCI-P3"),
+                        (32, "Photo"),
+                        (72, "Cinema"),
+                        (6, "Color Weakness"),
+                        (40, "FPS 1"),
+                        (41, "FPS 2"),
+                        (19, "RTS"),
+                        (20, "Vivid"),
+                        (21, "sRGB"),
+                        (24, "SMPTE-C"),
+                        (25, "EBU"),
+                        (45, "Gamer"),
                     ];
                     let cur = ddc_cur(snap, "picture_mode");
                     for (val, label) in modes {
@@ -459,14 +538,12 @@ impl ApiHubApp {
 
             // ── Input source ────────────────────────────────────────────
             ui.group(|ui| {
-                ui.label(egui::RichText::new("Input Source").strong());
+                ui.label(egui::RichText::new("Input Source").strong().size(18.0));
                 ui.horizontal_wrapped(|ui| {
                     let inputs = [
+                        (0x0F, "DisplayPort"),
                         (0x11, "HDMI 1"),
                         (0x12, "HDMI 2"),
-                        (0x0F, "DP"),
-                        (0x10, "DP Alt"),
-                        (0x22, "USB-C"),
                     ];
                     let cur = ddc_cur(snap, "input_source");
                     for (val, label) in inputs {
@@ -480,17 +557,17 @@ impl ApiHubApp {
     }
 
     fn tab_advanced(&mut self, ui: &mut egui::Ui, snap: &SharedState) {
-        ui.heading("Advanced Settings");
+        ui.label(egui::RichText::new("Advanced Settings").strong().size(18.0));
         ui.separator();
 
         if let Some(ref err) = snap.ddc.error {
-            ui.colored_label(egui::Color32::from_rgb(255, 100, 100), err);
+            ui.label(egui::RichText::new(err.as_str()).size(16.0).color(egui::Color32::from_rgb(255, 100, 100)));
         }
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            // Response Time
+            // Response Time — RE doc: 0=Off, 1=Fast, 2=Normal, 3=Slow, 4=Faster
             self.button_group(ui, snap, "Response Time", "response_time", 0xF7, &[
-                (0, "Off"), (1, "High"), (2, "Middle"), (3, "Low"), (4, "Faster"),
+                (0, "Off"), (1, "Fast"), (2, "Normal"), (3, "Slow"), (4, "Faster"),
             ]);
 
             // FreeSync
@@ -498,14 +575,14 @@ impl ApiHubApp {
                 (0, "Off"), (1, "Basic"), (2, "Extended"),
             ]);
 
-            // Gamma
-            self.button_group(ui, snap, "Gamma", "gamma", 0xFE, &[
-                (0, "2.2"), (1, "2.4"), (2, "2.0"), (3, "1.8"),
+            // Gamma via MCCS VCP 0x72 — encoding: (gamma - 1.0) * 100 << 8
+            self.button_group(ui, snap, "Gamma", "gamma_curve", 0x72, &[
+                (0x5000, "1.8"), (0x6400, "2.0"), (0x7800, "2.2"), (0x8C00, "2.4"),
             ]);
 
             // Smart Energy
             self.button_group(ui, snap, "Smart Energy Saving", "smart_energy", 0xF6, &[
-                (0, "Off"), (1, "High"), (2, "Low"),
+                (0, "Off"), (1, "Low"), (2, "High"),
             ]);
 
             // Aspect Ratio
@@ -513,158 +590,362 @@ impl ApiHubApp {
                 (0, "Full Wide"), (1, "Original"), (2, "Just Scan"), (3, "Cinema 1"),
             ]);
 
-            // Power LED
-            self.button_group(ui, snap, "Power LED", "power_led", 0xFD, &[
-                (0, "Off"), (1, "On"),
-            ]);
-
-            // Split Mode
-            self.button_group(ui, snap, "Split / PBP", "split_mode", 0xD7, &[
-                (0, "Off"), (1, "PBP"),
-            ]);
-
             // Audio Mute
             self.button_group(ui, snap, "Audio Mute", "audio_mute", 0x8D, &[
                 (1, "Muted"), (2, "Unmuted"),
             ]);
 
-            // Language
+            // Language — RE doc: 0=EN, 2=FR, 3=DE, 4=ES, 5=IT, 6=KO, 7=ZH, 8=JA, 9=PT
             self.button_group(ui, snap, "OSD Language", "language", 0xCC, &[
-                (0, "English"), (1, "French"), (2, "Deutsch"), (3, "Spanish"),
-                (4, "Italian"), (5, "Korean"), (6, "Chinese (S)"), (7, "Japanese"),
-                (8, "Portuguese"), (9, "Russian"),
+                (0, "English"), (2, "French"), (3, "Deutsch"), (4, "Spanish"),
+                (5, "Italian"), (6, "Korean"), (7, "Chinese"), (8, "Japanese"),
+                (9, "Portuguese"),
             ]);
 
-            // OSD Lock
-            self.button_group(ui, snap, "OSD Lock", "osd_lock", 0xCA, &[
-                (1, "Unlocked"), (2, "Locked"),
+            // Read-only VCPs (type=TABLE, DDC writes ignored)
+            self.readonly_group(ui, snap, "Power LED", "power_led", &[
+                (0, "Off"), (1, "On"),
+            ]);
+
+            self.readonly_group(ui, snap, "Split / PBP", "split_mode", &[
+                (0, "Off"), (1, "PBP"),
+            ]);
+
+            self.readonly_group(ui, snap, "OSD Lock", "osd_lock", &[
+                (2, "Unlocked"), (1, "Locked"),
             ]);
         });
     }
 
     fn tab_system(&self, ui: &mut egui::Ui, snap: &SharedState) {
-        ui.heading("System Info");
-        ui.separator();
+        // Status badges at top, full width
+        ui.horizontal_wrapped(|ui| {
+            let age = snap.ddc.last_update.map(|t| t.elapsed());
+            let fresh = age.map(|a| a.as_secs() < 10).unwrap_or(false);
+            self.badge(ui, "DDC", fresh);
 
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            // ── Monitor ─────────────────────────────────────────────────
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("Monitor").strong());
+            let kb_ok = snap.keyboard.is_some();
+            self.badge(ui, "Keyboard", kb_ok);
+
+            if let Some(ref kb) = snap.keyboard {
+                self.badge(ui, "BT", kb.bluetooth.connected);
+            }
+        });
+
+        ui.add_space(6.0);
+
+        // Two columns: Monitor info left, Raw VCP right
+        ui.columns(2, |cols| {
+            // ── LEFT: Monitor info ──────────────────────────────────
+            cols[0].group(|ui| {
+                ui.label(egui::RichText::new("Monitor").strong().size(18.0));
+                ui.add_space(4.0);
                 egui::Grid::new("sys_monitor")
                     .num_columns(2)
-                    .spacing([20.0, 4.0])
+                    .spacing([16.0, 8.0])
                     .show(ui, |ui| {
-                        if ddc_has(snap, "usage_hours") {
-                            ui.label("Usage:");
-                            ui.label(format!("{} hours", ddc_cur(snap, "usage_hours")));
+                        if ddc_has(snap, "power_mode") {
+                            let pm = ddc_cur(snap, "power_mode");
+                            ui.label(egui::RichText::new("Power").weak().size(16.0));
+                            let (label, color) = match pm {
+                                1 => ("On", egui::Color32::from_rgb(80, 220, 100)),
+                                2 => ("Standby", egui::Color32::from_rgb(255, 200, 50)),
+                                3 => ("Suspend", egui::Color32::from_rgb(255, 200, 50)),
+                                4 => ("Off (soft)", egui::Color32::from_rgb(255, 70, 70)),
+                                5 => ("Off (hard)", egui::Color32::from_rgb(255, 70, 70)),
+                                _ => ("Unknown", egui::Color32::GRAY),
+                            };
+                            ui.label(egui::RichText::new(label).strong().size(18.0).color(color));
                             ui.end_row();
                         }
-                        if ddc_has(snap, "backlight_pwm") {
-                            ui.label("Backlight PWM:");
-                            ui.label(format!("{}", ddc_cur(snap, "backlight_pwm")));
+                        if ddc_has(snap, "usage_hours") {
+                            ui.label(egui::RichText::new("Usage").weak().size(16.0));
+                            let h = ddc_cur(snap, "usage_hours");
+                            ui.label(egui::RichText::new(format!("{} h ({} days)", h, h / 24)).size(16.0));
                             ui.end_row();
                         }
                         if ddc_has(snap, "firmware") {
                             let fw = ddc_cur(snap, "firmware");
-                            ui.label("Firmware:");
-                            ui.label(format!("{}.{}", fw >> 8, fw & 0xFF));
+                            ui.label(egui::RichText::new("Firmware").weak().size(16.0));
+                            ui.label(egui::RichText::new(format!("{}.{}", fw >> 8, fw & 0xFF)).strong().size(18.0));
                             ui.end_row();
                         }
                         if ddc_has(snap, "vcp_version") {
                             let ver = ddc_cur(snap, "vcp_version");
-                            ui.label("VCP Version:");
-                            ui.label(format!("{}.{}", ver >> 8, ver & 0xFF));
+                            ui.label(egui::RichText::new("VCP Version").weak().size(16.0));
+                            ui.label(egui::RichText::new(format!("{}.{}", ver >> 8, ver & 0xFF)).size(16.0));
                             ui.end_row();
                         }
                         if ddc_has(snap, "display_tech") {
-                            ui.label("Display Tech:");
-                            ui.label(format!("{}", ddc_cur(snap, "display_tech")));
+                            let dt = ddc_cur(snap, "display_tech");
+                            ui.label(egui::RichText::new("Panel").weak().size(16.0));
+                            let label = match dt {
+                                1 => "CRT", 2 => "LCD", 3 => "IPS",
+                                4 => "OLED", 5 => "VA", _ => "Unknown",
+                            };
+                            ui.label(egui::RichText::new(label).size(16.0));
                             ui.end_row();
                         }
+                        if ddc_has(snap, "backlight_pwm") {
+                            let pwm = ddc_cur(snap, "backlight_pwm");
+                            let max = ddc_max(snap, "backlight_pwm");
+                            ui.label(egui::RichText::new("Backlight").weak().size(16.0));
+                            ui.label(egui::RichText::new(format!("{}/{}", pwm, max)).size(16.0));
+                            ui.end_row();
+                        }
+                    });
+            });
+
+            cols[0].add_space(8.0);
+
+            cols[0].group(|ui| {
+                ui.label(egui::RichText::new("Signal").strong().size(18.0));
+                ui.add_space(4.0);
+                egui::Grid::new("sys_signal")
+                    .num_columns(2)
+                    .spacing([16.0, 8.0])
+                    .show(ui, |ui| {
                         if ddc_has(snap, "h_freq") {
-                            ui.label("H-Freq:");
                             let hf = ddc_cur(snap, "h_freq");
-                            ui.label(format!("{} kHz", hf));
+                            ui.label(egui::RichText::new("H-Freq").weak().size(16.0));
+                            ui.label(egui::RichText::new(format!("{:.2} kHz", hf as f32 / 100.0)).size(16.0));
                             ui.end_row();
                         }
                         if ddc_has(snap, "v_freq") {
-                            ui.label("V-Freq:");
                             let vf = ddc_cur(snap, "v_freq");
-                            ui.label(format!("{}.{} Hz", vf / 100, vf % 100));
+                            ui.label(egui::RichText::new("V-Freq").weak().size(16.0));
+                            // LG encoding: raw value, display as-is (non-standard)
+                            ui.label(egui::RichText::new(format!("{}", vf)).size(16.0));
                             ui.end_row();
                         }
-                        if ddc_has(snap, "power_mode") {
-                            let pm = ddc_cur(snap, "power_mode");
-                            ui.label("Power Mode:");
-                            let label = match pm {
-                                1 => "On",
-                                2 => "Standby",
-                                3 => "Suspend",
-                                4 => "Off (soft)",
-                                5 => "Off (hard)",
+                        if ddc_has(snap, "picture_mode") {
+                            let pm = ddc_cur(snap, "picture_mode");
+                            ui.label(egui::RichText::new("Picture Mode").weak().size(16.0));
+                            let name = match pm {
+                                1 => "Reader", 6 => "Color Weakness",
+                                17 => "Custom", 19 => "RTS", 20 => "Vivid",
+                                21 => "sRGB", 24 => "SMPTE-C", 25 => "EBU",
+                                32 => "Photo", 40 => "FPS 1", 41 => "FPS 2",
+                                45 => "Gamer", 72 => "Cinema",
                                 _ => "Unknown",
                             };
-                            ui.label(label);
+                            ui.label(egui::RichText::new(format!("{} ({})", name, pm)).strong().size(16.0));
                             ui.end_row();
                         }
                         if ddc_has(snap, "color_preset") {
-                            ui.label("Color Preset:");
-                            ui.label(format!("{}", ddc_cur(snap, "color_preset")));
+                            let cp = ddc_cur(snap, "color_preset");
+                            ui.label(egui::RichText::new("Color Preset").weak().size(16.0));
+                            let label = match cp {
+                                5 => "6500K", 8 => "9300K", 0x0B => "User", _ => "Other",
+                            };
+                            ui.label(egui::RichText::new(format!("{} ({})", label, cp)).size(16.0));
                             ui.end_row();
                         }
                         if ddc_has(snap, "color_temp_kelvin") {
                             let k = ddc_cur(snap, "color_temp_kelvin");
-                            ui.label("Color Temp:");
-                            ui.label(format!("{} K", k));
+                            ui.label(egui::RichText::new("Color Temp").weak().size(16.0));
+                            ui.label(egui::RichText::new(format!("{} K", k)).size(16.0));
                             ui.end_row();
                         }
                     });
             });
 
-            ui.add_space(10.0);
+            // ── RIGHT: Raw VCP dump (scrollable) ────────────────────
+            cols[1].group(|ui| {
+                ui.label(egui::RichText::new("Raw VCP Values").strong().size(18.0));
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical().max_height(ui.available_height() - 8.0).show(ui, |ui| {
+                    egui::Grid::new("raw_vcp")
+                        .num_columns(3)
+                        .spacing([12.0, 4.0])
+                        .striped(true)
+                        .min_col_width(60.0)
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("VCP").strong().size(16.0));
+                            ui.label(egui::RichText::new("Current").strong().size(16.0));
+                            ui.label(egui::RichText::new("Max").strong().size(16.0));
+                            ui.end_row();
 
-            // ── Status badges ───────────────────────────────────────────
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("Status").strong());
-                ui.horizontal_wrapped(|ui| {
-                    let age = snap.ddc.last_update.map(|t| t.elapsed());
-                    let fresh = age.map(|a| a.as_secs() < 10).unwrap_or(false);
-                    self.badge(ui, "DDC", fresh);
+                            let mut keys: Vec<_> = snap.ddc.data.keys().collect();
+                            keys.sort();
+                            for k in keys {
+                                let (cur, max) = snap.ddc.data[k.as_str()];
+                                ui.label(egui::RichText::new(k.as_str()).size(16.0));
+                                ui.label(egui::RichText::new(format!("{}", cur)).monospace().size(16.0));
+                                ui.label(egui::RichText::new(format!("{}", max)).monospace().size(16.0));
+                                ui.end_row();
+                            }
+                        });
+                });
+            });
+        });
+    }
 
-                    let kb_ok = snap.keyboard.is_some();
-                    self.badge(ui, "Keyboard", kb_ok);
+    fn tab_mqtt(&mut self, ui: &mut egui::Ui) {
+        // Check bridge status periodically
+        let should_check = self.mqtt.last_check
+            .map(|t| t.elapsed() > Duration::from_secs(3))
+            .unwrap_or(true);
+        if should_check {
+            self.mqtt.bridge_running = Command::new("pgrep")
+                .args(["-f", "mqtt-bridge.py"])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
+            self.mqtt.last_check = Some(Instant::now());
+        }
 
-                    if let Some(ref kb) = snap.keyboard {
-                        self.badge(ui, "BT", kb.bluetooth.connected);
+        ui.columns(2, |cols| {
+            // ── LEFT: Supervision ──────────────────────────────────
+            cols[0].group(|ui| {
+                ui.label(egui::RichText::new("MQTT Bridge").strong().size(18.0));
+                ui.add_space(4.0);
+
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Status").weak().size(16.0));
+                    if self.mqtt.bridge_running {
+                        ui.label(egui::RichText::new("Running").strong().size(16.0)
+                            .color(egui::Color32::from_rgb(80, 220, 100)));
+                    } else {
+                        ui.label(egui::RichText::new("Stopped").strong().size(16.0)
+                            .color(egui::Color32::from_rgb(255, 70, 70)));
+                    }
+                });
+
+                ui.add_space(8.0);
+
+                ui.horizontal(|ui| {
+                    if self.mqtt.bridge_running {
+                        if ui.button(egui::RichText::new("Stop Bridge").size(16.0)).clicked() {
+                            let _ = Command::new("pkill").args(["-f", "mqtt-bridge.py"]).output();
+                        }
+                    } else {
+                        if ui.button(egui::RichText::new("Start Bridge").size(16.0)).clicked() {
+                            let _ = Command::new("bash").args(["-c",
+                                "nohup python3 /home/adminapi/apple-kb-monitor/mqtt-bridge.py > /tmp/mqtt-bridge.log 2>&1 &"
+                            ]).output();
+                        }
+                    }
+                    if ui.button(egui::RichText::new("Publish Sensors").size(16.0)).clicked() {
+                        let broker = self.mqtt.broker.clone();
+                        let user = self.mqtt.user.clone();
+                        let pass = self.mqtt.pass.clone();
+                        thread::spawn(move || {
+                            let _ = Command::new("apple-kb-monitor")
+                                .args(["--mqtt", &broker, "--mqtt-port", "1883"])
+                                .output();
+                            // Also publish via mosquitto_pub with auth
+                            let _ = Command::new("bash").args(["-c", &format!(
+                                "ddc-tool json 6 2>/dev/null | python3 -c \"\
+import json,sys,subprocess;\
+d=json.load(sys.stdin);\
+pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-t',t,'-r','-m',m],capture_output=True,timeout=5);\
+[pub(f'homeassistant/sensor/lg_34gn850/{{s}}/state',str(d.get(s,{{}}).get('current',''))) for s in ['brightness','contrast','volume']]\"",
+                                broker, user, pass
+                            )]).output();
+                        });
                     }
                 });
             });
 
-            ui.add_space(10.0);
+            cols[0].add_space(8.0);
 
-            // ── Raw VCP dump ────────────────────────────────────────────
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("Raw VCP Values").strong());
-                egui::Grid::new("raw_vcp")
-                    .num_columns(3)
-                    .spacing([15.0, 2.0])
-                    .striped(true)
+            // ── Lamp→Monitor Sync Info ──────────────────────────────
+            cols[0].group(|ui| {
+                ui.label(egui::RichText::new("Lamp → Monitor Sync").strong().size(18.0));
+                ui.add_space(4.0);
+                egui::Grid::new("mqtt_sync")
+                    .num_columns(2)
+                    .spacing([16.0, 8.0])
                     .show(ui, |ui| {
-                        ui.label(egui::RichText::new("VCP").strong());
-                        ui.label(egui::RichText::new("Current").strong());
-                        ui.label(egui::RichText::new("Max").strong());
+                        ui.label(egui::RichText::new("Source").weak().size(16.0));
+                        ui.label(egui::RichText::new(&self.mqtt.lamp_entity).monospace().size(16.0));
                         ui.end_row();
 
-                        let mut keys: Vec<_> = snap.ddc.data.keys().collect();
-                        keys.sort();
-                        for k in keys {
-                            let (cur, max) = snap.ddc.data[k.as_str()];
-                            ui.label(k.as_str());
-                            ui.label(format!("{}", cur));
-                            ui.label(format!("{}", max));
-                            ui.end_row();
-                        }
+                        ui.label(egui::RichText::new("Formula").weak().size(16.0));
+                        ui.label(egui::RichText::new(format!(
+                            "{} + (lamp/255) × {}",
+                            self.mqtt.bri_min as u16,
+                            (self.mqtt.bri_max - self.mqtt.bri_min) as u16
+                        )).monospace().size(16.0));
+                        ui.end_row();
+
+                        ui.label(egui::RichText::new("Output Range").weak().size(16.0));
+                        ui.label(egui::RichText::new(format!(
+                            "{}% – {}%", self.mqtt.bri_min as u16, self.mqtt.bri_max as u16
+                        )).strong().size(16.0));
+                        ui.end_row();
+
+                        ui.label(egui::RichText::new("Broker").weak().size(16.0));
+                        ui.label(egui::RichText::new(format!(
+                            "{}:{}", self.mqtt.broker, self.mqtt.port
+                        )).monospace().size(16.0));
+                        ui.end_row();
                     });
+            });
+
+            // ── RIGHT: Settings ────────────────────────────────────
+            cols[1].group(|ui| {
+                ui.label(egui::RichText::new("Settings").strong().size(18.0));
+                ui.add_space(4.0);
+
+                egui::Grid::new("mqtt_settings")
+                    .num_columns(2)
+                    .spacing([16.0, 8.0])
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new("Broker").weak().size(16.0));
+                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.broker).desired_width(180.0));
+                        ui.end_row();
+
+                        ui.label(egui::RichText::new("Port").weak().size(16.0));
+                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.port).desired_width(60.0));
+                        ui.end_row();
+
+                        ui.label(egui::RichText::new("User").weak().size(16.0));
+                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.user).desired_width(180.0));
+                        ui.end_row();
+
+                        ui.label(egui::RichText::new("Password").weak().size(16.0));
+                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.pass).password(true).desired_width(180.0));
+                        ui.end_row();
+
+                        ui.label(egui::RichText::new("Lamp Entity").weak().size(16.0));
+                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.lamp_entity).desired_width(180.0));
+                        ui.end_row();
+                    });
+
+                ui.add_space(12.0);
+                ui.label(egui::RichText::new("Brightness Range").strong().size(18.0));
+                ui.add_space(4.0);
+
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Min").weak().size(16.0));
+                    ui.add(egui::Slider::new(&mut self.mqtt.bri_min, 0.0..=30.0).show_value(true));
+                });
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Max").weak().size(16.0));
+                    ui.add(egui::Slider::new(&mut self.mqtt.bri_max, 30.0..=100.0).show_value(true));
+                });
+
+                ui.add_space(12.0);
+                if ui.button(egui::RichText::new("Apply & Restart Bridge").size(16.0).strong()).clicked() {
+                    // Update mqtt-bridge.py config and restart
+                    let cfg = format!(
+                        "BROKER = \"{}\"\nPORT = {}\nMQTT_USER = \"{}\"\nMQTT_PASS = \"{}\"\n",
+                        self.mqtt.broker, self.mqtt.port, self.mqtt.user, self.mqtt.pass
+                    );
+                    let _ = Command::new("pkill").args(["-f", "mqtt-bridge.py"]).output();
+                    // Rewrite config section
+                    let _ = Command::new("bash").args(["-c", &format!(
+                        "sed -i 's/^BROKER = .*/BROKER = \"{}\"/' /home/adminapi/apple-kb-monitor/mqtt-bridge.py && \
+                         sed -i 's/^PORT = .*/PORT = {}/' /home/adminapi/apple-kb-monitor/mqtt-bridge.py && \
+                         sed -i 's/^MQTT_USER = .*/MQTT_USER = \"{}\"/' /home/adminapi/apple-kb-monitor/mqtt-bridge.py && \
+                         sed -i 's/^MQTT_PASS = .*/MQTT_PASS = \"{}\"/' /home/adminapi/apple-kb-monitor/mqtt-bridge.py && \
+                         nohup python3 /home/adminapi/apple-kb-monitor/mqtt-bridge.py > /tmp/mqtt-bridge.log 2>&1 &",
+                        self.mqtt.broker, self.mqtt.port, self.mqtt.user, self.mqtt.pass
+                    )]).output();
+                    let _ = cfg; // suppress unused warning
+                }
             });
         });
     }
@@ -678,10 +959,9 @@ impl ApiHubApp {
         let mut val = cur;
 
         ui.horizontal(|ui| {
-            ui.label(format!("{:16}", name));
-            let label = format!("{:.0}", val);
+            ui.label(egui::RichText::new(name).monospace().size(16.0));
             let slider = egui::Slider::new(&mut val, 0.0..=max_val)
-                .text(label);
+                .show_value(true);
             if ui.add(slider).changed() {
                 self.pending_writes.push((vcp, val as u16));
             }
@@ -698,7 +978,7 @@ impl ApiHubApp {
         options: &[(u16, &str)],
     ) {
         ui.group(|ui| {
-            ui.label(egui::RichText::new(title).strong());
+            ui.label(egui::RichText::new(title).strong().size(18.0));
             ui.horizontal_wrapped(|ui| {
                 let cur = ddc_cur(snap, name);
                 for &(val, label) in options {
@@ -711,6 +991,41 @@ impl ApiHubApp {
         ui.add_space(4.0);
     }
 
+    fn readonly_group(
+        &self,
+        ui: &mut egui::Ui,
+        snap: &SharedState,
+        title: &str,
+        name: &str,
+        options: &[(u16, &str)],
+    ) {
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(title).strong().size(18.0));
+                if !ddc_has(snap, name) {
+                    ui.label(egui::RichText::new("loading...").weak().size(16.0).italics());
+                }
+            });
+            if ddc_has(snap, name) {
+                ui.horizontal_wrapped(|ui| {
+                    let cur = ddc_cur(snap, name);
+                    for &(val, label) in options {
+                        let selected = cur == val;
+                        let text = if selected {
+                            egui::RichText::new(format!("  {}  ", label)).strong().size(16.0)
+                                .color(egui::Color32::from_rgb(120, 200, 255))
+                                .background_color(egui::Color32::from_rgb(30, 50, 70))
+                        } else {
+                            egui::RichText::new(format!("  {}  ", label)).weak().size(16.0)
+                        };
+                        ui.label(text);
+                    }
+                });
+            }
+        });
+        ui.add_space(4.0);
+    }
+
     fn badge(&self, ui: &mut egui::Ui, label: &str, ok: bool) {
         let (text, bg) = if ok {
             (format!("{}: OK", label), egui::Color32::from_rgb(30, 100, 40))
@@ -719,7 +1034,8 @@ impl ApiHubApp {
         };
         let rt = egui::RichText::new(text)
             .color(egui::Color32::WHITE)
-            .strong();
+            .strong()
+            .size(16.0);
         ui.group(|ui| {
             ui.visuals_mut().widgets.noninteractive.bg_fill = bg;
             ui.label(rt);

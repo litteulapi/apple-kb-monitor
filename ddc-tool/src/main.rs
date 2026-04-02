@@ -132,11 +132,11 @@ const KNOWN_VCPS: &[VcpInfo] = &[
     VcpInfo { code: 0xD7, name: "split_mode" },
     VcpInfo { code: 0xDE, name: "scratch_pad" },
     VcpInfo { code: 0xDF, name: "vcp_version" },
-    // LG Undocumented
-    VcpInfo { code: 0x4D, name: "lg_unknown_4d" },
-    VcpInfo { code: 0x4E, name: "lg_unknown_4e" },
-    VcpInfo { code: 0x4F, name: "lg_unknown_4f" },
-    VcpInfo { code: 0xEF, name: "lg_unknown_ef" },
+    // LG Decoded (was unknown)
+    VcpInfo { code: 0x4D, name: "lg_capability_flags" },  // 0x8002=HDR+WCG, read-only bit field
+    VcpInfo { code: 0x4E, name: "lg_status_register" },   // 0=normal, read-only status/error
+    VcpInfo { code: 0x4F, name: "lg_panel_identifier" },  // 0x1B82=panel family+rev, read-only
+    VcpInfo { code: 0xEF, name: "lg_panel_timing_id" },   // 0x5860=panel timing constant, read-only
     // LG Vendor
     VcpInfo { code: 0xF4, name: "lg_response_time_alt" },
     VcpInfo { code: 0xF5, name: "aspect_ratio" },
@@ -144,10 +144,10 @@ const KNOWN_VCPS: &[VcpInfo] = &[
     VcpInfo { code: 0xF7, name: "response_time" },
     VcpInfo { code: 0xF8, name: "freesync" },
     VcpInfo { code: 0xF9, name: "black_stabilizer" },
-    VcpInfo { code: 0xFA, name: "lg_unknown_fa" },
+    VcpInfo { code: 0xFA, name: "lg_color_gamut" },       // 255=Wide(native), locked by picture mode
     VcpInfo { code: 0xFD, name: "power_led" },
     VcpInfo { code: 0xFE, name: "gamma" },
-    VcpInfo { code: 0xFF, name: "lg_unknown_ff" },
+    VcpInfo { code: 0xFF, name: "lg_vendor_cmd" },        // 0=idle, TABLE type, vendor command register
     // Mirror registers
     VcpInfo { code: 0xE8, name: "mirror_brightness" },
     VcpInfo { code: 0xE9, name: "mirror_contrast" },
@@ -168,10 +168,10 @@ const KNOWN_VCPS: &[VcpInfo] = &[
     VcpInfo { code: 0x6C, name: "black_level_red" },
     VcpInfo { code: 0x6E, name: "black_level_green" },
     VcpInfo { code: 0x70, name: "black_level_blue" },
-    VcpInfo { code: 0x72, name: "gamma_curve" },
+    VcpInfo { code: 0x72, name: "mccs_gamma" },            // hi-byte=(gamma-1)*100, 0x7800=2.2, WRITABLE
     VcpInfo { code: 0x7A, name: "adjust_zoom" },
-    VcpInfo { code: 0xAF, name: "model_id" },
-    VcpInfo { code: 0xCF, name: "unknown_cf" },
+    VcpInfo { code: 0xAF, name: "lg_tick_counter" },      // volatile +768/~2.86s, MCU heartbeat
+    VcpInfo { code: 0xCF, name: "lg_ddc_version" },       // 0x020E = v2.14, LG DDC/CI impl version
     VcpInfo { code: 0xD8, name: "unknown_toggle_d8" },
     VcpInfo { code: 0xDD, name: "unknown_toggle_dd" },
     VcpInfo { code: 0xE0, name: "lg_vendor_e0" },
