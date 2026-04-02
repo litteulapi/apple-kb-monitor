@@ -11,9 +11,10 @@ import json
 import os
 import subprocess
 import sys
+import threading
 from functools import partial
 
-from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtCore import Qt, QTimer, QSize, Signal, QObject
 from PySide6.QtGui import QIcon, QAction, QFont, QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSystemTrayIcon, QMenu,
@@ -24,15 +25,43 @@ from PySide6.QtWidgets import (
 )
 
 
+class DataLoader(QObject):
+    """Background data loader — prevents UI freeze."""
+    data_ready = Signal(str)
+
+    def load(self):
+        mon = ddc_read_all()
+        kb = kb_read()
+        self.data_ready.emit(json.dumps({"mon": mon, "kb": kb}))
+
+
 def ddc_read_all():
-    try:
-        r = subprocess.run(["ddc-tool", "json", "6"],
-                           capture_output=True, text=True, timeout=10)
-        if r.returncode == 0:
-            return json.loads(r.stdout)
-    except Exception:
-        pass
-    return {}
+    """Read essential monitor VCPs via individual reads (faster than json all)."""
+    essential = [
+        (0x10, "brightness"), (0x12, "contrast"), (0x14, "color_preset"),
+        (0x15, "picture_mode"), (0x16, "red_gain"), (0x18, "green_gain"),
+        (0x1A, "blue_gain"), (0x60, "input_source"), (0x62, "volume"),
+        (0x69, "color_temp_kelvin"), (0x87, "sharpness"), (0x8D, "audio_mute"),
+        (0xAE, "v_freq"), (0xAC, "h_freq"), (0xB6, "display_tech"),
+        (0xC0, "usage_hours"), (0xC1, "backlight_pwm"), (0xC9, "firmware"),
+        (0xCA, "osd_lock"), (0xCC, "language"), (0xD6, "power_mode"),
+        (0xD7, "split_mode"), (0xDF, "vcp_version"),
+        (0xF5, "aspect_ratio"), (0xF6, "smart_energy"), (0xF7, "response_time"),
+        (0xF8, "freesync"), (0xF9, "black_stabilizer"),
+        (0xFD, "power_led"), (0xFE, "gamma"),
+    ]
+    result = {}
+    for vcp, name in essential:
+        try:
+            r = subprocess.run(["ddc-tool", "read", "6", f"0x{vcp:02X}"],
+                               capture_output=True, text=True, timeout=3)
+            if r.returncode == 0:
+                parts = r.stdout.strip().split()
+                if len(parts) >= 2:
+                    result[name] = {"current": int(parts[0]), "max": int(parts[1])}
+        except Exception:
+            pass
+    return result
 
 
 def ddc_write(vcp, value):
@@ -151,6 +180,9 @@ class ApiHubWindow(QMainWindow):
 
         self.status = QStatusBar()
         self.setStatusBar(self.status)
+
+        self.loader = DataLoader()
+        self.loader.data_ready.connect(self._on_data_ready)
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.refresh)
@@ -325,7 +357,17 @@ class ApiHubWindow(QMainWindow):
         return w
 
     def refresh(self):
-        mon = ddc_read_all()
+        self.status.showMessage("Loading...")
+        t = threading.Thread(target=self.loader.load, daemon=True)
+        t.start()
+
+    def _on_data_ready(self, data_json):
+        data = json.loads(data_json)
+        mon = data.get("mon", {})
+        kb = data.get("kb", {})
+        self._apply_data(mon, kb)
+
+    def _apply_data(self, mon, kb):
         if mon:
             def g(k):
                 return mon.get(k, {}).get("current", 0)
@@ -370,7 +412,6 @@ class ApiHubWindow(QMainWindow):
             self.badges["FreeSync"].set_active(g("freesync") == 1)
             self.badges["SmartEnergy"].set_active(g("smart_energy") > 0)
 
-        kb = kb_read()
         if kb:
             bat = kb.get("battery", {})
             pct = bat.get("percentage_fine") or bat.get("percentage") or 0
