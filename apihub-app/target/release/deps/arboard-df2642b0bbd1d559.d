@@ -1,0 +1,11 @@
+/home/adminapi/apple-kb-monitor/apihub-app/target/release/deps/arboard-df2642b0bbd1d559.d: /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/mod.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/x11.rs
+
+/home/adminapi/apple-kb-monitor/apihub-app/target/release/deps/libarboard-df2642b0bbd1d559.rlib: /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/mod.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/x11.rs
+
+/home/adminapi/apple-kb-monitor/apihub-app/target/release/deps/libarboard-df2642b0bbd1d559.rmeta: /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/mod.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/x11.rs
+
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs:
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs:
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs:
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/mod.rs:
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/x11.rs:

@@ -1,0 +1,11 @@
+/home/adminapi/apple-kb-monitor/apihub-app/target/release/deps/wayland_sys-d252cf4b90788bfe.d: /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/lib.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/common.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/client.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/server.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/egl.rs
+
+/home/adminapi/apple-kb-monitor/apihub-app/target/release/deps/libwayland_sys-d252cf4b90788bfe.rlib: /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/lib.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/common.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/client.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/server.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/egl.rs
+
+/home/adminapi/apple-kb-monitor/apihub-app/target/release/deps/libwayland_sys-d252cf4b90788bfe.rmeta: /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/lib.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/common.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/client.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/server.rs /home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/egl.rs
+
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/lib.rs:
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/common.rs:
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/client.rs:
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/server.rs:
+/home/adminapi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wayland-sys-0.31.11/src/egl.rs:
