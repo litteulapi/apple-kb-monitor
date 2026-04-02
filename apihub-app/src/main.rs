@@ -396,7 +396,7 @@ impl ApiHubApp {
 
                         if let Some(ref build) = kb.firmware.build {
                             ui.label("Build:");
-                            ui.label(build);
+                            ui.label(build.to_string());
                             ui.end_row();
                         }
                     });
