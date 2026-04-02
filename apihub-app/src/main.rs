@@ -69,7 +69,7 @@ struct KbFirmware {
     #[serde(default)]
     version: Option<String>,
     #[serde(default)]
-    build: Option<String>,
+    build: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
