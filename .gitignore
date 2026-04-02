@@ -6,3 +6,5 @@ src/99-apple-kb-hidraw.rules
 *.log
 __pycache__/
 ddc-tool/target/
+apihub-app/target/
+apihub-app/target/
