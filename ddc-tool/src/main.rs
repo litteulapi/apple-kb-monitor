@@ -237,10 +237,43 @@ fn main() {
             }
         }
         "json" => {
-            thread::sleep(Duration::from_millis(100)); // Let I2C bus settle
+            // Fast JSON: only essential VCPs (30 instead of 85)
+            let essential: &[VcpInfo] = &[
+                VcpInfo { code: 0x10, name: "brightness" },
+                VcpInfo { code: 0x12, name: "contrast" },
+                VcpInfo { code: 0x14, name: "color_preset" },
+                VcpInfo { code: 0x15, name: "picture_mode" },
+                VcpInfo { code: 0x16, name: "red_gain" },
+                VcpInfo { code: 0x18, name: "green_gain" },
+                VcpInfo { code: 0x1A, name: "blue_gain" },
+                VcpInfo { code: 0x60, name: "input_source" },
+                VcpInfo { code: 0x62, name: "volume" },
+                VcpInfo { code: 0x69, name: "color_temp_kelvin" },
+                VcpInfo { code: 0x87, name: "sharpness" },
+                VcpInfo { code: 0x8D, name: "audio_mute" },
+                VcpInfo { code: 0xAC, name: "h_freq" },
+                VcpInfo { code: 0xAE, name: "v_freq" },
+                VcpInfo { code: 0xB6, name: "display_tech" },
+                VcpInfo { code: 0xC0, name: "usage_hours" },
+                VcpInfo { code: 0xC1, name: "backlight_pwm" },
+                VcpInfo { code: 0xC9, name: "firmware" },
+                VcpInfo { code: 0xCA, name: "osd_lock" },
+                VcpInfo { code: 0xCC, name: "language" },
+                VcpInfo { code: 0xD6, name: "power_mode" },
+                VcpInfo { code: 0xD7, name: "split_mode" },
+                VcpInfo { code: 0xDF, name: "vcp_version" },
+                VcpInfo { code: 0xF5, name: "aspect_ratio" },
+                VcpInfo { code: 0xF6, name: "smart_energy" },
+                VcpInfo { code: 0xF7, name: "response_time" },
+                VcpInfo { code: 0xF8, name: "freesync" },
+                VcpInfo { code: 0xF9, name: "black_stabilizer" },
+                VcpInfo { code: 0xFD, name: "power_led" },
+                VcpInfo { code: 0xFE, name: "gamma" },
+            ];
+            thread::sleep(Duration::from_millis(100));
             print!("{{");
             let mut first = true;
-            for v in KNOWN_VCPS {
+            for v in essential {
                 if let Ok((cur, max, _)) = ddc_read_vcp(&path, v.code) {
                     if !first { print!(","); }
                     print!("\"{}\":{{\"current\":{},\"max\":{}}}", v.name, cur, max);
