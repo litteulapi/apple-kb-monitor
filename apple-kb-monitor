@@ -2245,6 +2245,32 @@ async def watch_mode(watch_interval):
 # CLI
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Auto-brightness (circadian rhythm)
+# ---------------------------------------------------------------------------
+
+def auto_brightness_value():
+    """Calculate optimal brightness based on time of day."""
+    from datetime import datetime
+    hour = datetime.now().hour
+    # Circadian curve: bright during day, dim at night
+    # 06:00-08:00: ramp up 30→80
+    # 08:00-18:00: 80 (work hours)
+    # 18:00-21:00: ramp down 80→40
+    # 21:00-23:00: ramp down 40→20
+    # 23:00-06:00: 20 (night)
+    if 6 <= hour < 8:
+        return 30 + (hour - 6) * 25  # 30→80
+    elif 8 <= hour < 18:
+        return 80
+    elif 18 <= hour < 21:
+        return 80 - (hour - 18) * 13  # 80→41
+    elif 21 <= hour < 23:
+        return 40 - (hour - 21) * 10  # 40→20
+    else:
+        return 20
+
+
 def main():
     p = argparse.ArgumentParser(
         description=f"Apple Keyboard Monitor v{__version__} \u2014 BCM2042/BCM20733 telemetry",
@@ -2419,30 +2445,4 @@ license: GPL-2.0-or-later
 
 if __name__ == "__main__":
     main()
-
-
-# ---------------------------------------------------------------------------
-# Auto-brightness (circadian rhythm)
-# ---------------------------------------------------------------------------
-
-def auto_brightness_value():
-    """Calculate optimal brightness based on time of day."""
-    from datetime import datetime
-    hour = datetime.now().hour
-    # Circadian curve: bright during day, dim at night
-    # 06:00-08:00: ramp up 30→80
-    # 08:00-18:00: 80 (work hours)
-    # 18:00-21:00: ramp down 80→40
-    # 21:00-23:00: ramp down 40→20
-    # 23:00-06:00: 20 (night)
-    if 6 <= hour < 8:
-        return 30 + (hour - 6) * 25  # 30→80
-    elif 8 <= hour < 18:
-        return 80
-    elif 18 <= hour < 21:
-        return 80 - (hour - 18) * 13  # 80→41
-    elif 21 <= hour < 23:
-        return 40 - (hour - 21) * 10  # 40→20
-    else:
-        return 20
 
