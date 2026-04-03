@@ -829,20 +829,22 @@ impl ApiHubApp {
             ui.group(|ui| {
                 ui.label(egui::RichText::new("Picture Mode").strong().size(18.0));
                 ui.horizontal_wrapped(|ui| {
-                    let modes: [(u16, &str); 13] = [
-                        (17, "Custom"),
+                    // Real LG 34GN850 picture mode values (brute-force verified)
+                    let modes: [(u16, &str); 14] = [
+                        (45, "Custom"),
                         (1, "Reader"),
-                        (32, "Photo"),
-                        (72, "Cinema"),
-                        (6, "Color Weakness"),
-                        (40, "FPS 1"),
-                        (41, "FPS 2"),
-                        (19, "RTS"),
                         (20, "Vivid"),
-                        (21, "sRGB"),
-                        (24, "SMPTE-C"),
+                        (22, "HDR Effect"),
+                        (46, "Cinema"),
+                        (6, "Color Weakness"),
+                        (30, "FPS 1"),
+                        (31, "FPS 2"),
+                        (39, "RTS"),
+                        (15, "sRGB"),
+                        (24, "DCI-P3"),
                         (25, "EBU"),
-                        (45, "Gamer"),
+                        (48, "Photo"),
+                        (49, "Calibration"),
                     ];
                     let cur = ddc_cur(snap, "picture_mode");
                     for (val, label) in modes {
@@ -1143,10 +1145,11 @@ impl ApiHubApp {
                             ui.label(egui::RichText::new("Picture Mode").weak().size(16.0));
                             let name = match pm {
                                 1 => "Reader", 6 => "Color Weakness",
-                                17 => "Custom", 19 => "RTS", 20 => "Vivid",
-                                21 => "sRGB", 24 => "SMPTE-C", 25 => "EBU",
-                                32 => "Photo", 40 => "FPS 1", 41 => "FPS 2",
-                                45 => "Gamer", 72 => "Cinema",
+                                15 => "sRGB", 20 => "Vivid", 22 => "HDR Effect",
+                                24 => "DCI-P3", 25 => "EBU",
+                                30 => "FPS 1", 31 => "FPS 2", 39 => "RTS",
+                                45 => "Custom", 46 => "Cinema",
+                                48 => "Photo", 49 => "Calibration",
                                 _ => "Unknown",
                             };
                             ui.label(egui::RichText::new(format!("{} ({})", name, pm)).strong().size(16.0));
