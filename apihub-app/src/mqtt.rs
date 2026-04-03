@@ -124,7 +124,7 @@ impl MqttBridge {
     /// Publish all keyboard + monitor data to HA auto-discovery.
     pub fn publish_telemetry(
         &self,
-        kb: &Option<crate::KbReport>,
+        kb: &Option<crate::keyboard::KbReport>,
         ddc_data: &HashMap<String, (u16, u16)>,
         cfg: &MqttCfg,
     ) {

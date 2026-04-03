@@ -2,8 +2,11 @@ mod bluez;
 mod brightness;
 mod ddc;
 mod history;
+mod keyboard;
 mod mqtt;
 mod rssi;
+
+use keyboard::*;
 
 use std::collections::HashMap;
 use std::process::Command;
@@ -12,7 +15,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
-use serde::Deserialize;
 
 // ── Profile persistence ────────────────────────────────────────────────────
 
@@ -68,288 +70,6 @@ fn circadian_brightness() -> u16 {
     bri.round() as u16
 }
 
-// ── Keyboard telemetry (from apple-kb-monitor --json) ───────────────────────
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[allow(dead_code)] // fields used by serde deserialization
-struct KbDevice {
-    #[serde(default)]
-    model: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    mac: Option<String>,
-    #[serde(default)]
-    chip: Option<String>,
-    #[serde(default)]
-    driver: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-struct KbBattery {
-    #[serde(default)]
-    percentage: Option<f64>,
-    #[serde(default)]
-    percentage_fine: Option<f64>,
-    #[serde(default)]
-    percentage_interpolated: Option<f64>,
-    #[serde(default)]
-    voltage: Option<f64>,
-    #[serde(default)]
-    adc_raw: Option<u32>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[allow(dead_code)]
-struct KbBluetooth {
-    #[serde(default)]
-    connected: bool,
-    #[serde(default)]
-    paired: bool,
-    #[serde(default)]
-    rssi_dbus: Option<i32>,
-    #[serde(default)]
-    tx_power_dbus: Option<i32>,
-    #[serde(default)]
-    address_type: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[allow(dead_code)]
-struct KbRadio {
-    #[serde(default)]
-    rssi_dbm: Option<i32>,
-    #[serde(default)]
-    tx_power_dbm: Option<i32>,
-    #[serde(default)]
-    max_tx_power_dbm: Option<i32>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-struct KbFirmware {
-    #[serde(default)]
-    version: Option<String>,
-    #[serde(default)]
-    build: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-struct KbReport {
-    #[serde(default)]
-    device: KbDevice,
-    #[serde(default)]
-    battery: KbBattery,
-    #[serde(default)]
-    bluetooth: KbBluetooth,
-    #[serde(default)]
-    radio: KbRadio,
-    #[serde(default)]
-    firmware: KbFirmware,
-}
-
-// ── HID Feature Report reader (pure Rust, no subprocess) ───────────────────
-
-/// HIDIOCGFEATURE = _IOWR('H', 0x07, 256) — read HID Feature Report
-const HIDIOCGFEATURE: libc::c_ulong = 0xC1004807;
-
-fn hid_read_feature(fd: libc::c_int, report_id: u8) -> Option<Vec<u8>> {
-    let mut buf = [0u8; 256];
-    buf[0] = report_id;
-    let ret = unsafe { libc::ioctl(fd, HIDIOCGFEATURE, buf.as_mut_ptr()) };
-    if ret > 0 {
-        Some(buf[..ret as usize].to_vec())
-    } else {
-        None
-    }
-}
-
-fn find_apple_hidraw() -> Option<String> {
-    // Scan /dev/hidraw* for Apple Wireless Keyboard (vendor 05ac)
-    if let Ok(rd) = std::fs::read_dir("/sys/class/hidraw") {
-        for entry in rd.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            // Read the uevent of the parent HID device
-            let device_path = entry.path().join("device/uevent");
-            if let Ok(uevent) = std::fs::read_to_string(&device_path) {
-                if uevent.contains("05AC") && (uevent.contains("0256") || uevent.contains("0255") || uevent.contains("0254")) {
-                    return Some(format!("/dev/{}", name));
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Interpolate battery % from voltage using the BCM2042 calibration curve.
-/// Thresholds: [100%, 75%, 50%, 25%] in mV, linear interpolation between segments.
-fn interpolate_battery(voltage_v: f64, thresholds_mv: &[u16; 4]) -> f64 {
-    let mv = (voltage_v * 1000.0) as i32;
-    let levels_pct = [100.0, 75.0, 50.0, 25.0, 0.0];
-    let levels_mv = [
-        thresholds_mv[0] as i32,
-        thresholds_mv[1] as i32,
-        thresholds_mv[2] as i32,
-        thresholds_mv[3] as i32,
-        0,
-    ];
-    if mv >= levels_mv[0] { return 100.0; }
-    if mv <= 0 { return 0.0; }
-    for i in 0..4 {
-        if mv >= levels_mv[i + 1] {
-            let hi_mv = levels_mv[i] as f64;
-            let lo_mv = levels_mv[i + 1] as f64;
-            if hi_mv == lo_mv { return levels_pct[i]; }
-            let frac = (mv as f64 - lo_mv) / (hi_mv - lo_mv);
-            return levels_pct[i + 1] + frac * (levels_pct[i] - levels_pct[i + 1]);
-        }
-    }
-    0.0
-}
-
-/// Detect battery chemistry from voltage (2×AA cells in series).
-fn detect_battery_type(voltage: f64) -> &'static str {
-    if voltage >= 3.1 { "Lithium (fresh)" }
-    else if voltage >= 2.85 { "Alkaline (fresh)" }
-    else if voltage >= 2.5 { "Alkaline or NiMH" }
-    else if voltage >= 2.3 { "NiMH (likely)" }
-    else if voltage >= 2.0 { "Depleted" }
-    else { "Critical — replace" }
-}
-
-fn read_keyboard_hid() -> Option<KbReport> {
-    let path = find_apple_hidraw()?;
-    let c_path = std::ffi::CString::new(path.as_str()).ok()?;
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
-    if fd < 0 { return None; }
-
-    let mut report = KbReport::default();
-
-    // Battery precise (0xEA) — pre-rounding ADC value
-    if let Some(buf) = hid_read_feature(fd, 0xEA) {
-        if buf.len() >= 2 {
-            report.battery.percentage_fine = Some(buf[1] as f64);
-        }
-    }
-
-    // Battery standard (0x47) — firmware-rounded
-    if let Some(buf) = hid_read_feature(fd, 0x47) {
-        if buf.len() >= 2 {
-            report.battery.percentage = Some(buf[1] as f64);
-        }
-    }
-
-    // ADC raw voltage (0xF5) — 10-bit, 3.3V reference
-    if let Some(buf) = hid_read_feature(fd, 0xF5) {
-        if buf.len() >= 3 {
-            let adc = ((buf[1] as u32) << 8) | buf[2] as u32;
-            report.battery.adc_raw = Some(adc);
-            report.battery.voltage = Some(adc as f64 * 3.3 / 1024.0);
-        }
-    }
-
-    // Calibration curve (0x5A) — 4 × u16 mV thresholds [100%, 75%, 50%, 25%]
-    let mut calib = [2900u16, 2450, 2350, 2000]; // defaults if read fails
-    if let Some(buf) = hid_read_feature(fd, 0x5A) {
-        if buf.len() >= 9 {
-            for i in 0..4 {
-                let off = 1 + i * 2;
-                calib[i] = ((buf[off] as u16) << 8) | buf[off + 1] as u16;
-            }
-        }
-    }
-
-    // Interpolated battery % from voltage + calibration curve
-    if let Some(voltage) = report.battery.voltage {
-        report.battery.percentage_interpolated = Some(
-            interpolate_battery(voltage, &calib).round()
-        );
-    }
-
-    // Firmware (0x4F) — high nibble = major, low nibble = minor
-    if let Some(buf) = hid_read_feature(fd, 0x4F) {
-        if buf.len() >= 2 {
-            let major = buf[1] >> 4;
-            let minor = buf[1] & 0x0F;
-            report.firmware.version = Some(format!("{}.{}", major, minor));
-        }
-    }
-
-    // Firmware build (0xFF) — u16 build + u8 flag
-    if let Some(buf) = hid_read_feature(fd, 0xFF) {
-        if buf.len() >= 3 {
-            let build = ((buf[1] as u32) << 8) | buf[2] as u32;
-            report.firmware.build = Some(serde_json::Value::Number(build.into()));
-        }
-    }
-
-    // Device name (0x51 + 0x52 + 0x53) — 3 chunks of 8 bytes
-    let mut name_bytes = Vec::new();
-    for rid in [0x51, 0x52, 0x53] {
-        if let Some(buf) = hid_read_feature(fd, rid) {
-            name_bytes.extend_from_slice(&buf[1..]);
-        }
-    }
-    let name = String::from_utf8_lossy(&name_bytes).trim_end_matches('\0').to_string();
-    if !name.is_empty() {
-        report.device.name = Some(name);
-    }
-
-    // Connection params (0x46) — BT interval + latency
-    if let Some(buf) = hid_read_feature(fd, 0x46) {
-        if buf.len() >= 5 {
-            report.bluetooth.connected = true;
-        }
-    }
-
-    // Device identity (0x4C) — MAC in LE order
-    if let Some(buf) = hid_read_feature(fd, 0x4C) {
-        if buf.len() >= 7 {
-            // BCM2042 stores MAC in little-endian in the identity report
-            let mac = format!("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                buf[6], buf[5], buf[4], buf[3], buf[2], buf[1]);
-            report.device.mac = Some(mac);
-        }
-    }
-
-    // Device state (0x09) — 1=OK, 0=LOW
-    if let Some(buf) = hid_read_feature(fd, 0x09) {
-        if buf.len() >= 2 && buf[1] == 0 {
-            // Device reports LOW state — override percentage if it's above threshold
-            if report.battery.percentage_interpolated.unwrap_or(100.0) > 15.0 {
-                report.battery.percentage_interpolated = Some(10.0);
-            }
-        }
-    }
-
-    // Identify model from PID (via sysfs uevent)
-    let uevent = std::fs::read_to_string(
-        std::path::Path::new("/sys/class/hidraw")
-            .join(path.trim_start_matches("/dev/"))
-            .join("device/uevent")
-    ).unwrap_or_default();
-    let (model, chip) = if uevent.contains("0256") {
-        ("Apple Wireless Keyboard (A1314, aluminum, ISO)", "BCM2042")
-    } else if uevent.contains("0255") {
-        ("Apple Wireless Keyboard (A1314, aluminum, ANSI)", "BCM2042")
-    } else if uevent.contains("0254") {
-        ("Apple Wireless Keyboard (A1314, aluminum, JIS)", "BCM2042")
-    } else if uevent.contains("0267") {
-        ("Apple Magic Keyboard (A1644)", "BCM20733")
-    } else {
-        ("Apple Wireless Keyboard", "BCM2042")
-    };
-    report.device.model = Some(model.to_string());
-    report.device.chip = Some(chip.to_string());
-    report.device.driver = Some("hid-apple".to_string());
-
-    unsafe { libc::close(fd); }
-    Some(report)
-}
-
-fn read_keyboard_json() -> Option<KbReport> {
-    read_keyboard_hid()
-}
-
 // ── Shared state ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -394,7 +114,7 @@ fn apply_burst(state: &State, results: &[(&str, u16, u16)]) {
 fn spawn_poll_thread(state: State) {
     // Start BlueZ Battery Provider (register once, update in loop)
     let battery_provider: Option<bluez::BatteryProvider> = {
-        if let Some(kb) = read_keyboard_hid() {
+        if let Some(kb) = keyboard::read_keyboard() {
             if let Some(ref mac) = kb.device.mac {
                 bluez::BatteryProvider::start(mac)
             } else { None }
@@ -414,7 +134,7 @@ fn spawn_poll_thread(state: State) {
 
         loop {
             // ── Keyboard: direct HID ioctl (~5ms) ──────────────────
-            let kb = read_keyboard_json();
+            let kb = keyboard::read_keyboard();
 
             // Battery low notification + BlueZ provider update + history
             if let Some(ref k) = kb {
