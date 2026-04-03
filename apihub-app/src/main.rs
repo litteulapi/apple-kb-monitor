@@ -1,5 +1,9 @@
+mod bluez;
+mod brightness;
 mod ddc;
+mod history;
 mod mqtt;
+mod rssi;
 
 use std::collections::HashMap;
 use std::process::Command;
@@ -312,6 +316,19 @@ fn apply_burst(state: &State, results: &[(&str, u16, u16)]) {
 }
 
 fn spawn_poll_thread(state: State) {
+    // Start BlueZ Battery Provider (register once, update in loop)
+    let battery_provider: Option<bluez::BatteryProvider> = {
+        if let Some(kb) = read_keyboard_hid() {
+            if let Some(ref mac) = kb.device.mac {
+                bluez::BatteryProvider::start(mac)
+            } else { None }
+        } else { None }
+    };
+
+    // Start brightness F1/F2 handler
+    let bus_for_bri = ddc::default_bus();
+    brightness::spawn_brightness_thread(bus_for_bri);
+
     thread::spawn(move || {
         let bus = ddc::default_bus();
         let mut cycle: u32 = 0;
@@ -323,21 +340,44 @@ fn spawn_poll_thread(state: State) {
             // ── Keyboard: direct HID ioctl (~5ms) ──────────────────
             let kb = read_keyboard_json();
 
-            // Battery low notification (once per session)
-            if !battery_notified {
-                if let Some(ref k) = kb {
-                    let pct = k.battery.percentage_interpolated
-                        .or(k.battery.percentage_fine)
-                        .or(k.battery.percentage)
-                        .unwrap_or(100.0);
-                    if pct < 15.0 {
-                        battery_notified = true;
-                        let _ = notify_rust::Notification::new()
-                            .summary("Apple Keyboard — Low Battery")
-                            .body(&format!("Battery at {:.0}% — charge soon", pct))
-                            .icon("battery-caution")
-                            .show();
+            // Battery low notification + BlueZ provider update + history
+            if let Some(ref k) = kb {
+                let pct = k.battery.percentage_interpolated
+                    .or(k.battery.percentage_fine)
+                    .or(k.battery.percentage)
+                    .unwrap_or(100.0);
+
+                // Update BlueZ Battery Provider (KDE/GNOME battery display)
+                if let Some(ref bp) = battery_provider {
+                    bp.update_percentage(pct as u8);
+                }
+
+                // RSSI from BlueZ MGMT API (pure Rust, no rssi-helper binary)
+                if let Some(ref mac) = k.device.mac {
+                    if let Some((rssi, tx)) = rssi::read_rssi(mac) {
+                        if let Ok(mut s) = state.lock() {
+                            if let Some(ref mut kb) = s.keyboard {
+                                kb.radio.rssi_dbm = Some(rssi as i32);
+                                kb.radio.tx_power_dbm = Some(tx as i32);
+                            }
+                        }
                     }
+                }
+
+                // History logging (every 30th cycle = ~15s)
+                if cycle % 30 == 0 {
+                    let voltage = k.battery.voltage.unwrap_or(0.0);
+                    history::append_history(pct, voltage);
+                }
+
+                // Low battery notification
+                if !battery_notified && pct < 15.0 {
+                    battery_notified = true;
+                    let _ = notify_rust::Notification::new()
+                        .summary("Apple Keyboard — Low Battery")
+                        .body(&format!("Battery at {:.0}% — charge soon", pct))
+                        .icon("battery-caution")
+                        .show();
                 }
             }
 

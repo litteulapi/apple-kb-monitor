@@ -178,6 +178,7 @@ dependencies = [
  "rumqttc",
  "serde",
  "serde_json",
+ "zbus 4.4.0",
 ]
 
 [[package]]
