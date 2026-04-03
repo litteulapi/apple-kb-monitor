@@ -22,11 +22,24 @@ pub fn default_bus() -> String {
     ];
     for path in paths.into_iter().flatten() {
         if let Ok(content) = std::fs::read_to_string(&path) {
+            let mut in_ddc = false;
             for line in content.lines() {
                 let line = line.trim();
+                if line.starts_with('[') {
+                    in_ddc = line.trim_matches(|c| c == '[' || c == ']').trim() == "ddc";
+                    continue;
+                }
+                if !in_ddc { continue; }
+                if line.is_empty() || line.starts_with('#') { continue; }
                 if let Some((key, val)) = line.split_once('=') {
                     if key.trim() == "bus" {
-                        let val = val.trim().trim_matches('"').trim_start_matches('#').trim();
+                        let val = val.trim();
+                        let val = if val.starts_with('"') {
+                            val.trim_start_matches('"')
+                                .splitn(2, '"').next().unwrap_or("")
+                        } else {
+                            val.split('#').next().unwrap_or("").trim()
+                        };
                         if val.starts_with("/dev/") {
                             return val.to_string();
                         }
@@ -246,6 +259,7 @@ pub fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16), String> {
 
 /// Read all 31 essential VCPs. Returns name → (current, max).
 /// Tolerates individual read failures (skips them).
+#[allow(dead_code)]
 pub fn read_all_essential(path: &str) -> HashMap<String, (u16, u16)> {
     let mut map = HashMap::new();
     for v in ESSENTIAL_VCPS {

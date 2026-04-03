@@ -92,5 +92,7 @@ package() {
     local plasma_dir="$pkgdir/usr/share/plasma/plasmoids/com.agenceapi.devicehub"
     install -dm755 "$plasma_dir/contents/ui"
     install -Dm644 "$srcdir/../plasma/com.agenceapi.devicehub/metadata.json" "$plasma_dir/metadata.json"
-    install -Dm644 "$srcdir/../plasma/com.agenceapi.devicehub/contents/ui/"*.qml "$plasma_dir/contents/ui/"
+    for qml in "$srcdir/../plasma/com.agenceapi.devicehub/contents/ui/"*.qml; do
+        install -Dm644 "$qml" "$plasma_dir/contents/ui/$(basename "$qml")"
+    done
 }

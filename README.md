@@ -67,11 +67,30 @@ All 13 special keys mapped at system level (Wayland compatible):
 | F12 | Volume Up | Native (kernel) |
 | Eject | Eject | Native (kernel) |
 
+### apihub-app (Rust egui, ~1100 LOC)
+
+Native desktop GUI for keyboard telemetry + monitor DDC control + MQTT management.
+
+- **6 tabs** -- Keyboard, Display, Advanced, System, MQTT, Diagnostics
+- **Direct I2C** -- reads 31 VCPs via validated DDC/CI (checksum, opcode, aliasing detection)
+- **Bus lock** -- serialized I2C transactions, no bus contention
+- **MQTT tab** -- configure broker/auth/lamp entity, save config, start/stop bridge
+- **Diag tab** -- 15 system checks (binaries, services, hardware, config files, permissions)
+- **Config file** -- reads `~/.config/apple-kb-monitor/config.toml`, zero hardcoded credentials
+- **.desktop entry** -- searchable as "ApiHub" in KDE launcher with scarab icon
+
+### mqtt-bridge (Python, ~140 LOC)
+
+MQTT-to-DDC bridge daemon for Home Assistant integration.
+
+- **Lamp→Monitor sync** -- HA automation adjusts monitor brightness when desk lamp changes
+- **Configurable** -- broker, auth, brightness range (min/max), monitor model from config.toml
+- **systemd service** -- `mqtt-bridge.service` with auto-restart
+
 ### KDE integration
 
 - **Plasma widget (ApiHub)** -- `com.agenceapi.devicehub` applet with compact representation (panel icon) and full popup (keyboard telemetry + monitor DDC controls)
 - **Bluedevil panel patch** -- enriched Bluetooth panel showing battery %, firmware version, BT profiles, device class
-- **apihub-settings** -- PySide6 desktop app for keyboard + monitor control (system tray, sliders, live data)
 
 ### Reverse engineering
 
@@ -216,15 +235,24 @@ Creates auto-discovery entities: `sensor.apple_kb_battery`, `sensor.apple_kb_vol
 | File | Description |
 |------|-------------|
 | `/usr/bin/apple-kb-monitor` | Main daemon + CLI (Python) |
+| `/usr/bin/apihub-app` | Desktop GUI (Rust egui) |
+| `/usr/bin/ddc-tool` | DDC/CI monitor control (Rust) |
+| `/usr/bin/apihub-settings` | Legacy PySide6 desktop app |
 | `/usr/bin/apple-brightness-daemon` | F1/F2 DDC brightness + KDE OSD |
 | `/usr/bin/apple-brightness-down` | DDC brightness -1% script |
 | `/usr/bin/apple-brightness-up` | DDC brightness +1% script |
 | `/usr/lib/apple-kb-monitor/rssi-helper` | RSSI binary (CAP_NET_ADMIN) |
+| `/usr/lib/apple-kb-monitor/mqtt-bridge.py` | MQTT↔DDC bridge daemon |
+| `/etc/apple-kb-monitor/config.toml.example` | Configuration template |
 | `/usr/lib/systemd/user/apple-kb-monitor.service` | Battery Provider daemon |
 | `/usr/lib/systemd/user/apple-brightness.service` | Brightness daemon |
+| `/usr/lib/systemd/user/mqtt-bridge.service` | MQTT bridge daemon |
 | `/usr/lib/udev/rules.d/99-apple-kb-hidraw.rules` | hidraw permissions |
 | `/etc/keyd/apple-keyboard.conf` | keyd special key mapping |
 | `/etc/modprobe.d/hid_apple.conf` | fnmode=1 (media keys default) |
+| `/usr/share/applications/apihub-app.desktop` | KDE app launcher entry |
+| `/usr/share/icons/hicolor/scalable/apps/apihub-scarab.svg` | App icon |
+| `/usr/share/plasma/plasmoids/com.agenceapi.devicehub/` | Plasma widget |
 | `/usr/share/apple-kb-monitor/kde/DeviceItem.qml` | Bluedevil panel patch |
 
 ## Compatibility
@@ -250,25 +278,32 @@ Creates auto-discovery entities: `sensor.apple_kb_battery`, `sensor.apple_kb_vol
 
 ```
 apple-kb-monitor/
-  apple-kb-monitor          Python daemon + CLI (2448 LOC)
-  apihub-settings           PySide6 desktop app
+  apple-kb-monitor          Python daemon + CLI (2500 LOC)
+  apihub-settings           Legacy PySide6 desktop app
+  mqtt-bridge.py            MQTT↔DDC bridge daemon
+  config.toml.example       Configuration template
   rssi-helper.c             RSSI via BlueZ MGMT API
-  rssi-helper               Compiled C binary
-  PKGBUILD                  Arch Linux package build
+  PKGBUILD                  Arch Linux package build (v3.0.0)
+  apihub-app.desktop        KDE .desktop entry
   apple-kb-monitor.install  Post-install hooks
+  apihub-app/
+    Cargo.toml              Rust GUI config
+    src/main.rs             egui GUI (~1100 LOC)
+    src/ddc.rs              DDC/CI I2C driver (~280 LOC)
+    tests/test_ddc.rs       27 unit tests
   ddc-tool/
-    Cargo.toml              Rust binary config
-    src/main.rs             DDC/CI I2C implementation (288 LOC)
+    Cargo.toml              Rust CLI config
+    src/main.rs             DDC/CI CLI (288 LOC)
   keyd/
     apple-keyboard.conf     13 special keys (05ac:0256)
   modprobe/
     hid_apple.conf          fnmode=1
   systemd/
-    apple-kb-monitor.service        User service (battery provider)
-    apple-brightness.service        User service (F1/F2 brightness)
-    apple-kb-monitor-system.service System service (alternative)
+    apple-kb-monitor.service        Battery provider daemon
+    apple-brightness.service        F1/F2 brightness daemon
+    mqtt-bridge.service             MQTT bridge daemon
   udev/
-    99-apple-kb-hidraw.rules        hidraw permissions for input group
+    99-apple-kb-hidraw.rules        hidraw permissions
   kde/
     DeviceItem.qml                  Bluedevil panel patch
     shortcuts/
@@ -277,15 +312,10 @@ apple-kb-monitor/
       apple-brightness-up           DDC brightness +1%
   plasma/
     com.agenceapi.devicehub/        KDE Plasma widget
-      metadata.json
-      contents/ui/
-        main.qml
-        CompactRepresentation.qml
-        FullRepresentation.qml
   icons/
-    apihub-scarab.svg               Widget icon
+    apihub-scarab.svg               App icon (scarab)
   tests/
-    test_apple_kb.py                46 unit tests
+    test_apple_kb.py                46 Python unit tests
   docs/
     INSTALL.md                      Installation guide
     ARCHITECTURE.md                 System architecture

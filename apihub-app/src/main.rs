@@ -1,4 +1,3 @@
-#![allow(dead_code)] // serde structs have fields used only for deserialization
 mod ddc;
 
 use std::collections::HashMap;
@@ -13,6 +12,7 @@ use serde::Deserialize;
 // ── Keyboard telemetry (from apple-kb-monitor --json) ───────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[allow(dead_code)] // fields used by serde deserialization
 struct KbDevice {
     #[serde(default)]
     model: Option<String>,
@@ -41,6 +41,7 @@ struct KbBattery {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[allow(dead_code)]
 struct KbBluetooth {
     #[serde(default)]
     connected: bool,
@@ -55,6 +56,7 @@ struct KbBluetooth {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[allow(dead_code)]
 struct KbRadio {
     #[serde(default)]
     rssi_dbm: Option<i32>,
@@ -217,20 +219,36 @@ impl MqttConfig {
         ];
         for path in paths.into_iter().flatten() {
             if let Ok(content) = std::fs::read_to_string(&path) {
-                // Minimal TOML parser — extract key = "value" pairs
+                // Section-aware TOML parser — only read keys from their proper section
+                let mut section = String::new();
                 for line in content.lines() {
                     let line = line.trim();
+                    if line.starts_with('[') {
+                        section = line.trim_matches(|c| c == '[' || c == ']').trim().to_string();
+                        continue;
+                    }
+                    if line.is_empty() || line.starts_with('#') { continue; }
                     if let Some((key, val)) = line.split_once('=') {
                         let key = key.trim();
-                        let val = val.trim().trim_matches('"');
-                        match key {
-                            "broker" => cfg.broker = val.to_string(),
-                            "port" => cfg.port = val.to_string(),
-                            "user" => cfg.user = val.to_string(),
-                            "password" => cfg.pass = val.to_string(),
-                            "lamp_entity" => cfg.lamp_entity = val.to_string(),
-                            "min" => cfg.bri_min = val.parse().unwrap_or(2.0),
-                            "max" => cfg.bri_max = val.parse().unwrap_or(70.0),
+                        // Strip inline comments then trim quotes
+                        let val = val.trim();
+                        let val = if val.starts_with('"') {
+                            // Quoted value: find closing quote
+                            val.trim_start_matches('"')
+                                .splitn(2, '"').next().unwrap_or("")
+                        } else {
+                            // Unquoted value: strip inline comment
+                            val.split('#').next().unwrap_or("").trim()
+                        };
+                        match (section.as_str(), key) {
+                            ("mqtt", "broker") => cfg.broker = val.to_string(),
+                            ("mqtt", "port") => cfg.port = val.to_string(),
+                            ("mqtt", "user") => cfg.user = val.to_string(),
+                            ("mqtt", "password") => cfg.pass = val.to_string(),
+                            ("mqtt", "topic_prefix") => {} // recognized but not stored in MqttConfig
+                            ("brightness", "min") => cfg.bri_min = val.parse().unwrap_or(2.0),
+                            ("brightness", "max") => cfg.bri_max = val.parse().unwrap_or(70.0),
+                            ("brightness", "lamp_entity") => cfg.lamp_entity = val.to_string(),
                             _ => {}
                         }
                     }
@@ -876,18 +894,19 @@ impl ApiHubApp {
                         let broker = self.mqtt.broker.clone();
                         let user = self.mqtt.user.clone();
                         let pass = self.mqtt.pass.clone();
+                        let bus_num = self.i2c_bus.rsplit('-').next().unwrap_or("6").to_string();
                         thread::spawn(move || {
                             let _ = Command::new("apple-kb-monitor")
                                 .args(["--mqtt", &broker, "--mqtt-port", "1883"])
                                 .output();
                             // Also publish via mosquitto_pub with auth
                             let _ = Command::new("bash").args(["-c", &format!(
-                                "ddc-tool json 6 2>/dev/null | python3 -c \"\
+                                "ddc-tool json {} 2>/dev/null | python3 -c \"\
 import json,sys,subprocess;\
 d=json.load(sys.stdin);\
 pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-t',t,'-r','-m',m],capture_output=True,timeout=5);\
 [pub(f'homeassistant/sensor/lg_34gn850/{{s}}/state',str(d.get(s,{{}}).get('current',''))) for s in ['brightness','contrast','volume']]\"",
-                                broker, user, pass
+                                bus_num, broker, user, pass
                             )]).output();
                         });
                     }
@@ -958,6 +977,10 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
                         ui.label(egui::RichText::new("Lamp Entity").weak().size(16.0));
                         ui.add(egui::TextEdit::singleline(&mut self.mqtt.lamp_entity).desired_width(180.0));
                         ui.end_row();
+
+                        ui.label(egui::RichText::new("I2C Bus").weak().size(16.0));
+                        ui.add(egui::TextEdit::singleline(&mut self.i2c_bus).desired_width(180.0));
+                        ui.end_row();
                     });
 
                 ui.add_space(12.0);
@@ -980,12 +1003,13 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
                         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
                         .join("apple-kb-monitor");
                     let _ = std::fs::create_dir_all(&config_dir);
+                    let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
                     let toml = format!(
                         "[ddc]\nbus = \"{}\"\n\n[mqtt]\nbroker = \"{}\"\nport = {}\nuser = \"{}\"\npassword = \"{}\"\ntopic_prefix = \"homeassistant\"\n\n[brightness]\nmin = {}\nmax = {}\nlamp_entity = \"{}\"\n",
-                        self.i2c_bus, self.mqtt.broker, self.mqtt.port,
-                        self.mqtt.user, self.mqtt.pass,
+                        esc(&self.i2c_bus), esc(&self.mqtt.broker), self.mqtt.port,
+                        esc(&self.mqtt.user), esc(&self.mqtt.pass),
                         self.mqtt.bri_min as u16, self.mqtt.bri_max as u16,
-                        self.mqtt.lamp_entity,
+                        esc(&self.mqtt.lamp_entity),
                     );
                     let _ = std::fs::write(config_dir.join("config.toml"), &toml);
                     // Restart bridge (systemd or fallback)
@@ -1001,16 +1025,18 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
         self.diag_results.clear();
         self.diag_running = true;
 
-        let checks: Vec<(&str, &[&str], &str)> = vec![
-            ("apple-kb-monitor", &["--version"], "Main daemon binary"),
-            ("ddc-tool", &["read", "6", "0x10"], "DDC/CI I2C tool"),
-            ("keyd", &["-v"], "Key remapping daemon"),
-            ("bluetoothctl", &["--version"], "BlueZ CLI"),
-            ("mosquitto_pub", &["--help"], "MQTT publish tool"),
+        // Extract bus number from path (e.g. "/dev/i2c-6" -> "6")
+        let bus_num = self.i2c_bus.rsplit('-').next().unwrap_or("6").to_string();
+        let checks: Vec<(&str, Vec<&str>, &str)> = vec![
+            ("apple-kb-monitor", vec!["--version"], "Main daemon binary"),
+            ("ddc-tool", vec!["read", &bus_num, "0x10"], "DDC/CI I2C tool"),
+            ("keyd", vec!["-v"], "Key remapping daemon"),
+            ("bluetoothctl", vec!["--version"], "BlueZ CLI"),
+            ("mosquitto_pub", vec!["--help"], "MQTT publish tool"),
         ];
 
         for (bin, args, desc) in &checks {
-            let result = Command::new(bin).args(*args)
+            let result = Command::new(bin).args(args)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .output();
@@ -1067,12 +1093,16 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
             detail: if i2c_ok { format!("{}: accessible", bus) } else { format!("{}: NOT FOUND", bus) },
         });
 
-        // hidraw (keyboard)
-        let hidraw = std::path::Path::new("/dev/hidraw12").exists()
-            || std::path::Path::new("/dev/hidraw0").exists();
+        // hidraw (keyboard) — enumerate /dev/hidraw*
+        let hidraw_count = std::fs::read_dir("/dev").map(|rd| {
+            rd.filter_map(|e| e.ok())
+                .filter(|e| e.file_name().to_string_lossy().starts_with("hidraw"))
+                .count()
+        }).unwrap_or(0);
         self.diag_results.push(DiagResult {
-            label: "HID raw device".into(), ok: hidraw,
-            detail: if hidraw { "/dev/hidraw*: found".into() } else { "no hidraw device".into() },
+            label: "HID raw device".into(), ok: hidraw_count > 0,
+            detail: if hidraw_count > 0 { format!("{} hidraw device(s) in /dev/", hidraw_count) }
+                    else { "no hidraw device found".into() },
         });
 
         // Config file

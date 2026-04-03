@@ -12,6 +12,9 @@ user = ""
 password = ""
 topic_prefix = "homeassistant"
 
+[monitor]
+model = "lg_34gn850"     # Monitor model slug (used in MQTT topic path)
+
 [brightness]
 min = 2               # Monitor brightness minimum (DDC %)
 max = 70              # Monitor brightness maximum (DDC %)

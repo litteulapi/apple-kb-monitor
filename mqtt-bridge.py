@@ -20,8 +20,13 @@ CONFIG_PATHS = [
     pathlib.Path("/etc/apple-kb-monitor/config.toml"),
 ]
 
-TOPIC_CMD = "homeassistant/number/lg_34gn850/brightness/set"
-TOPIC_STATE = "homeassistant/number/lg_34gn850/brightness/state"
+def _build_topics(cfg: dict) -> tuple[str, str]:
+    """Build MQTT command/state topics from config."""
+    prefix = cfg.get("mqtt", {}).get("topic_prefix", "homeassistant")
+    model = cfg.get("monitor", {}).get("model", "lg_34gn850")
+    topic_cmd = f"{prefix}/number/{model}/brightness/set"
+    topic_state = f"{prefix}/number/{model}/brightness/state"
+    return topic_cmd, topic_state
 
 
 def load_config() -> dict:
@@ -79,11 +84,12 @@ def ddc_read_brightness(bus: str) -> int:
 
 def on_connect(client, userdata, _flags, rc):
     if rc == 0:
-        client.subscribe(TOPIC_CMD)
-        print(f"[mqtt] connected, subscribed to {TOPIC_CMD}", file=sys.stderr)
+        topic_cmd = userdata["topic_cmd"]
+        client.subscribe(topic_cmd)
+        print(f"[mqtt] connected, subscribed to {topic_cmd}", file=sys.stderr)
         bri = ddc_read_brightness(userdata["bus"])
         if bri >= 0:
-            client.publish(TOPIC_STATE, str(bri), retain=True)
+            client.publish(userdata["topic_state"], str(bri), retain=True)
     else:
         print(f"[mqtt] connect failed: rc={rc}", file=sys.stderr)
 
@@ -101,7 +107,7 @@ def on_message(client, userdata, msg):
 
     value = max(bri_min, min(bri_max, value))
     if ddc_write_brightness(bus, bri_min, bri_max, value):
-        client.publish(TOPIC_STATE, str(value), retain=True)
+        client.publish(userdata["topic_state"], str(value), retain=True)
 
 
 def main():
@@ -122,7 +128,15 @@ def main():
     bri_max = bri_cfg.get("max", 70)
     bus = _bus_number(cfg)
 
-    userdata = {"bus": bus, "bri_min": bri_min, "bri_max": bri_max}
+    topic_cmd, topic_state = _build_topics(cfg)
+
+    userdata = {
+        "bus": bus,
+        "bri_min": bri_min,
+        "bri_max": bri_max,
+        "topic_cmd": topic_cmd,
+        "topic_state": topic_state,
+    }
 
     client = mqtt.Client(client_id="lg-ddc-bridge", userdata=userdata)
     if user:

@@ -20,7 +20,7 @@ post_install() {
     fi
 
     echo ""
-    echo ">>> apple-kb-monitor v2.4.0 installed"
+    echo ">>> apple-kb-monitor v3.0.0 installed"
     echo ""
     echo ">>> Setup:"
     echo "      sudo usermod -aG input \$USER"
