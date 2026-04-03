@@ -286,18 +286,18 @@ fn spawn_poll_thread(state: State) {
 
             // ── HOT: brightness + volume + backlight (~210ms) ──────
             // Every cycle — the values that change during HA lamp sync
-            apply_burst(&state, &ddc::read_burst(&bus, ddc::HOT_VCPS));
+            apply_burst(&state, &ddc::read_batch(&bus, ddc::HOT_VCPS));
 
             // ── WARM: contrast, RGB, sharpness (~420ms) ────────────
             // Every 4th cycle (~3s)
             if cycle % 4 == 0 {
-                apply_burst(&state, &ddc::read_burst(&bus, ddc::WARM_VCPS));
+                apply_burst(&state, &ddc::read_batch(&bus, ddc::WARM_VCPS));
             }
 
             // ── COLD: all settings/info (~1.5s) ────────────────────
             // Every 30th cycle (~22s)
             if cycle % 30 == 0 {
-                apply_burst(&state, &ddc::read_burst(&bus, ddc::COLD_VCPS));
+                apply_burst(&state, &ddc::read_batch(&bus, ddc::COLD_VCPS));
             }
 
             cycle = cycle.wrapping_add(1);

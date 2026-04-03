@@ -302,30 +302,17 @@ pub fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16), String> {
     result
 }
 
-/// Burst-read a list of VCPs in a single fd session.
-/// One open(), one lock, N reads back-to-back (60ms I2C delay each), one close().
+/// Read a list of VCPs with per-VCP open/close (NVIDIA I2C compatible).
+/// Each VCP gets a fresh fd — resets the I2C adapter state between reads.
+/// Retries once on failure with a fresh fd.
 /// Returns Vec of (name, current, max) for successful reads.
-pub fn read_burst(path: &str, vcps: &[VcpInfo]) -> Vec<(&'static str, u16, u16)> {
-    let _lock = match BUS_LOCK.lock() {
-        Ok(g) => g,
-        Err(_) => return Vec::new(),
-    };
-
-    let c_path = match CString::new(path) {
-        Ok(p) => p,
-        Err(_) => return Vec::new(),
-    };
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
-    if fd < 0 { return Vec::new(); }
-
+pub fn read_batch(path: &str, vcps: &[VcpInfo]) -> Vec<(&'static str, u16, u16)> {
     let mut results = Vec::with_capacity(vcps.len());
     for v in vcps {
-        if let Ok((cur, max)) = ddc_read_vcp_fd(fd, v.code) {
-            results.push((v.name, cur, max));
+        match ddc_read_vcp(path, v.code) {
+            Ok((cur, max)) => results.push((v.name, cur, max)),
+            Err(_) => {} // Skip — caught on next poll cycle
         }
-        // No retry — failed reads caught on next poll cycle
     }
-
-    unsafe { libc::close(fd); }
     results
 }
