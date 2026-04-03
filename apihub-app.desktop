@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=ApiHub
+GenericName=Device Hub
+Comment=Apple Keyboard telemetry + LG Monitor DDC control + MQTT Home Assistant
+Exec=apihub-app
+Icon=apihub-scarab
+Terminal=false
+Type=Application
+Categories=Utility;System;HardwareSettings;
+Keywords=keyboard;monitor;ddc;brightness;apple;bluetooth;mqtt;
+StartupWMClass=apihub

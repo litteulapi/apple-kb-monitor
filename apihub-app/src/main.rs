@@ -144,6 +144,7 @@ type State = Arc<Mutex<SharedState>>;
 
 fn spawn_poll_thread(state: State) {
     thread::spawn(move || {
+        let bus = ddc::default_bus();
         loop {
             // Read keyboard FIRST (fast, ~0.6s)
             let kb = read_keyboard_json();
@@ -159,7 +160,7 @@ fn spawn_poll_thread(state: State) {
             // Read DDC VCPs ONE BY ONE — UI updates after each
             // ddc_read_vcp validates VCP code in response + auto-retries on aliasing
             for vcp_info in ddc::ESSENTIAL_VCPS {
-                if let Ok((cur, max)) = ddc::ddc_read_vcp(ddc::DEFAULT_BUS, vcp_info.code) {
+                if let Ok((cur, max)) = ddc::ddc_read_vcp(&bus, vcp_info.code) {
                     if let Ok(mut s) = state.lock() {
                         s.ddc.data.insert(vcp_info.name.to_string(), (cur, max));
                         s.ddc.last_update = Some(Instant::now());
@@ -184,6 +185,7 @@ enum Tab {
     Advanced,
     System,
     Mqtt,
+    Diag,
 }
 
 #[derive(Clone)]
@@ -199,20 +201,58 @@ struct MqttConfig {
     last_check: Option<Instant>,
 }
 
+impl MqttConfig {
+    fn from_config_file() -> Self {
+        let mut cfg = Self {
+            broker: String::new(), port: "1883".to_string(),
+            user: String::new(), pass: String::new(),
+            lamp_entity: "light.bureau".to_string(),
+            bri_min: 2.0, bri_max: 70.0,
+            bridge_running: false, last_check: None,
+        };
+        // Try ~/.config/apple-kb-monitor/config.toml
+        let paths = [
+            dirs::config_dir().map(|d| d.join("apple-kb-monitor/config.toml")),
+            Some(std::path::PathBuf::from("/etc/apple-kb-monitor/config.toml")),
+        ];
+        for path in paths.into_iter().flatten() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                // Minimal TOML parser — extract key = "value" pairs
+                for line in content.lines() {
+                    let line = line.trim();
+                    if let Some((key, val)) = line.split_once('=') {
+                        let key = key.trim();
+                        let val = val.trim().trim_matches('"');
+                        match key {
+                            "broker" => cfg.broker = val.to_string(),
+                            "port" => cfg.port = val.to_string(),
+                            "user" => cfg.user = val.to_string(),
+                            "password" => cfg.pass = val.to_string(),
+                            "lamp_entity" => cfg.lamp_entity = val.to_string(),
+                            "min" => cfg.bri_min = val.parse().unwrap_or(2.0),
+                            "max" => cfg.bri_max = val.parse().unwrap_or(70.0),
+                            _ => {}
+                        }
+                    }
+                }
+                eprintln!("[config] loaded {}", path.display());
+                break;
+            }
+        }
+        cfg
+    }
+}
+
 impl Default for MqttConfig {
     fn default() -> Self {
-        Self {
-            broker: "192.168.8.3".to_string(),
-            port: "1883".to_string(),
-            user: "adminapi".to_string(),
-            pass: "12b27g02".to_string(),
-            lamp_entity: "light.bureau".to_string(),
-            bri_min: 2.0,
-            bri_max: 70.0,
-            bridge_running: false,
-            last_check: None,
-        }
+        Self::from_config_file()
     }
+}
+
+struct DiagResult {
+    label: String,
+    ok: bool,
+    detail: String,
 }
 
 struct ApiHubApp {
@@ -222,6 +262,8 @@ struct ApiHubApp {
     pending_writes: Vec<(u8, u16)>,
     style_initialized: bool,
     mqtt: MqttConfig,
+    diag_results: Vec<DiagResult>,
+    diag_running: bool,
 }
 
 impl ApiHubApp {
@@ -231,10 +273,12 @@ impl ApiHubApp {
         Self {
             state,
             tab: Tab::Keyboard,
-            i2c_bus: ddc::DEFAULT_BUS.to_string(),
+            i2c_bus: ddc::default_bus(),
             pending_writes: Vec::new(),
             style_initialized: false,
             mqtt: MqttConfig::default(),
+            diag_results: Vec::new(),
+            diag_running: false,
         }
     }
 }
@@ -298,6 +342,7 @@ impl eframe::App for ApiHubApp {
                 ui.selectable_value(&mut self.tab, Tab::Advanced, "Advanced");
                 ui.selectable_value(&mut self.tab, Tab::System, "System");
                 ui.selectable_value(&mut self.tab, Tab::Mqtt, "MQTT");
+                ui.selectable_value(&mut self.tab, Tab::Diag, "Diag");
             });
         });
 
@@ -308,6 +353,7 @@ impl eframe::App for ApiHubApp {
                 Tab::Advanced => self.tab_advanced(ui, &snap),
                 Tab::System => self.tab_system(ui, &snap),
                 Tab::Mqtt => self.tab_mqtt(ui),
+                Tab::Diag => self.tab_diag(ui),
             }
         });
     }
@@ -822,7 +868,7 @@ impl ApiHubApp {
                     } else {
                         if ui.button(egui::RichText::new("Start Bridge").size(16.0)).clicked() {
                             let _ = Command::new("bash").args(["-c",
-                                "nohup python3 /home/adminapi/apple-kb-monitor/mqtt-bridge.py > /tmp/mqtt-bridge.log 2>&1 &"
+                                "nohup python3 /usr/lib/apple-kb-monitor/mqtt-bridge.py > /tmp/mqtt-bridge.log 2>&1 &"
                             ]).output();
                         }
                     }
@@ -928,25 +974,204 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
                 });
 
                 ui.add_space(12.0);
-                if ui.button(egui::RichText::new("Apply & Restart Bridge").size(16.0).strong()).clicked() {
-                    // Update mqtt-bridge.py config and restart
-                    let cfg = format!(
-                        "BROKER = \"{}\"\nPORT = {}\nMQTT_USER = \"{}\"\nMQTT_PASS = \"{}\"\n",
-                        self.mqtt.broker, self.mqtt.port, self.mqtt.user, self.mqtt.pass
+                if ui.button(egui::RichText::new("Save & Restart Bridge").size(16.0).strong()).clicked() {
+                    // Write config.toml then restart bridge
+                    let config_dir = dirs::config_dir()
+                        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+                        .join("apple-kb-monitor");
+                    let _ = std::fs::create_dir_all(&config_dir);
+                    let toml = format!(
+                        "[ddc]\nbus = \"{}\"\n\n[mqtt]\nbroker = \"{}\"\nport = {}\nuser = \"{}\"\npassword = \"{}\"\ntopic_prefix = \"homeassistant\"\n\n[brightness]\nmin = {}\nmax = {}\nlamp_entity = \"{}\"\n",
+                        self.i2c_bus, self.mqtt.broker, self.mqtt.port,
+                        self.mqtt.user, self.mqtt.pass,
+                        self.mqtt.bri_min as u16, self.mqtt.bri_max as u16,
+                        self.mqtt.lamp_entity,
                     );
-                    let _ = Command::new("pkill").args(["-f", "mqtt-bridge.py"]).output();
-                    // Rewrite config section
-                    let _ = Command::new("bash").args(["-c", &format!(
-                        "sed -i 's/^BROKER = .*/BROKER = \"{}\"/' /home/adminapi/apple-kb-monitor/mqtt-bridge.py && \
-                         sed -i 's/^PORT = .*/PORT = {}/' /home/adminapi/apple-kb-monitor/mqtt-bridge.py && \
-                         sed -i 's/^MQTT_USER = .*/MQTT_USER = \"{}\"/' /home/adminapi/apple-kb-monitor/mqtt-bridge.py && \
-                         sed -i 's/^MQTT_PASS = .*/MQTT_PASS = \"{}\"/' /home/adminapi/apple-kb-monitor/mqtt-bridge.py && \
-                         nohup python3 /home/adminapi/apple-kb-monitor/mqtt-bridge.py > /tmp/mqtt-bridge.log 2>&1 &",
-                        self.mqtt.broker, self.mqtt.port, self.mqtt.user, self.mqtt.pass
-                    )]).output();
-                    let _ = cfg; // suppress unused warning
+                    let _ = std::fs::write(config_dir.join("config.toml"), &toml);
+                    // Restart bridge (systemd or fallback)
+                    let _ = Command::new("systemctl")
+                        .args(["--user", "restart", "mqtt-bridge.service"])
+                        .output();
                 }
             });
+        });
+    }
+
+    fn run_diagnostics(&mut self) {
+        self.diag_results.clear();
+        self.diag_running = true;
+
+        let checks: Vec<(&str, &[&str], &str)> = vec![
+            ("apple-kb-monitor", &["--version"], "Main daemon binary"),
+            ("ddc-tool", &["read", "6", "0x10"], "DDC/CI I2C tool"),
+            ("keyd", &["-v"], "Key remapping daemon"),
+            ("bluetoothctl", &["--version"], "BlueZ CLI"),
+            ("mosquitto_pub", &["--help"], "MQTT publish tool"),
+        ];
+
+        for (bin, args, desc) in &checks {
+            let result = Command::new(bin).args(*args)
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output();
+            match result {
+                Ok(o) if o.status.success() => {
+                    let out = String::from_utf8_lossy(&o.stdout);
+                    let first = out.lines().next().unwrap_or("OK").trim();
+                    self.diag_results.push(DiagResult {
+                        label: desc.to_string(), ok: true,
+                        detail: format!("{}: {}", bin, if first.is_empty() { "OK" } else { first }),
+                    });
+                }
+                Ok(o) => {
+                    let err = String::from_utf8_lossy(&o.stderr);
+                    // Some tools return non-zero for --help but still work
+                    if err.contains("Usage") || err.contains("usage") || err.contains("mosquitto_pub") {
+                        self.diag_results.push(DiagResult {
+                            label: desc.to_string(), ok: true,
+                            detail: format!("{}: installed", bin),
+                        });
+                    } else {
+                        self.diag_results.push(DiagResult {
+                            label: desc.to_string(), ok: false,
+                            detail: format!("{}: exit {}", bin, o.status.code().unwrap_or(-1)),
+                        });
+                    }
+                }
+                Err(_) => {
+                    self.diag_results.push(DiagResult {
+                        label: desc.to_string(), ok: false,
+                        detail: format!("{}: NOT FOUND", bin),
+                    });
+                }
+            }
+        }
+
+        // Services
+        for svc in ["apple-kb-monitor", "apple-brightness", "mqtt-bridge"] {
+            let result = Command::new("systemctl")
+                .args(["--user", "is-active", &format!("{}.service", svc)])
+                .output();
+            let active = result.map(|o| o.status.success()).unwrap_or(false);
+            self.diag_results.push(DiagResult {
+                label: format!("{}.service", svc), ok: active,
+                detail: if active { "active (running)".into() } else { "inactive / not found".into() },
+            });
+        }
+
+        // I2C bus
+        let bus = &self.i2c_bus;
+        let i2c_ok = std::path::Path::new(bus).exists();
+        self.diag_results.push(DiagResult {
+            label: "I2C bus".into(), ok: i2c_ok,
+            detail: if i2c_ok { format!("{}: accessible", bus) } else { format!("{}: NOT FOUND", bus) },
+        });
+
+        // hidraw (keyboard)
+        let hidraw = std::path::Path::new("/dev/hidraw12").exists()
+            || std::path::Path::new("/dev/hidraw0").exists();
+        self.diag_results.push(DiagResult {
+            label: "HID raw device".into(), ok: hidraw,
+            detail: if hidraw { "/dev/hidraw*: found".into() } else { "no hidraw device".into() },
+        });
+
+        // Config file
+        let cfg_path = dirs::config_dir()
+            .map(|d| d.join("apple-kb-monitor/config.toml"))
+            .unwrap_or_default();
+        let cfg_ok = cfg_path.exists();
+        self.diag_results.push(DiagResult {
+            label: "Config file".into(), ok: cfg_ok,
+            detail: if cfg_ok { format!("{}", cfg_path.display()) } else { "not found — copy config.toml.example".into() },
+        });
+
+        // keyd config
+        let keyd_ok = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
+        self.diag_results.push(DiagResult {
+            label: "keyd config".into(), ok: keyd_ok,
+            detail: if keyd_ok { "/etc/keyd/apple-keyboard.conf".into() } else { "NOT FOUND".into() },
+        });
+
+        // udev rules
+        let udev_ok = std::path::Path::new("/usr/lib/udev/rules.d/99-apple-kb-hidraw.rules").exists();
+        self.diag_results.push(DiagResult {
+            label: "udev rules".into(), ok: udev_ok,
+            detail: if udev_ok { "99-apple-kb-hidraw.rules installed".into() } else { "NOT FOUND".into() },
+        });
+
+        // modprobe
+        let mod_ok = std::path::Path::new("/etc/modprobe.d/hid_apple.conf").exists();
+        self.diag_results.push(DiagResult {
+            label: "hid_apple fnmode".into(), ok: mod_ok,
+            detail: if mod_ok { "fnmode=1 configured".into() } else { "NOT FOUND — media keys won't be default".into() },
+        });
+
+        // rssi-helper caps
+        let rssi_path = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper");
+        let rssi_ok = rssi_path.exists();
+        self.diag_results.push(DiagResult {
+            label: "RSSI helper".into(), ok: rssi_ok,
+            detail: if rssi_ok { "rssi-helper installed (needs CAP_NET_ADMIN)".into() } else { "NOT FOUND".into() },
+        });
+
+        // user in input group
+        let groups = Command::new("groups").output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+        let input_ok = groups.contains("input");
+        self.diag_results.push(DiagResult {
+            label: "User in input group".into(), ok: input_ok,
+            detail: if input_ok { "input group: OK".into() } else { "NOT in input group — run: sudo usermod -aG input $USER".into() },
+        });
+
+        self.diag_running = false;
+    }
+
+    fn tab_diag(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("System Diagnostics").strong().size(18.0));
+            if ui.button(egui::RichText::new("Run Full Check").size(16.0).strong()).clicked() {
+                self.run_diagnostics();
+            }
+        });
+        ui.separator();
+
+        if self.diag_results.is_empty() {
+            ui.label(egui::RichText::new("Press 'Run Full Check' to scan all components.").weak().size(16.0));
+            return;
+        }
+
+        let total = self.diag_results.len();
+        let ok_count = self.diag_results.iter().filter(|r| r.ok).count();
+        let fail_count = total - ok_count;
+
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(format!("{}/{} passed", ok_count, total)).strong().size(18.0)
+                .color(if fail_count == 0 { egui::Color32::from_rgb(80, 220, 100) }
+                       else { egui::Color32::from_rgb(255, 200, 50) }));
+            if fail_count > 0 {
+                ui.label(egui::RichText::new(format!("  {} issues", fail_count)).size(16.0)
+                    .color(egui::Color32::from_rgb(255, 70, 70)));
+            }
+        });
+
+        ui.add_space(8.0);
+
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for r in &self.diag_results {
+                ui.horizontal(|ui| {
+                    let (icon, color) = if r.ok {
+                        ("OK", egui::Color32::from_rgb(80, 220, 100))
+                    } else {
+                        ("FAIL", egui::Color32::from_rgb(255, 70, 70))
+                    };
+                    ui.label(egui::RichText::new(icon).strong().size(16.0).color(color)
+                        .background_color(if r.ok { egui::Color32::from_rgb(20, 50, 20) }
+                                         else { egui::Color32::from_rgb(60, 20, 20) }));
+                    ui.label(egui::RichText::new(&r.label).strong().size(16.0));
+                    ui.label(egui::RichText::new(&r.detail).weak().size(16.0));
+                });
+            }
         });
     }
 

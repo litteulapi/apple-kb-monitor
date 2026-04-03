@@ -14,7 +14,29 @@ const I2C_SLAVE: libc::c_ulong = 0x0703;
 const I2C_RDWR: libc::c_ulong = 0x0707;
 
 /// Default I2C bus path for the monitor.
-pub const DEFAULT_BUS: &str = "/dev/i2c-6";
+/// Overridden by config.toml [ddc] bus = "/dev/i2c-N"
+pub fn default_bus() -> String {
+    let paths = [
+        dirs::config_dir().map(|d| d.join("apple-kb-monitor/config.toml")),
+        Some(std::path::PathBuf::from("/etc/apple-kb-monitor/config.toml")),
+    ];
+    for path in paths.into_iter().flatten() {
+        if let Ok(content) = std::fs::read_to_string(&path) {
+            for line in content.lines() {
+                let line = line.trim();
+                if let Some((key, val)) = line.split_once('=') {
+                    if key.trim() == "bus" {
+                        let val = val.trim().trim_matches('"').trim_start_matches('#').trim();
+                        if val.starts_with("/dev/") {
+                            return val.to_string();
+                        }
+                    }
+                }
+            }
+        }
+    }
+    "/dev/i2c-6".to_string()
+}
 
 /// Global I2C bus lock — serializes all DDC transactions on the same bus.
 /// Prevents concurrent reads/writes from corrupting the I2C pipeline.

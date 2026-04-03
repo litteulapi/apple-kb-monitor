@@ -5,6 +5,7 @@ edition = "2021"
 description = "DDC/CI monitor control + Apple keyboard telemetry — single binary GUI"
 
 [dependencies]
+dirs = "5"
 eframe = "0.29"
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }

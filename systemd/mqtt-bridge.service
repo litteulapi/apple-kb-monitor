@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/adminapi/apple-kb-monitor/mqtt-bridge.py
+ExecStart=/usr/bin/python3 /usr/lib/apple-kb-monitor/mqtt-bridge.py
 Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1

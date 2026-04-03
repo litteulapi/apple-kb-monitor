@@ -1,0 +1,18 @@
+# apple-kb-monitor — MQTT ↔ DDC bridge configuration
+# Copy to ~/.config/apple-kb-monitor/config.toml
+# Fallback: /etc/apple-kb-monitor/config.toml
+
+[ddc]
+bus = "/dev/i2c-6"    # I2C bus for DDC/CI monitor control
+
+[mqtt]
+broker = ""           # MQTT broker address (e.g. 192.168.8.3)
+port = 1883
+user = ""
+password = ""
+topic_prefix = "homeassistant"
+
+[brightness]
+min = 2               # Monitor brightness minimum (DDC %)
+max = 70              # Monitor brightness maximum (DDC %)
+lamp_entity = "light.bureau"  # HA entity to sync with
