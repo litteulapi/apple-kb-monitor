@@ -1,4 +1,5 @@
 mod ddc;
+mod mqtt;
 
 use std::collections::HashMap;
 use std::process::Command;
@@ -329,8 +330,6 @@ struct MqttConfig {
     lamp_entity: String,
     bri_min: f32,
     bri_max: f32,
-    bridge_running: bool,
-    last_check: Option<Instant>,
 }
 
 impl MqttConfig {
@@ -340,7 +339,6 @@ impl MqttConfig {
             user: String::new(), pass: String::new(),
             lamp_entity: "light.bureau".to_string(),
             bri_min: 2.0, bri_max: 70.0,
-            bridge_running: false, last_check: None,
         };
         // Try ~/.config/apple-kb-monitor/config.toml
         let paths = [
@@ -412,6 +410,7 @@ struct ApiHubApp {
     mqtt: MqttConfig,
     diag_results: Vec<DiagResult>,
     diag_running: bool,
+    mqtt_bridge: Option<mqtt::MqttBridge>,
 }
 
 impl ApiHubApp {
@@ -427,6 +426,7 @@ impl ApiHubApp {
             mqtt: MqttConfig::default(),
             diag_results: Vec::new(),
             diag_running: false,
+            mqtt_bridge: None,
         }
     }
 }
@@ -975,31 +975,39 @@ impl ApiHubApp {
         });
     }
 
-    fn tab_mqtt(&mut self, ui: &mut egui::Ui) {
-        // Check bridge status periodically
-        let should_check = self.mqtt.last_check
-            .map(|t| t.elapsed() > Duration::from_secs(3))
-            .unwrap_or(true);
-        if should_check {
-            self.mqtt.bridge_running = Command::new("pgrep")
-                .args(["-f", "mqtt-bridge.py"])
-                .output()
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-            self.mqtt.last_check = Some(Instant::now());
+    fn mqtt_cfg(&self) -> mqtt::MqttCfg {
+        mqtt::MqttCfg {
+            broker: self.mqtt.broker.clone(),
+            port: self.mqtt.port.parse().unwrap_or(1883),
+            user: self.mqtt.user.clone(),
+            pass: self.mqtt.pass.clone(),
+            topic_prefix: "homeassistant".to_string(),
+            monitor_model: "lg_34gn850".to_string(),
+            bri_min: self.mqtt.bri_min as u16,
+            bri_max: self.mqtt.bri_max as u16,
+            bus: self.i2c_bus.clone(),
         }
+    }
+
+    fn tab_mqtt(&mut self, ui: &mut egui::Ui) {
+        let bridge_active = self.mqtt_bridge.as_ref()
+            .map(|b| b.is_connected()).unwrap_or(false);
 
         ui.columns(2, |cols| {
             // ── LEFT: Supervision ──────────────────────────────────
             cols[0].group(|ui| {
-                ui.label(egui::RichText::new("MQTT Bridge").strong().size(18.0));
+                ui.label(egui::RichText::new("MQTT Bridge (in-process)").strong().size(18.0));
                 ui.add_space(4.0);
 
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Status").weak().size(16.0));
-                    if self.mqtt.bridge_running {
-                        ui.label(egui::RichText::new("Running").strong().size(16.0)
-                            .color(egui::Color32::from_rgb(80, 220, 100)));
+                    if self.mqtt_bridge.is_some() {
+                        let (label, color) = if bridge_active {
+                            ("Connected", egui::Color32::from_rgb(80, 220, 100))
+                        } else {
+                            ("Connecting...", egui::Color32::from_rgb(255, 200, 50))
+                        };
+                        ui.label(egui::RichText::new(label).strong().size(16.0).color(color));
                     } else {
                         ui.label(egui::RichText::new("Stopped").strong().size(16.0)
                             .color(egui::Color32::from_rgb(255, 70, 70)));
@@ -1009,43 +1017,44 @@ impl ApiHubApp {
                 ui.add_space(8.0);
 
                 ui.horizontal(|ui| {
-                    if self.mqtt.bridge_running {
-                        if ui.button(egui::RichText::new("Stop Bridge").size(16.0)).clicked() {
-                            let _ = Command::new("pkill").args(["-f", "mqtt-bridge.py"]).output();
+                    if self.mqtt_bridge.is_some() {
+                        if ui.button(egui::RichText::new("Stop").size(16.0)).clicked() {
+                            self.mqtt_bridge = None;
                         }
                     } else {
-                        if ui.button(egui::RichText::new("Start Bridge").size(16.0)).clicked() {
-                            let _ = Command::new("bash").args(["-c",
-                                "nohup python3 /usr/lib/apple-kb-monitor/mqtt-bridge.py > /tmp/mqtt-bridge.log 2>&1 &"
-                            ]).output();
+                        if ui.button(egui::RichText::new("Start").size(16.0)).clicked() {
+                            if !self.mqtt.broker.is_empty() {
+                                self.mqtt_bridge = Some(mqtt::MqttBridge::start(self.mqtt_cfg()));
+                            }
                         }
                     }
-                    if ui.button(egui::RichText::new("Publish Sensors").size(16.0)).clicked() {
-                        let broker = self.mqtt.broker.clone();
-                        let user = self.mqtt.user.clone();
-                        let pass = self.mqtt.pass.clone();
-                        let bus_num = self.i2c_bus.rsplit('-').next().unwrap_or("6").to_string();
-                        thread::spawn(move || {
-                            let _ = Command::new("apple-kb-monitor")
-                                .args(["--mqtt", &broker, "--mqtt-port", "1883"])
-                                .output();
-                            // Also publish via mosquitto_pub with auth
-                            let _ = Command::new("bash").args(["-c", &format!(
-                                "ddc-tool json {} 2>/dev/null | python3 -c \"\
-import json,sys,subprocess;\
-d=json.load(sys.stdin);\
-pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-t',t,'-r','-m',m],capture_output=True,timeout=5);\
-[pub(f'homeassistant/sensor/lg_34gn850/{{s}}/state',str(d.get(s,{{}}).get('current',''))) for s in ['brightness','contrast','volume']]\"",
-                                bus_num, broker, user, pass
-                            )]).output();
-                        });
+                    if ui.button(egui::RichText::new("Publish Now").size(16.0)).clicked() {
+                        if let Some(bridge) = &self.mqtt_bridge {
+                            let snap = self.state.lock().map(|s| s.clone()).unwrap_or_default();
+                            bridge.publish_telemetry(&snap.keyboard, &snap.ddc.data, &self.mqtt_cfg());
+                        }
                     }
                 });
+
+                // Last command received
+                if let Some(bridge) = &self.mqtt_bridge {
+                    if let Ok(lc) = bridge.last_cmd.lock() {
+                        if let Some(cmd) = lc.as_ref() {
+                            ui.add_space(4.0);
+                            ui.label(egui::RichText::new(format!("Last: {}", cmd)).weak().size(16.0));
+                        }
+                    }
+                    if let Ok(lp) = bridge.last_publish.lock() {
+                        if let Some(t) = lp.as_ref() {
+                            let ago = t.elapsed().as_secs();
+                            ui.label(egui::RichText::new(format!("Published {}s ago", ago)).weak().size(16.0));
+                        }
+                    }
+                }
             });
 
             cols[0].add_space(8.0);
 
-            // ── Lamp→Monitor Sync Info ──────────────────────────────
             cols[0].group(|ui| {
                 ui.label(egui::RichText::new("Lamp → Monitor Sync").strong().size(18.0));
                 ui.add_space(4.0);
@@ -1056,21 +1065,17 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
                         ui.label(egui::RichText::new("Source").weak().size(16.0));
                         ui.label(egui::RichText::new(&self.mqtt.lamp_entity).monospace().size(16.0));
                         ui.end_row();
-
                         ui.label(egui::RichText::new("Formula").weak().size(16.0));
                         ui.label(egui::RichText::new(format!(
-                            "{} + (lamp/255) × {}",
-                            self.mqtt.bri_min as u16,
+                            "{} + (lamp/255) × {}", self.mqtt.bri_min as u16,
                             (self.mqtt.bri_max - self.mqtt.bri_min) as u16
                         )).monospace().size(16.0));
                         ui.end_row();
-
-                        ui.label(egui::RichText::new("Output Range").weak().size(16.0));
+                        ui.label(egui::RichText::new("Range").weak().size(16.0));
                         ui.label(egui::RichText::new(format!(
                             "{}% – {}%", self.mqtt.bri_min as u16, self.mqtt.bri_max as u16
                         )).strong().size(16.0));
                         ui.end_row();
-
                         ui.label(egui::RichText::new("Broker").weak().size(16.0));
                         ui.label(egui::RichText::new(format!(
                             "{}:{}", self.mqtt.broker, self.mqtt.port
@@ -1083,7 +1088,6 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
             cols[1].group(|ui| {
                 ui.label(egui::RichText::new("Settings").strong().size(18.0));
                 ui.add_space(4.0);
-
                 egui::Grid::new("mqtt_settings")
                     .num_columns(2)
                     .spacing([16.0, 8.0])
@@ -1091,23 +1095,18 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
                         ui.label(egui::RichText::new("Broker").weak().size(16.0));
                         ui.add(egui::TextEdit::singleline(&mut self.mqtt.broker).desired_width(180.0));
                         ui.end_row();
-
                         ui.label(egui::RichText::new("Port").weak().size(16.0));
                         ui.add(egui::TextEdit::singleline(&mut self.mqtt.port).desired_width(60.0));
                         ui.end_row();
-
                         ui.label(egui::RichText::new("User").weak().size(16.0));
                         ui.add(egui::TextEdit::singleline(&mut self.mqtt.user).desired_width(180.0));
                         ui.end_row();
-
                         ui.label(egui::RichText::new("Password").weak().size(16.0));
                         ui.add(egui::TextEdit::singleline(&mut self.mqtt.pass).password(true).desired_width(180.0));
                         ui.end_row();
-
                         ui.label(egui::RichText::new("Lamp Entity").weak().size(16.0));
                         ui.add(egui::TextEdit::singleline(&mut self.mqtt.lamp_entity).desired_width(180.0));
                         ui.end_row();
-
                         ui.label(egui::RichText::new("I2C Bus").weak().size(16.0));
                         ui.add(egui::TextEdit::singleline(&mut self.i2c_bus).desired_width(180.0));
                         ui.end_row();
@@ -1116,7 +1115,6 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
                 ui.add_space(12.0);
                 ui.label(egui::RichText::new("Brightness Range").strong().size(18.0));
                 ui.add_space(4.0);
-
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Min").weak().size(16.0));
                     ui.add(egui::Slider::new(&mut self.mqtt.bri_min, 0.0..=30.0).show_value(true));
@@ -1127,25 +1125,22 @@ pub=lambda t,m: subprocess.run(['mosquitto_pub','-h','{}','-u','{}','-P','{}','-
                 });
 
                 ui.add_space(12.0);
-                if ui.button(egui::RichText::new("Save & Restart Bridge").size(16.0).strong()).clicked() {
-                    // Write config.toml then restart bridge
+                if ui.button(egui::RichText::new("Save Config & Reconnect").size(16.0).strong()).clicked() {
                     let config_dir = dirs::config_dir()
                         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
                         .join("apple-kb-monitor");
                     let _ = std::fs::create_dir_all(&config_dir);
                     let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
                     let toml = format!(
-                        "[ddc]\nbus = \"{}\"\n\n[mqtt]\nbroker = \"{}\"\nport = {}\nuser = \"{}\"\npassword = \"{}\"\ntopic_prefix = \"homeassistant\"\n\n[brightness]\nmin = {}\nmax = {}\nlamp_entity = \"{}\"\n",
+                        "[ddc]\nbus = \"{}\"\n\n[mqtt]\nbroker = \"{}\"\nport = {}\nuser = \"{}\"\npassword = \"{}\"\ntopic_prefix = \"homeassistant\"\n\n[monitor]\nmodel = \"lg_34gn850\"\n\n[brightness]\nmin = {}\nmax = {}\nlamp_entity = \"{}\"\n",
                         esc(&self.i2c_bus), esc(&self.mqtt.broker), self.mqtt.port,
                         esc(&self.mqtt.user), esc(&self.mqtt.pass),
                         self.mqtt.bri_min as u16, self.mqtt.bri_max as u16,
                         esc(&self.mqtt.lamp_entity),
                     );
                     let _ = std::fs::write(config_dir.join("config.toml"), &toml);
-                    // Restart bridge (systemd or fallback)
-                    let _ = Command::new("systemctl")
-                        .args(["--user", "restart", "mqtt-bridge.service"])
-                        .output();
+                    // Restart in-process bridge with new config
+                    self.mqtt_bridge = Some(mqtt::MqttBridge::start(self.mqtt_cfg()));
                 }
             });
         });
