@@ -783,29 +783,29 @@ impl ApiHubApp {
         }
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            // Response Time — RE doc: 0=Off, 1=Fast, 2=Normal, 3=Slow, 4=Faster
+            // Response Time — brute-force verified: 0-3 accepted, 4 rejected
             self.button_group(ui, snap, "Response Time", "response_time", 0xF7, &[
-                (0, "Off"), (1, "Fast"), (2, "Normal"), (3, "Slow"), (4, "Faster"),
+                (0, "Off"), (1, "Fast"), (2, "Normal"), (3, "Slow"),
             ]);
 
-            // FreeSync
+            // FreeSync — 0/1/2 verified (write causes I2C bus reset, normal)
             self.button_group(ui, snap, "FreeSync", "freesync", 0xF8, &[
                 (0, "Off"), (1, "Basic"), (2, "Extended"),
             ]);
 
-            // Gamma via MCCS VCP 0x72 — encoding: (gamma - 1.0) * 100 << 8
+            // Gamma via MCCS VCP 0x72 — only 3 values accepted (1.8 rejected)
             self.button_group(ui, snap, "Gamma", "gamma_curve", 0x72, &[
-                (0x5000, "1.8"), (0x6400, "2.0"), (0x7800, "2.2"), (0x8C00, "2.4"),
+                (0x6400, "2.0"), (0x7800, "2.2"), (0x8C00, "2.4"),
             ]);
 
-            // Smart Energy
+            // Smart Energy — only 0 and 2 accepted (1 rejected)
             self.button_group(ui, snap, "Smart Energy Saving", "smart_energy", 0xF6, &[
-                (0, "Off"), (1, "Low"), (2, "High"),
+                (0, "Off"), (2, "High"),
             ]);
 
-            // Aspect Ratio
-            self.button_group(ui, snap, "Aspect Ratio", "aspect_ratio", 0xF5, &[
-                (0, "Full Wide"), (1, "Original"), (2, "Just Scan"), (3, "Cinema 1"),
+            // Aspect Ratio — only 1 accepted on current setup (resolution-dependent)
+            self.readonly_group(ui, snap, "Aspect Ratio", "aspect_ratio", &[
+                (0, "Full Wide"), (1, "Original"), (2, "Just Scan"),
             ]);
 
             // Audio Mute
@@ -813,11 +813,12 @@ impl ApiHubApp {
                 (1, "Muted"), (2, "Unmuted"),
             ]);
 
-            // Language — RE doc: 0=EN, 2=FR, 3=DE, 4=ES, 5=IT, 6=KO, 7=ZH, 8=JA, 9=PT
+            // Language — 16 values (0-15), brute-force verified
             self.button_group(ui, snap, "OSD Language", "language", 0xCC, &[
-                (0, "English"), (2, "French"), (3, "Deutsch"), (4, "Spanish"),
-                (5, "Italian"), (6, "Korean"), (7, "Chinese"), (8, "Japanese"),
-                (9, "Portuguese"),
+                (0, "EN"), (1, "FR"), (2, "DE"), (3, "ES"),
+                (4, "IT"), (5, "KO"), (6, "ZH"), (7, "JA"),
+                (8, "PT"), (9, "RU"), (10, "ZH-T"), (11, "PL"),
+                (12, "TR"), (13, "CZ"), (14, "SV"), (15, "FI"),
             ]);
 
             // Read-only VCPs (type=TABLE, DDC writes ignored)
