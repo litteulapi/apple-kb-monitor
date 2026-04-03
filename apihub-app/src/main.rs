@@ -44,32 +44,6 @@ fn save_profiles(profiles: &[DdcProfile]) {
     }
 }
 
-// ── Circadian brightness curve ─────────────────────────────────────────────
-
-fn circadian_brightness() -> u16 {
-    let now = unsafe {
-        let epoch = libc::time(std::ptr::null_mut());
-        let mut tm: libc::tm = std::mem::zeroed();
-        libc::localtime_r(&epoch, &mut tm);
-        tm
-    };
-    let h = now.tm_hour as f32 + now.tm_min as f32 / 60.0;
-    let bri = if h < 6.0 {
-        30.0
-    } else if h < 9.0 {
-        // 6-9: ramp 30 -> 70
-        30.0 + (h - 6.0) / 3.0 * 40.0
-    } else if h < 17.0 {
-        70.0
-    } else if h < 21.0 {
-        // 17-21: ramp 70 -> 30
-        70.0 - (h - 17.0) / 4.0 * 40.0
-    } else {
-        30.0
-    };
-    bri.round() as u16
-}
-
 // ── Shared state ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -334,16 +308,39 @@ impl ApiHubApp {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let state: State = Arc::new(Mutex::new(SharedState::default()));
         spawn_poll_thread(Arc::clone(&state));
+
+        let mqtt = MqttConfig::default();
+        let i2c_bus = ddc::default_bus();
+
+        // Auto-start MQTT bridge if broker is configured
+        let mqtt_bridge = if !mqtt.broker.is_empty() {
+            let cfg = mqtt::MqttCfg {
+                broker: mqtt.broker.clone(),
+                port: mqtt.port.parse().unwrap_or(1883),
+                user: mqtt.user.clone(),
+                pass: mqtt.pass.clone(),
+                topic_prefix: "homeassistant".to_string(),
+                monitor_model: "lg_34gn850".to_string(),
+                bri_min: mqtt.bri_min as u16,
+                bri_max: mqtt.bri_max as u16,
+                bus: i2c_bus.clone(),
+            };
+            eprintln!("[mqtt] auto-start: {}:{}", cfg.broker, cfg.port);
+            Some(mqtt::MqttBridge::start(cfg))
+        } else {
+            None
+        };
+
         Self {
             state,
             tab: Tab::Keyboard,
-            i2c_bus: ddc::default_bus(),
+            i2c_bus,
             pending_writes: Vec::new(),
             style_initialized: false,
-            mqtt: MqttConfig::default(),
+            mqtt,
             diag_results: Vec::new(),
             diag_running: false,
-            mqtt_bridge: None,
+            mqtt_bridge,
             profiles: load_profiles(),
             profile_name: String::new(),
             auto_brightness: false,
@@ -482,6 +479,9 @@ impl ApiHubApp {
                             if let Some(v) = kb.battery.voltage {
                                 ui.label(egui::RichText::new("Voltage").weak().size(16.0));
                                 ui.label(egui::RichText::new(format!("{:.3} V", v)).strong().size(18.0));
+                                ui.end_row();
+                                ui.label(egui::RichText::new("Type").weak().size(16.0));
+                                ui.label(egui::RichText::new(keyboard::detect_battery_type(v)).size(16.0));
                                 ui.end_row();
                             }
                             if let Some(adc) = kb.battery.adc_raw {
@@ -679,7 +679,7 @@ impl ApiHubApp {
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut self.auto_brightness, "Enable circadian curve");
                     if self.auto_brightness {
-                        let target = circadian_brightness();
+                        let target = brightness::circadian_brightness();
                         ui.label(egui::RichText::new(format!("Target: {}%", target))
                             .strong().size(16.0)
                             .color(egui::Color32::from_rgb(120, 200, 255)));

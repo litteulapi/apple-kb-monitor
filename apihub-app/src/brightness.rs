@@ -21,6 +21,33 @@ const STEP: i32 = 5;
 /// Cached brightness level shared across event iterations.
 static BRIGHTNESS: AtomicI32 = AtomicI32::new(-1);
 
+/// Circadian brightness curve — returns a target brightness percentage
+/// based on time of day: 30% at night, ramp to 70% by 9 AM, hold,
+/// ramp back down to 30% by 9 PM.
+pub fn circadian_brightness() -> u16 {
+    let now = unsafe {
+        let epoch = libc::time(std::ptr::null_mut());
+        let mut tm: libc::tm = std::mem::zeroed();
+        libc::localtime_r(&epoch, &mut tm);
+        tm
+    };
+    let h = now.tm_hour as f32 + now.tm_min as f32 / 60.0;
+    let bri = if h < 6.0 {
+        30.0
+    } else if h < 9.0 {
+        // 6-9: ramp 30 -> 70
+        30.0 + (h - 6.0) / 3.0 * 40.0
+    } else if h < 17.0 {
+        70.0
+    } else if h < 21.0 {
+        // 17-21: ramp 70 -> 30
+        70.0 - (h - 17.0) / 4.0 * 40.0
+    } else {
+        30.0
+    };
+    bri.round() as u16
+}
+
 /// Spawn a background thread that listens for brightness key events
 /// and adjusts the monitor via DDC/CI.
 ///

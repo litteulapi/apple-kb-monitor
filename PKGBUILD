@@ -6,7 +6,7 @@ pkgdesc="Full telemetry + key mapping for Apple Wireless Keyboards (BCM2042/BCM2
 arch=('x86_64')
 url="https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
 license=('GPL-2.0-or-later')
-depends=('python' 'bluez' 'dbus' 'python-dbus-fast' 'python-dbus' 'keyd')
+depends=('bluez' 'keyd')
 makedepends=('rust' 'gcc')
 optdepends=(
     'bluez-utils: bluetoothctl CLI for BT management'
@@ -18,29 +18,18 @@ optdepends=(
 install=apple-kb-monitor.install
 source=(
     'apple-kb-monitor'
-    'apihub-settings'
-    'rssi-helper.c'
-    'mqtt-bridge.py'
     'config.toml.example'
     'systemd/apple-kb-monitor.service'
-    'systemd/apple-brightness.service'
-    'systemd/mqtt-bridge.service'
     'udev/99-apple-kb-hidraw.rules'
     'keyd/apple-keyboard.conf'
     'modprobe/hid_apple.conf'
-    'kde/shortcuts/apple-brightness-daemon'
-    'kde/shortcuts/apple-brightness-down'
-    'kde/shortcuts/apple-brightness-up'
     'kde/DeviceItem.qml'
     'icons/apihub-scarab.svg'
     'apihub-app.desktop'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 build() {
-    # RSSI helper (C)
-    gcc -O2 -Wall -o rssi-helper "$srcdir/rssi-helper.c"
-
     # ddc-tool (Rust)
     cd "$srcdir/../ddc-tool"
     cargo build --release
@@ -52,29 +41,15 @@ build() {
 
 package() {
     # ── Binaries ────────────────────────────────────────────────────────
-    install -Dm755 "$srcdir/apple-kb-monitor"                  "$pkgdir/usr/bin/apple-kb-monitor"
-    install -Dm755 "$srcdir/apihub-settings"                   "$pkgdir/usr/bin/apihub-settings"
-    install -Dm755 "$srcdir/../ddc-tool/target/release/ddc-tool" "$pkgdir/usr/bin/ddc-tool"
+    install -Dm755 "$srcdir/apple-kb-monitor"                        "$pkgdir/usr/bin/apple-kb-monitor"
+    install -Dm755 "$srcdir/../ddc-tool/target/release/ddc-tool"     "$pkgdir/usr/bin/ddc-tool"
     install -Dm755 "$srcdir/../apihub-app/target/release/apihub-app" "$pkgdir/usr/bin/apihub-app"
-
-    # RSSI helper (needs setcap post-install)
-    install -Dm755 rssi-helper                                 "$pkgdir/usr/lib/apple-kb-monitor/rssi-helper"
-
-    # MQTT bridge
-    install -Dm755 "$srcdir/mqtt-bridge.py"                    "$pkgdir/usr/lib/apple-kb-monitor/mqtt-bridge.py"
 
     # ── Config ──────────────────────────────────────────────────────────
     install -Dm644 "$srcdir/config.toml.example"               "$pkgdir/etc/apple-kb-monitor/config.toml.example"
 
-    # ── Brightness scripts ──────────────────────────────────────────────
-    install -Dm755 "$srcdir/apple-brightness-daemon"           "$pkgdir/usr/bin/apple-brightness-daemon"
-    install -Dm755 "$srcdir/apple-brightness-down"             "$pkgdir/usr/bin/apple-brightness-down"
-    install -Dm755 "$srcdir/apple-brightness-up"               "$pkgdir/usr/bin/apple-brightness-up"
-
-    # ── systemd user services ───────────────────────────────────────────
+    # ── systemd user service (CLI daemon) ───────────────────────────────
     install -Dm644 "$srcdir/apple-kb-monitor.service"          "$pkgdir/usr/lib/systemd/user/apple-kb-monitor.service"
-    install -Dm644 "$srcdir/apple-brightness.service"          "$pkgdir/usr/lib/systemd/user/apple-brightness.service"
-    install -Dm644 "$srcdir/mqtt-bridge.service"               "$pkgdir/usr/lib/systemd/user/mqtt-bridge.service"
 
     # ── udev + keyd + modprobe ──────────────────────────────────────────
     install -Dm644 "$srcdir/99-apple-kb-hidraw.rules"          "$pkgdir/usr/lib/udev/rules.d/99-apple-kb-hidraw.rules"
