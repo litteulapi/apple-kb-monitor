@@ -260,43 +260,48 @@ type State = Arc<Mutex<SharedState>>;
 
 // ── Background polling ──────────────────────────────────────────────────────
 
-fn poll_vcp_list(bus: &str, vcps: &[ddc::VcpInfo], state: &State) {
-    for vcp_info in vcps {
-        if let Ok((cur, max)) = ddc::ddc_read_vcp(bus, vcp_info.code) {
-            if let Ok(mut s) = state.lock() {
-                s.ddc.data.insert(vcp_info.name.to_string(), (cur, max));
-                s.ddc.last_update = Some(Instant::now());
-                s.ddc.error = None;
-            }
-        }
-        thread::sleep(Duration::from_millis(40));
-    }
-}
-
 fn spawn_poll_thread(state: State) {
     thread::spawn(move || {
         let bus = ddc::default_bus();
         let mut slow_counter: u32 = 0;
 
         loop {
-            // Keyboard: direct HID (~5ms) or subprocess fallback (~1s)
+            // ── Keyboard: direct HID ioctl (~5ms) ──────────────────
             let kb = read_keyboard_json();
             if let Ok(mut s) = state.lock() {
                 s.kb_error = if kb.is_none() { Some("Keyboard: not found".into()) } else { None };
                 s.keyboard = kb;
             }
 
-            // FAST VCPs: brightness, contrast, RGB, volume, sharpness (~1.2s for 9 VCPs)
-            poll_vcp_list(&bus, ddc::FAST_VCPS, &state);
+            // ── FAST VCPs: burst read, 1 open, 9 reads, 1 close ───
+            // 9 × 60ms I2C = 540ms total (no extra sleeps, no per-VCP open/close)
+            let fast = ddc::read_burst(&bus, ddc::FAST_VCPS);
+            if let Ok(mut s) = state.lock() {
+                for (name, cur, max) in &fast {
+                    s.ddc.data.insert(name.to_string(), (*cur, *max));
+                }
+                if !fast.is_empty() {
+                    s.ddc.last_update = Some(Instant::now());
+                    s.ddc.error = None;
+                }
+            }
 
-            // SLOW VCPs: every 15th cycle (~30s) — settings, firmware, status
+            // ── SLOW VCPs: every 15th cycle (~22s) ─────────────────
             if slow_counter % 15 == 0 {
-                poll_vcp_list(&bus, ddc::SLOW_VCPS, &state);
+                let slow = ddc::read_burst(&bus, ddc::SLOW_VCPS);
+                if let Ok(mut s) = state.lock() {
+                    for (name, cur, max) in &slow {
+                        s.ddc.data.insert(name.to_string(), (*cur, *max));
+                    }
+                    if !slow.is_empty() {
+                        s.ddc.last_update = Some(Instant::now());
+                    }
+                }
             }
             slow_counter = slow_counter.wrapping_add(1);
 
-            // Fast cycle: 2s between each full fast-poll
-            thread::sleep(Duration::from_secs(2));
+            // Next fast cycle in ~1s (total cycle ≈ 540ms I2C + 1s wait ≈ 1.5s)
+            thread::sleep(Duration::from_millis(1000));
         }
     });
 }

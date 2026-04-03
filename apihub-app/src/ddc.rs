@@ -3,7 +3,6 @@
 //! Direct libc I2C: open + ioctl(I2C_RDWR) + close per transaction.
 //! Validates response opcode, VCP code, result code, length, and checksum.
 
-use std::collections::HashMap;
 use std::ffi::CString;
 use std::sync::Mutex;
 use std::thread;
@@ -270,9 +269,9 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16), String> {
     Ok((cur_val, max_val))
 }
 
-/// Read a VCP value with validation and auto-retry on aliasing.
-/// Acquires the bus lock, opens fd once, retries once on failure.
-/// Returns (current, max).
+/// Read a single VCP value with validation and auto-retry.
+/// Used by diagnostics and single-VCP reads. For bulk reads, use read_burst().
+#[allow(dead_code)]
 pub fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16), String> {
     let _lock = BUS_LOCK.lock().map_err(|e| format!("bus lock: {}", e))?;
 
@@ -296,16 +295,36 @@ pub fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16), String> {
     result
 }
 
-/// Read all 31 essential VCPs. Returns name → (current, max).
-/// Tolerates individual read failures (skips them).
-#[allow(dead_code)]
-pub fn read_all_essential(path: &str) -> HashMap<String, (u16, u16)> {
-    let mut map = HashMap::new();
-    for v in ESSENTIAL_VCPS {
-        if let Ok((cur, max)) = ddc_read_vcp(path, v.code) {
-            map.insert(v.name.to_string(), (cur, max));
+/// Burst-read a list of VCPs in a single fd session.
+/// One open(), one lock, N reads back-to-back (60ms I2C delay each), one close().
+/// Returns Vec of (name, current, max) for successful reads.
+pub fn read_burst(path: &str, vcps: &[VcpInfo]) -> Vec<(&'static str, u16, u16)> {
+    let _lock = match BUS_LOCK.lock() {
+        Ok(g) => g,
+        Err(_) => return Vec::new(),
+    };
+
+    let c_path = match CString::new(path) {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
+    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
+    if fd < 0 { return Vec::new(); }
+
+    let mut results = Vec::with_capacity(vcps.len());
+    for v in vcps {
+        match ddc_read_vcp_fd(fd, v.code) {
+            Ok((cur, max)) => results.push((v.name, cur, max)),
+            Err(_) => {
+                // Retry once inline (no extra open/close)
+                thread::sleep(Duration::from_millis(40));
+                if let Ok((cur, max)) = ddc_read_vcp_fd(fd, v.code) {
+                    results.push((v.name, cur, max));
+                }
+            }
         }
-        thread::sleep(Duration::from_millis(50));
     }
-    map
+
+    unsafe { libc::close(fd); }
+    results
 }
