@@ -279,17 +279,17 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16), String> {
         return Err(format!("VCP 0x{:02X}: aliased (got 0x{:02X})", vcp, resp_vcp));
     }
 
-    // Validate checksum: XOR of source addr (0x50) with all reply bytes
-    // Source addr for reply = display addr 0x28 << 1 = 0x50 (not on wire, implicit)
-    let chk_end = off + 9; // checksum byte position
-    if chk_end < buf.len() {
+    // Validate checksum: XOR of host addr (0x50) with ALL reply bytes including source (0x6E)
+    // Formula: chk = 0x50 ^ buf[0] ^ buf[1] ^ ... ^ buf[9], must equal buf[10]
+    let chk_idx = off + 9;
+    if chk_idx < buf.len() {
         let mut computed: u8 = 0x50;
-        for i in off..chk_end {
+        for i in 0..=chk_idx - 1 {
             computed ^= buf[i];
         }
-        if computed != buf[chk_end] {
+        if computed != buf[chk_idx] {
             return Err(format!("VCP 0x{:02X}: checksum mismatch (got 0x{:02X}, expected 0x{:02X})",
-                vcp, buf[chk_end], computed));
+                vcp, buf[chk_idx], computed));
         }
     }
 
