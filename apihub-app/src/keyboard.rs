@@ -38,14 +38,21 @@ pub const HID_DEVICE_STATE: u8 = 0x09;
 
 /// Apple USB vendor ID (uppercase hex as it appears in sysfs uevent)
 pub const APPLE_VENDOR_ID: &str = "05AC";
-/// A1314 aluminum ISO
-pub const PID_A1314_ISO: &str = "0256";
-/// A1314 aluminum ANSI
-pub const PID_A1314_ANSI: &str = "0255";
-/// A1314 aluminum JIS
-pub const PID_A1314_JIS: &str = "0254";
-/// A1644 Magic Keyboard
-pub const PID_A1644: &str = "0267";
+
+/// All known Apple Wireless Keyboard product IDs (BT HID)
+pub const APPLE_PIDS: &[(&str, &str, &str)] = &[
+    // (PID, model, chip)
+    ("0220", "Apple Wireless Keyboard (A1016, white)", "BCM2042"),
+    ("0229", "Apple Wireless Keyboard (A1255, aluminum, ANSI)", "BCM2042"),
+    ("022C", "Apple Wireless Keyboard (A1255, aluminum, JIS)", "BCM2042"),
+    ("0255", "Apple Wireless Keyboard (A1314, aluminum, ANSI)", "BCM2042"),
+    ("0256", "Apple Wireless Keyboard (A1314, aluminum, ISO)", "BCM2042"),
+    ("0257", "Apple Wireless Keyboard (A1314, aluminum, JIS)", "BCM2042"),
+    ("024F", "Apple Magic Keyboard (A1644, ANSI)", "BCM20733"),
+    ("0250", "Apple Magic Keyboard (A1644, ISO)", "BCM20733"),
+    ("0267", "Apple Magic Keyboard with Touch ID (A2449, ANSI)", "BCM20733"),
+    ("026C", "Apple Magic Keyboard with Touch ID (A2449, ISO)", "BCM20733"),
+];
 
 // ── ADC reference values ──────────────────────────────────────────────────
 
@@ -135,18 +142,20 @@ pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> Option<Vec<u8>> {
     }
 }
 
+/// Find the first Apple keyboard hidraw device by scanning sysfs uevent.
+/// Matches all 10 known Apple Wireless/Magic Keyboard PIDs.
 pub fn find_apple_hidraw() -> Option<String> {
     let rd = std::fs::read_dir("/sys/class/hidraw").ok()?;
     for entry in rd.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         let device_path = entry.path().join("device/uevent");
         if let Ok(uevent) = std::fs::read_to_string(&device_path) {
-            if uevent.contains(APPLE_VENDOR_ID)
-                && (uevent.contains(PID_A1314_ISO)
-                    || uevent.contains(PID_A1314_ANSI)
-                    || uevent.contains(PID_A1314_JIS))
-            {
-                return Some(format!("/dev/{}", name));
+            if uevent.contains(APPLE_VENDOR_ID) {
+                for &(pid, _, _) in APPLE_PIDS {
+                    if uevent.contains(pid) {
+                        return Some(format!("/dev/{}", name));
+                    }
+                }
             }
         }
     }
@@ -310,16 +319,15 @@ pub fn read_keyboard() -> Option<KbReport> {
             .join(path.trim_start_matches("/dev/"))
             .join("device/uevent")
     ).unwrap_or_default();
-    let (model, chip) = if uevent.contains(PID_A1314_ISO) {
-        ("Apple Wireless Keyboard (A1314, aluminum, ISO)", "BCM2042")
-    } else if uevent.contains(PID_A1314_ANSI) {
-        ("Apple Wireless Keyboard (A1314, aluminum, ANSI)", "BCM2042")
-    } else if uevent.contains(PID_A1314_JIS) {
-        ("Apple Wireless Keyboard (A1314, aluminum, JIS)", "BCM2042")
-    } else if uevent.contains(PID_A1644) {
-        ("Apple Magic Keyboard (A1644)", "BCM20733")
-    } else {
-        ("Apple Wireless Keyboard", "BCM2042")
+    let (model, chip) = {
+        let mut found = ("Apple Wireless Keyboard", "BCM2042");
+        for &(pid, name, c) in APPLE_PIDS {
+            if uevent.contains(pid) {
+                found = (name, c);
+                break;
+            }
+        }
+        found
     };
     report.device.model = Some(model.to_string());
     report.device.chip = Some(chip.to_string());
