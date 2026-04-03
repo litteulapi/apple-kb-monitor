@@ -56,44 +56,73 @@ fn ddc_write_vcp(path: &str, vcp: u8, value: u16) -> Result<(), String> {
     Ok(())
 }
 
-fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16, u8), String> {
-    let file = OpenOptions::new().read(true).write(true).open(path)
-        .map_err(|e| format!("{}: {}", path, e))?;
-    let fd = file.as_raw_fd();
-
-    // Write VCP Get Request via I2C_RDWR
+/// Read a single VCP on an already-opened fd. No open/close overhead.
+fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16, u8), String> {
     let payload: [u8; 4] = [0x51, 0x82, 0x01, vcp];
     let mut chk: u8 = 0x6E;
     for b in &payload { chk ^= b; }
-    let mut write_buf = payload.to_vec();
-    write_buf.push(chk);
+    let mut write_buf = [0u8; 5];
+    write_buf[..4].copy_from_slice(&payload);
+    write_buf[4] = chk;
 
-    let mut w_msg = [I2cMsg { addr: DDC_ADDR, flags: 0, len: write_buf.len() as u16, buf: write_buf.as_mut_ptr() }];
+    let mut w_msg = [I2cMsg { addr: DDC_ADDR, flags: 0, len: 5, buf: write_buf.as_mut_ptr() }];
     let w_data = I2cRdwrData { msgs: w_msg.as_mut_ptr(), nmsgs: 1 };
     if unsafe { libc::ioctl(fd, I2C_RDWR, &w_data as *const _) } < 0 {
         return Err("I2C write failed".into());
     }
 
-    thread::sleep(Duration::from_millis(10));
+    thread::sleep(Duration::from_millis(50));
 
-    // Read response via I2C_RDWR
-    let mut read_buf = [0u8; 12];
-    let mut r_msg = [I2cMsg { addr: DDC_ADDR, flags: 1, len: 12, buf: read_buf.as_mut_ptr() }];
+    let mut buf = [0u8; 12];
+    let mut r_msg = [I2cMsg { addr: DDC_ADDR, flags: 1, len: 12, buf: buf.as_mut_ptr() }];
     let r_data = I2cRdwrData { msgs: r_msg.as_mut_ptr(), nmsgs: 1 };
     if unsafe { libc::ioctl(fd, I2C_RDWR, &r_data as *const _) } < 0 {
         return Err("I2C read failed".into());
     }
 
-    // Response: [0x6E(src), len|0x80, opcode, result, vcp_code, vcp_type, max_hi, max_lo, cur_hi, cur_lo, chk]
-    let offset: usize = if read_buf[0] == 0x6E { 1 } else { 0 };
-    let opcode = read_buf[offset + 1];
-    if opcode != 0x02 {
-        return Err(format!("opcode 0x{:02X}", opcode));
+    let off: usize = if buf[0] == 0x6E { 1 } else { 0 };
+    if buf[off + 1] != 0x02 {
+        return Err(format!("opcode 0x{:02X}", buf[off + 1]));
     }
-    let vcp_type = read_buf[offset + 4];
-    let max_val = ((read_buf[offset + 5] as u16) << 8) | read_buf[offset + 6] as u16;
-    let cur_val = ((read_buf[offset + 7] as u16) << 8) | read_buf[offset + 8] as u16;
+    if buf[off + 3] != vcp {
+        return Err(format!("aliased 0x{:02X}", buf[off + 3]));
+    }
+    let vcp_type = buf[off + 4];
+    let max_val = ((buf[off + 5] as u16) << 8) | buf[off + 6] as u16;
+    let cur_val = ((buf[off + 7] as u16) << 8) | buf[off + 8] as u16;
     Ok((cur_val, max_val, vcp_type))
+}
+
+/// Open path, read one VCP with retry, close.
+fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16, u8), String> {
+    let file = OpenOptions::new().read(true).write(true).open(path)
+        .map_err(|e| format!("{}: {}", path, e))?;
+    let fd = file.as_raw_fd();
+    // First attempt
+    if let Ok(r) = ddc_read_vcp_fd(fd, vcp) { return Ok(r); }
+    // Retry once after a fresh open (reset I2C state)
+    drop(file);
+    thread::sleep(Duration::from_millis(30));
+    let file = OpenOptions::new().read(true).write(true).open(path)
+        .map_err(|e| format!("{}: {}", path, e))?;
+    ddc_read_vcp_fd(file.as_raw_fd(), vcp)
+}
+
+/// Open path once, read all VCPs back-to-back, close. Maximum speed.
+/// No retry — failed reads are skipped (caught on next cycle in app, or printed as "-" in CLI).
+fn ddc_read_burst<'a>(path: &str, vcps: &'a [VcpInfo]) -> Vec<(u8, &'a str, u16, u16, u8)> {
+    let file = match OpenOptions::new().read(true).write(true).open(path) {
+        Ok(f) => f,
+        Err(_) => return Vec::new(),
+    };
+    let fd = file.as_raw_fd();
+    let mut results = Vec::with_capacity(vcps.len());
+    for v in vcps {
+        if let Ok((cur, max, t)) = ddc_read_vcp_fd(fd, v.code) {
+            results.push((v.code, v.name, cur, max, t));
+        }
+    }
+    results
 }
 
 struct VcpInfo { code: u8, name: &'static str }
@@ -225,7 +254,6 @@ fn main() {
                         Ok((cur, max, _)) => println!("0x{:02X} {:20} {:5} {:5}", v.code, v.name, cur, max),
                         Err(_) => println!("0x{:02X} {:20} -     -", v.code, v.name),
                     }
-                    thread::sleep(Duration::from_millis(20));
                 }
             } else {
                 let vcp = parse_vcp(&args[3]).expect("bad vcp");
@@ -277,7 +305,6 @@ fn main() {
                     print!("\"{}\":{{\"current\":{},\"max\":{}}}", v.name, cur, max);
                     first = false;
                 }
-                thread::sleep(Duration::from_millis(20));
             }
             println!("}}");
         }

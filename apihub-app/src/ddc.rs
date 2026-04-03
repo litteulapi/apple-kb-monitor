@@ -218,7 +218,7 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16), String> {
         return Err(format!("I2C write 0x{:02X}: {}", vcp, std::io::Error::last_os_error()));
     }
 
-    thread::sleep(Duration::from_millis(10));
+    thread::sleep(Duration::from_millis(20));
 
     // Read 12-byte response
     let mut buf = [0u8; 12];
@@ -320,16 +320,10 @@ pub fn read_burst(path: &str, vcps: &[VcpInfo]) -> Vec<(&'static str, u16, u16)>
 
     let mut results = Vec::with_capacity(vcps.len());
     for v in vcps {
-        match ddc_read_vcp_fd(fd, v.code) {
-            Ok((cur, max)) => results.push((v.name, cur, max)),
-            Err(_) => {
-                // Retry once inline (no extra open/close)
-                thread::sleep(Duration::from_millis(40));
-                if let Ok((cur, max)) = ddc_read_vcp_fd(fd, v.code) {
-                    results.push((v.name, cur, max));
-                }
-            }
+        if let Ok((cur, max)) = ddc_read_vcp_fd(fd, v.code) {
+            results.push((v.name, cur, max));
         }
+        // No retry — failed reads caught on next poll cycle
     }
 
     unsafe { libc::close(fd); }
