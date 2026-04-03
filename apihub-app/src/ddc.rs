@@ -77,21 +77,28 @@ pub struct VcpInfo {
     pub name: &'static str,
 }
 
-/// Fast-poll VCPs — values that change during use (read every 2s).
-pub const FAST_VCPS: &[VcpInfo] = &[
+/// HOT VCPs — the 3 values most likely to change externally (~210ms burst).
+/// Polled every cycle for near-realtime feedback.
+pub const HOT_VCPS: &[VcpInfo] = &[
     VcpInfo { code: 0x10, name: "brightness" },
+    VcpInfo { code: 0x62, name: "volume" },
+    VcpInfo { code: 0xC1, name: "backlight_pwm" },
+];
+
+/// WARM VCPs — user-adjustable controls (~420ms burst).
+/// Polled every 4th cycle (~3s).
+pub const WARM_VCPS: &[VcpInfo] = &[
     VcpInfo { code: 0x12, name: "contrast" },
     VcpInfo { code: 0x16, name: "red_gain" },
     VcpInfo { code: 0x18, name: "green_gain" },
     VcpInfo { code: 0x1A, name: "blue_gain" },
-    VcpInfo { code: 0x62, name: "volume" },
     VcpInfo { code: 0x87, name: "sharpness" },
-    VcpInfo { code: 0xC1, name: "backlight_pwm" },
     VcpInfo { code: 0xF9, name: "black_stabilizer" },
 ];
 
-/// Slow-poll VCPs — settings/info that rarely change (read every 30s).
-pub const SLOW_VCPS: &[VcpInfo] = &[
+/// COLD VCPs — settings/info that rarely change (~1.5s burst).
+/// Polled every 30th cycle (~22s).
+pub const COLD_VCPS: &[VcpInfo] = &[
     VcpInfo { code: 0x14, name: "color_preset" },
     VcpInfo { code: 0x15, name: "picture_mode" },
     VcpInfo { code: 0x60, name: "input_source" },
@@ -211,7 +218,7 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16), String> {
         return Err(format!("I2C write 0x{:02X}: {}", vcp, std::io::Error::last_os_error()));
     }
 
-    thread::sleep(Duration::from_millis(60));
+    thread::sleep(Duration::from_millis(10));
 
     // Read 12-byte response
     let mut buf = [0u8; 12];

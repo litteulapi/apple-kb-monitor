@@ -260,10 +260,21 @@ type State = Arc<Mutex<SharedState>>;
 
 // ── Background polling ──────────────────────────────────────────────────────
 
+fn apply_burst(state: &State, results: &[(&str, u16, u16)]) {
+    if results.is_empty() { return; }
+    if let Ok(mut s) = state.lock() {
+        for (name, cur, max) in results {
+            s.ddc.data.insert(name.to_string(), (*cur, *max));
+        }
+        s.ddc.last_update = Some(Instant::now());
+        s.ddc.error = None;
+    }
+}
+
 fn spawn_poll_thread(state: State) {
     thread::spawn(move || {
         let bus = ddc::default_bus();
-        let mut slow_counter: u32 = 0;
+        let mut cycle: u32 = 0;
 
         loop {
             // ── Keyboard: direct HID ioctl (~5ms) ──────────────────
@@ -273,35 +284,26 @@ fn spawn_poll_thread(state: State) {
                 s.keyboard = kb;
             }
 
-            // ── FAST VCPs: burst read, 1 open, 9 reads, 1 close ───
-            // 9 × 60ms I2C = 540ms total (no extra sleeps, no per-VCP open/close)
-            let fast = ddc::read_burst(&bus, ddc::FAST_VCPS);
-            if let Ok(mut s) = state.lock() {
-                for (name, cur, max) in &fast {
-                    s.ddc.data.insert(name.to_string(), (*cur, *max));
-                }
-                if !fast.is_empty() {
-                    s.ddc.last_update = Some(Instant::now());
-                    s.ddc.error = None;
-                }
+            // ── HOT: brightness + volume + backlight (~210ms) ──────
+            // Every cycle — the values that change during HA lamp sync
+            apply_burst(&state, &ddc::read_burst(&bus, ddc::HOT_VCPS));
+
+            // ── WARM: contrast, RGB, sharpness (~420ms) ────────────
+            // Every 4th cycle (~3s)
+            if cycle % 4 == 0 {
+                apply_burst(&state, &ddc::read_burst(&bus, ddc::WARM_VCPS));
             }
 
-            // ── SLOW VCPs: every 15th cycle (~22s) ─────────────────
-            if slow_counter % 15 == 0 {
-                let slow = ddc::read_burst(&bus, ddc::SLOW_VCPS);
-                if let Ok(mut s) = state.lock() {
-                    for (name, cur, max) in &slow {
-                        s.ddc.data.insert(name.to_string(), (*cur, *max));
-                    }
-                    if !slow.is_empty() {
-                        s.ddc.last_update = Some(Instant::now());
-                    }
-                }
+            // ── COLD: all settings/info (~1.5s) ────────────────────
+            // Every 30th cycle (~22s)
+            if cycle % 30 == 0 {
+                apply_burst(&state, &ddc::read_burst(&bus, ddc::COLD_VCPS));
             }
-            slow_counter = slow_counter.wrapping_add(1);
 
-            // Next fast cycle in ~1s (total cycle ≈ 540ms I2C + 1s wait ≈ 1.5s)
-            thread::sleep(Duration::from_millis(1000));
+            cycle = cycle.wrapping_add(1);
+
+            // HOT cycle: ~210ms I2C + 500ms wait = ~710ms per cycle
+            thread::sleep(Duration::from_millis(500));
         }
     });
 }
