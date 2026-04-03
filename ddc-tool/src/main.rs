@@ -6,11 +6,8 @@
 use std::env;
 use std::fs::OpenOptions;
 use std::os::unix::io::AsRawFd;
-use std::thread;
-use std::time::Duration;
 
 const DDC_ADDR: u16 = 0x37;
-const I2C_SLAVE: libc::c_ulong = 0x0703;
 const I2C_RDWR: libc::c_ulong = 0x0707;
 
 #[repr(C)]
@@ -56,7 +53,7 @@ fn ddc_write_vcp(path: &str, vcp: u8, value: u16) -> Result<(), String> {
     Ok(())
 }
 
-/// Read a single VCP on an already-opened fd. No open/close overhead.
+/// Combined write+read in single I2C_RDWR ioctl (2 messages, no sleep).
 fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16, u8), String> {
     let payload: [u8; 4] = [0x51, 0x82, 0x01, vcp];
     let mut chk: u8 = 0x6E;
@@ -65,19 +62,14 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16, u8), String> {
     write_buf[..4].copy_from_slice(&payload);
     write_buf[4] = chk;
 
-    let mut w_msg = [I2cMsg { addr: DDC_ADDR, flags: 0, len: 5, buf: write_buf.as_mut_ptr() }];
-    let w_data = I2cRdwrData { msgs: w_msg.as_mut_ptr(), nmsgs: 1 };
-    if unsafe { libc::ioctl(fd, I2C_RDWR, &w_data as *const _) } < 0 {
-        return Err("I2C write failed".into());
-    }
-
-    thread::sleep(Duration::from_millis(50));
-
     let mut buf = [0u8; 12];
-    let mut r_msg = [I2cMsg { addr: DDC_ADDR, flags: 1, len: 12, buf: buf.as_mut_ptr() }];
-    let r_data = I2cRdwrData { msgs: r_msg.as_mut_ptr(), nmsgs: 1 };
-    if unsafe { libc::ioctl(fd, I2C_RDWR, &r_data as *const _) } < 0 {
-        return Err("I2C read failed".into());
+    let mut msgs = [
+        I2cMsg { addr: DDC_ADDR, flags: 0, len: 5, buf: write_buf.as_mut_ptr() },
+        I2cMsg { addr: DDC_ADDR, flags: 1, len: 12, buf: buf.as_mut_ptr() },
+    ];
+    let data = I2cRdwrData { msgs: msgs.as_mut_ptr(), nmsgs: 2 };
+    if unsafe { libc::ioctl(fd, I2C_RDWR, &data as *const _) } < 0 {
+        return Err("I2C combined failed".into());
     }
 
     let off: usize = if buf[0] == 0x6E { 1 } else { 0 };
@@ -93,16 +85,8 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16, u8), String> {
     Ok((cur_val, max_val, vcp_type))
 }
 
-/// Open path, read one VCP with retry, close.
+/// Open path, read one VCP, close.
 fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16, u8), String> {
-    let file = OpenOptions::new().read(true).write(true).open(path)
-        .map_err(|e| format!("{}: {}", path, e))?;
-    let fd = file.as_raw_fd();
-    // First attempt
-    if let Ok(r) = ddc_read_vcp_fd(fd, vcp) { return Ok(r); }
-    // Retry once after a fresh open (reset I2C state)
-    drop(file);
-    thread::sleep(Duration::from_millis(30));
     let file = OpenOptions::new().read(true).write(true).open(path)
         .map_err(|e| format!("{}: {}", path, e))?;
     ddc_read_vcp_fd(file.as_raw_fd(), vcp)
@@ -249,12 +233,16 @@ fn main() {
         }
         "read" => {
             if args[3] == "all" {
+                let results = ddc_read_burst(&path, KNOWN_VCPS);
+                let found: std::collections::HashSet<u8> = results.iter().map(|r| r.0).collect();
                 for v in KNOWN_VCPS {
-                    match ddc_read_vcp(&path, v.code) {
-                        Ok((cur, max, _)) => println!("0x{:02X} {:20} {:5} {:5}", v.code, v.name, cur, max),
-                        Err(_) => println!("0x{:02X} {:20} -     -", v.code, v.name),
+                    if let Some(r) = results.iter().find(|r| r.0 == v.code) {
+                        println!("0x{:02X} {:20} {:5} {:5}", r.0, r.1, r.2, r.3);
+                    } else {
+                        println!("0x{:02X} {:20} -     -", v.code, v.name);
                     }
                 }
+                let _ = found;
             } else {
                 let vcp = parse_vcp(&args[3]).expect("bad vcp");
                 match ddc_read_vcp(&path, vcp) {
@@ -297,14 +285,13 @@ fn main() {
                 VcpInfo { code: 0xFD, name: "power_led" },
                 VcpInfo { code: 0xFE, name: "gamma" },
             ];
+            let results = ddc_read_burst(&path, essential);
             print!("{{");
             let mut first = true;
-            for v in essential {
-                if let Ok((cur, max, _)) = ddc_read_vcp(&path, v.code) {
-                    if !first { print!(","); }
-                    print!("\"{}\":{{\"current\":{},\"max\":{}}}", v.name, cur, max);
-                    first = false;
-                }
+            for (_, name, cur, max, _) in &results {
+                if !first { print!(","); }
+                print!("\"{}\":{{\"current\":{},\"max\":{}}}", name, cur, max);
+                first = false;
             }
             println!("}}");
         }
