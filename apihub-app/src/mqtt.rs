@@ -114,7 +114,7 @@ impl MqttBridge {
         });
 
         Self {
-            connected: Arc::new(Mutex::new(false)),
+            connected,
             last_publish: lp,
             last_cmd: lc,
             tx: Some(tx),

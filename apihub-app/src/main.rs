@@ -10,6 +10,60 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 use serde::Deserialize;
 
+// ── Profile persistence ────────────────────────────────────────────────────
+
+type DdcProfile = (String, HashMap<String, u16>);
+
+fn profiles_path() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("apple-kb-monitor/profiles.json")
+}
+
+fn load_profiles() -> Vec<DdcProfile> {
+    let path = profiles_path();
+    match std::fs::read_to_string(&path) {
+        Ok(data) => serde_json::from_str::<Vec<DdcProfile>>(&data).unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
+}
+
+fn save_profiles(profiles: &[DdcProfile]) {
+    let path = profiles_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(profiles) {
+        let _ = std::fs::write(&path, json);
+    }
+}
+
+// ── Circadian brightness curve ─────────────────────────────────────────────
+
+fn circadian_brightness() -> u16 {
+    let now = unsafe {
+        let epoch = libc::time(std::ptr::null_mut());
+        let mut tm: libc::tm = std::mem::zeroed();
+        libc::localtime_r(&epoch, &mut tm);
+        tm
+    };
+    let h = now.tm_hour as f32 + now.tm_min as f32 / 60.0;
+    let bri = if h < 6.0 {
+        30.0
+    } else if h < 9.0 {
+        // 6-9: ramp 30 -> 70
+        30.0 + (h - 6.0) / 3.0 * 40.0
+    } else if h < 17.0 {
+        70.0
+    } else if h < 21.0 {
+        // 17-21: ramp 70 -> 30
+        70.0 - (h - 17.0) / 4.0 * 40.0
+    } else {
+        30.0
+    };
+    bri.round() as u16
+}
+
 // ── Keyboard telemetry (from apple-kb-monitor --json) ───────────────────────
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -213,22 +267,7 @@ fn read_keyboard_hid() -> Option<KbReport> {
 }
 
 fn read_keyboard_json() -> Option<KbReport> {
-    // Try direct HID first (fast, ~5ms), fallback to subprocess (~1s)
-    if let Some(report) = read_keyboard_hid() {
-        return Some(report);
-    }
-    // Fallback: subprocess
-    let output = match Command::new("apple-kb-monitor").arg("--json").output() {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("[kb] failed to run apple-kb-monitor: {}", e);
-            return None;
-        }
-    };
-    if !output.status.success() {
-        return None;
-    }
-    serde_json::from_slice::<KbReport>(&output.stdout).ok()
+    read_keyboard_hid()
 }
 
 // ── Shared state ────────────────────────────────────────────────────────────
@@ -276,10 +315,32 @@ fn spawn_poll_thread(state: State) {
     thread::spawn(move || {
         let bus = ddc::default_bus();
         let mut cycle: u32 = 0;
+        let mut battery_notified = false;
+        let mut ddc_fail_streak: u32 = 0;
+        let mut ddc_fail_notified = false;
 
         loop {
             // ── Keyboard: direct HID ioctl (~5ms) ──────────────────
             let kb = read_keyboard_json();
+
+            // Battery low notification (once per session)
+            if !battery_notified {
+                if let Some(ref k) = kb {
+                    let pct = k.battery.percentage_interpolated
+                        .or(k.battery.percentage_fine)
+                        .or(k.battery.percentage)
+                        .unwrap_or(100.0);
+                    if pct < 15.0 {
+                        battery_notified = true;
+                        let _ = notify_rust::Notification::new()
+                            .summary("Apple Keyboard — Low Battery")
+                            .body(&format!("Battery at {:.0}% — charge soon", pct))
+                            .icon("battery-caution")
+                            .show();
+                    }
+                }
+            }
+
             if let Ok(mut s) = state.lock() {
                 s.kb_error = if kb.is_none() { Some("Keyboard: not found".into()) } else { None };
                 s.keyboard = kb;
@@ -287,7 +348,21 @@ fn spawn_poll_thread(state: State) {
 
             // ── HOT: brightness + volume + backlight (~210ms) ──────
             // Every cycle — the values that change during HA lamp sync
-            apply_burst(&state, &ddc::read_batch(&bus, ddc::HOT_VCPS));
+            let hot = ddc::read_batch(&bus, ddc::HOT_VCPS);
+            if hot.is_empty() {
+                ddc_fail_streak += 1;
+                if ddc_fail_streak >= 5 && !ddc_fail_notified {
+                    ddc_fail_notified = true;
+                    let _ = notify_rust::Notification::new()
+                        .summary("DDC/CI Communication Failure")
+                        .body("5 consecutive DDC read failures — check I2C bus")
+                        .icon("dialog-error")
+                        .show();
+                }
+            } else {
+                ddc_fail_streak = 0;
+            }
+            apply_burst(&state, &hot);
 
             // ── WARM: contrast, RGB, sharpness (~420ms) ────────────
             // Every 4th cycle (~3s)
@@ -411,6 +486,12 @@ struct ApiHubApp {
     diag_results: Vec<DiagResult>,
     diag_running: bool,
     mqtt_bridge: Option<mqtt::MqttBridge>,
+    // DDC profile presets
+    profiles: Vec<DdcProfile>,
+    profile_name: String,
+    // Circadian auto-brightness
+    auto_brightness: bool,
+    last_auto_bri: u16,
 }
 
 impl ApiHubApp {
@@ -427,6 +508,10 @@ impl ApiHubApp {
             diag_results: Vec::new(),
             diag_running: false,
             mqtt_bridge: None,
+            profiles: load_profiles(),
+            profile_name: String::new(),
+            auto_brightness: false,
+            last_auto_bri: 0,
         }
     }
 }
@@ -746,6 +831,107 @@ impl ApiHubApp {
                         }
                     }
                 });
+            });
+
+            ui.add_space(10.0);
+
+            // ── Auto Brightness (circadian) ────────────────────────────
+            ui.group(|ui| {
+                ui.label(egui::RichText::new("Auto Brightness").strong().size(18.0));
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.auto_brightness, "Enable circadian curve");
+                    if self.auto_brightness {
+                        let target = circadian_brightness();
+                        ui.label(egui::RichText::new(format!("Target: {}%", target))
+                            .strong().size(16.0)
+                            .color(egui::Color32::from_rgb(120, 200, 255)));
+                        if target != self.last_auto_bri {
+                            self.last_auto_bri = target;
+                            self.pending_writes.push((0x10, target));
+                        }
+                    }
+                });
+            });
+
+            ui.add_space(10.0);
+
+            // ── DDC Profiles ───────────────────────────────────────────
+            ui.group(|ui| {
+                ui.label(egui::RichText::new("Profiles").strong().size(18.0));
+                ui.add_space(4.0);
+
+                // Save new profile
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Name").weak().size(16.0));
+                    ui.add(egui::TextEdit::singleline(&mut self.profile_name).desired_width(140.0));
+                    if ui.button(egui::RichText::new("Save").size(16.0)).clicked()
+                        && !self.profile_name.trim().is_empty()
+                    {
+                        let profile_keys: &[(&str, u8)] = &[
+                            ("brightness", 0x10), ("contrast", 0x12),
+                            ("red_gain", 0x16), ("green_gain", 0x18), ("blue_gain", 0x1A),
+                            ("sharpness", 0x87), ("volume", 0x62),
+                            ("black_stabilizer", 0xF9), ("picture_mode", 0x15),
+                        ];
+                        let mut values = HashMap::new();
+                        for &(name, _vcp) in profile_keys {
+                            if ddc_has(snap, name) {
+                                values.insert(name.to_string(), ddc_cur(snap, name));
+                            }
+                        }
+                        let name = self.profile_name.trim().to_string();
+                        // Replace if name exists, otherwise append
+                        if let Some(pos) = self.profiles.iter().position(|(n, _)| n == &name) {
+                            self.profiles[pos].1 = values;
+                        } else {
+                            self.profiles.push((name, values));
+                        }
+                        save_profiles(&self.profiles);
+                        self.profile_name.clear();
+                    }
+                });
+
+                ui.add_space(4.0);
+
+                // List saved profiles
+                let mut delete_idx: Option<usize> = None;
+                for (idx, (name, values)) in self.profiles.iter().enumerate() {
+                    ui.horizontal(|ui| {
+                        if ui.button(egui::RichText::new(name).strong().size(16.0)).clicked() {
+                            // Restore profile: push all values as pending writes
+                            let vcp_map: &[(&str, u8)] = &[
+                                ("brightness", 0x10), ("contrast", 0x12),
+                                ("red_gain", 0x16), ("green_gain", 0x18), ("blue_gain", 0x1A),
+                                ("sharpness", 0x87), ("volume", 0x62),
+                                ("black_stabilizer", 0xF9), ("picture_mode", 0x15),
+                            ];
+                            for &(key, vcp) in vcp_map {
+                                if let Some(&val) = values.get(key) {
+                                    self.pending_writes.push((vcp, val));
+                                }
+                            }
+                        }
+                        if ui.small_button("Delete").clicked() {
+                            delete_idx = Some(idx);
+                        }
+                        // Show summary
+                        let summary: Vec<String> = values.iter()
+                            .take(4)
+                            .map(|(k, v)| format!("{}={}", k, v))
+                            .collect();
+                        let suffix = if values.len() > 4 {
+                            format!(" +{}", values.len() - 4)
+                        } else {
+                            String::new()
+                        };
+                        ui.label(egui::RichText::new(format!("{}{}", summary.join(", "), suffix))
+                            .weak().size(14.0));
+                    });
+                }
+                if let Some(idx) = delete_idx {
+                    self.profiles.remove(idx);
+                    save_profiles(&self.profiles);
+                }
             });
         });
     }
@@ -1269,11 +1455,21 @@ impl ApiHubApp {
             detail: if rssi_ok { "rssi-helper installed (needs CAP_NET_ADMIN)".into() } else { "NOT FOUND".into() },
         });
 
-        // user in input group
-        let groups = Command::new("groups").output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
-        let input_ok = groups.contains("input");
+        // user in input group (pure libc — no subprocess)
+        let input_ok = {
+            let mut buf = [0i32; 64];
+            let n = unsafe { libc::getgroups(64, buf.as_mut_ptr() as *mut u32) };
+            if n > 0 {
+                let input_content = std::fs::read_to_string("/etc/group").unwrap_or_default();
+                let input_gid = input_content.lines()
+                    .find(|l| l.starts_with("input:"))
+                    .and_then(|l| l.split(':').nth(2))
+                    .and_then(|s| s.parse::<i32>().ok());
+                input_gid.map(|gid| buf[..n as usize].contains(&gid)).unwrap_or(false)
+            } else {
+                false
+            }
+        };
         self.diag_results.push(DiagResult {
             label: "User in input group".into(), ok: input_ok,
             detail: if input_ok { "input group: OK".into() } else { "NOT in input group — run: sudo usermod -aG input $USER".into() },

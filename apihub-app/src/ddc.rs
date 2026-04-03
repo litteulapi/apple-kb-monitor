@@ -10,8 +10,35 @@ const DDC_ADDR: u16 = 0x37;
 const I2C_SLAVE: libc::c_ulong = 0x0703;
 const I2C_RDWR: libc::c_ulong = 0x0707;
 
+/// Auto-detect I2C bus by probing for a DDC-capable display.
+/// Tests each /dev/i2c-* for a valid DDC/CI response to VCP 0xDF (version).
+pub fn detect_bus() -> Option<String> {
+    if let Ok(rd) = std::fs::read_dir("/dev") {
+        let mut buses: Vec<String> = rd.filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with("i2c-"))
+            .map(|e| format!("/dev/{}", e.file_name().to_string_lossy()))
+            .collect();
+        buses.sort();
+        for bus in &buses {
+            let c_path = match CString::new(bus.as_str()) {
+                Ok(p) => p,
+                Err(_) => continue,
+            };
+            let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
+            if fd < 0 { continue; }
+            let result = ddc_read_vcp_fd(fd, 0xDF); // VCP version
+            unsafe { libc::close(fd); }
+            if result.is_ok() {
+                eprintln!("[ddc] auto-detected monitor on {}", bus);
+                return Some(bus.clone());
+            }
+        }
+    }
+    None
+}
+
 /// Default I2C bus path for the monitor.
-/// Overridden by config.toml [ddc] bus = "/dev/i2c-N"
+/// Priority: config.toml > auto-detect > fallback /dev/i2c-6
 pub fn default_bus() -> String {
     let paths = [
         dirs::config_dir().map(|d| d.join("apple-kb-monitor/config.toml")),
@@ -44,6 +71,10 @@ pub fn default_bus() -> String {
                 }
             }
         }
+    }
+    // Auto-detect: probe all I2C buses for DDC
+    if let Some(bus) = detect_bus() {
+        return bus;
     }
     "/dev/i2c-6".to_string()
 }
