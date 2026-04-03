@@ -155,35 +155,50 @@ Value: 30720 = 0x7800. Encoding: **high byte = (gamma - 1.0) × 100**.
 
 | Value | High Byte | Gamma |
 |-------|-----------|-------|
-| 0x5000 (20480) | 0x50 (80) | 1.8 |
 | 0x6400 (25600) | 0x64 (100) | 2.0 |
 | 0x7800 (30720) | 0x78 (120) | **2.2** (current) |
 | 0x8C00 (35840) | 0x8C (140) | 2.4 |
 
-**WRITABLE** — unlike 0xFE which is read-only, VCP 0x72 accepts writes and the gamma actually changes on the panel. This bypasses the picture mode gamma lock on 0xFE.
+**WRITABLE** — only 3 values accepted (brute-force verified). 0x5000 (1.8) is rejected. Unlike 0xFE which is read-only, VCP 0x72 accepts writes and the gamma actually changes on the panel.
 
-## Picture Modes (VCP 0x15) — 16 modes from capabilities
+## Picture Modes (VCP 0x15) — 14 modes brute-force verified
 
-| Value | Mode | Gamma locked? |
-|-------|------|--------------|
-| 0x01 (1) | Reader | Yes |
-| 0x06 (6) | Color Weakness / Gamer 2 | Yes |
-| 0x11 (17) | Custom | Configurable via OSD only |
-| 0x13 (19) | RTS | Yes |
-| 0x14 (20) | Vivid | Yes |
-| 0x15 (21) | sRGB | Yes (2.2) |
-| 0x18 (24) | sRGB/SMPTE-C | Yes |
-| 0x19 (25) | EBU | Yes |
-| 0x20 (32) | Photo | Yes |
-| 0x22 (34) | ? | Unknown |
-| 0x23 (35) | ? | Unknown |
-| 0x24 (36) | ? | Unknown |
-| 0x28 (40) | FPS Game 1 | Yes |
-| 0x29 (41) | FPS Game 2 | Yes |
-| 0x32 (50) | ? | Unknown |
-| 0x48 (72) | Cinema | Yes |
+The DDC/CI capabilities string reports MCCS standard values (17, 21, 32, etc.) but the LG firmware uses **different internal values**. All 14 modes were discovered by writing values 0-80 and checking readback.
 
-**Note**: Current picture mode is 45 (0x2D) which is NOT in the capabilities string. The monitor accepts it, suggesting undocumented modes exist.
+| Value | Mode | Gamma (0xFE) | RT | Brightness | Contrast |
+|-------|------|-------------|-----|------------|----------|
+| 1 | Reader | — | — | — | — |
+| 6 | Color Weakness | 3 | 2 | 20 | 70 |
+| 15 | sRGB | 7 | 2 | 45 | 70 |
+| 20 | Vivid | 5 | — | — | — |
+| 22 | HDR Effect | 9 | 2 | 40 | 70 |
+| 24 | DCI-P3 | 7 | 2 | 40 | 70 |
+| 25 | EBU | 3 | 2 | 100 | 70 |
+| 30 | FPS 1 | 3 | 1 | 100 | 70 |
+| 31 | FPS 2 | 3 | 1 | 100 | 70 |
+| 39 | RTS | 3 | 2 | 100 | 70 |
+| 45 | Custom | 3 | 1 | user | user |
+| 46 | Cinema | 3 | 1 | 100 | 70 |
+| 48 | Photo | 3 | 2 | 100 | 70 |
+| 49 | Calibration | 3 | 2 | 100 | 70 |
+
+**Values from capabilities string that are WRONG**: 17 (Custom), 19 (RTS), 21 (sRGB), 32 (Photo), 40 (FPS1), 41 (FPS2), 72 (Cinema) — all rejected by firmware, readback returns current mode unchanged.
+
+## Advanced VCPs — Brute-Force Verified Values
+
+| VCP | Name | Accepted Values | Notes |
+|-----|------|----------------|-------|
+| 0xF7 | Response Time | 0=Off, 1=Fast, 2=Normal, 3=Slow | 4=Faster REJECTED |
+| 0xF8 | FreeSync | 0=Off, 1=Basic, 2=Extended | Write causes I2C bus reset (1.5s recovery) |
+| 0x72 | Gamma (MCCS) | 0x6400=2.0, 0x7800=2.2, 0x8C00=2.4 | 0x5000=1.8 REJECTED |
+| 0xF6 | Smart Energy | 0=Off, 2=High | 1=Low REJECTED |
+| 0xCC | Language | 0-15 sequential | 16 languages (EN/FR/DE/ES/IT/KO/ZH/JA/PT/RU/ZH-T/PL/TR/CZ/SV/FI) |
+| 0xD7 | Split/PBP | 1=Off, 3=PBP | **WRITABLE** (was marked read-only). 0/2/4+ cause I2C bus error |
+| 0xF5 | Aspect Ratio | 1=Original only | READ-ONLY on DP@3440x1440 |
+| 0xCA | OSD Lock | 2=Unlocked | READ-ONLY (writes accepted but ignored) |
+| 0xFD | Power LED | 0=Off | READ-ONLY (writes accepted but ignored) |
+| 0xFE | Gamma (LG) | 3=current | READ-ONLY (use 0x72 instead) |
+| 0xD8 | Display Mode | 1 | READ-ONLY |
 
 ## OSD Control
 
@@ -286,9 +301,18 @@ The LG 34GN850 has a factory service menu accessible via the Realtek RTD2795 sca
 
 - **85 VCPs scanned** across standard MCCS, LG vendor, and mirror banks
 - **43 fully decoded** (20 standard + 10 LG vendor + 3 black level + 10 newly decoded)
+- **20 writable VCPs** confirmed by write+readback testing
+- **14 picture modes** brute-force verified (capabilities string was wrong for 7 of them)
 - **16 mirror registers** in 2 banks (stale data, not real-time)
 - **5 VGA legacy** (dead on DisplayPort)
-- **11 still unknown** (0x0B, 0x0C, 0x50, 0x55, 0x6A, 0x7A, 0xD8, 0xDD, 0xE0-E2) — all TABLE type, read-only, likely MCCS informational
-- **5 RAM regions decoded** — all VCP response cache ring buffers, no distinct data
+- **10 still unknown** (0x0B, 0x0C, 0x50, 0x55, 0x6A, 0x7A, 0xDD, 0xE0-E2) — all TABLE type, read-only
+- **5 RAM regions decoded** — all VCP response cache ring buffers
 - **Service menu**: physical access documented, NOT accessible via DDC
-- **Key discovery**: VCP 0x72 (MCCS Gamma) is **writable** with high-byte encoding, bypasses 0xFE picture mode lock
+
+### Key Discoveries
+- VCP 0x72 (MCCS Gamma) is **writable** — bypasses 0xFE picture mode lock (3 values: 2.0/2.2/2.4)
+- VCP 0xD7 (Split/PBP) is **writable** — value 3 activates PBP mode (was thought read-only)
+- DDC/CI capabilities string **lies** about picture mode values — LG firmware uses internal values
+- **Combined I2C_RDWR** (2 messages in 1 ioctl) = 100% reliable, zero sleep, 50ms/VCP
+- **DDC checksum** formula: `0x50 XOR bytes[0..10]` (including 0x6E source byte on wire)
+- FreeSync writes **crash the I2C bus** temporarily (1.5s recovery needed)
