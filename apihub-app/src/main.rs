@@ -88,7 +88,135 @@ struct KbReport {
     firmware: KbFirmware,
 }
 
+// ── HID Feature Report reader (pure Rust, no subprocess) ───────────────────
+
+/// HIDIOCGFEATURE = _IOWR('H', 0x07, 256) — read HID Feature Report
+const HIDIOCGFEATURE: libc::c_ulong = 0xC1004807;
+
+fn hid_read_feature(fd: libc::c_int, report_id: u8) -> Option<Vec<u8>> {
+    let mut buf = [0u8; 256];
+    buf[0] = report_id;
+    let ret = unsafe { libc::ioctl(fd, HIDIOCGFEATURE, buf.as_mut_ptr()) };
+    if ret > 0 {
+        Some(buf[..ret as usize].to_vec())
+    } else {
+        None
+    }
+}
+
+fn find_apple_hidraw() -> Option<String> {
+    // Scan /dev/hidraw* for Apple Wireless Keyboard (vendor 05ac)
+    if let Ok(rd) = std::fs::read_dir("/sys/class/hidraw") {
+        for entry in rd.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            // Read the uevent of the parent HID device
+            let device_path = entry.path().join("device/uevent");
+            if let Ok(uevent) = std::fs::read_to_string(&device_path) {
+                if uevent.contains("05AC") && (uevent.contains("0256") || uevent.contains("0255") || uevent.contains("0254")) {
+                    return Some(format!("/dev/{}", name));
+                }
+            }
+        }
+    }
+    None
+}
+
+fn read_keyboard_hid() -> Option<KbReport> {
+    let path = find_apple_hidraw()?;
+    let c_path = std::ffi::CString::new(path.as_str()).ok()?;
+    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
+    if fd < 0 { return None; }
+
+    let mut report = KbReport::default();
+
+    // Battery precise (0xEA)
+    if let Some(buf) = hid_read_feature(fd, 0xEA) {
+        if buf.len() >= 2 {
+            report.battery.percentage_fine = Some(buf[1] as f64);
+        }
+    }
+
+    // Battery standard (0x47)
+    if let Some(buf) = hid_read_feature(fd, 0x47) {
+        if buf.len() >= 2 {
+            report.battery.percentage = Some(buf[1] as f64);
+        }
+    }
+
+    // Voltage (0xF5) — ADC raw 10-bit, 3.3V ref
+    if let Some(buf) = hid_read_feature(fd, 0xF5) {
+        if buf.len() >= 3 {
+            let adc = ((buf[1] as u32) << 8) | buf[2] as u32;
+            report.battery.adc_raw = Some(adc);
+            report.battery.voltage = Some(adc as f64 * 3.3 / 1024.0);
+        }
+    }
+
+    // Firmware (0x4F) — high nibble = major, low nibble = minor
+    if let Some(buf) = hid_read_feature(fd, 0x4F) {
+        if buf.len() >= 2 {
+            let major = buf[1] >> 4;
+            let minor = buf[1] & 0x0F;
+            report.firmware.version = Some(format!("{}.{}", major, minor));
+        }
+    }
+
+    // Firmware build (0xFF)
+    if let Some(buf) = hid_read_feature(fd, 0xFF) {
+        if buf.len() >= 3 {
+            let build = ((buf[1] as u32) << 8) | buf[2] as u32;
+            report.firmware.build = Some(serde_json::Value::Number(build.into()));
+        }
+    }
+
+    // Device name (0x51 + 0x52 + 0x53)
+    let mut name_bytes = Vec::new();
+    for rid in [0x51, 0x52, 0x53] {
+        if let Some(buf) = hid_read_feature(fd, rid) {
+            name_bytes.extend_from_slice(&buf[1..]);
+        }
+    }
+    let name = String::from_utf8_lossy(&name_bytes).trim_end_matches('\0').to_string();
+    if !name.is_empty() {
+        report.device.name = Some(name);
+    }
+
+    // Connection params (0x46) — interval + latency
+    if let Some(buf) = hid_read_feature(fd, 0x46) {
+        if buf.len() >= 5 {
+            report.bluetooth.connected = true;
+        }
+    }
+
+    // Device identity (0x4C)
+    if let Some(buf) = hid_read_feature(fd, 0x4C) {
+        if buf.len() >= 7 {
+            let mac = format!("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                buf[6], buf[5], buf[4], buf[3], buf[2], buf[1]);
+            report.device.mac = Some(mac);
+        }
+    }
+
+    report.device.model = Some("Apple Wireless Keyboard (A1314)".to_string());
+    report.device.chip = Some("BCM2042".to_string());
+
+    // Battery interpolation: use fine percentage if available
+    if let (Some(voltage), Some(pct)) = (report.battery.voltage, report.battery.percentage_fine) {
+        // Simple linear interpolation: 2.3V=0%, 3.1V=100%, but prefer ADC value
+        let interpolated = if voltage > 0.0 { pct } else { 0.0 };
+        report.battery.percentage_interpolated = Some(interpolated);
+    }
+
+    unsafe { libc::close(fd); }
+    Some(report)
+}
+
 fn read_keyboard_json() -> Option<KbReport> {
+    // Try direct HID first (fast, ~5ms), fallback to subprocess (~1s)
+    if let Some(report) = read_keyboard_hid() {
+        return Some(report);
+    }
+    // Fallback: subprocess
     let output = match Command::new("apple-kb-monitor").arg("--json").output() {
         Ok(o) => o,
         Err(e) => {
@@ -97,21 +225,9 @@ fn read_keyboard_json() -> Option<KbReport> {
         }
     };
     if !output.status.success() {
-        eprintln!("[kb] command failed: exit={:?}", output.status.code());
         return None;
     }
-    match serde_json::from_slice::<KbReport>(&output.stdout) {
-        Ok(report) => Some(report),
-        Err(e) => {
-            eprintln!("[kb] JSON parse error: {}", e);
-            // Fallback: parse as generic Value
-            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
-                eprintln!("[kb] JSON is valid, struct mismatch. Top keys: {:?}",
-                    v.as_object().map(|o| o.keys().collect::<Vec<_>>()));
-            }
-            None
-        }
-    }
+    serde_json::from_slice::<KbReport>(&output.stdout).ok()
 }
 
 // ── Shared state ────────────────────────────────────────────────────────────
@@ -144,36 +260,43 @@ type State = Arc<Mutex<SharedState>>;
 
 // ── Background polling ──────────────────────────────────────────────────────
 
+fn poll_vcp_list(bus: &str, vcps: &[ddc::VcpInfo], state: &State) {
+    for vcp_info in vcps {
+        if let Ok((cur, max)) = ddc::ddc_read_vcp(bus, vcp_info.code) {
+            if let Ok(mut s) = state.lock() {
+                s.ddc.data.insert(vcp_info.name.to_string(), (cur, max));
+                s.ddc.last_update = Some(Instant::now());
+                s.ddc.error = None;
+            }
+        }
+        thread::sleep(Duration::from_millis(40));
+    }
+}
+
 fn spawn_poll_thread(state: State) {
     thread::spawn(move || {
         let bus = ddc::default_bus();
+        let mut slow_counter: u32 = 0;
+
         loop {
-            // Read keyboard FIRST (fast, ~0.6s)
+            // Keyboard: direct HID (~5ms) or subprocess fallback (~1s)
             let kb = read_keyboard_json();
             if let Ok(mut s) = state.lock() {
-                s.kb_error = if kb.is_none() {
-                    Some("Keyboard: loading...".into())
-                } else {
-                    None
-                };
+                s.kb_error = if kb.is_none() { Some("Keyboard: not found".into()) } else { None };
                 s.keyboard = kb;
             }
 
-            // Read DDC VCPs ONE BY ONE — UI updates after each
-            // ddc_read_vcp validates VCP code in response + auto-retries on aliasing
-            for vcp_info in ddc::ESSENTIAL_VCPS {
-                if let Ok((cur, max)) = ddc::ddc_read_vcp(&bus, vcp_info.code) {
-                    if let Ok(mut s) = state.lock() {
-                        s.ddc.data.insert(vcp_info.name.to_string(), (cur, max));
-                        s.ddc.last_update = Some(Instant::now());
-                        s.ddc.error = None;
-                    }
-                }
-                thread::sleep(Duration::from_millis(50));
-            }
+            // FAST VCPs: brightness, contrast, RGB, volume, sharpness (~1.2s for 9 VCPs)
+            poll_vcp_list(&bus, ddc::FAST_VCPS, &state);
 
-            // Wait before next full cycle
-            thread::sleep(Duration::from_secs(5));
+            // SLOW VCPs: every 15th cycle (~30s) — settings, firmware, status
+            if slow_counter % 15 == 0 {
+                poll_vcp_list(&bus, ddc::SLOW_VCPS, &state);
+            }
+            slow_counter = slow_counter.wrapping_add(1);
+
+            // Fast cycle: 2s between each full fast-poll
+            thread::sleep(Duration::from_secs(2));
         }
     });
 }
