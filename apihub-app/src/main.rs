@@ -621,6 +621,15 @@ impl ApiHubApp {
 
             ui.add_space(10.0);
 
+            ui.group(|ui| {
+                ui.label(egui::RichText::new("Video Black Level").strong().size(18.0));
+                self.vcp_slider(ui, snap, "black_level_red", 0x6C);
+                self.vcp_slider(ui, snap, "black_level_green", 0x6E);
+                self.vcp_slider(ui, snap, "black_level_blue", 0x70);
+            });
+
+            ui.add_space(10.0);
+
             // ── Picture mode ────────────────────────────────────────────
             ui.group(|ui| {
                 ui.label(egui::RichText::new("Picture Mode").strong().size(18.0));
