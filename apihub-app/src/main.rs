@@ -180,6 +180,42 @@ fn find_apple_hidraw() -> Option<String> {
     None
 }
 
+/// Interpolate battery % from voltage using the BCM2042 calibration curve.
+/// Thresholds: [100%, 75%, 50%, 25%] in mV, linear interpolation between segments.
+fn interpolate_battery(voltage_v: f64, thresholds_mv: &[u16; 4]) -> f64 {
+    let mv = (voltage_v * 1000.0) as i32;
+    let levels_pct = [100.0, 75.0, 50.0, 25.0, 0.0];
+    let levels_mv = [
+        thresholds_mv[0] as i32,
+        thresholds_mv[1] as i32,
+        thresholds_mv[2] as i32,
+        thresholds_mv[3] as i32,
+        0,
+    ];
+    if mv >= levels_mv[0] { return 100.0; }
+    if mv <= 0 { return 0.0; }
+    for i in 0..4 {
+        if mv >= levels_mv[i + 1] {
+            let hi_mv = levels_mv[i] as f64;
+            let lo_mv = levels_mv[i + 1] as f64;
+            if hi_mv == lo_mv { return levels_pct[i]; }
+            let frac = (mv as f64 - lo_mv) / (hi_mv - lo_mv);
+            return levels_pct[i + 1] + frac * (levels_pct[i] - levels_pct[i + 1]);
+        }
+    }
+    0.0
+}
+
+/// Detect battery chemistry from voltage (2×AA cells in series).
+fn detect_battery_type(voltage: f64) -> &'static str {
+    if voltage >= 3.1 { "Lithium (fresh)" }
+    else if voltage >= 2.85 { "Alkaline (fresh)" }
+    else if voltage >= 2.5 { "Alkaline or NiMH" }
+    else if voltage >= 2.3 { "NiMH (likely)" }
+    else if voltage >= 2.0 { "Depleted" }
+    else { "Critical — replace" }
+}
+
 fn read_keyboard_hid() -> Option<KbReport> {
     let path = find_apple_hidraw()?;
     let c_path = std::ffi::CString::new(path.as_str()).ok()?;
@@ -188,27 +224,45 @@ fn read_keyboard_hid() -> Option<KbReport> {
 
     let mut report = KbReport::default();
 
-    // Battery precise (0xEA)
+    // Battery precise (0xEA) — pre-rounding ADC value
     if let Some(buf) = hid_read_feature(fd, 0xEA) {
         if buf.len() >= 2 {
             report.battery.percentage_fine = Some(buf[1] as f64);
         }
     }
 
-    // Battery standard (0x47)
+    // Battery standard (0x47) — firmware-rounded
     if let Some(buf) = hid_read_feature(fd, 0x47) {
         if buf.len() >= 2 {
             report.battery.percentage = Some(buf[1] as f64);
         }
     }
 
-    // Voltage (0xF5) — ADC raw 10-bit, 3.3V ref
+    // ADC raw voltage (0xF5) — 10-bit, 3.3V reference
     if let Some(buf) = hid_read_feature(fd, 0xF5) {
         if buf.len() >= 3 {
             let adc = ((buf[1] as u32) << 8) | buf[2] as u32;
             report.battery.adc_raw = Some(adc);
             report.battery.voltage = Some(adc as f64 * 3.3 / 1024.0);
         }
+    }
+
+    // Calibration curve (0x5A) — 4 × u16 mV thresholds [100%, 75%, 50%, 25%]
+    let mut calib = [2900u16, 2450, 2350, 2000]; // defaults if read fails
+    if let Some(buf) = hid_read_feature(fd, 0x5A) {
+        if buf.len() >= 9 {
+            for i in 0..4 {
+                let off = 1 + i * 2;
+                calib[i] = ((buf[off] as u16) << 8) | buf[off + 1] as u16;
+            }
+        }
+    }
+
+    // Interpolated battery % from voltage + calibration curve
+    if let Some(voltage) = report.battery.voltage {
+        report.battery.percentage_interpolated = Some(
+            interpolate_battery(voltage, &calib).round()
+        );
     }
 
     // Firmware (0x4F) — high nibble = major, low nibble = minor
@@ -220,7 +274,7 @@ fn read_keyboard_hid() -> Option<KbReport> {
         }
     }
 
-    // Firmware build (0xFF)
+    // Firmware build (0xFF) — u16 build + u8 flag
     if let Some(buf) = hid_read_feature(fd, 0xFF) {
         if buf.len() >= 3 {
             let build = ((buf[1] as u32) << 8) | buf[2] as u32;
@@ -228,7 +282,7 @@ fn read_keyboard_hid() -> Option<KbReport> {
         }
     }
 
-    // Device name (0x51 + 0x52 + 0x53)
+    // Device name (0x51 + 0x52 + 0x53) — 3 chunks of 8 bytes
     let mut name_bytes = Vec::new();
     for rid in [0x51, 0x52, 0x53] {
         if let Some(buf) = hid_read_feature(fd, rid) {
@@ -240,31 +294,53 @@ fn read_keyboard_hid() -> Option<KbReport> {
         report.device.name = Some(name);
     }
 
-    // Connection params (0x46) — interval + latency
+    // Connection params (0x46) — BT interval + latency
     if let Some(buf) = hid_read_feature(fd, 0x46) {
         if buf.len() >= 5 {
             report.bluetooth.connected = true;
         }
     }
 
-    // Device identity (0x4C)
+    // Device identity (0x4C) — MAC in LE order
     if let Some(buf) = hid_read_feature(fd, 0x4C) {
         if buf.len() >= 7 {
+            // BCM2042 stores MAC in little-endian in the identity report
             let mac = format!("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
                 buf[6], buf[5], buf[4], buf[3], buf[2], buf[1]);
             report.device.mac = Some(mac);
         }
     }
 
-    report.device.model = Some("Apple Wireless Keyboard (A1314)".to_string());
-    report.device.chip = Some("BCM2042".to_string());
-
-    // Battery interpolation: use fine percentage if available
-    if let (Some(voltage), Some(pct)) = (report.battery.voltage, report.battery.percentage_fine) {
-        // Simple linear interpolation: 2.3V=0%, 3.1V=100%, but prefer ADC value
-        let interpolated = if voltage > 0.0 { pct } else { 0.0 };
-        report.battery.percentage_interpolated = Some(interpolated);
+    // Device state (0x09) — 1=OK, 0=LOW
+    if let Some(buf) = hid_read_feature(fd, 0x09) {
+        if buf.len() >= 2 && buf[1] == 0 {
+            // Device reports LOW state — override percentage if it's above threshold
+            if report.battery.percentage_interpolated.unwrap_or(100.0) > 15.0 {
+                report.battery.percentage_interpolated = Some(10.0);
+            }
+        }
     }
+
+    // Identify model from PID (via sysfs uevent)
+    let uevent = std::fs::read_to_string(
+        std::path::Path::new("/sys/class/hidraw")
+            .join(path.trim_start_matches("/dev/"))
+            .join("device/uevent")
+    ).unwrap_or_default();
+    let (model, chip) = if uevent.contains("0256") {
+        ("Apple Wireless Keyboard (A1314, aluminum, ISO)", "BCM2042")
+    } else if uevent.contains("0255") {
+        ("Apple Wireless Keyboard (A1314, aluminum, ANSI)", "BCM2042")
+    } else if uevent.contains("0254") {
+        ("Apple Wireless Keyboard (A1314, aluminum, JIS)", "BCM2042")
+    } else if uevent.contains("0267") {
+        ("Apple Magic Keyboard (A1644)", "BCM20733")
+    } else {
+        ("Apple Wireless Keyboard", "BCM2042")
+    };
+    report.device.model = Some(model.to_string());
+    report.device.chip = Some(chip.to_string());
+    report.device.driver = Some("hid-apple".to_string());
 
     unsafe { libc::close(fd); }
     Some(report)
