@@ -74,7 +74,7 @@ fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16, u8), String> {
         return Err("I2C write failed".into());
     }
 
-    thread::sleep(Duration::from_millis(60));
+    thread::sleep(Duration::from_millis(10));
 
     // Read response via I2C_RDWR
     let mut read_buf = [0u8; 12];
@@ -220,13 +220,12 @@ fn main() {
         }
         "read" => {
             if args[3] == "all" {
-                thread::sleep(Duration::from_millis(100));
                 for v in KNOWN_VCPS {
                     match ddc_read_vcp(&path, v.code) {
                         Ok((cur, max, _)) => println!("0x{:02X} {:20} {:5} {:5}", v.code, v.name, cur, max),
                         Err(_) => println!("0x{:02X} {:20} -     -", v.code, v.name),
                     }
-                    thread::sleep(Duration::from_millis(50));
+                    thread::sleep(Duration::from_millis(20));
                 }
             } else {
                 let vcp = parse_vcp(&args[3]).expect("bad vcp");
@@ -270,7 +269,6 @@ fn main() {
                 VcpInfo { code: 0xFD, name: "power_led" },
                 VcpInfo { code: 0xFE, name: "gamma" },
             ];
-            thread::sleep(Duration::from_millis(100));
             print!("{{");
             let mut first = true;
             for v in essential {
@@ -279,7 +277,7 @@ fn main() {
                     print!("\"{}\":{{\"current\":{},\"max\":{}}}", v.name, cur, max);
                     first = false;
                 }
-                thread::sleep(Duration::from_millis(50));
+                thread::sleep(Duration::from_millis(20));
             }
             println!("}}");
         }
