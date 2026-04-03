@@ -1,6 +1,6 @@
 [Unit]
 Description=Apple Wireless Keyboard telemetry monitor and BlueZ battery provider
-Documentation=https://github.com/litteulapi/apple-kb-monitor
+Documentation=https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor
 After=bluetooth.target
 
 [Service]

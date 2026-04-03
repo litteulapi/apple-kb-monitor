@@ -1,7 +1,4 @@
 post_install() {
-    # RSSI helper needs CAP_NET_ADMIN
-    setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper 2>/dev/null || true
-
     # Reload udev rules
     udevadm control --reload-rules 2>/dev/null || true
 
@@ -22,22 +19,27 @@ post_install() {
     echo ""
     echo ">>> apple-kb-monitor v3.0.0 installed"
     echo ""
-    echo ">>> Setup:"
+    echo ">>> First-time setup:"
     echo "      sudo usermod -aG input \$USER"
-    echo "      systemctl --user enable --now apple-kb-monitor.service"
-    echo "      systemctl --user enable --now apple-brightness.service"
+    echo "      sudo usermod -aG i2c \$USER    # for DDC/CI monitor control"
+    echo "      # Log out and back in"
+    echo ""
+    echo ">>> Configuration:"
+    echo "      mkdir -p ~/.config/apple-kb-monitor"
+    echo "      cp /etc/apple-kb-monitor/config.toml.example ~/.config/apple-kb-monitor/config.toml"
+    echo ""
+    echo ">>> Launch:"
+    echo "      apihub-app                     # from terminal"
+    echo "      # or search 'ApiHub' in KDE application menu"
     echo ""
     echo ">>> Special keys (via keyd):"
-    echo "      F1/F2 = Monitor brightness (DDC/CI + OSD)"
-    echo "      F3    = Overview (Exposé)"
-    echo "      F4    = Grid View (Launchpad)"
-    echo "      F5    = Lock Screen"
-    echo "      F6    = Show Desktop"
-    echo "      F7-F9 = Media controls"
-    echo "      F10-F12 = Volume"
-    echo ""
-    echo ">>> Quick test:"
-    echo "      apple-kb-monitor --status"
+    echo "      F1/F2  = Monitor brightness (DDC/CI + OSD)"
+    echo "      F3     = Overview (Expose)"
+    echo "      F4     = Grid View (Launchpad)"
+    echo "      F5     = Lock Screen"
+    echo "      F6     = Show Desktop"
+    echo "      F7-F9  = Media controls"
+    echo "      F10-12 = Volume"
 }
 
 post_upgrade() {
@@ -54,10 +56,6 @@ post_remove() {
         echo ">>> KDE Bluedevil panel restored to original"
     fi
 
-    # Remove capabilities
-    setcap -r /usr/lib/apple-kb-monitor/rssi-helper 2>/dev/null || true
-
-    echo ">>> Disable services:"
+    echo ">>> To disable the legacy CLI daemon:"
     echo "      systemctl --user disable apple-kb-monitor.service"
-    echo "      systemctl --user disable apple-brightness.service"
 }

@@ -11,9 +11,7 @@ makedepends=('rust' 'gcc')
 optdepends=(
     'bluez-utils: bluetoothctl CLI for BT management'
     'libnotify: desktop notifications on low battery'
-    'python-paho-mqtt: MQTT Home Assistant integration'
     'mosquitto: MQTT broker (local or for testing)'
-    'python-pyside6: legacy apihub-settings desktop app'
 )
 install=apple-kb-monitor.install
 source=(
@@ -26,8 +24,9 @@ source=(
     'kde/DeviceItem.qml'
     'icons/apihub-scarab.svg'
     'apihub-app.desktop'
+    'dbus/com.agenceapi.AppleKbMonitor.conf'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 build() {
     # ddc-tool (Rust)
@@ -62,6 +61,9 @@ package() {
 
     # ── Desktop entry ───────────────────────────────────────────────────
     install -Dm644 "$srcdir/apihub-app.desktop"                "$pkgdir/usr/share/applications/apihub-app.desktop"
+
+    # ── D-Bus policy ────────────────────────────────────────────────────
+    install -Dm644 "$srcdir/com.agenceapi.AppleKbMonitor.conf" "$pkgdir/etc/dbus-1/system.d/com.agenceapi.AppleKbMonitor.conf"
 
     # ── Plasma widget ───────────────────────────────────────────────────
     local plasma_dir="$pkgdir/usr/share/plasma/plasmoids/com.agenceapi.devicehub"
