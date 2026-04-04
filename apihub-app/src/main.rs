@@ -815,6 +815,11 @@ impl ApiHubApp {
                                 ui.label(egui::RichText::new(model).strong().size(16.0));
                                 ui.end_row();
                             }
+                            if let Some(ref name) = kb.device.name {
+                                ui.label(egui::RichText::new("Name").weak().size(16.0));
+                                ui.label(egui::RichText::new(name).size(16.0));
+                                ui.end_row();
+                            }
                             if let Some(ref mac) = kb.device.mac {
                                 ui.label(egui::RichText::new("MAC").weak().size(16.0));
                                 ui.label(egui::RichText::new(mac).monospace().size(16.0));
@@ -823,6 +828,11 @@ impl ApiHubApp {
                             if let Some(ref driver) = kb.device.driver {
                                 ui.label(egui::RichText::new("Driver").weak().size(16.0));
                                 ui.label(egui::RichText::new(driver.as_str()).size(16.0));
+                                ui.end_row();
+                            }
+                            if let Some(ref key) = kb.bluetooth.identity_key {
+                                ui.label(egui::RichText::new("Identity").weak().size(16.0));
+                                ui.label(egui::RichText::new(&key[..key.len().min(23)]).monospace().size(16.0));
                                 ui.end_row();
                             }
                         });
@@ -846,6 +856,11 @@ impl ApiHubApp {
                             if let Some(ref build) = kb.firmware.build {
                                 ui.label(egui::RichText::new("Build").weak().size(16.0));
                                 ui.label(egui::RichText::new(build.to_string()).size(16.0));
+                                ui.end_row();
+                            }
+                            if let Some(adc_ref) = kb.firmware.adc_ref {
+                                ui.label(egui::RichText::new("ADC Ref").weak().size(16.0));
+                                ui.label(egui::RichText::new(format!("{}", adc_ref)).monospace().size(16.0));
                                 ui.end_row();
                             }
                         });
