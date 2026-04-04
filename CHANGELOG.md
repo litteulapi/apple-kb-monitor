@@ -4,6 +4,46 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [3.1.0] - 2026-04-02
+
+Broad feature expansion: 10 keyboard models, system tray, battery analytics, App Presets, expanded MQTT entities, and DDC/CI improvements.
+
+### Added
+
+#### Keyboard
+- **10 Apple keyboard models** supported (was 3) -- A1016, A1255 ANSI/JIS, A1314 ISO/ANSI/JIS, A1644 ANSI/ISO, A2449 ANSI/ISO
+- **Wake event monitor** -- dedicated thread monitors HID Input Report 0x13 (vendor FF01 wake/connection events)
+- **LED state display** -- CapsLock and NumLock badges read from sysfs, shown in Keyboard tab
+- **Battery time remaining estimate** -- discharge rate calculation from history with time-to-empty prediction
+- **Battery history graph** -- painter-based 24h chart (battery % + voltage dual axis) rendered in the Keyboard tab
+
+#### Display / DDC
+- **Video Black Level RGB** -- 3 new writable VCPs discovered (0x6C, 0x6E, 0x70) with slider controls
+- **VCP 0x02 smart polling** -- reads New Control Value flag first; skips WARM tier VCPs when nothing changed on the monitor OSD
+- **Factory Reset buttons** -- VCP 0x04 (restore factory defaults), 0x05 (restore factory brightness/contrast), 0x08 (restore factory color) with confirmation dialog
+- **PBP mirror registers display** -- reads sub-display brightness, contrast, and color preset (0xE8, 0xE9, 0xEA) when split mode is active
+- **All Advanced VCPs brute-force verified** -- 7 corrections from hardware verification against LG 34GN850
+
+#### Desktop integration
+- **System tray** -- ksni-based KDE StatusNotifierItem (D-Bus protocol), scarab icon, battery tooltip, quit menu
+- **App Presets** -- automatic picture mode switching based on active window class (e.g., Firefox -> sRGB, Steam -> FPS 1)
+- **KWin D-Bus scripting** -- Wayland-native window class detection via `org.kde.kwin.Scripting` (replaces xdotool)
+
+#### MQTT / Home Assistant
+- **RSSI sensor** -- keyboard signal strength in dBm
+- **TX power sensor** -- keyboard transmit power in dBm
+- **Connected binary_sensor** -- keyboard connectivity state (ON/OFF)
+- **Volume number entity** -- bidirectional monitor volume control (0-100%)
+- **Picture mode select** -- 14 modes (Custom, Reader, Vivid, HDR Effect, Cinema, Color Weakness, FPS 1/2, RTS, sRGB, DCI-P3, EBU, Photo, Calibration), bidirectional
+- **Input source select** -- DisplayPort, HDMI 1, HDMI 2, bidirectional
+- Total: **15 HA entities** (was 4)
+
+### Changed
+- **Dependencies** -- removed `gtk`, `tray-icon`, `png` crates; added `ksni` for D-Bus native system tray
+- **LOC** -- apihub-app grew from 3030 to ~3900 LOC (main.rs 1477->2126, keyboard.rs 330->401, ddc.rs 340->355, mqtt.rs 240->339, history.rs 66->90)
+- **Polled VCPs** -- 34 VCPs across 4 tiers (HOT/WARM/COLD/PBP), up from flat polling
+- **Writable VCPs** -- 22 writable controls (was ~15)
+
 ## [3.0.0] - 2025-04-03
 
 Full Rust rewrite. The Python CLI daemon remains for backward compatibility but the primary interface is now `apihub-app`, a native egui desktop application.

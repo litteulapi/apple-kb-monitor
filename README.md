@@ -10,21 +10,27 @@ Full telemetry, DDC/CI monitor control, and desktop integration for Apple Wirele
 ## What this project does
 
 - Decodes **21 HID Feature Reports** from Apple keyboards: battery (3 methods), voltage, firmware, calibration curve, identity, BT parameters, config registers, ROM mirrors
+- Supports **10 Apple keyboard models** (A1016, A1255, A1314 ISO/ANSI/JIS, A1644 ANSI/ISO, A2449 ANSI/ISO)
 - Provides a native **egui desktop GUI** (apihub-app) with 6 tabs for keyboard telemetry, monitor DDC/CI control, MQTT management, and system diagnostics
 - Includes a standalone **DDC/CI CLI** (ddc-tool) with direct I2C access, 85 mapped VCPs, and sub-100ms latency -- no ddcutil dependency
+- Controls **34 polled VCPs and 22 writable VCPs** including Video Black Level RGB, factory reset, and PBP mirror registers
 - Maps all **13 special keys** at system level via keyd (Wayland-compatible)
 - Handles **F1/F2 brightness** through raw evdev + DDC/CI writes + KDE OSD, with a circadian auto-brightness curve
 - Integrates with **BlueZ Battery Provider** so battery percentage appears natively in KDE Plasma and GNOME
-- Publishes to **MQTT / Home Assistant** with auto-discovery entities (battery, voltage, RSSI, monitor brightness)
+- Publishes to **MQTT / Home Assistant** with 15 auto-discovery entities (sensors, binary sensor, number controls, select entities)
 - Reads **RSSI and TX power** via the BlueZ MGMT API (pure Rust, no C helper)
-- Logs **battery history** to a JSONL append-only store for discharge analysis
+- Logs **battery history** to a JSONL append-only store with **painter-based 24h graph** and discharge rate estimation
+- Provides **App Presets** -- automatic picture mode switching based on active window class (KWin D-Bus scripting, Wayland-native)
+- Runs a **system tray** via ksni (KDE StatusNotifierItem D-Bus protocol, scarab icon with battery tooltip)
+- Monitors **wake events** (HID Input Report 0x13) and displays **LED state** (CapsLock/NumLock badges)
+- Estimates **battery time remaining** from discharge rate and prediction model
 - Includes original **reverse engineering documentation** for both the BCM2042 keyboard controller and the LG 34GN850 monitor scaler
 
 ## Components
 
 | Binary | Language | LOC | Description |
 |--------|----------|-----|-------------|
-| `apihub-app` | Rust (egui) | 3030 | Desktop GUI: 6 tabs -- Keyboard, Display, Advanced, System, MQTT, Diagnostics |
+| `apihub-app` | Rust (egui) | 3900 | Desktop GUI: 6 tabs -- Keyboard, Display, Advanced, System, MQTT, Diagnostics + system tray |
 | `ddc-tool` | Rust | 300 | CLI for direct I2C DDC/CI monitor read/write/json |
 | `apple-kb-monitor` | Python | 2500 | Legacy CLI daemon (12 modes, systemd service, BlueZ Battery Provider) |
 
@@ -32,11 +38,11 @@ Full telemetry, DDC/CI monitor control, and desktop integration for Apple Wirele
 
 The primary interface for daily use. Launches from the KDE application menu as "ApiHub".
 
-- **Keyboard tab** -- battery (3 sources), voltage, ADC calibration, firmware, device identity, BT connection parameters, RSSI, TX power
-- **Display tab** -- brightness, contrast, volume, input source, color preset, picture mode, sharpness, response time, FreeSync
-- **Advanced tab** -- 85 VCPs including LG vendor registers, gamma, aspect ratio, smart energy saving, black stabilizer
-- **System tab** -- DDC profiles (save/restore full monitor state), I2C bus auto-detection, circadian brightness
-- **MQTT tab** -- broker/auth/entity configuration, start/stop bridge, connection status, last command received
+- **Keyboard tab** -- battery (3 sources), voltage, ADC calibration, firmware, device identity, BT connection parameters, RSSI, TX power, LED state (CapsLock/NumLock badges), battery time remaining estimate, 24h battery history graph
+- **Display tab** -- brightness, contrast, volume, input source, color preset, picture mode (14 modes), sharpness, response time, FreeSync, Video Black Level RGB
+- **Advanced tab** -- 85 VCPs including LG vendor registers, gamma, aspect ratio, smart energy saving, black stabilizer, factory reset buttons (0x04/0x05/0x08), PBP mirror registers
+- **System tab** -- DDC profiles (save/restore full monitor state), I2C bus auto-detection, circadian brightness, App Presets (auto picture mode by active window)
+- **MQTT tab** -- broker/auth/entity configuration, start/stop bridge, connection status, last command received, 15 HA entities
 - **Diagnostics tab** -- 15 system checks (binaries, services, hardware, config files, permissions)
 
 ### ddc-tool (CLI)
@@ -115,15 +121,15 @@ The config file controls DDC I2C bus path, MQTT broker credentials, monitor mode
 ## Module architecture
 
 ```
-apihub-app (3030 LOC, 8 modules)
- +-- main.rs       (1477)  egui UI: 6 tabs, profile persistence, background polling
- +-- ddc.rs         (340)  DDC/CI I2C driver: auto-detect, read/write VCP, checksum
- +-- keyboard.rs    (330)  HID Feature Reports: 21 registers via ioctl
- +-- mqtt.rs        (240)  In-process MQTT client (rumqttc): HA auto-discovery
+apihub-app (~3900 LOC, 8 modules)
+ +-- main.rs       (2126)  egui UI: 6 tabs, system tray (ksni), app presets, battery graph
+ +-- keyboard.rs    (401)  HID Feature Reports: 21 registers, wake monitor, LED state
+ +-- ddc.rs         (355)  DDC/CI I2C driver: smart polling (0x02), 34 polled VCPs
+ +-- mqtt.rs        (339)  MQTT client (rumqttc): 15 HA entities, bidirectional controls
  +-- bluez.rs       (230)  BlueZ Battery Provider: zbus D-Bus, Battery1 interface
  +-- brightness.rs  (210)  F1/F2 evdev handler: raw input_event, DDC write, KDE OSD
  +-- rssi.rs        (137)  BlueZ MGMT API: AF_BLUETOOTH socket, opcode 0x0031
- +-- history.rs      (66)  JSONL battery history: append-only store
+ +-- history.rs      (90)  JSONL battery history: discharge rate, time remaining estimate
 
 ddc-tool (300 LOC, 1 module)
  +-- main.rs        (300)  CLI: read/write/json, 85 VCP map, I2C_RDWR ioctl
@@ -136,22 +142,23 @@ Hardware                        apihub-app                      Desktop
 +-----------------+    ioctl    +------------------+            +-----------+
 | Apple Keyboard  |----------->| keyboard.rs      |            |           |
 | /dev/hidrawN    |  HID feat  | 21 Feature Rpts  |   zbus     | KDE/GNOME |
-|                 |            +------------------+----------->| Battery % |
+|                 |  0x13 wake | wake monitor     |----------->| Battery % |
 | BCM2042 BT     |  AF_BT     | rssi.rs          |  Battery1  |           |
 |                 |----------->| MGMT 0x0031      |            +-----------+
 +-----------------+            +------------------+
                                | history.rs       |
-+-----------------+    ioctl   | JSONL logging    |            +-----------+
++-----------------+    ioctl   | JSONL + graph    |            +-----------+
 | LG Monitor      |<--------->+------------------+  rumqttc   |           |
 | /dev/i2c-N      |  I2C_RDWR | ddc.rs           |----------->| Home Asst |
-| DDC/CI @ 0x37   |           | 85 VCPs          |  MQTT      | auto-disc |
-+-----------------+            +------------------+            +-----------+
+| DDC/CI @ 0x37   |  0x02 poll| 34 polled VCPs   |  MQTT 15   | auto-disc |
++-----------------+            +------------------+  entities  +-----------+
                     evdev      | brightness.rs    |  qdbus6    +-----------+
 +-----------------+----------->| F1/F2 handler    |----------->| KDE OSD   |
 | keyd            |  key event | circadian curve  |            |           |
-| F3-F6 remapped  |            +------------------+            +-----------+
-+-----------------+            | main.rs          |
-                               | egui 6-tab UI    |
+| F3-F6 remapped  |            +------------------+   ksni     +-----------+
++-----------------+            | main.rs          |----------->| Sys Tray  |
+                    KWin D-Bus | egui 6-tab UI    |  D-Bus     | scarab    |
+                   <---------->| app presets      |            +-----------+
                                +------------------+
 ```
 
@@ -175,15 +182,20 @@ Hardware                        apihub-app                      Desktop
 
 ## Hardware support
 
-### Supported keyboards
+### Supported keyboards (10 models)
 
-| Model | Controller | Status |
-|-------|-----------|--------|
-| Apple Wireless Keyboard A1314 (aluminum, ISO/ANSI/JIS) | BCM2042 | tested |
-| Apple Wireless Keyboard A1016 (white) | BCM2042 | compatible |
-| Apple Wireless Keyboard A1255 (aluminum) | BCM2042 | compatible |
-| Apple Magic Keyboard A1644 | BCM20733 | untested (same register map) |
-| Apple Magic Keyboard A2449 (Touch ID) | BCM20733 | untested |
+| Model | PID | Controller | Status |
+|-------|-----|-----------|--------|
+| Apple Wireless Keyboard A1016 (white) | 0220 | BCM2042 | compatible |
+| Apple Wireless Keyboard A1255 (aluminum, ANSI) | 0229 | BCM2042 | compatible |
+| Apple Wireless Keyboard A1255 (aluminum, JIS) | 022C | BCM2042 | compatible |
+| Apple Wireless Keyboard A1314 (aluminum, ANSI) | 0255 | BCM2042 | compatible |
+| Apple Wireless Keyboard A1314 (aluminum, ISO) | 0256 | BCM2042 | tested |
+| Apple Wireless Keyboard A1314 (aluminum, JIS) | 0257 | BCM2042 | compatible |
+| Apple Magic Keyboard A1644 (ANSI) | 024F | BCM20733 | untested |
+| Apple Magic Keyboard A1644 (ISO) | 0250 | BCM20733 | untested |
+| Apple Magic Keyboard A2449 Touch ID (ANSI) | 0267 | BCM20733 | untested |
+| Apple Magic Keyboard A2449 Touch ID (ISO) | 026C | BCM20733 | untested |
 
 ### Tested environment
 
@@ -266,4 +278,4 @@ Developed by [AgenceAPI](https://agenceapi.com).
 
 The HID register map was built through original reverse engineering of the Broadcom BCM2042 controller firmware. The DDC/CI VCP map includes original reverse engineering of the LG 34GN850 scaler (Realtek RTD2795), documented in [docs/LG_34GN850_RE.md](docs/LG_34GN850_RE.md).
 
-Built with [egui](https://github.com/emilk/egui), [zbus](https://gitlab.freedesktop.org/dbus/zbus), [rumqttc](https://github.com/bytebeamio/rumqtt).
+Built with [egui](https://github.com/emilk/egui), [zbus](https://gitlab.freedesktop.org/dbus/zbus), [rumqttc](https://github.com/bytebeamio/rumqtt), [ksni](https://github.com/peg-os/ksni).
