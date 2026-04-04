@@ -77,17 +77,81 @@ fn save_app_presets(presets: &[AppPreset]) {
     }
 }
 
-/// Get the active window class via xdotool (single justified subprocess).
+/// Get the active window class via KWin scripting D-Bus (Wayland native).
+/// Loads a 1-line JS script into KWin, reads output from journalctl, cleans up.
+/// Falls back to xprop for X11 sessions.
 fn active_window_class() -> Option<String> {
-    let output = Command::new("xdotool")
-        .args(["getactivewindow", "getwindowclassname"])
+    // Method 1: KWin D-Bus scripting (KDE Wayland)
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        return active_window_kwin();
+    }
+    // Method 2: xprop (X11)
+    let active = Command::new("xprop")
+        .args(["-root", "_NET_ACTIVE_WINDOW"])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .output()
-        .ok()?;
-    if !output.status.success() { return None; }
-    let class = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+        .output().ok()?;
+    let wid = String::from_utf8_lossy(&active.stdout);
+    let wid = wid.split_whitespace().last()?;
+    if wid == "0x0" || wid == "0" { return None; }
+    let cls = Command::new("xprop")
+        .args(["-id", wid, "WM_CLASS"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output().ok()?;
+    let out = String::from_utf8_lossy(&cls.stdout);
+    // WM_CLASS(STRING) = "instance", "class"
+    let class = out.split('"').nth(3)?.to_lowercase();
     if class.is_empty() { None } else { Some(class) }
+}
+
+fn active_window_kwin() -> Option<String> {
+    // Write temp script
+    let script = "console.log('APIHUB_CLASS:' + workspace.activeWindow.resourceClass);";
+    let tmp = std::env::temp_dir().join("apihub_kwin_detect.js");
+    std::fs::write(&tmp, script).ok()?;
+
+    // Load script
+    let load = Command::new("qdbus6")
+        .args(["org.kde.KWin", "/Scripting",
+               "org.kde.kwin.Scripting.loadScript",
+               &tmp.to_string_lossy(), "apihub-detect"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output().ok()?;
+    let sid = String::from_utf8_lossy(&load.stdout).trim().to_string();
+    if sid.is_empty() { let _ = std::fs::remove_file(&tmp); return None; }
+
+    // Run
+    let _ = Command::new("qdbus6")
+        .args(["org.kde.KWin", &format!("/Scripting/Script{}", sid),
+               "org.kde.kwin.Script.run"])
+        .output();
+    thread::sleep(Duration::from_millis(200));
+
+    // Read from journal
+    let journal = Command::new("journalctl")
+        .args(["--user", "-t", "kwin_wayland", "-n", "5", "--no-pager", "-o", "cat"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output().ok()?;
+    let out = String::from_utf8_lossy(&journal.stdout);
+    let class = out.lines().rev()
+        .find(|l| l.contains("APIHUB_CLASS:"))
+        .and_then(|l| l.split("APIHUB_CLASS:").nth(1))
+        .map(|s| s.trim().to_lowercase());
+
+    // Cleanup
+    let _ = Command::new("qdbus6")
+        .args(["org.kde.KWin", &format!("/Scripting/Script{}", sid),
+               "org.kde.kwin.Script.stop"])
+        .output();
+    let _ = Command::new("qdbus6")
+        .args(["org.kde.KWin", "/Scripting",
+               "org.kde.kwin.Scripting.unloadScript", "apihub-detect"])
+        .output();
+
+    class.filter(|s| !s.is_empty())
 }
 
 // ── Shared state ────────────────────────────────────────────────────────────
