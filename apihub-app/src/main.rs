@@ -228,7 +228,8 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
 
         loop {
             // ── Keyboard: direct HID ioctl (~5ms) ──────────────────
-            let kb = keyboard::read_keyboard();
+            let mut kb = keyboard::read_keyboard();
+            let mut mac_for_rssi: Option<String> = None;
 
             // Battery low notification + BlueZ provider update + history
             if let Some(ref k) = kb {
@@ -242,17 +243,8 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
                     bp.update_percentage(pct as u8);
                 }
 
-                // RSSI from BlueZ MGMT API (pure Rust, no rssi-helper binary)
-                if let Some(ref mac) = k.device.mac {
-                    if let Some((rssi, tx)) = rssi::read_rssi(mac) {
-                        if let Ok(mut s) = state.lock() {
-                            if let Some(ref mut kb) = s.keyboard {
-                                kb.radio.rssi_dbm = Some(rssi as i32);
-                                kb.radio.tx_power_dbm = Some(tx as i32);
-                            }
-                        }
-                    }
-                }
+                // Save MAC for RSSI read after this borrow ends
+                mac_for_rssi = k.device.mac.clone();
 
                 // History logging (every 30th cycle = ~15s)
                 if cycle % 30 == 0 {
@@ -270,6 +262,16 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
                         .show();
                     // Flash CapsLock LED 5 times as visual alert
                     keyboard::flash_capslock(5);
+                }
+            }
+
+            // RSSI from BlueZ MGMT API (after immutable borrow of kb ends)
+            if let Some(ref mac) = mac_for_rssi {
+                if let Some((rssi, tx)) = rssi::read_rssi(mac) {
+                    if let Some(ref mut k) = kb {
+                        k.radio.rssi_dbm = Some(rssi as i32);
+                        k.radio.tx_power_dbm = Some(tx as i32);
+                    }
                 }
             }
 
