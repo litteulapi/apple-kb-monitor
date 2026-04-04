@@ -504,8 +504,8 @@ impl ApiHubApp {
     fn new(
         _cc: &eframe::CreationContext<'_>,
         tray_tooltip: Arc<Mutex<String>>,
+        state: State,
     ) -> Self {
-        let state: State = Arc::new(Mutex::new(SharedState::default()));
         let app_presets = load_app_presets();
         let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets.clone())));
         spawn_poll_thread(Arc::clone(&state), Arc::clone(&shared_presets));
@@ -2077,6 +2077,8 @@ impl ApiHubApp {
 
 struct AppTray {
     tooltip: Arc<Mutex<String>>,
+    state: State,
+    i2c_bus: String,
 }
 
 impl ksni::Tray for AppTray {
@@ -2089,25 +2091,138 @@ impl ksni::Tray for AppTray {
     fn tool_tip(&self) -> ksni::ToolTip {
         let text = self.tooltip.lock().map(|t| t.clone()).unwrap_or_default();
         ksni::ToolTip {
-            title: text,
+            title: "ApiHub".into(),
+            description: text,
             ..Default::default()
         }
     }
     fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
-        vec![
-            ksni::MenuItem::Standard(ksni::menu::StandardItem {
-                label: "Quit".into(),
-                activate: Box::new(|_| std::process::exit(0)),
+        use ksni::menu::*;
+
+        // Read current state for info items
+        let snap = self.state.lock().map(|s| s.clone()).ok();
+
+        let mut items: Vec<ksni::MenuItem<Self>> = Vec::new();
+
+        // ── Info section ──────────────────────────────────────
+        if let Some(ref snap) = snap {
+            if let Some(ref kb) = snap.keyboard {
+                let pct = kb.battery.percentage_interpolated
+                    .or(kb.battery.percentage_fine)
+                    .or(kb.battery.percentage)
+                    .unwrap_or(0.0);
+                let voltage = kb.battery.voltage.unwrap_or(0.0);
+                items.push(ksni::MenuItem::Standard(StandardItem {
+                    label: format!("Battery: {:.0}%  ({:.3}V)", pct, voltage),
+                    enabled: false,
+                    ..Default::default()
+                }));
+                if let Some(ref rssi) = kb.radio.rssi_dbm {
+                    items.push(ksni::MenuItem::Standard(StandardItem {
+                        label: format!("RSSI: {} dBm", rssi),
+                        enabled: false,
+                        ..Default::default()
+                    }));
+                }
+                let caps = if snap.caps_lock { "ON" } else { "off" };
+                let num = if snap.num_lock { "ON" } else { "off" };
+                items.push(ksni::MenuItem::Standard(StandardItem {
+                    label: format!("CapsLock: {}  NumLock: {}", caps, num),
+                    enabled: false,
+                    ..Default::default()
+                }));
+            }
+
+            let bri = snap.ddc.data.get("brightness").map(|v| v.0).unwrap_or(0);
+            let vol = snap.ddc.data.get("volume").map(|v| v.0).unwrap_or(0);
+            items.push(ksni::MenuItem::Standard(StandardItem {
+                label: format!("Brightness: {}%  Volume: {}%", bri, vol),
+                enabled: false,
                 ..Default::default()
+            }));
+
+            if let Some(ref rem) = snap.remaining_display {
+                items.push(ksni::MenuItem::Standard(StandardItem {
+                    label: format!("Remaining: {}", rem),
+                    enabled: false,
+                    ..Default::default()
+                }));
+            }
+        }
+
+        items.push(ksni::MenuItem::Separator);
+
+        // ── Quick actions ─────────────────────────────────────
+        let bus = self.i2c_bus.clone();
+        items.push(ksni::MenuItem::Standard(StandardItem {
+            label: "Brightness +10".into(),
+            activate: Box::new(move |_| {
+                if let Ok((cur, _)) = ddc::ddc_read_vcp(&bus, 0x10) {
+                    let _ = ddc::ddc_write_vcp(&bus, 0x10, (cur + 10).min(100));
+                }
             }),
-        ]
+            ..Default::default()
+        }));
+
+        let bus = self.i2c_bus.clone();
+        items.push(ksni::MenuItem::Standard(StandardItem {
+            label: "Brightness -10".into(),
+            activate: Box::new(move |_| {
+                if let Ok((cur, _)) = ddc::ddc_read_vcp(&bus, 0x10) {
+                    let _ = ddc::ddc_write_vcp(&bus, 0x10, cur.saturating_sub(10));
+                }
+            }),
+            ..Default::default()
+        }));
+
+        items.push(ksni::MenuItem::Separator);
+
+        // ── Picture modes submenu ─────────────────────────────
+        let modes: Vec<(u16, &str)> = vec![
+            (45, "Custom"), (1, "Reader"), (20, "Vivid"), (15, "sRGB"),
+            (30, "FPS 1"), (31, "FPS 2"), (39, "RTS"), (46, "Cinema"),
+        ];
+        let mut mode_items = Vec::new();
+        for (val, name) in modes {
+            let bus = self.i2c_bus.clone();
+            mode_items.push(ksni::MenuItem::Standard(StandardItem {
+                label: name.into(),
+                activate: Box::new(move |_| {
+                    let _ = ddc::ddc_write_vcp(&bus, 0x15, val);
+                }),
+                ..Default::default()
+            }));
+        }
+        items.push(ksni::MenuItem::SubMenu(ksni::menu::SubMenu {
+            label: "Picture Mode".into(),
+            submenu: mode_items,
+            ..Default::default()
+        }));
+
+        items.push(ksni::MenuItem::Separator);
+
+        items.push(ksni::MenuItem::Standard(StandardItem {
+            label: "Quit".into(),
+            activate: Box::new(|_| std::process::exit(0)),
+            ..Default::default()
+        }));
+
+        items
     }
 }
 
 fn main() -> eframe::Result<()> {
+    // ── Create shared state early (needed by tray) ───────────────────
+    let tray_state: State = Arc::new(Mutex::new(SharedState::default()));
+    let i2c_bus = ddc::default_bus();
+
     // ── Spawn ksni system tray (StatusNotifierItem via D-Bus) ─────────
     let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("ApiHub \u{2014} starting...".into()));
-    let tray = AppTray { tooltip: tray_tooltip.clone() };
+    let tray = AppTray {
+        tooltip: tray_tooltip.clone(),
+        state: tray_state.clone(),
+        i2c_bus: i2c_bus.clone(),
+    };
     ksni::TrayService::new(tray).spawn();
 
     // ── Launch eframe ─────────────────────────────────────────────────
@@ -2121,6 +2236,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "apihub",
         options,
-        Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, tray_tooltip)))),
+        Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, tray_tooltip, tray_state)))),
     )
 }
