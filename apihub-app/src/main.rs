@@ -501,6 +501,8 @@ struct ApiHubApp {
     confirm_factory_reset: bool,
     // System tray tooltip (shared with ksni tray thread)
     tray_tooltip: Arc<Mutex<String>>,
+    // Tray "Show Window" flag
+    tray_show_window: Arc<std::sync::atomic::AtomicBool>,
     // Battery history graph
     battery_history: Vec<(f64, f64)>,    // (timestamp, percentage)
     voltage_history: Vec<(f64, f64)>,    // (timestamp, voltage)
@@ -511,6 +513,7 @@ impl ApiHubApp {
         _cc: &eframe::CreationContext<'_>,
         tray_tooltip: Arc<Mutex<String>>,
         state: State,
+        tray_show_window: Arc<std::sync::atomic::AtomicBool>,
     ) -> Self {
         let app_presets = load_app_presets();
         let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets.clone())));
@@ -570,6 +573,7 @@ impl ApiHubApp {
             shared_presets,
             confirm_factory_reset: false,
             tray_tooltip,
+            tray_show_window,
             battery_history,
             voltage_history,
         }
@@ -643,6 +647,12 @@ impl eframe::App for ApiHubApp {
         }
 
         // Request next repaint in 2s — egui will sleep until then or until user interaction
+        // Check if tray requested window show
+        if self.tray_show_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        }
+
         ctx.request_repaint_after(Duration::from_secs(2));
 
         let snap = self.state.lock().map(|s| s.clone()).unwrap_or_default();
@@ -2113,6 +2123,7 @@ struct AppTray {
     tooltip: Arc<Mutex<String>>,
     state: State,
     i2c_bus: String,
+    show_window: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ksni::Tray for AppTray {
@@ -2256,6 +2267,15 @@ impl ksni::Tray for AppTray {
 
         items.push(ksni::MenuItem::Separator);
 
+        let show = self.show_window.clone();
+        items.push(ksni::MenuItem::Standard(StandardItem {
+            label: "Show Window".into(),
+            activate: Box::new(move |_| {
+                show.store(true, std::sync::atomic::Ordering::Relaxed);
+            }),
+            ..Default::default()
+        }));
+
         items.push(ksni::MenuItem::Standard(StandardItem {
             label: "Quit".into(),
             activate: Box::new(|_| std::process::exit(0)),
@@ -2273,10 +2293,12 @@ fn main() -> eframe::Result<()> {
 
     // ── Spawn ksni system tray (StatusNotifierItem via D-Bus) ─────────
     let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("ApiHub \u{2014} starting...".into()));
+    let show_window = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let tray = AppTray {
         tooltip: tray_tooltip.clone(),
         state: tray_state.clone(),
         i2c_bus: i2c_bus.clone(),
+        show_window: show_window.clone(),
     };
     ksni::TrayService::new(tray).spawn();
 
@@ -2285,13 +2307,14 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_title("ApiHub \u{2014} Monitor + Keyboard")
             .with_inner_size([720.0, 600.0])
-            .with_min_inner_size([500.0, 400.0]),
-        vsync: true, // cap at monitor refresh, not unlimited
+            .with_min_inner_size([500.0, 400.0])
+            .with_visible(false), // start hidden — tray icon is the primary interface
+        vsync: true,
         ..Default::default()
     };
     eframe::run_native(
         "apihub",
         options,
-        Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, tray_tooltip, tray_state)))),
+        Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, tray_tooltip, tray_state, show_window)))),
     )
 }
