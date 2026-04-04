@@ -15,6 +15,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
+use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tray_icon::{Icon as TrayIconImage, TrayIconBuilder};
 
 // ── Profile persistence ────────────────────────────────────────────────────
 
@@ -465,10 +467,70 @@ struct ApiHubApp {
     shared_presets: SharedPresets,
     // Factory reset confirmation guard
     confirm_factory_reset: bool,
+    // System tray
+    window_visible: bool,
+    tray_menu_show: tray_icon::menu::MenuId,
+    tray_menu_publish: tray_icon::menu::MenuId,
+    tray_menu_quit: tray_icon::menu::MenuId,
+    tray_icon: Option<tray_icon::TrayIcon>,
+    // Battery history graph
+    battery_history: Vec<(f64, f64)>,    // (timestamp, percentage)
+    voltage_history: Vec<(f64, f64)>,    // (timestamp, voltage)
+}
+
+/// Generate a 32x32 RGBA tray icon with a battery bar.
+/// Color: green (>50%), yellow (20-50%), red (<20%).
+fn generate_tray_icon(pct: f64) -> TrayIconImage {
+    let size: u32 = 32;
+    let mut rgba = vec![0u8; (size * size * 4) as usize];
+
+    let (r, g, b) = if pct > 50.0 {
+        (60u8, 200u8, 80u8)
+    } else if pct > 20.0 {
+        (230u8, 190u8, 40u8)
+    } else {
+        (230u8, 60u8, 60u8)
+    };
+
+    let bar_height = ((pct / 100.0) * (size - 4) as f64).round() as u32;
+
+    for y in 0..size {
+        for x in 0..size {
+            let idx = ((y * size + x) * 4) as usize;
+            let is_border = x < 2 || x >= size - 2 || y < 2 || y >= size - 2;
+            let fill_y = size - 2 - y; // fill from bottom
+            let is_fill = !is_border && x >= 2 && x < size - 2 && fill_y < bar_height;
+
+            if is_border {
+                rgba[idx] = 180;
+                rgba[idx + 1] = 180;
+                rgba[idx + 2] = 180;
+                rgba[idx + 3] = 220;
+            } else if is_fill {
+                rgba[idx] = r;
+                rgba[idx + 1] = g;
+                rgba[idx + 2] = b;
+                rgba[idx + 3] = 240;
+            } else {
+                rgba[idx] = 30;
+                rgba[idx + 1] = 30;
+                rgba[idx + 2] = 30;
+                rgba[idx + 3] = 180;
+            }
+        }
+    }
+
+    TrayIconImage::from_rgba(rgba, size, size).expect("valid 32x32 RGBA icon")
 }
 
 impl ApiHubApp {
-    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    fn new(
+        _cc: &eframe::CreationContext<'_>,
+        tray_icon: Option<tray_icon::TrayIcon>,
+        tray_menu_show: tray_icon::menu::MenuId,
+        tray_menu_publish: tray_icon::menu::MenuId,
+        tray_menu_quit: tray_icon::menu::MenuId,
+    ) -> Self {
         let state: State = Arc::new(Mutex::new(SharedState::default()));
         let app_presets = load_app_presets();
         let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets.clone())));
@@ -496,6 +558,17 @@ impl ApiHubApp {
             None
         };
 
+        // Load battery history from disk (once at startup)
+        let entries = history::read_history();
+        let battery_history: Vec<(f64, f64)> = entries
+            .iter()
+            .map(|e| (e.ts as f64, e.pct))
+            .collect();
+        let voltage_history: Vec<(f64, f64)> = entries
+            .iter()
+            .map(|e| (e.ts as f64, e.voltage))
+            .collect();
+
         Self {
             state,
             tab: Tab::Keyboard,
@@ -516,12 +589,52 @@ impl ApiHubApp {
             app_preset_new_mode: 15, // default: sRGB
             shared_presets,
             confirm_factory_reset: false,
+            window_visible: true,
+            tray_menu_show,
+            tray_menu_publish,
+            tray_menu_quit,
+            tray_icon,
+            battery_history,
+            voltage_history,
         }
     }
 }
 
 impl eframe::App for ApiHubApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // ── Tray menu events ──────────────────────────────────────────
+        if let Ok(event) = MenuEvent::receiver().try_recv() {
+            if event.id == self.tray_menu_show {
+                self.window_visible = !self.window_visible;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
+            } else if event.id == self.tray_menu_publish {
+                if let Some(bridge) = &self.mqtt_bridge {
+                    let snap = self.state.lock().map(|s| s.clone()).unwrap_or_default();
+                    bridge.publish_telemetry(&snap.keyboard, &snap.ddc.data, &self.mqtt_cfg());
+                }
+            } else if event.id == self.tray_menu_quit {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
+
+        // ── Update tray tooltip + icon based on current telemetry ─────
+        if let Some(ref tray) = self.tray_icon {
+            let snap_for_tray = self.state.lock().map(|s| s.clone()).ok();
+            if let Some(ref snap) = snap_for_tray {
+                let pct = snap.keyboard.as_ref()
+                    .and_then(|kb| kb.battery.percentage_interpolated
+                        .or(kb.battery.percentage_fine)
+                        .or(kb.battery.percentage))
+                    .unwrap_or(0.0);
+                let bri = snap.ddc.data.get("brightness")
+                    .map(|v| v.0)
+                    .unwrap_or(0);
+                let tooltip = format!("ApiHub \u{2014} Battery: {:.0}% \u{2014} Brightness: {}%", pct, bri);
+                let _ = tray.set_tooltip(Some(&tooltip));
+                let _ = tray.set_icon(Some(generate_tray_icon(pct)));
+            }
+        }
+
         // Process pending DDC writes — deduplicate per VCP, optimistic UI update
         {
             // Keep only the LAST value per VCP (dedup rapid slider drags)
@@ -613,11 +726,12 @@ fn ddc_has(snap: &SharedState, name: &str) -> bool {
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
 impl ApiHubApp {
-    fn tab_keyboard(&self, ui: &mut egui::Ui, snap: &SharedState) {
+    fn tab_keyboard(&mut self, ui: &mut egui::Ui, snap: &SharedState) {
         if let Some(ref err) = snap.kb_error {
             ui.label(egui::RichText::new(err.as_str()).size(16.0).color(egui::Color32::from_rgb(255, 100, 100)));
         }
 
+        egui::ScrollArea::vertical().show(ui, |ui| {
         match &snap.keyboard {
             None => {
                 ui.label(egui::RichText::new("Waiting for keyboard data...").size(16.0));
@@ -752,8 +866,176 @@ impl ApiHubApp {
                         });
                     });
                 });
+
+                ui.add_space(8.0);
+
+                // ── Battery History Graph ─────────────────────────────
+                self.draw_battery_history(ui);
             }
         }
+        }); // ScrollArea
+    }
+
+    /// Draw battery + voltage history chart using egui painter.
+    fn draw_battery_history(&mut self, ui: &mut egui::Ui) {
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Battery History").strong().size(18.0));
+                if ui.button(egui::RichText::new("Refresh").size(14.0)).clicked() {
+                    let entries = history::read_history();
+                    self.battery_history = entries.iter().map(|e| (e.ts as f64, e.pct)).collect();
+                    self.voltage_history = entries.iter().map(|e| (e.ts as f64, e.voltage)).collect();
+                }
+            });
+
+            if self.battery_history.is_empty() {
+                ui.label(egui::RichText::new("No history data yet.").weak().size(16.0));
+                return;
+            }
+
+            // Info line
+            let n = self.battery_history.len();
+            let ts_first = self.battery_history.first().map(|p| p.0).unwrap_or(0.0);
+            let ts_last = self.battery_history.last().map(|p| p.0).unwrap_or(0.0);
+            let span_hours = (ts_last - ts_first) / 3600.0;
+            ui.label(egui::RichText::new(
+                format!("{} data points, spanning {:.1} hours", n, span_hours)
+            ).weak().size(14.0));
+
+            ui.add_space(4.0);
+
+            // Chart area: reserve 160px height
+            let chart_height = 160.0;
+            let (response, painter) = ui.allocate_painter(
+                egui::Vec2::new(ui.available_width(), chart_height),
+                egui::Sense::hover(),
+            );
+            let rect = response.rect;
+
+            // Background
+            painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 22, 28));
+
+            // Margins inside the chart
+            let margin = 8.0;
+            let plot_rect = egui::Rect::from_min_max(
+                egui::Pos2::new(rect.min.x + margin, rect.min.y + margin),
+                egui::Pos2::new(rect.max.x - margin, rect.max.y - margin),
+            );
+
+            if plot_rect.width() < 10.0 || plot_rect.height() < 10.0 {
+                return;
+            }
+
+            // Filter to last 24h if data spans more
+            let now_ts = unsafe { libc::time(std::ptr::null_mut()) } as f64;
+            let cutoff = now_ts - 24.0 * 3600.0;
+            let batt_data: Vec<(f64, f64)> = self.battery_history.iter()
+                .filter(|(ts, _)| *ts >= cutoff)
+                .copied()
+                .collect();
+            let volt_data: Vec<(f64, f64)> = self.voltage_history.iter()
+                .filter(|(ts, _)| *ts >= cutoff)
+                .copied()
+                .collect();
+
+            if batt_data.len() < 2 {
+                painter.text(
+                    rect.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "Not enough data points",
+                    egui::FontId::proportional(14.0),
+                    egui::Color32::GRAY,
+                );
+                return;
+            }
+
+            // Time range
+            let t_min = batt_data.first().unwrap().0;
+            let t_max = batt_data.last().unwrap().0;
+            let t_range = (t_max - t_min).max(1.0);
+
+            // Battery Y range: 0-100
+            let batt_y_min = 0.0_f64;
+            let batt_y_max = 100.0_f64;
+
+            // Voltage Y range: dynamic from data
+            let v_min = volt_data.iter().map(|p| p.1).fold(f64::MAX, f64::min);
+            let v_max = volt_data.iter().map(|p| p.1).fold(f64::MIN, f64::max);
+            let v_range = (v_max - v_min).max(0.1);
+            let v_lo = v_min - v_range * 0.05;
+            let v_hi = v_max + v_range * 0.05;
+
+            // Map functions
+            let map_batt = |ts: f64, pct: f64| -> egui::Pos2 {
+                let x = plot_rect.min.x + ((ts - t_min) / t_range) as f32 * plot_rect.width();
+                let y = plot_rect.max.y - ((pct - batt_y_min) / (batt_y_max - batt_y_min)) as f32 * plot_rect.height();
+                egui::Pos2::new(x, y)
+            };
+            let map_volt = |ts: f64, v: f64| -> egui::Pos2 {
+                let x = plot_rect.min.x + ((ts - t_min) / t_range) as f32 * plot_rect.width();
+                let y = plot_rect.max.y - ((v - v_lo) / (v_hi - v_lo)) as f32 * plot_rect.height();
+                egui::Pos2::new(x, y)
+            };
+
+            // Horizontal grid lines for battery (0%, 25%, 50%, 75%, 100%)
+            for &level in &[0.0, 25.0, 50.0, 75.0, 100.0] {
+                let y = map_batt(t_min, level).y;
+                painter.line_segment(
+                    [egui::Pos2::new(plot_rect.min.x, y), egui::Pos2::new(plot_rect.max.x, y)],
+                    egui::Stroke::new(0.5, egui::Color32::from_rgb(50, 52, 58)),
+                );
+                painter.text(
+                    egui::Pos2::new(plot_rect.min.x + 2.0, y - 10.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    format!("{:.0}%", level),
+                    egui::FontId::proportional(10.0),
+                    egui::Color32::from_rgb(100, 100, 110),
+                );
+            }
+
+            // Draw battery % line (green)
+            let batt_color = egui::Color32::from_rgb(80, 220, 100);
+            for pair in batt_data.windows(2) {
+                let p0 = map_batt(pair[0].0, pair[0].1);
+                let p1 = map_batt(pair[1].0, pair[1].1);
+                painter.line_segment([p0, p1], egui::Stroke::new(2.0, batt_color));
+            }
+
+            // Draw voltage line (cyan)
+            let volt_color = egui::Color32::from_rgb(100, 180, 255);
+            for pair in volt_data.windows(2) {
+                let p0 = map_volt(pair[0].0, pair[0].1);
+                let p1 = map_volt(pair[1].0, pair[1].1);
+                painter.line_segment([p0, p1], egui::Stroke::new(1.5, volt_color));
+            }
+
+            // Legend
+            let legend_y = plot_rect.min.y + 4.0;
+            painter.text(
+                egui::Pos2::new(plot_rect.max.x - 4.0, legend_y),
+                egui::Align2::RIGHT_TOP,
+                format!("Battery %  |  Voltage ({:.2}-{:.2} V)", v_min, v_max),
+                egui::FontId::proportional(11.0),
+                egui::Color32::from_rgb(140, 140, 150),
+            );
+            // Color swatches for legend
+            let swatch_y = legend_y + 2.0;
+            let swatch_size = 8.0;
+            painter.rect_filled(
+                egui::Rect::from_min_size(
+                    egui::Pos2::new(plot_rect.max.x - 200.0, swatch_y),
+                    egui::Vec2::new(swatch_size, swatch_size),
+                ),
+                0.0, batt_color,
+            );
+            painter.rect_filled(
+                egui::Rect::from_min_size(
+                    egui::Pos2::new(plot_rect.max.x - 100.0, swatch_y),
+                    egui::Vec2::new(swatch_size, swatch_size),
+                ),
+                0.0, volt_color,
+            );
+        });
     }
 
     fn tab_display(&mut self, ui: &mut egui::Ui, snap: &SharedState) {
@@ -1822,9 +2104,44 @@ impl ApiHubApp {
 // ── Entrypoint ──────────────────────────────────────────────────────────────
 
 fn main() -> eframe::Result<()> {
+    // GTK init required by tray-icon on Linux (libayatana-appindicator)
+    let _ = unsafe { libc::setenv(
+        b"GTK_THEME\0".as_ptr() as *const _,
+        b"Adwaita:dark\0".as_ptr() as *const _,
+        0
+    )};
+    gtk::init().unwrap_or_else(|_| eprintln!("[tray] GTK init failed — tray may not work"));
+
+    // ── Build system tray on main thread (before eframe takes over) ───
+    let menu_show = MenuItem::new("Show/Hide", true, None);
+    let menu_publish = MenuItem::new("Publish MQTT", true, None);
+    let menu_quit = MenuItem::new("Quit", true, None);
+
+    let id_show = menu_show.id().clone();
+    let id_publish = menu_publish.id().clone();
+    let id_quit = menu_quit.id().clone();
+
+    let tray_menu = Menu::new();
+    let _ = tray_menu.append(&menu_show);
+    let _ = tray_menu.append(&menu_publish);
+    let _ = tray_menu.append(&PredefinedMenuItem::separator());
+    let _ = tray_menu.append(&menu_quit);
+
+    let tray_icon = TrayIconBuilder::new()
+        .with_menu(Box::new(tray_menu))
+        .with_tooltip("ApiHub — starting...")
+        .with_icon(generate_tray_icon(100.0))
+        .build()
+        .ok();
+
+    if tray_icon.is_none() {
+        eprintln!("[tray] failed to create system tray icon — continuing without tray");
+    }
+
+    // ── Launch eframe ─────────────────────────────────────────────────
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("ApiHub — Monitor + Keyboard")
+            .with_title("ApiHub \u{2014} Monitor + Keyboard")
             .with_inner_size([720.0, 600.0])
             .with_min_inner_size([500.0, 400.0]),
         ..Default::default()
@@ -1832,6 +2149,8 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "apihub",
         options,
-        Box::new(|cc| Ok(Box::new(ApiHubApp::new(cc)))),
+        Box::new(move |cc| Ok(Box::new(ApiHubApp::new(
+            cc, tray_icon, id_show, id_publish, id_quit,
+        )))),
     )
 }
