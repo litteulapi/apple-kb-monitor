@@ -178,6 +178,9 @@ struct SharedState {
     ddc: DdcValues,
     keyboard: Option<KbReport>,
     kb_error: Option<String>,
+    caps_lock: bool,
+    num_lock: bool,
+    remaining_display: Option<String>,
 }
 
 type State = Arc<Mutex<SharedState>>;
@@ -211,6 +214,10 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
     // Start brightness F1/F2 handler
     let bus_for_bri = ddc::default_bus();
     brightness::spawn_brightness_thread(bus_for_bri);
+
+    // Start wake event monitor (Input Report 0x13)
+    let _wake_monitor = keyboard::find_apple_hidraw()
+        .map(|path| keyboard::spawn_wake_monitor(&path));
 
     thread::spawn(move || {
         let bus = ddc::default_bus();
@@ -264,9 +271,30 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
                 }
             }
 
+            // LED state (sysfs, fast)
+            let (caps, num) = keyboard::read_led_state();
+
+            // Battery remaining (every 30th cycle)
+            let remaining = if cycle % 30 == 0 {
+                history::estimate_remaining().map(|(rate, hours)| {
+                    if hours < 24.0 {
+                        format!("{:.1}h ({:.1} mV/h)", hours, rate)
+                    } else {
+                        format!("{:.1} days ({:.1} mV/h)", hours / 24.0, rate)
+                    }
+                })
+            } else {
+                None
+            };
+
             if let Ok(mut s) = state.lock() {
                 s.kb_error = if kb.is_none() { Some("Keyboard: not found".into()) } else { None };
                 s.keyboard = kb;
+                s.caps_lock = caps;
+                s.num_lock = num;
+                if remaining.is_some() {
+                    s.remaining_display = remaining;
+                }
             }
 
             // ── HOT: new_control_value + brightness + volume + backlight ──
@@ -702,6 +730,20 @@ impl ApiHubApp {
                                 ui.label(egui::RichText::new(format!("{}", adc)).size(16.0));
                                 ui.end_row();
                             }
+                            if let Some(ref rem) = snap.remaining_display {
+                                ui.label(egui::RichText::new("Remaining").weak().size(16.0));
+                                ui.label(egui::RichText::new(rem).size(16.0));
+                                ui.end_row();
+                            }
+                            // LED state
+                            ui.label(egui::RichText::new("LEDs").weak().size(16.0));
+                            ui.horizontal(|ui| {
+                                let caps_color = if snap.caps_lock { egui::Color32::from_rgb(80, 220, 100) } else { egui::Color32::GRAY };
+                                let num_color = if snap.num_lock { egui::Color32::from_rgb(80, 220, 100) } else { egui::Color32::GRAY };
+                                ui.label(egui::RichText::new("CAPS").size(16.0).color(caps_color).strong());
+                                ui.label(egui::RichText::new("NUM").size(16.0).color(num_color).strong());
+                            });
+                            ui.end_row();
                         });
                     });
 

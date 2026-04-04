@@ -336,3 +336,66 @@ pub fn read_keyboard() -> Option<KbReport> {
     // fd is closed automatically by HidFd Drop
     Some(report)
 }
+
+// ── Wake event monitor (Input Report 0x13) ──────────────────────────────
+
+/// Spawn a thread that monitors HID Input Report 0x13 (vendor wake/connection events).
+/// Returns a shared timestamp of the last wake event.
+pub fn spawn_wake_monitor(hidraw_path: &str) -> Arc<Mutex<Option<std::time::Instant>>> {
+    let last_wake: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
+    let lw = last_wake.clone();
+    let path = hidraw_path.to_string();
+
+    std::thread::spawn(move || {
+        let c_path = match std::ffi::CString::new(path.as_str()) {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+        let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK) };
+        if fd < 0 { return; }
+
+        let mut buf = [0u8; 64];
+        loop {
+            // poll with 2s timeout
+            let mut pfd = libc::pollfd { fd, events: libc::POLLIN, revents: 0 };
+            let ret = unsafe { libc::poll(&mut pfd, 1, 2000) };
+            if ret <= 0 { continue; }
+
+            let n = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+            if n <= 0 { continue; }
+
+            // Report 0x13 = vendor wake event (FF01 usage page)
+            if buf[0] == 0x13 {
+                if let Ok(mut lw) = lw.lock() {
+                    *lw = Some(std::time::Instant::now());
+                }
+            }
+        }
+    });
+
+    last_wake
+}
+
+// ── LED state reader ────────────────────────────────────────────────────
+
+/// Read CapsLock and NumLock LED state from sysfs.
+/// Returns (capslock_on, numlock_on).
+pub fn read_led_state() -> (bool, bool) {
+    let mut caps = false;
+    let mut num = false;
+
+    if let Ok(rd) = std::fs::read_dir("/sys/class/leds") {
+        for entry in rd.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let bri_path = entry.path().join("brightness");
+            if let Ok(val) = std::fs::read_to_string(&bri_path) {
+                let on = val.trim() != "0";
+                if name.contains("capslock") { caps = on; }
+                if name.contains("numlock") { num = on; }
+            }
+        }
+    }
+    (caps, num)
+}
+
+use std::sync::{Arc, Mutex};
