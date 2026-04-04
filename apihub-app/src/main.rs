@@ -2088,6 +2088,21 @@ impl ksni::Tray for AppTray {
     fn title(&self) -> String {
         "ApiHub".into()
     }
+
+    /// Scroll wheel on tray icon: adjust brightness ±1
+    fn scroll(&mut self, delta: i32, dir: &str) {
+        if dir == "vertical" || dir == "Vertical" {
+            let bus = &self.i2c_bus;
+            if let Ok((cur, _)) = ddc::ddc_read_vcp(bus, 0x10) {
+                let new_val = if delta > 0 {
+                    (cur + 1).min(100)
+                } else {
+                    cur.saturating_sub(1)
+                };
+                let _ = ddc::ddc_write_vcp(bus, 0x10, new_val);
+            }
+        }
+    }
     fn tool_tip(&self) -> ksni::ToolTip {
         let text = self.tooltip.lock().map(|t| t.clone()).unwrap_or_default();
         ksni::ToolTip {
@@ -2152,26 +2167,22 @@ impl ksni::Tray for AppTray {
 
         items.push(ksni::MenuItem::Separator);
 
-        // ── Quick actions ─────────────────────────────────────
-        let bus = self.i2c_bus.clone();
-        items.push(ksni::MenuItem::Standard(StandardItem {
-            label: "Brightness +10".into(),
-            activate: Box::new(move |_| {
-                if let Ok((cur, _)) = ddc::ddc_read_vcp(&bus, 0x10) {
-                    let _ = ddc::ddc_write_vcp(&bus, 0x10, (cur + 10).min(100));
-                }
-            }),
-            ..Default::default()
-        }));
-
-        let bus = self.i2c_bus.clone();
-        items.push(ksni::MenuItem::Standard(StandardItem {
-            label: "Brightness -10".into(),
-            activate: Box::new(move |_| {
-                if let Ok((cur, _)) = ddc::ddc_read_vcp(&bus, 0x10) {
-                    let _ = ddc::ddc_write_vcp(&bus, 0x10, cur.saturating_sub(10));
-                }
-            }),
+        // ── Quick brightness presets ───────────────────────────
+        let presets = [(10, "10%"), (30, "30%"), (50, "50%"), (70, "70%"), (100, "100%")];
+        let mut bri_items = Vec::new();
+        for (val, label) in presets {
+            let bus = self.i2c_bus.clone();
+            bri_items.push(ksni::MenuItem::Standard(StandardItem {
+                label: format!("Brightness {}", label),
+                activate: Box::new(move |_| {
+                    let _ = ddc::ddc_write_vcp(&bus, 0x10, val);
+                }),
+                ..Default::default()
+            }));
+        }
+        items.push(ksni::MenuItem::SubMenu(ksni::menu::SubMenu {
+            label: "Brightness".into(),
+            submenu: bri_items,
             ..Default::default()
         }));
 
