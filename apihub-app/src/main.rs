@@ -480,7 +480,68 @@ struct ApiHubApp {
 
 /// Generate a 32x32 RGBA tray icon with a battery bar.
 /// Color: green (>50%), yellow (20-50%), red (<20%).
+fn load_scarab_icon() -> Option<TrayIconImage> {
+    // Try loading the installed PNG icon (generated from SVG at package time)
+    for path in [
+        "/usr/share/icons/hicolor/scalable/apps/apihub-scarab-32.png",
+        "/usr/share/icons/hicolor/48x48/apps/apihub-scarab.png",
+    ] {
+        if let Ok(data) = std::fs::read(path) {
+            if let Ok(icon) = decode_png_rgba(&data) {
+                return Some(icon);
+            }
+        }
+    }
+    // Try from project dir (dev mode)
+    for size in [32, 48] {
+        let path = format!("/home/adminapi/apple-kb-monitor/icons/apihub-scarab-{}.png", size);
+        if let Ok(data) = std::fs::read(&path) {
+            if let Ok(icon) = decode_png_rgba(&data) {
+                return Some(icon);
+            }
+        }
+    }
+    None
+}
+
+fn decode_png_rgba(data: &[u8]) -> Result<TrayIconImage, String> {
+    let decoder = png::Decoder::new(std::io::Cursor::new(data));
+    let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
+    let width = info.width;
+    let height = info.height;
+
+    // Convert to RGBA if needed
+    let rgba = match info.color_type {
+        png::ColorType::Rgba => buf[..info.buffer_size()].to_vec(),
+        png::ColorType::Rgb => {
+            let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+            for chunk in buf[..info.buffer_size()].chunks(3) {
+                rgba.extend_from_slice(chunk);
+                rgba.push(255);
+            }
+            rgba
+        }
+        png::ColorType::GrayscaleAlpha => {
+            let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+            for chunk in buf[..info.buffer_size()].chunks(2) {
+                rgba.push(chunk[0]); rgba.push(chunk[0]); rgba.push(chunk[0]);
+                rgba.push(chunk[1]);
+            }
+            rgba
+        }
+        _ => return Err("unsupported color type".into()),
+    };
+    TrayIconImage::from_rgba(rgba, width, height).map_err(|e| e.to_string())
+}
+
 fn generate_tray_icon(pct: f64) -> TrayIconImage {
+    // Try scarab PNG first
+    if let Some(icon) = load_scarab_icon() {
+        return icon;
+    }
+    // Fallback: generated battery bar
     let size: u32 = 32;
     let mut rgba = vec![0u8; (size * size * 4) as usize];
 
@@ -498,7 +559,7 @@ fn generate_tray_icon(pct: f64) -> TrayIconImage {
         for x in 0..size {
             let idx = ((y * size + x) * 4) as usize;
             let is_border = x < 2 || x >= size - 2 || y < 2 || y >= size - 2;
-            let fill_y = size - 2 - y; // fill from bottom
+            let fill_y = size - 2 - y;
             let is_fill = !is_border && x >= 2 && x < size - 2 && fill_y < bar_height;
 
             if is_border {
@@ -617,7 +678,7 @@ impl eframe::App for ApiHubApp {
             }
         }
 
-        // ── Update tray tooltip + icon based on current telemetry ─────
+        // ── Update tray tooltip (every frame, lightweight) ─────
         if let Some(ref tray) = self.tray_icon {
             let snap_for_tray = self.state.lock().map(|s| s.clone()).ok();
             if let Some(ref snap) = snap_for_tray {
@@ -631,7 +692,6 @@ impl eframe::App for ApiHubApp {
                     .unwrap_or(0);
                 let tooltip = format!("ApiHub \u{2014} Battery: {:.0}% \u{2014} Brightness: {}%", pct, bri);
                 let _ = tray.set_tooltip(Some(&tooltip));
-                let _ = tray.set_icon(Some(generate_tray_icon(pct)));
             }
         }
 

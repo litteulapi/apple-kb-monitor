@@ -176,6 +176,7 @@ dependencies = [
  "gtk",
  "libc",
  "notify-rust",
+ "png 0.17.16",
  "rumqttc",
  "serde",
  "serde_json",
