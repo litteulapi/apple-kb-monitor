@@ -47,10 +47,10 @@ pub fn read_rssi(mac: &str) -> Option<(i8, i8)> {
         return None;
     }
 
-    // 2-second receive timeout
+    // 200ms receive timeout (was 2s — reduces poll thread blocking)
     let tv = libc::timeval {
-        tv_sec: 2,
-        tv_usec: 0,
+        tv_sec: 0,
+        tv_usec: 200_000,
     };
     unsafe {
         libc::setsockopt(

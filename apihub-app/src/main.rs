@@ -127,7 +127,7 @@ fn active_window_kwin() -> Option<String> {
         .args(["org.kde.KWin", &format!("/Scripting/Script{}", sid),
                "org.kde.kwin.Script.run"])
         .output();
-    thread::sleep(Duration::from_millis(200));
+    thread::sleep(Duration::from_millis(100));
 
     // Read from journal
     let journal = Command::new("journalctl")
@@ -265,12 +265,14 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
                 }
             }
 
-            // RSSI from BlueZ MGMT API (after immutable borrow of kb ends)
-            if let Some(ref mac) = mac_for_rssi {
-                if let Some((rssi, tx)) = rssi::read_rssi(mac) {
-                    if let Some(ref mut k) = kb {
-                        k.radio.rssi_dbm = Some(rssi as i32);
-                        k.radio.tx_power_dbm = Some(tx as i32);
+            // RSSI from BlueZ MGMT API (every 10th cycle — blocking socket)
+            if cycle % 10 == 0 {
+                if let Some(ref mac) = mac_for_rssi {
+                    if let Some((rssi, tx)) = rssi::read_rssi(mac) {
+                        if let Some(ref mut k) = kb {
+                            k.radio.rssi_dbm = Some(rssi as i32);
+                            k.radio.tx_power_dbm = Some(tx as i32);
+                        }
                     }
                 }
             }
@@ -347,8 +349,8 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
             }
 
             // ── App Preset: auto picture mode by active window ────
-            // Every 2nd cycle (~1.4s)
-            if cycle % 2 == 0 {
+            // Every 10th cycle (~7s) — reduces subprocess spawning
+            if cycle % 10 == 0 {
                 if let Ok(p) = presets.lock() {
                     if p.0 && !p.1.is_empty() {
                         if let Some(wclass) = active_window_class() {
@@ -640,8 +642,8 @@ impl eframe::App for ApiHubApp {
             self.style_initialized = true;
         }
 
-        // Request repaint every second for live data
-        ctx.request_repaint_after(Duration::from_secs(1));
+        // Request next repaint in 2s — egui will sleep until then or until user interaction
+        ctx.request_repaint_after(Duration::from_secs(2));
 
         let snap = self.state.lock().map(|s| s.clone()).unwrap_or_default();
 
@@ -2284,6 +2286,7 @@ fn main() -> eframe::Result<()> {
             .with_title("ApiHub \u{2014} Monitor + Keyboard")
             .with_inner_size([720.0, 600.0])
             .with_min_inner_size([500.0, 400.0]),
+        vsync: true, // cap at monitor refresh, not unlimited
         ..Default::default()
     };
     eframe::run_native(
