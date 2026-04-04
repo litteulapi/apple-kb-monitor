@@ -228,7 +228,7 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
 
         loop {
             // ── Keyboard: direct HID ioctl — every 2nd cycle (~10s) ──
-            let mut kb = if cycle % 2 == 0 {
+            let mut kb = if cycle % 4 == 0 {
                 keyboard::read_keyboard()
             } else {
                 state.lock().ok().and_then(|s| s.keyboard.clone())
@@ -383,7 +383,7 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
             cycle = cycle.wrapping_add(1);
 
             // HOT cycle: ~210ms I2C + 500ms wait = ~710ms per cycle
-            thread::sleep(Duration::from_secs(5));
+            thread::sleep(Duration::from_secs(10));
         }
     });
 }
