@@ -15,8 +15,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use eframe::egui;
-use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tray_icon::{Icon as TrayIconImage, TrayIconBuilder};
 
 // ── Profile persistence ────────────────────────────────────────────────────
 
@@ -467,130 +465,17 @@ struct ApiHubApp {
     shared_presets: SharedPresets,
     // Factory reset confirmation guard
     confirm_factory_reset: bool,
-    // System tray
-    window_visible: bool,
-    tray_menu_show: tray_icon::menu::MenuId,
-    tray_menu_publish: tray_icon::menu::MenuId,
-    tray_menu_quit: tray_icon::menu::MenuId,
-    tray_icon: Option<tray_icon::TrayIcon>,
+    // System tray tooltip (shared with ksni tray thread)
+    tray_tooltip: Arc<Mutex<String>>,
     // Battery history graph
     battery_history: Vec<(f64, f64)>,    // (timestamp, percentage)
     voltage_history: Vec<(f64, f64)>,    // (timestamp, voltage)
 }
 
-/// Generate a 32x32 RGBA tray icon with a battery bar.
-/// Color: green (>50%), yellow (20-50%), red (<20%).
-fn load_scarab_icon() -> Option<TrayIconImage> {
-    // Try loading the installed PNG icon (generated from SVG at package time)
-    for path in [
-        "/usr/share/icons/hicolor/scalable/apps/apihub-scarab-32.png",
-        "/usr/share/icons/hicolor/48x48/apps/apihub-scarab.png",
-    ] {
-        if let Ok(data) = std::fs::read(path) {
-            if let Ok(icon) = decode_png_rgba(&data) {
-                return Some(icon);
-            }
-        }
-    }
-    // Try from project dir (dev mode)
-    for size in [32, 48] {
-        let path = format!("/home/adminapi/apple-kb-monitor/icons/apihub-scarab-{}.png", size);
-        if let Ok(data) = std::fs::read(&path) {
-            if let Ok(icon) = decode_png_rgba(&data) {
-                return Some(icon);
-            }
-        }
-    }
-    None
-}
-
-fn decode_png_rgba(data: &[u8]) -> Result<TrayIconImage, String> {
-    let decoder = png::Decoder::new(std::io::Cursor::new(data));
-    let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
-    let mut buf = vec![0u8; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf).map_err(|e| e.to_string())?;
-    let width = info.width;
-    let height = info.height;
-
-    // Convert to RGBA if needed
-    let rgba = match info.color_type {
-        png::ColorType::Rgba => buf[..info.buffer_size()].to_vec(),
-        png::ColorType::Rgb => {
-            let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-            for chunk in buf[..info.buffer_size()].chunks(3) {
-                rgba.extend_from_slice(chunk);
-                rgba.push(255);
-            }
-            rgba
-        }
-        png::ColorType::GrayscaleAlpha => {
-            let mut rgba = Vec::with_capacity((width * height * 4) as usize);
-            for chunk in buf[..info.buffer_size()].chunks(2) {
-                rgba.push(chunk[0]); rgba.push(chunk[0]); rgba.push(chunk[0]);
-                rgba.push(chunk[1]);
-            }
-            rgba
-        }
-        _ => return Err("unsupported color type".into()),
-    };
-    TrayIconImage::from_rgba(rgba, width, height).map_err(|e| e.to_string())
-}
-
-fn generate_tray_icon(pct: f64) -> TrayIconImage {
-    // Try scarab PNG first
-    if let Some(icon) = load_scarab_icon() {
-        return icon;
-    }
-    // Fallback: generated battery bar
-    let size: u32 = 32;
-    let mut rgba = vec![0u8; (size * size * 4) as usize];
-
-    let (r, g, b) = if pct > 50.0 {
-        (60u8, 200u8, 80u8)
-    } else if pct > 20.0 {
-        (230u8, 190u8, 40u8)
-    } else {
-        (230u8, 60u8, 60u8)
-    };
-
-    let bar_height = ((pct / 100.0) * (size - 4) as f64).round() as u32;
-
-    for y in 0..size {
-        for x in 0..size {
-            let idx = ((y * size + x) * 4) as usize;
-            let is_border = x < 2 || x >= size - 2 || y < 2 || y >= size - 2;
-            let fill_y = size - 2 - y;
-            let is_fill = !is_border && x >= 2 && x < size - 2 && fill_y < bar_height;
-
-            if is_border {
-                rgba[idx] = 180;
-                rgba[idx + 1] = 180;
-                rgba[idx + 2] = 180;
-                rgba[idx + 3] = 220;
-            } else if is_fill {
-                rgba[idx] = r;
-                rgba[idx + 1] = g;
-                rgba[idx + 2] = b;
-                rgba[idx + 3] = 240;
-            } else {
-                rgba[idx] = 30;
-                rgba[idx + 1] = 30;
-                rgba[idx + 2] = 30;
-                rgba[idx + 3] = 180;
-            }
-        }
-    }
-
-    TrayIconImage::from_rgba(rgba, size, size).expect("valid 32x32 RGBA icon")
-}
-
 impl ApiHubApp {
     fn new(
         _cc: &eframe::CreationContext<'_>,
-        tray_icon: Option<tray_icon::TrayIcon>,
-        tray_menu_show: tray_icon::menu::MenuId,
-        tray_menu_publish: tray_icon::menu::MenuId,
-        tray_menu_quit: tray_icon::menu::MenuId,
+        tray_tooltip: Arc<Mutex<String>>,
     ) -> Self {
         let state: State = Arc::new(Mutex::new(SharedState::default()));
         let app_presets = load_app_presets();
@@ -650,11 +535,7 @@ impl ApiHubApp {
             app_preset_new_mode: 15, // default: sRGB
             shared_presets,
             confirm_factory_reset: false,
-            window_visible: true,
-            tray_menu_show,
-            tray_menu_publish,
-            tray_menu_quit,
-            tray_icon,
+            tray_tooltip,
             battery_history,
             voltage_history,
         }
@@ -663,23 +544,8 @@ impl ApiHubApp {
 
 impl eframe::App for ApiHubApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // ── Tray menu events ──────────────────────────────────────────
-        if let Ok(event) = MenuEvent::receiver().try_recv() {
-            if event.id == self.tray_menu_show {
-                self.window_visible = !self.window_visible;
-                ctx.send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
-            } else if event.id == self.tray_menu_publish {
-                if let Some(bridge) = &self.mqtt_bridge {
-                    let snap = self.state.lock().map(|s| s.clone()).unwrap_or_default();
-                    bridge.publish_telemetry(&snap.keyboard, &snap.ddc.data, &self.mqtt_cfg());
-                }
-            } else if event.id == self.tray_menu_quit {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-            }
-        }
-
         // ── Update tray tooltip (every frame, lightweight) ─────
-        if let Some(ref tray) = self.tray_icon {
+        {
             let snap_for_tray = self.state.lock().map(|s| s.clone()).ok();
             if let Some(ref snap) = snap_for_tray {
                 let pct = snap.keyboard.as_ref()
@@ -690,8 +556,10 @@ impl eframe::App for ApiHubApp {
                 let bri = snap.ddc.data.get("brightness")
                     .map(|v| v.0)
                     .unwrap_or(0);
-                let tooltip = format!("ApiHub \u{2014} Battery: {:.0}% \u{2014} Brightness: {}%", pct, bri);
-                let _ = tray.set_tooltip(Some(&tooltip));
+                let text = format!("ApiHub \u{2014} Battery: {:.0}% \u{2014} Brightness: {}%", pct, bri);
+                if let Ok(mut tt) = self.tray_tooltip.lock() {
+                    *tt = text;
+                }
             }
         }
 
@@ -2163,40 +2031,42 @@ impl ApiHubApp {
 
 // ── Entrypoint ──────────────────────────────────────────────────────────────
 
-fn main() -> eframe::Result<()> {
-    // GTK init required by tray-icon on Linux (libayatana-appindicator)
-    let _ = unsafe { libc::setenv(
-        b"GTK_THEME\0".as_ptr() as *const _,
-        b"Adwaita:dark\0".as_ptr() as *const _,
-        0
-    )};
-    gtk::init().unwrap_or_else(|_| eprintln!("[tray] GTK init failed — tray may not work"));
+// ── ksni system tray ───────────────────────────────────────────────────────
 
-    // ── Build system tray on main thread (before eframe takes over) ───
-    let menu_show = MenuItem::new("Show/Hide", true, None);
-    let menu_publish = MenuItem::new("Publish MQTT", true, None);
-    let menu_quit = MenuItem::new("Quit", true, None);
+struct AppTray {
+    tooltip: Arc<Mutex<String>>,
+}
 
-    let id_show = menu_show.id().clone();
-    let id_publish = menu_publish.id().clone();
-    let id_quit = menu_quit.id().clone();
-
-    let tray_menu = Menu::new();
-    let _ = tray_menu.append(&menu_show);
-    let _ = tray_menu.append(&menu_publish);
-    let _ = tray_menu.append(&PredefinedMenuItem::separator());
-    let _ = tray_menu.append(&menu_quit);
-
-    let tray_icon = TrayIconBuilder::new()
-        .with_menu(Box::new(tray_menu))
-        .with_tooltip("ApiHub — starting...")
-        .with_icon(generate_tray_icon(100.0))
-        .build()
-        .ok();
-
-    if tray_icon.is_none() {
-        eprintln!("[tray] failed to create system tray icon — continuing without tray");
+impl ksni::Tray for AppTray {
+    fn icon_name(&self) -> String {
+        "apihub-scarab".into()
     }
+    fn title(&self) -> String {
+        "ApiHub".into()
+    }
+    fn tool_tip(&self) -> ksni::ToolTip {
+        let text = self.tooltip.lock().map(|t| t.clone()).unwrap_or_default();
+        ksni::ToolTip {
+            title: text,
+            ..Default::default()
+        }
+    }
+    fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
+        vec![
+            ksni::MenuItem::Standard(ksni::menu::StandardItem {
+                label: "Quit".into(),
+                activate: Box::new(|_| std::process::exit(0)),
+                ..Default::default()
+            }),
+        ]
+    }
+}
+
+fn main() -> eframe::Result<()> {
+    // ── Spawn ksni system tray (StatusNotifierItem via D-Bus) ─────────
+    let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("ApiHub \u{2014} starting...".into()));
+    let tray = AppTray { tooltip: tray_tooltip.clone() };
+    ksni::TrayService::new(tray).spawn();
 
     // ── Launch eframe ─────────────────────────────────────────────────
     let options = eframe::NativeOptions {
@@ -2209,8 +2079,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "apihub",
         options,
-        Box::new(move |cc| Ok(Box::new(ApiHubApp::new(
-            cc, tray_icon, id_show, id_publish, id_quit,
-        )))),
+        Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, tray_tooltip)))),
     )
 }
