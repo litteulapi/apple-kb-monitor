@@ -44,6 +44,52 @@ fn save_profiles(profiles: &[DdcProfile]) {
     }
 }
 
+// ── App Preset persistence ────────────────────────────────────────────────
+
+/// (window_class, picture_mode_value)
+type AppPreset = (String, u16);
+
+fn app_presets_path() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+        .join("apple-kb-monitor/app_presets.json")
+}
+
+fn load_app_presets() -> Vec<AppPreset> {
+    let path = app_presets_path();
+    match std::fs::read_to_string(&path) {
+        Ok(data) => serde_json::from_str::<Vec<AppPreset>>(&data).unwrap_or_default(),
+        Err(_) => vec![
+            ("firefox".to_string(), 15),   // sRGB
+            ("steam".to_string(), 30),      // FPS 1
+            ("gimp".to_string(), 48),       // Photo
+        ],
+    }
+}
+
+fn save_app_presets(presets: &[AppPreset]) {
+    let path = app_presets_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(presets) {
+        let _ = std::fs::write(&path, json);
+    }
+}
+
+/// Get the active window class via xdotool (single justified subprocess).
+fn active_window_class() -> Option<String> {
+    let output = Command::new("xdotool")
+        .args(["getactivewindow", "getwindowclassname"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() { return None; }
+    let class = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+    if class.is_empty() { None } else { Some(class) }
+}
+
 // ── Shared state ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -85,7 +131,10 @@ fn apply_burst(state: &State, results: &[(&str, u16, u16)]) {
     }
 }
 
-fn spawn_poll_thread(state: State) {
+/// Shared app presets (read by poll thread, written by UI).
+type SharedPresets = Arc<Mutex<(bool, Vec<AppPreset>)>>;
+
+fn spawn_poll_thread(state: State, presets: SharedPresets) {
     // Start BlueZ Battery Provider (register once, update in loop)
     let battery_provider: Option<bluez::BatteryProvider> = {
         if let Some(kb) = keyboard::read_keyboard() {
@@ -156,8 +205,8 @@ fn spawn_poll_thread(state: State) {
                 s.keyboard = kb;
             }
 
-            // ── HOT: brightness + volume + backlight (~210ms) ──────
-            // Every cycle — the values that change during HA lamp sync
+            // ── HOT: new_control_value + brightness + volume + backlight ──
+            // Every cycle. 0x02 is first — if its value is 0, skip WARM VCPs.
             let hot = ddc::read_batch(&bus, ddc::HOT_VCPS);
             if hot.is_empty() {
                 ddc_fail_streak += 1;
@@ -172,11 +221,15 @@ fn spawn_poll_thread(state: State) {
             } else {
                 ddc_fail_streak = 0;
             }
+            let new_control_value = hot.iter()
+                .find(|(name, _, _)| *name == "new_control_value")
+                .map(|(_, cur, _)| *cur)
+                .unwrap_or(1); // default to 1 (assume changed) if read failed
             apply_burst(&state, &hot);
 
             // ── WARM: contrast, RGB, sharpness (~420ms) ────────────
-            // Every 4th cycle (~3s)
-            if cycle % 4 == 0 {
+            // Every 4th cycle (~3s) — BUT skip if VCP 0x02 reports no change
+            if cycle % 4 == 0 && new_control_value != 0 {
                 apply_burst(&state, &ddc::read_batch(&bus, ddc::WARM_VCPS));
             }
 
@@ -184,6 +237,44 @@ fn spawn_poll_thread(state: State) {
             // Every 30th cycle (~22s)
             if cycle % 30 == 0 {
                 apply_burst(&state, &ddc::read_batch(&bus, ddc::COLD_VCPS));
+            }
+
+            // ── PBP mirror registers (informational) ──────────────
+            // Every 30th cycle, only when split mode is active (D7 != 1)
+            if cycle % 30 == 0 {
+                let split = state.lock().ok()
+                    .and_then(|s| s.ddc.data.get("split_mode").map(|v| v.0))
+                    .unwrap_or(1);
+                if split != 1 {
+                    apply_burst(&state, &ddc::read_batch(&bus, ddc::PBP_MIRROR_VCPS));
+                }
+            }
+
+            // ── App Preset: auto picture mode by active window ────
+            // Every 2nd cycle (~1.4s)
+            if cycle % 2 == 0 {
+                if let Ok(p) = presets.lock() {
+                    if p.0 && !p.1.is_empty() {
+                        if let Some(wclass) = active_window_class() {
+                            for (class, mode) in &p.1 {
+                                if wclass.contains(&class.to_lowercase()) {
+                                    // Only write if picture mode differs
+                                    let current_mode = state.lock().ok()
+                                        .and_then(|s| s.ddc.data.get("picture_mode").map(|v| v.0))
+                                        .unwrap_or(0);
+                                    if current_mode != *mode {
+                                        let _ = ddc::ddc_write_vcp(&bus, 0x15, *mode);
+                                        if let Ok(mut s) = state.lock() {
+                                            let max = s.ddc.data.get("picture_mode").map(|v| v.1).unwrap_or(255);
+                                            s.ddc.data.insert("picture_mode".to_string(), (*mode, max));
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             cycle = cycle.wrapping_add(1);
@@ -302,12 +393,22 @@ struct ApiHubApp {
     // Circadian auto-brightness
     auto_brightness: bool,
     last_auto_bri: u16,
+    // App Presets — auto picture mode by active window
+    app_presets: Vec<AppPreset>,
+    app_presets_enabled: bool,
+    app_preset_new_class: String,
+    app_preset_new_mode: u16,
+    shared_presets: SharedPresets,
+    // Factory reset confirmation guard
+    confirm_factory_reset: bool,
 }
 
 impl ApiHubApp {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
         let state: State = Arc::new(Mutex::new(SharedState::default()));
-        spawn_poll_thread(Arc::clone(&state));
+        let app_presets = load_app_presets();
+        let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets.clone())));
+        spawn_poll_thread(Arc::clone(&state), Arc::clone(&shared_presets));
 
         let mqtt = MqttConfig::default();
         let i2c_bus = ddc::default_bus();
@@ -345,6 +446,12 @@ impl ApiHubApp {
             profile_name: String::new(),
             auto_brightness: false,
             last_auto_bri: 0,
+            app_presets,
+            app_presets_enabled: false,
+            app_preset_new_class: String::new(),
+            app_preset_new_mode: 15, // default: sRGB
+            shared_presets,
+            confirm_factory_reset: false,
         }
     }
 }
@@ -780,6 +887,104 @@ impl ApiHubApp {
                     save_profiles(&self.profiles);
                 }
             });
+
+            ui.add_space(10.0);
+
+            // ── App Presets — auto picture mode by active window ───
+            ui.group(|ui| {
+                ui.label(egui::RichText::new("App Presets").strong().size(18.0));
+                ui.add_space(4.0);
+
+                let mut presets_changed = false;
+                ui.horizontal(|ui| {
+                    if ui.checkbox(&mut self.app_presets_enabled, "Auto-switch picture mode by window").changed() {
+                        presets_changed = true;
+                    }
+                });
+
+                ui.add_space(4.0);
+
+                // Picture mode lookup for display labels
+                let mode_labels: &[(u16, &str)] = &[
+                    (45, "Custom"), (1, "Reader"), (20, "Vivid"), (22, "HDR Effect"),
+                    (46, "Cinema"), (6, "Color Weakness"), (30, "FPS 1"), (31, "FPS 2"),
+                    (39, "RTS"), (15, "sRGB"), (24, "DCI-P3"), (25, "EBU"),
+                    (48, "Photo"), (49, "Calibration"),
+                ];
+
+                // Existing presets grid
+                let mut delete_preset_idx: Option<usize> = None;
+                egui::Grid::new("app_presets_grid")
+                    .num_columns(3)
+                    .spacing([12.0, 6.0])
+                    .show(ui, |ui| {
+                        ui.label(egui::RichText::new("Window Class").strong().size(16.0));
+                        ui.label(egui::RichText::new("Picture Mode").strong().size(16.0));
+                        ui.label("");
+                        ui.end_row();
+                        for (idx, (class, mode)) in self.app_presets.iter().enumerate() {
+                            ui.label(egui::RichText::new(class).monospace().size(16.0));
+                            let label = mode_labels.iter()
+                                .find(|(v, _)| v == mode)
+                                .map(|(_, l)| *l)
+                                .unwrap_or("Unknown");
+                            ui.label(egui::RichText::new(format!("{} ({})", label, mode)).size(16.0));
+                            if ui.small_button("Delete").clicked() {
+                                delete_preset_idx = Some(idx);
+                            }
+                            ui.end_row();
+                        }
+                    });
+
+                if let Some(idx) = delete_preset_idx {
+                    self.app_presets.remove(idx);
+                    save_app_presets(&self.app_presets);
+                    presets_changed = true;
+                }
+
+                ui.add_space(4.0);
+
+                // Add new preset
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Class").weak().size(16.0));
+                    ui.add(egui::TextEdit::singleline(&mut self.app_preset_new_class).desired_width(100.0));
+                    ui.label(egui::RichText::new("Mode").weak().size(16.0));
+                    egui::ComboBox::from_id_salt("app_preset_mode")
+                        .selected_text(
+                            mode_labels.iter()
+                                .find(|(v, _)| *v == self.app_preset_new_mode)
+                                .map(|(_, l)| *l)
+                                .unwrap_or("?"),
+                        )
+                        .show_ui(ui, |ui| {
+                            for &(val, label) in mode_labels {
+                                ui.selectable_value(&mut self.app_preset_new_mode, val, label);
+                            }
+                        });
+                    if ui.button(egui::RichText::new("Add").size(16.0)).clicked()
+                        && !self.app_preset_new_class.trim().is_empty()
+                    {
+                        let class = self.app_preset_new_class.trim().to_lowercase();
+                        // Replace if class exists
+                        if let Some(pos) = self.app_presets.iter().position(|(c, _)| c == &class) {
+                            self.app_presets[pos].1 = self.app_preset_new_mode;
+                        } else {
+                            self.app_presets.push((class, self.app_preset_new_mode));
+                        }
+                        save_app_presets(&self.app_presets);
+                        self.app_preset_new_class.clear();
+                        presets_changed = true;
+                    }
+                });
+
+                // Sync to poll thread when anything changes
+                if presets_changed {
+                    if let Ok(mut p) = self.shared_presets.lock() {
+                        p.0 = self.app_presets_enabled;
+                        p.1 = self.app_presets.clone();
+                    }
+                }
+            });
         });
     }
 
@@ -842,6 +1047,45 @@ impl ApiHubApp {
             self.readonly_group(ui, snap, "OSD Lock", "osd_lock", &[
                 (2, "Unlocked"), (1, "Locked"),
             ]);
+
+            ui.add_space(10.0);
+
+            // ── Maintenance / Factory Reset ───────────────────────────
+            ui.group(|ui| {
+                ui.label(egui::RichText::new("Maintenance").strong().size(18.0));
+                ui.add_space(4.0);
+
+                ui.horizontal(|ui| {
+                    if ui.button(egui::RichText::new("Reset Brightness/Contrast").size(16.0)).clicked() {
+                        self.pending_writes.push((0x05, 1));
+                    }
+                    if ui.button(egui::RichText::new("Reset Color").size(16.0)).clicked() {
+                        self.pending_writes.push((0x08, 1));
+                    }
+                });
+
+                ui.add_space(4.0);
+
+                if self.confirm_factory_reset {
+                    ui.horizontal(|ui| {
+                        ui.label(egui::RichText::new("Are you sure? This resets ALL settings.")
+                            .size(16.0).color(egui::Color32::from_rgb(255, 70, 70)));
+                        if ui.button(egui::RichText::new("Confirm Factory Reset")
+                            .size(16.0).strong().color(egui::Color32::from_rgb(255, 70, 70))).clicked()
+                        {
+                            self.pending_writes.push((0x04, 1));
+                            self.confirm_factory_reset = false;
+                        }
+                        if ui.button(egui::RichText::new("Cancel").size(16.0)).clicked() {
+                            self.confirm_factory_reset = false;
+                        }
+                    });
+                } else {
+                    if ui.button(egui::RichText::new("Factory Reset ALL").size(16.0)).clicked() {
+                        self.confirm_factory_reset = true;
+                    }
+                }
+            });
         });
     }
 
@@ -978,6 +1222,49 @@ impl ApiHubApp {
                         }
                     });
             });
+
+            // ── PBP Sub-Display (mirror registers) ─────────────────
+            // Only shown when split mode is active (D7 != 1)
+            {
+                let split = ddc_cur(snap, "split_mode");
+                let has_mirror = ddc_has(snap, "mirror_brightness")
+                    || ddc_has(snap, "mirror_contrast")
+                    || ddc_has(snap, "mirror_color_preset");
+                if split != 1 && has_mirror {
+                    cols[0].add_space(8.0);
+                    cols[0].group(|ui| {
+                        ui.label(egui::RichText::new("PBP Sub-Display").strong().size(18.0));
+                        ui.add_space(4.0);
+                        egui::Grid::new("sys_pbp_mirror")
+                            .num_columns(2)
+                            .spacing([16.0, 8.0])
+                            .show(ui, |ui| {
+                                if ddc_has(snap, "mirror_brightness") {
+                                    ui.label(egui::RichText::new("Brightness").weak().size(16.0));
+                                    ui.label(egui::RichText::new(format!("{}", ddc_cur(snap, "mirror_brightness")))
+                                        .monospace().size(16.0));
+                                    ui.end_row();
+                                }
+                                if ddc_has(snap, "mirror_contrast") {
+                                    ui.label(egui::RichText::new("Contrast").weak().size(16.0));
+                                    ui.label(egui::RichText::new(format!("{}", ddc_cur(snap, "mirror_contrast")))
+                                        .monospace().size(16.0));
+                                    ui.end_row();
+                                }
+                                if ddc_has(snap, "mirror_color_preset") {
+                                    let cp = ddc_cur(snap, "mirror_color_preset");
+                                    ui.label(egui::RichText::new("Color Preset").weak().size(16.0));
+                                    let label = match cp {
+                                        5 => "6500K", 8 => "9300K", 0x0B => "User", _ => "Other",
+                                    };
+                                    ui.label(egui::RichText::new(format!("{} ({})", label, cp))
+                                        .monospace().size(16.0));
+                                    ui.end_row();
+                                }
+                            });
+                    });
+                }
+            }
 
             // ── RIGHT: Raw VCP dump (scrollable) ────────────────────
             cols[1].group(|ui| {

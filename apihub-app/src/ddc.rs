@@ -106,9 +106,10 @@ pub struct VcpInfo {
     pub name: &'static str,
 }
 
-/// HOT VCPs — the 3 values most likely to change externally (~210ms burst).
-/// Polled every cycle for near-realtime feedback.
+/// HOT VCPs — polled every cycle for near-realtime feedback.
+/// 0x02 (New Control Value) is read first: if 0, WARM VCPs are skipped that cycle.
 pub const HOT_VCPS: &[VcpInfo] = &[
+    VcpInfo { code: 0x02, name: "new_control_value" },
     VcpInfo { code: 0x10, name: "brightness" },
     VcpInfo { code: 0x62, name: "volume" },
     VcpInfo { code: 0xC1, name: "backlight_pwm" },
@@ -153,6 +154,14 @@ pub const COLD_VCPS: &[VcpInfo] = &[
     VcpInfo { code: 0xF8, name: "freesync" },
     VcpInfo { code: 0xFD, name: "power_led" },
     VcpInfo { code: 0xFE, name: "gamma" },
+];
+
+/// PBP mirror registers — read-only, only meaningful when split mode (0xD7) != 1.
+/// These expose the scaler's sub-display settings.
+pub const PBP_MIRROR_VCPS: &[VcpInfo] = &[
+    VcpInfo { code: 0xE8, name: "mirror_brightness" },
+    VcpInfo { code: 0xE9, name: "mirror_contrast" },
+    VcpInfo { code: 0xEA, name: "mirror_color_preset" },
 ];
 
 /// All 31 VCPs (for optimistic update lookup and diagnostics).
