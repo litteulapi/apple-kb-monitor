@@ -399,3 +399,59 @@ pub fn read_led_state() -> (bool, bool) {
 }
 
 use std::sync::{Arc, Mutex};
+
+// ── LED control via evdev ───────────────────────────────────────────────
+
+/// Find the Apple keyboard evdev path (e.g. /dev/input/event13)
+pub fn find_apple_evdev() -> Option<String> {
+    if let Ok(rd) = std::fs::read_dir("/sys/class/input") {
+        for entry in rd.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.starts_with("event") { continue; }
+            let name_path = entry.path().join("device/name");
+            if let Ok(dev_name) = std::fs::read_to_string(&name_path) {
+                if dev_name.trim().contains("Apple") && dev_name.trim().contains("Keyboard") {
+                    return Some(format!("/dev/input/{}", name));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Set a keyboard LED via evdev (EV_LED input_event).
+/// led: 0=NumLock, 1=CapsLock, 2=ScrollLock
+/// value: true=on, false=off
+pub fn set_led(led: u16, value: bool) {
+    if let Some(evdev) = find_apple_evdev() {
+        if let Ok(c_path) = std::ffi::CString::new(evdev.as_str()) {
+            let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_WRONLY) };
+            if fd >= 0 {
+                // struct input_event: tv_sec(8) + tv_usec(8) + type(2) + code(2) + value(4) = 24
+                let mut event = [0u8; 24];
+                // type = EV_LED = 0x11
+                event[16] = 0x11;
+                event[17] = 0x00;
+                // code = led
+                event[18] = led as u8;
+                event[19] = (led >> 8) as u8;
+                // value = 0 or 1
+                event[20] = if value { 1 } else { 0 };
+                unsafe { libc::write(fd, event.as_ptr() as *const libc::c_void, 24); }
+                unsafe { libc::close(fd); }
+            }
+        }
+    }
+}
+
+/// Flash CapsLock LED N times (for notifications).
+pub fn flash_capslock(times: u8) {
+    std::thread::spawn(move || {
+        for _ in 0..times {
+            set_led(1, true);
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            set_led(1, false);
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+    });
+}

@@ -268,6 +268,8 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
                         .body(&format!("Battery at {:.0}% — charge soon", pct))
                         .icon("battery-caution")
                         .show();
+                    // Flash CapsLock LED 5 times as visual alert
+                    keyboard::flash_capslock(5);
                 }
             }
 
