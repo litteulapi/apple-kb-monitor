@@ -105,6 +105,10 @@ pub struct KbBluetooth {
     pub rssi_dbus: Option<i32>,
     pub tx_power_dbus: Option<i32>,
     pub address_type: Option<String>,
+    pub conn_interval_ms: Option<f64>,
+    pub slave_latency: Option<u8>,
+    pub supervision_timeout_s: Option<f64>,
+    pub identity_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -118,6 +122,7 @@ pub struct KbRadio {
 pub struct KbFirmware {
     pub version: Option<String>,
     pub build: Option<u32>,
+    pub adc_ref: Option<u16>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -286,20 +291,43 @@ pub fn read_keyboard() -> Option<KbReport> {
         report.device.name = Some(name);
     }
 
-    // Connection params (0x46) — BT interval + latency
+    // Connection params (0x46) — byte[1]=interval, byte[2]=latency
     if let Some(buf) = hid_read_feature(fd.0, HID_CONNECTION_PARAMS) {
-        if buf.len() >= 5 {
+        if buf.len() >= 3 {
             report.bluetooth.connected = true;
+            let interval = buf[1] as f64 * 1.25; // × 1.25ms per BT spec
+            let latency = buf[2];
+            report.bluetooth.conn_interval_ms = Some(interval);
+            report.bluetooth.slave_latency = Some(latency);
         }
     }
 
-    // Device identity (0x4C) — MAC in LE order
+    // Supervision timeout (0x49) — LE u16 × 10ms
+    if let Some(buf) = hid_read_feature(fd.0, 0x49) {
+        if buf.len() >= 3 {
+            let timeout = ((buf[2] as u16) << 8) | buf[1] as u16; // LE
+            report.bluetooth.supervision_timeout_s = Some(timeout as f64 * 0.01);
+        }
+    }
+
+    // ADC reference (0xF4) — factory calibration constant
+    if let Some(buf) = hid_read_feature(fd.0, 0xF4) {
+        if buf.len() >= 3 {
+            report.firmware.adc_ref = Some(((buf[1] as u16) << 8) | buf[2] as u16);
+        }
+    }
+
+    // Device identity (0x4C) — MAC in LE order + identity key
     if let Some(buf) = hid_read_feature(fd.0, HID_DEVICE_IDENTITY) {
         if buf.len() >= 7 {
-            // BCM2042 stores MAC in little-endian in the identity report
             let mac = format!("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
                 buf[6], buf[5], buf[4], buf[3], buf[2], buf[1]);
             report.device.mac = Some(mac);
+            // Identity key (bytes 7+)
+            if buf.len() > 7 {
+                let key_hex: String = buf[7..].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(":");
+                report.bluetooth.identity_key = Some(key_hex);
+            }
         }
     }
 

@@ -784,6 +784,19 @@ impl ApiHubApp {
                             ui.label(egui::RichText::new("Paired").weak().size(16.0));
                             ui.label(egui::RichText::new(if kb.bluetooth.paired { "Yes" } else { "No" }).size(16.0));
                             ui.end_row();
+
+                            if let Some(interval) = kb.bluetooth.conn_interval_ms {
+                                let latency = kb.bluetooth.slave_latency.unwrap_or(0);
+                                let effective = interval * (latency as f64 + 1.0);
+                                ui.label(egui::RichText::new("BT Interval").weak().size(16.0));
+                                ui.label(egui::RichText::new(format!("{:.0}ms (lat={}, eff={:.0}ms)", interval, latency, effective)).size(16.0));
+                                ui.end_row();
+                            }
+                            if let Some(timeout) = kb.bluetooth.supervision_timeout_s {
+                                ui.label(egui::RichText::new("BT Timeout").weak().size(16.0));
+                                ui.label(egui::RichText::new(format!("{:.1}s", timeout)).size(16.0));
+                                ui.end_row();
+                            }
                         });
                     });
                 });
