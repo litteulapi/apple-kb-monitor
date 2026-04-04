@@ -56,8 +56,8 @@ pub const APPLE_PIDS: &[(&str, &str, &str)] = &[
 
 // ── ADC reference values ──────────────────────────────────────────────────
 
-/// ADC resolution (10-bit)
-pub const ADC_RESOLUTION: u32 = 1024;
+/// ADC max value (10-bit: 2^10 - 1 = 1023, not 1024)
+pub const ADC_MAX: u32 = 1023;
 /// ADC reference voltage (V)
 pub const ADC_VREF: f64 = 3.3;
 /// Default calibration curve [100%, 75%, 50%, 25%] in mV
@@ -235,7 +235,7 @@ pub fn read_keyboard() -> Option<KbReport> {
         if buf.len() >= 3 {
             let adc = ((buf[1] as u32) << 8) | buf[2] as u32;
             report.battery.adc_raw = Some(adc);
-            report.battery.voltage = Some(adc as f64 * ADC_VREF / ADC_RESOLUTION as f64);
+            report.battery.voltage = Some(adc as f64 * ADC_VREF / ADC_MAX as f64);
         }
     }
 

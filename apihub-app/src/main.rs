@@ -232,8 +232,8 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
 
             // Battery low notification + BlueZ provider update + history
             if let Some(ref k) = kb {
-                let pct = k.battery.percentage_interpolated
-                    .or(k.battery.percentage_fine)
+                let pct = k.battery.percentage_fine
+                    .or(k.battery.percentage_interpolated)
                     .or(k.battery.percentage)
                     .unwrap_or(100.0);
 
@@ -577,8 +577,8 @@ impl eframe::App for ApiHubApp {
             let snap_for_tray = self.state.lock().map(|s| s.clone()).ok();
             if let Some(ref snap) = snap_for_tray {
                 let pct = snap.keyboard.as_ref()
-                    .and_then(|kb| kb.battery.percentage_interpolated
-                        .or(kb.battery.percentage_fine)
+                    .and_then(|kb| kb.battery.percentage_fine
+                        .or(kb.battery.percentage_interpolated)
                         .or(kb.battery.percentage))
                     .unwrap_or(0.0);
                 let bri = snap.ddc.data.get("brightness")
@@ -693,8 +693,8 @@ impl ApiHubApp {
                 ui.label(egui::RichText::new("Waiting for keyboard data...").size(16.0));
             }
             Some(kb) => {
-                let pct = kb.battery.percentage_interpolated
-                    .or(kb.battery.percentage_fine)
+                let pct = kb.battery.percentage_fine
+                    .or(kb.battery.percentage_interpolated)
                     .or(kb.battery.percentage)
                     .unwrap_or(0.0);
 
@@ -2122,8 +2122,8 @@ impl ksni::Tray for AppTray {
         // ── Info section ──────────────────────────────────────
         if let Some(ref snap) = snap {
             if let Some(ref kb) = snap.keyboard {
-                let pct = kb.battery.percentage_interpolated
-                    .or(kb.battery.percentage_fine)
+                let pct = kb.battery.percentage_fine
+                    .or(kb.battery.percentage_interpolated)
                     .or(kb.battery.percentage)
                     .unwrap_or(0.0);
                 let voltage = kb.battery.voltage.unwrap_or(0.0);

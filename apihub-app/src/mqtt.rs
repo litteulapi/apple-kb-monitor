@@ -170,8 +170,8 @@ impl MqttBridge {
                 mac, dev_name, dev_name, fw
             );
 
-            let pct = kb.battery.percentage_interpolated
-                .or(kb.battery.percentage_fine)
+            let pct = kb.battery.percentage_fine
+                .or(kb.battery.percentage_interpolated)
                 .or(kb.battery.percentage);
 
             let sensors: Vec<(&str, Option<String>, &str, &str, Option<&str>)> = vec![
