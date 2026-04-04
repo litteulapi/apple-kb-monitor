@@ -227,8 +227,12 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
         let mut ddc_fail_notified = false;
 
         loop {
-            // ── Keyboard: direct HID ioctl (~5ms) ──────────────────
-            let mut kb = keyboard::read_keyboard();
+            // ── Keyboard: direct HID ioctl — every 2nd cycle (~10s) ──
+            let mut kb = if cycle % 2 == 0 {
+                keyboard::read_keyboard()
+            } else {
+                state.lock().ok().and_then(|s| s.keyboard.clone())
+            };
             let mut mac_for_rssi: Option<String> = None;
 
             // Battery low notification + BlueZ provider update + history
@@ -303,36 +307,37 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
                 }
             }
 
-            // ── HOT: new_control_value + brightness + volume + backlight ──
-            // Every cycle. 0x02 is first — if its value is 0, skip WARM VCPs.
-            let hot = ddc::read_batch(&bus, ddc::HOT_VCPS);
-            if hot.is_empty() {
-                ddc_fail_streak += 1;
-                if ddc_fail_streak >= 5 && !ddc_fail_notified {
-                    ddc_fail_notified = true;
-                    let _ = notify_rust::Notification::new()
-                        .summary("DDC/CI Communication Failure")
-                        .body("5 consecutive DDC read failures — check I2C bus")
-                        .icon("dialog-error")
-                        .show();
-                }
-            } else {
-                ddc_fail_streak = 0;
-            }
-            let new_control_value = hot.iter()
-                .find(|(name, _, _)| *name == "new_control_value")
-                .map(|(_, cur, _)| *cur)
-                .unwrap_or(1); // default to 1 (assume changed) if read failed
-            apply_burst(&state, &hot);
+            // ── SMART POLL: read VCP 0x02 first (single read, ~50ms) ──
+            // If 0 = nothing changed → skip ALL DDC reads this cycle
+            let ncv = ddc::ddc_read_vcp(&bus, 0x02)
+                .map(|(cur, _)| cur).unwrap_or(1);
 
-            // ── WARM: contrast, RGB, sharpness (~420ms) ────────────
-            // Every 4th cycle (~3s) — BUT skip if VCP 0x02 reports no change
-            if cycle % 4 == 0 && new_control_value != 0 {
+            if ncv != 0 || cycle % 6 == 0 {
+                // Something changed (or periodic forced read)
+                // Read HOT VCPs only (brightness, volume, backlight)
+                let hot = ddc::read_batch(&bus, ddc::HOT_VCPS);
+                if hot.is_empty() {
+                    ddc_fail_streak += 1;
+                    if ddc_fail_streak >= 5 && !ddc_fail_notified {
+                        ddc_fail_notified = true;
+                        let _ = notify_rust::Notification::new()
+                            .summary("DDC/CI Communication Failure")
+                            .body("5 consecutive DDC read failures — check I2C bus")
+                            .icon("dialog-error")
+                            .show();
+                    }
+                } else {
+                    ddc_fail_streak = 0;
+                }
+                apply_burst(&state, &hot);
+            }
+
+            // ── WARM: every 6th cycle (~30s) ───────────────────────
+            if cycle % 6 == 0 {
                 apply_burst(&state, &ddc::read_batch(&bus, ddc::WARM_VCPS));
             }
 
-            // ── COLD: all settings/info (~1.5s) ────────────────────
-            // Every 30th cycle (~22s)
+            // ── COLD: every 30th cycle (~2.5min) ───────────────────
             if cycle % 30 == 0 {
                 apply_burst(&state, &ddc::read_batch(&bus, ddc::COLD_VCPS));
             }
@@ -378,7 +383,7 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
             cycle = cycle.wrapping_add(1);
 
             // HOT cycle: ~210ms I2C + 500ms wait = ~710ms per cycle
-            thread::sleep(Duration::from_millis(500));
+            thread::sleep(Duration::from_secs(5));
         }
     });
 }
@@ -2287,11 +2292,13 @@ impl ksni::Tray for AppTray {
 }
 
 fn main() -> eframe::Result<()> {
-    // ── Create shared state early (needed by tray) ───────────────────
+    let gui_now = std::env::args().any(|a| a == "--gui");
+
+    // ── Create shared state ──────────────────────────────────────────
     let tray_state: State = Arc::new(Mutex::new(SharedState::default()));
     let i2c_bus = ddc::default_bus();
 
-    // ── Spawn ksni system tray (StatusNotifierItem via D-Bus) ─────────
+    // ── Spawn ksni system tray ───────────────────────────────────────
     let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("ApiHub \u{2014} starting...".into()));
     let show_window = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let tray = AppTray {
@@ -2302,19 +2309,68 @@ fn main() -> eframe::Result<()> {
     };
     ksni::TrayService::new(tray).spawn();
 
-    // ── Launch eframe ─────────────────────────────────────────────────
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("ApiHub \u{2014} Monitor + Keyboard")
-            .with_inner_size([720.0, 600.0])
-            .with_min_inner_size([500.0, 400.0])
-            .with_visible(false), // start hidden — tray icon is the primary interface
-        vsync: true,
-        ..Default::default()
-    };
-    eframe::run_native(
-        "apihub",
-        options,
-        Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, tray_tooltip, tray_state, show_window)))),
-    )
+    if gui_now {
+        // ── GUI mode (--gui): open window immediately ────────────────
+        let options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_title("ApiHub \u{2014} Monitor + Keyboard")
+                .with_inner_size([720.0, 600.0])
+                .with_min_inner_size([500.0, 400.0]),
+            vsync: true,
+            ..Default::default()
+        };
+        eframe::run_native(
+            "apihub",
+            options,
+            Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, tray_tooltip, tray_state, show_window)))),
+        )
+    } else {
+        // ── Daemon mode: tray only, no GPU, <1% CPU ──────────────────
+        // Start polling + services here (not in ApiHubApp::new)
+        let app_presets = load_app_presets();
+        let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets)));
+        spawn_poll_thread(Arc::clone(&tray_state), shared_presets);
+
+        let mqtt = MqttConfig::default();
+        if !mqtt.broker.is_empty() {
+            let cfg = mqtt::MqttCfg {
+                broker: mqtt.broker, port: mqtt.port.parse().unwrap_or(1883),
+                user: mqtt.user, pass: mqtt.pass,
+                topic_prefix: "homeassistant".into(), monitor_model: "lg_34gn850".into(),
+                bri_min: mqtt.bri_min as u16, bri_max: mqtt.bri_max as u16,
+                bus: i2c_bus,
+            };
+            eprintln!("[mqtt] auto-start: {}:{}", cfg.broker, cfg.port);
+            let _bridge = mqtt::MqttBridge::start(cfg);
+            // Keep _bridge alive by leaking it (daemon runs forever)
+            std::mem::forget(_bridge);
+        }
+
+        eprintln!("[daemon] tray-only mode (<1% CPU) — click tray 'Show Window' to open GUI");
+
+        // Update tray tooltip periodically from SharedState
+        loop {
+            std::thread::sleep(Duration::from_secs(2));
+
+            // Update tray tooltip
+            if let Ok(snap) = tray_state.lock() {
+                let pct = snap.keyboard.as_ref()
+                    .and_then(|kb| kb.battery.percentage_fine
+                        .or(kb.battery.percentage))
+                    .unwrap_or(0.0);
+                let bri = snap.ddc.data.get("brightness").map(|v| v.0).unwrap_or(0);
+                let text = format!("ApiHub \u{2014} Battery: {:.0}% \u{2014} Brightness: {}%", pct, bri);
+                if let Ok(mut tt) = tray_tooltip.lock() {
+                    *tt = text;
+                }
+            }
+
+            // Show Window requested → spawn GUI subprocess
+            if show_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
+                eprintln!("[daemon] opening GUI window...");
+                let exe = std::env::current_exe().unwrap_or_else(|_| "apihub-app".into());
+                let _ = Command::new(exe).arg("--gui").spawn();
+            }
+        }
+    }
 }
