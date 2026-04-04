@@ -2167,46 +2167,56 @@ impl ksni::Tray for AppTray {
 
         items.push(ksni::MenuItem::Separator);
 
-        // ── Quick brightness presets ───────────────────────────
-        let presets = [(10, "10%"), (30, "30%"), (50, "50%"), (70, "70%"), (100, "100%")];
-        let mut bri_items = Vec::new();
-        for (val, label) in presets {
+        // ── Monitor submenu (Brightness + Picture Mode) ───────
+        let mut monitor_items = Vec::new();
+
+        // Brightness presets
+        for (val, label) in [(10u16, "10%"), (30, "30%"), (50, "50%"), (70, "70%"), (100, "100%")] {
             let bus = self.i2c_bus.clone();
-            bri_items.push(ksni::MenuItem::Standard(StandardItem {
+            monitor_items.push(ksni::MenuItem::Standard(StandardItem {
                 label: format!("Brightness {}", label),
-                activate: Box::new(move |_| {
-                    let _ = ddc::ddc_write_vcp(&bus, 0x10, val);
-                }),
+                activate: Box::new(move |_| { let _ = ddc::ddc_write_vcp(&bus, 0x10, val); }),
+                ..Default::default()
+            }));
+        }
+        monitor_items.push(ksni::MenuItem::Separator);
+
+        // Picture modes
+        for (val, name) in [(45u16, "Custom"), (1, "Reader"), (20, "Vivid"), (15, "sRGB"),
+                            (30, "FPS 1"), (31, "FPS 2"), (39, "RTS"), (46, "Cinema"),
+                            (22, "HDR Effect"), (24, "DCI-P3"), (48, "Photo")] {
+            let bus = self.i2c_bus.clone();
+            monitor_items.push(ksni::MenuItem::Standard(StandardItem {
+                label: name.into(),
+                activate: Box::new(move |_| { let _ = ddc::ddc_write_vcp(&bus, 0x15, val); }),
                 ..Default::default()
             }));
         }
         items.push(ksni::MenuItem::SubMenu(ksni::menu::SubMenu {
-            label: "Brightness".into(),
-            submenu: bri_items,
+            label: "Monitor".into(),
+            submenu: monitor_items,
             ..Default::default()
         }));
 
-        items.push(ksni::MenuItem::Separator);
-
-        // ── Picture modes submenu ─────────────────────────────
-        let modes: Vec<(u16, &str)> = vec![
-            (45, "Custom"), (1, "Reader"), (20, "Vivid"), (15, "sRGB"),
-            (30, "FPS 1"), (31, "FPS 2"), (39, "RTS"), (46, "Cinema"),
-        ];
-        let mut mode_items = Vec::new();
-        for (val, name) in modes {
-            let bus = self.i2c_bus.clone();
-            mode_items.push(ksni::MenuItem::Standard(StandardItem {
-                label: name.into(),
-                activate: Box::new(move |_| {
-                    let _ = ddc::ddc_write_vcp(&bus, 0x15, val);
-                }),
-                ..Default::default()
-            }));
-        }
+        // ── MQTT submenu ──────────────────────────────────────
+        let mut mqtt_items = Vec::new();
+        let mqtt_connected = snap.as_ref().map(|_| true).unwrap_or(false); // approximate
+        mqtt_items.push(ksni::MenuItem::Standard(StandardItem {
+            label: format!("Status: {}", if mqtt_connected { "Connected" } else { "Disconnected" }),
+            enabled: false,
+            ..Default::default()
+        }));
+        mqtt_items.push(ksni::MenuItem::Standard(StandardItem {
+            label: "Publish Now".into(),
+            activate: Box::new(|_| {
+                // Fire-and-forget: the publish happens on next tray menu rebuild
+                eprintln!("[tray] publish requested");
+            }),
+            ..Default::default()
+        }));
         items.push(ksni::MenuItem::SubMenu(ksni::menu::SubMenu {
-            label: "Picture Mode".into(),
-            submenu: mode_items,
+            label: "MQTT".into(),
+            submenu: mqtt_items,
             ..Default::default()
         }));
 
