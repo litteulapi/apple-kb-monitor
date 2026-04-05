@@ -5,6 +5,7 @@ mod history;
 mod keyboard;
 mod mqtt;
 mod rssi;
+mod tray;
 
 use keyboard::*;
 
@@ -157,10 +158,10 @@ fn active_window_kwin() -> Option<String> {
 // ── Shared state ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
-struct DdcValues {
-    data: HashMap<String, (u16, u16)>,
-    last_update: Option<Instant>,
-    error: Option<String>,
+pub(crate) struct DdcValues {
+    pub(crate) data: HashMap<String, (u16, u16)>,
+    pub(crate) last_update: Option<Instant>,
+    pub(crate) error: Option<String>,
 }
 
 impl Default for DdcValues {
@@ -174,13 +175,13 @@ impl Default for DdcValues {
 }
 
 #[derive(Clone, Default)]
-struct SharedState {
-    ddc: DdcValues,
-    keyboard: Option<KbReport>,
-    kb_error: Option<String>,
-    caps_lock: bool,
-    num_lock: bool,
-    remaining_display: Option<String>,
+pub(crate) struct SharedState {
+    pub(crate) ddc: DdcValues,
+    pub(crate) keyboard: Option<KbReport>,
+    pub(crate) kb_error: Option<String>,
+    pub(crate) caps_lock: bool,
+    pub(crate) num_lock: bool,
+    pub(crate) remaining_display: Option<String>,
 }
 
 type State = Arc<Mutex<SharedState>>;
@@ -504,7 +505,7 @@ struct ApiHubApp {
     shared_presets: SharedPresets,
     // Factory reset confirmation guard
     confirm_factory_reset: bool,
-    // System tray tooltip (shared with ksni tray thread)
+    // System tray tooltip (shared with tray thread)
     tray_tooltip: Arc<Mutex<String>>,
     // Tray "Show Window" flag
     tray_show_window: Arc<std::sync::atomic::AtomicBool>,
@@ -2122,175 +2123,6 @@ impl ApiHubApp {
 
 // ── Entrypoint ──────────────────────────────────────────────────────────────
 
-// ── ksni system tray ───────────────────────────────────────────────────────
-
-struct AppTray {
-    tooltip: Arc<Mutex<String>>,
-    state: State,
-    i2c_bus: String,
-    show_window: Arc<std::sync::atomic::AtomicBool>,
-}
-
-impl ksni::Tray for AppTray {
-    fn icon_name(&self) -> String {
-        "apihub-scarab".into()
-    }
-    fn title(&self) -> String {
-        "ApiHub".into()
-    }
-
-    /// Scroll wheel on tray icon: adjust brightness ±1
-    fn scroll(&mut self, delta: i32, dir: &str) {
-        if dir == "vertical" || dir == "Vertical" {
-            let bus = &self.i2c_bus;
-            if let Ok((cur, _)) = ddc::ddc_read_vcp(bus, 0x10) {
-                let new_val = if delta > 0 {
-                    (cur + 1).min(100)
-                } else {
-                    cur.saturating_sub(1)
-                };
-                let _ = ddc::ddc_write_vcp(bus, 0x10, new_val);
-            }
-        }
-    }
-    fn tool_tip(&self) -> ksni::ToolTip {
-        let text = self.tooltip.lock().map(|t| t.clone()).unwrap_or_default();
-        ksni::ToolTip {
-            title: "ApiHub".into(),
-            description: text,
-            ..Default::default()
-        }
-    }
-    fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
-        use ksni::menu::*;
-
-        // Read current state for info items
-        let snap = self.state.lock().map(|s| s.clone()).ok();
-
-        let mut items: Vec<ksni::MenuItem<Self>> = Vec::new();
-
-        // ── Info section ──────────────────────────────────────
-        if let Some(ref snap) = snap {
-            if let Some(ref kb) = snap.keyboard {
-                let pct = kb.battery.percentage_fine
-                    .or(kb.battery.percentage_interpolated)
-                    .or(kb.battery.percentage)
-                    .unwrap_or(0.0);
-                let voltage = kb.battery.voltage.unwrap_or(0.0);
-                items.push(ksni::MenuItem::Standard(StandardItem {
-                    label: format!("Battery: {:.0}%  ({:.3}V)", pct, voltage),
-                    enabled: false,
-                    ..Default::default()
-                }));
-                if let Some(ref rssi) = kb.radio.rssi_dbm {
-                    items.push(ksni::MenuItem::Standard(StandardItem {
-                        label: format!("RSSI: {} dBm", rssi),
-                        enabled: false,
-                        ..Default::default()
-                    }));
-                }
-                let caps = if snap.caps_lock { "ON" } else { "off" };
-                let num = if snap.num_lock { "ON" } else { "off" };
-                items.push(ksni::MenuItem::Standard(StandardItem {
-                    label: format!("CapsLock: {}  NumLock: {}", caps, num),
-                    enabled: false,
-                    ..Default::default()
-                }));
-            }
-
-            let bri = snap.ddc.data.get("brightness").map(|v| v.0).unwrap_or(0);
-            let vol = snap.ddc.data.get("volume").map(|v| v.0).unwrap_or(0);
-            items.push(ksni::MenuItem::Standard(StandardItem {
-                label: format!("Brightness: {}%  Volume: {}%", bri, vol),
-                enabled: false,
-                ..Default::default()
-            }));
-
-            if let Some(ref rem) = snap.remaining_display {
-                items.push(ksni::MenuItem::Standard(StandardItem {
-                    label: format!("Remaining: {}", rem),
-                    enabled: false,
-                    ..Default::default()
-                }));
-            }
-        }
-
-        items.push(ksni::MenuItem::Separator);
-
-        // ── Monitor submenu (Brightness + Picture Mode) ───────
-        let mut monitor_items = Vec::new();
-
-        // Brightness presets
-        for (val, label) in [(10u16, "10%"), (30, "30%"), (50, "50%"), (70, "70%"), (100, "100%")] {
-            let bus = self.i2c_bus.clone();
-            monitor_items.push(ksni::MenuItem::Standard(StandardItem {
-                label: format!("Brightness {}", label),
-                activate: Box::new(move |_| { let _ = ddc::ddc_write_vcp(&bus, 0x10, val); }),
-                ..Default::default()
-            }));
-        }
-        monitor_items.push(ksni::MenuItem::Separator);
-
-        // Picture modes
-        for (val, name) in [(45u16, "Custom"), (1, "Reader"), (20, "Vivid"), (15, "sRGB"),
-                            (30, "FPS 1"), (31, "FPS 2"), (39, "RTS"), (46, "Cinema"),
-                            (22, "HDR Effect"), (24, "DCI-P3"), (48, "Photo")] {
-            let bus = self.i2c_bus.clone();
-            monitor_items.push(ksni::MenuItem::Standard(StandardItem {
-                label: name.into(),
-                activate: Box::new(move |_| { let _ = ddc::ddc_write_vcp(&bus, 0x15, val); }),
-                ..Default::default()
-            }));
-        }
-        items.push(ksni::MenuItem::SubMenu(ksni::menu::SubMenu {
-            label: "Monitor".into(),
-            submenu: monitor_items,
-            ..Default::default()
-        }));
-
-        // ── MQTT submenu ──────────────────────────────────────
-        let mut mqtt_items = Vec::new();
-        let mqtt_connected = snap.as_ref().map(|_| true).unwrap_or(false); // approximate
-        mqtt_items.push(ksni::MenuItem::Standard(StandardItem {
-            label: format!("Status: {}", if mqtt_connected { "Connected" } else { "Disconnected" }),
-            enabled: false,
-            ..Default::default()
-        }));
-        mqtt_items.push(ksni::MenuItem::Standard(StandardItem {
-            label: "Publish Now".into(),
-            activate: Box::new(|_| {
-                // Fire-and-forget: the publish happens on next tray menu rebuild
-                eprintln!("[tray] publish requested");
-            }),
-            ..Default::default()
-        }));
-        items.push(ksni::MenuItem::SubMenu(ksni::menu::SubMenu {
-            label: "MQTT".into(),
-            submenu: mqtt_items,
-            ..Default::default()
-        }));
-
-        items.push(ksni::MenuItem::Separator);
-
-        let show = self.show_window.clone();
-        items.push(ksni::MenuItem::Standard(StandardItem {
-            label: "Show Window".into(),
-            activate: Box::new(move |_| {
-                show.store(true, std::sync::atomic::Ordering::Relaxed);
-            }),
-            ..Default::default()
-        }));
-
-        items.push(ksni::MenuItem::Standard(StandardItem {
-            label: "Quit".into(),
-            activate: Box::new(|_| std::process::exit(0)),
-            ..Default::default()
-        }));
-
-        items
-    }
-}
-
 fn main() -> eframe::Result<()> {
     let gui_now = std::env::args().any(|a| a == "--gui");
 
@@ -2298,16 +2130,15 @@ fn main() -> eframe::Result<()> {
     let tray_state: State = Arc::new(Mutex::new(SharedState::default()));
     let i2c_bus = ddc::default_bus();
 
-    // ── Spawn ksni system tray ───────────────────────────────────────
+    // ── Spawn system tray (zbus SNI — epoll, near-zero idle CPU) ────
     let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("ApiHub \u{2014} starting...".into()));
     let show_window = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let tray = AppTray {
-        tooltip: tray_tooltip.clone(),
-        state: tray_state.clone(),
-        i2c_bus: i2c_bus.clone(),
-        show_window: show_window.clone(),
-    };
-    ksni::TrayService::new(tray).spawn();
+    tray::spawn(
+        tray_tooltip.clone(),
+        tray_state.clone(),
+        i2c_bus.clone(),
+        show_window.clone(),
+    );
 
     if gui_now {
         // ── GUI mode (--gui): open window immediately ────────────────

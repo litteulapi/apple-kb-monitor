@@ -7,7 +7,6 @@ description = "DDC/CI monitor control + Apple keyboard telemetry — single bina
 [dependencies]
 dirs = "5"
 eframe = "0.29"
-ksni = "0.2"
 libc = "0.2"
 notify-rust = "4"
 rumqttc = "0.24"
