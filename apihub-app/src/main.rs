@@ -652,6 +652,12 @@ impl eframe::App for ApiHubApp {
                     font_id.size = 16.0;
                 }
             }
+            style.visuals.window_rounding = egui::Rounding::same(8.0);
+            style.visuals.widgets.noninteractive.rounding = egui::Rounding::same(4.0);
+            style.visuals.widgets.inactive.rounding = egui::Rounding::same(4.0);
+            style.visuals.widgets.hovered.rounding = egui::Rounding::same(4.0);
+            style.visuals.widgets.active.rounding = egui::Rounding::same(4.0);
+            style.spacing.item_spacing = egui::Vec2::new(8.0, 6.0);
             ctx.set_style(style);
             self.style_initialized = true;
         }
@@ -705,6 +711,25 @@ fn ddc_has(snap: &SharedState, name: &str) -> bool {
     snap.ddc.data.contains_key(name)
 }
 
+// ── VCP label mapping ──────────────────────────────────────────────────────
+
+fn vcp_label(name: &str) -> &str {
+    match name {
+        "brightness" => "Brightness",
+        "contrast" => "Contrast",
+        "sharpness" => "Sharpness",
+        "black_stabilizer" => "Black Stabilizer",
+        "volume" => "Volume",
+        "red_gain" => "Red",
+        "green_gain" => "Green",
+        "blue_gain" => "Blue",
+        "black_level_red" => "Red",
+        "black_level_green" => "Green",
+        "black_level_blue" => "Blue",
+        other => other,
+    }
+}
+
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
 impl ApiHubApp {
@@ -738,6 +763,11 @@ impl ApiHubApp {
                             };
                             ui.colored_label(color,
                                 egui::RichText::new(format!("{:.0}%", pct)).size(28.0).strong());
+                            // Battery type subtitle under hero percentage
+                            if let Some(v) = kb.battery.voltage {
+                                ui.label(egui::RichText::new(keyboard::detect_battery_type(v))
+                                    .weak().size(16.0));
+                            }
                             ui.add(egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0) as f32)
                                 .text(format!("{:.1}%", pct)));
                         });
@@ -745,10 +775,15 @@ impl ApiHubApp {
                         egui::Grid::new("bat_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(v) = kb.battery.voltage {
                                 ui.label(egui::RichText::new("Voltage").weak().size(16.0));
-                                ui.label(egui::RichText::new(format!("{:.3} V", v)).strong().size(18.0));
-                                ui.end_row();
-                                ui.label(egui::RichText::new("Type").weak().size(16.0));
-                                ui.label(egui::RichText::new(keyboard::detect_battery_type(v)).size(16.0));
+                                // Colored voltage indicator
+                                let v_color = if v > 2.8 {
+                                    egui::Color32::from_rgb(80, 220, 100)
+                                } else if v > 2.4 {
+                                    egui::Color32::from_rgb(255, 200, 50)
+                                } else {
+                                    egui::Color32::from_rgb(255, 70, 70)
+                                };
+                                ui.label(egui::RichText::new(format!("{:.3} V", v)).strong().size(18.0).color(v_color));
                                 ui.end_row();
                             }
                             if let Some(adc) = kb.battery.adc_raw {
@@ -788,7 +823,22 @@ impl ApiHubApp {
                                 } else {
                                     egui::Color32::from_rgb(255, 70, 70)
                                 };
-                                ui.colored_label(color, egui::RichText::new(format!("{} dBm", r)).strong().size(18.0));
+                                // Signal bars based on RSSI strength
+                                let bars = if r > -50 {
+                                    "\u{2582}\u{2584}\u{2586}\u{2588}"
+                                } else if r > -60 {
+                                    "\u{2582}\u{2584}\u{2586}\u{2581}"
+                                } else if r > -70 {
+                                    "\u{2582}\u{2584}\u{2581}\u{2581}"
+                                } else if r > -80 {
+                                    "\u{2582}\u{2581}\u{2581}\u{2581}"
+                                } else {
+                                    "\u{2581}\u{2581}\u{2581}\u{2581}"
+                                };
+                                ui.horizontal(|ui| {
+                                    ui.colored_label(color, egui::RichText::new(format!("{} dBm", r)).strong().size(18.0));
+                                    ui.colored_label(color, egui::RichText::new(bars).size(18.0));
+                                });
                                 ui.end_row();
                             }
                             if let Some(tx) = kb.radio.tx_power_dbm.or(kb.bluetooth.tx_power_dbus) {
@@ -809,14 +859,17 @@ impl ApiHubApp {
                             ui.label(egui::RichText::new(if kb.bluetooth.paired { "Yes" } else { "No" }).size(16.0));
                             ui.end_row();
 
+                            // Compact BT Interval/Timeout on one row
                             if let Some(interval) = kb.bluetooth.conn_interval_ms {
                                 let latency = kb.bluetooth.slave_latency.unwrap_or(0);
                                 let effective = interval * (latency as f64 + 1.0);
-                                ui.label(egui::RichText::new("BT Interval").weak().size(16.0));
-                                ui.label(egui::RichText::new(format!("{:.0}ms (lat={}, eff={:.0}ms)", interval, latency, effective)).size(16.0));
+                                let timeout_str = kb.bluetooth.supervision_timeout_s
+                                    .map(|t| format!(" | T/O {:.1}s", t))
+                                    .unwrap_or_default();
+                                ui.label(egui::RichText::new("BT Link").weak().size(16.0));
+                                ui.label(egui::RichText::new(format!("{:.0}ms eff={:.0}ms{}", interval, effective, timeout_str)).size(16.0));
                                 ui.end_row();
-                            }
-                            if let Some(timeout) = kb.bluetooth.supervision_timeout_s {
+                            } else if let Some(timeout) = kb.bluetooth.supervision_timeout_s {
                                 ui.label(egui::RichText::new("BT Timeout").weak().size(16.0));
                                 ui.label(egui::RichText::new(format!("{:.1}s", timeout)).size(16.0));
                                 ui.end_row();
@@ -1063,16 +1116,16 @@ impl ApiHubApp {
     }
 
     fn tab_display(&mut self, ui: &mut egui::Ui, snap: &SharedState) {
-        // Monitor identity header
+        // Monitor identity header — model name prominent, details smaller
         let mi = &self.monitor_info;
         if !mi.name.is_empty() {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(format!("{} {}", mi.manufacturer, mi.name)).strong().size(18.0));
-                ui.label(egui::RichText::new(format!("  {}  {}  {}", mi.connector, mi.adapter, mi.serial))
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new(format!("{} {}", mi.manufacturer, mi.name)).strong().size(28.0));
+                ui.label(egui::RichText::new(format!("{}  \u{2022}  {}  \u{2022}  {}", mi.connector, mi.adapter, mi.serial))
                     .weak().size(16.0));
             });
         } else {
-            ui.label(egui::RichText::new("Display Controls").strong().size(18.0));
+            ui.label(egui::RichText::new("Display Controls").strong().size(28.0));
         }
         ui.separator();
 
@@ -1080,10 +1133,14 @@ impl ApiHubApp {
             ui.label(egui::RichText::new(err.as_str()).size(16.0).color(egui::Color32::from_rgb(255, 100, 100)));
         }
 
+        let color_red = egui::Color32::from_rgb(255, 90, 90);
+        let color_green = egui::Color32::from_rgb(80, 220, 100);
+        let color_blue = egui::Color32::from_rgb(100, 160, 255);
+
         egui::ScrollArea::vertical().show(ui, |ui| {
             // ── Continuous sliders ──────────────────────────────────────
             ui.group(|ui| {
-                ui.label(egui::RichText::new("Image").strong().size(18.0));
+                ui.label(egui::RichText::new("\u{1F5A5} Image").strong().size(18.0));
                 self.vcp_slider(ui, snap, "brightness", 0x10);
                 self.vcp_slider(ui, snap, "contrast", 0x12);
                 self.vcp_slider(ui, snap, "sharpness", 0x87);
@@ -1093,33 +1150,33 @@ impl ApiHubApp {
             ui.add_space(10.0);
 
             ui.group(|ui| {
-                ui.label(egui::RichText::new("Audio").strong().size(18.0));
+                ui.label(egui::RichText::new("\u{1F50A} Audio").strong().size(18.0));
                 self.vcp_slider(ui, snap, "volume", 0x62);
             });
 
             ui.add_space(10.0);
 
             ui.group(|ui| {
-                ui.label(egui::RichText::new("RGB Gain").strong().size(18.0));
-                self.vcp_slider(ui, snap, "red_gain", 0x16);
-                self.vcp_slider(ui, snap, "green_gain", 0x18);
-                self.vcp_slider(ui, snap, "blue_gain", 0x1A);
+                ui.label(egui::RichText::new("\u{1F3A8} RGB Gain").strong().size(18.0));
+                self.vcp_slider_colored(ui, snap, "red_gain", 0x16, Some(color_red));
+                self.vcp_slider_colored(ui, snap, "green_gain", 0x18, Some(color_green));
+                self.vcp_slider_colored(ui, snap, "blue_gain", 0x1A, Some(color_blue));
             });
 
             ui.add_space(10.0);
 
             ui.group(|ui| {
-                ui.label(egui::RichText::new("Video Black Level").strong().size(18.0));
-                self.vcp_slider(ui, snap, "black_level_red", 0x6C);
-                self.vcp_slider(ui, snap, "black_level_green", 0x6E);
-                self.vcp_slider(ui, snap, "black_level_blue", 0x70);
+                ui.label(egui::RichText::new("\u{2B1B} Video Black Level").strong().size(18.0));
+                self.vcp_slider_colored(ui, snap, "black_level_red", 0x6C, Some(color_red));
+                self.vcp_slider_colored(ui, snap, "black_level_green", 0x6E, Some(color_green));
+                self.vcp_slider_colored(ui, snap, "black_level_blue", 0x70, Some(color_blue));
             });
 
             ui.add_space(10.0);
 
             // ── Picture mode ────────────────────────────────────────────
             ui.group(|ui| {
-                ui.label(egui::RichText::new("Picture Mode").strong().size(18.0));
+                ui.label(egui::RichText::new("\u{1F5BC} Picture Mode").strong().size(18.0));
                 ui.horizontal_wrapped(|ui| {
                     // Real LG 34GN850 picture mode values (brute-force verified)
                     let modes: [(u16, &str); 14] = [
@@ -1151,7 +1208,7 @@ impl ApiHubApp {
 
             // ── Input source ────────────────────────────────────────────
             ui.group(|ui| {
-                ui.label(egui::RichText::new("Input Source").strong().size(18.0));
+                ui.label(egui::RichText::new("\u{1F50C} Input Source").strong().size(18.0));
                 ui.horizontal_wrapped(|ui| {
                     let inputs = [
                         (0x0F, "DisplayPort"),
@@ -1382,37 +1439,37 @@ impl ApiHubApp {
 
         egui::ScrollArea::vertical().show(ui, |ui| {
             // Response Time — brute-force verified: 0-3 accepted, 4 rejected
-            self.button_group(ui, snap, "Response Time", "response_time", 0xF7, &[
+            self.button_group(ui, snap, "\u{23F1} Response Time", "response_time", 0xF7, &[
                 (0, "Off"), (1, "Fast"), (2, "Normal"), (3, "Slow"),
             ]);
 
             // FreeSync — 0/1/2 verified (write causes I2C bus reset, normal)
-            self.button_group(ui, snap, "FreeSync", "freesync", 0xF8, &[
+            self.button_group(ui, snap, "\u{1F504} FreeSync", "freesync", 0xF8, &[
                 (0, "Off"), (1, "Basic"), (2, "Extended"),
             ]);
 
             // Gamma via MCCS VCP 0x72 — only 3 values accepted (1.8 rejected)
-            self.button_group(ui, snap, "Gamma", "gamma_curve", 0x72, &[
+            self.button_group(ui, snap, "\u{1F313} Gamma", "gamma_curve", 0x72, &[
                 (0x6400, "2.0"), (0x7800, "2.2"), (0x8C00, "2.4"),
             ]);
 
             // Smart Energy — only 0 and 2 accepted (1 rejected)
-            self.button_group(ui, snap, "Smart Energy Saving", "smart_energy", 0xF6, &[
+            self.button_group(ui, snap, "\u{26A1} Smart Energy Saving", "smart_energy", 0xF6, &[
                 (0, "Off"), (2, "High"),
             ]);
 
             // Aspect Ratio — only 1 accepted on current setup (resolution-dependent)
-            self.readonly_group(ui, snap, "Aspect Ratio", "aspect_ratio", &[
+            self.readonly_group(ui, snap, "\u{1F4D0} Aspect Ratio", "aspect_ratio", &[
                 (0, "Full Wide"), (1, "Original"), (2, "Just Scan"),
             ]);
 
             // Audio Mute
-            self.button_group(ui, snap, "Audio Mute", "audio_mute", 0x8D, &[
+            self.button_group(ui, snap, "\u{1F507} Audio Mute", "audio_mute", 0x8D, &[
                 (1, "Muted"), (2, "Unmuted"),
             ]);
 
             // Language — 16 values (0-15), brute-force verified
-            self.button_group(ui, snap, "OSD Language", "language", 0xCC, &[
+            self.button_group(ui, snap, "\u{1F310} OSD Language", "language", 0xCC, &[
                 (0, "EN"), (1, "FR"), (2, "DE"), (3, "ES"),
                 (4, "IT"), (5, "KO"), (6, "ZH"), (7, "JA"),
                 (8, "PT"), (9, "RU"), (10, "ZH-T"), (11, "PL"),
@@ -1420,15 +1477,15 @@ impl ApiHubApp {
             ]);
 
             // Read-only VCPs (type=TABLE, DDC writes ignored)
-            self.readonly_group(ui, snap, "Power LED", "power_led", &[
+            self.readonly_group(ui, snap, "\u{1F4A1} Power LED", "power_led", &[
                 (0, "Off"), (1, "On"),
             ]);
 
-            self.readonly_group(ui, snap, "Split / PBP", "split_mode", &[
+            self.readonly_group(ui, snap, "\u{1F5A5} Split / PBP", "split_mode", &[
                 (0, "Off"), (1, "PBP"),
             ]);
 
-            self.readonly_group(ui, snap, "OSD Lock", "osd_lock", &[
+            self.readonly_group(ui, snap, "\u{1F512} OSD Lock", "osd_lock", &[
                 (2, "Unlocked"), (1, "Locked"),
             ]);
 
@@ -1436,7 +1493,7 @@ impl ApiHubApp {
 
             // ── Maintenance / Factory Reset ───────────────────────────
             ui.group(|ui| {
-                ui.label(egui::RichText::new("Maintenance").strong().size(18.0));
+                ui.label(egui::RichText::new("\u{1F527} Maintenance").strong().size(18.0));
                 ui.add_space(4.0);
 
                 ui.horizontal(|ui| {
@@ -1465,7 +1522,11 @@ impl ApiHubApp {
                         }
                     });
                 } else {
-                    if ui.button(egui::RichText::new("Factory Reset ALL").size(16.0)).clicked() {
+                    let btn = egui::Button::new(
+                        egui::RichText::new("Factory Reset ALL").size(16.0).strong()
+                            .color(egui::Color32::WHITE)
+                    ).fill(egui::Color32::from_rgb(180, 40, 40));
+                    if ui.add(btn).clicked() {
                         self.confirm_factory_reset = true;
                     }
                 }
@@ -1708,13 +1769,15 @@ impl ApiHubApp {
                 ui.horizontal(|ui| {
                     ui.label(egui::RichText::new("Status").weak().size(16.0));
                     if self.mqtt_bridge.is_some() {
-                        let (label, color) = if bridge_active {
-                            ("Connected", egui::Color32::from_rgb(80, 220, 100))
+                        let (label, dot, color) = if bridge_active {
+                            ("Connected", "\u{1F7E2}", egui::Color32::from_rgb(80, 220, 100))
                         } else {
-                            ("Connecting...", egui::Color32::from_rgb(255, 200, 50))
+                            ("Connecting...", "\u{1F7E1}", egui::Color32::from_rgb(255, 200, 50))
                         };
+                        ui.label(egui::RichText::new(dot).size(16.0));
                         ui.label(egui::RichText::new(label).strong().size(16.0).color(color));
                     } else {
+                        ui.label(egui::RichText::new("\u{1F534}").size(16.0));
                         ui.label(egui::RichText::new("Stopped").strong().size(16.0)
                             .color(egui::Color32::from_rgb(255, 70, 70)));
                     }
@@ -2073,14 +2136,8 @@ impl ApiHubApp {
         egui::ScrollArea::vertical().show(ui, |ui| {
             for r in &results {
                 ui.horizontal(|ui| {
-                    let (icon, color) = if r.ok {
-                        ("OK", egui::Color32::from_rgb(80, 220, 100))
-                    } else {
-                        ("FAIL", egui::Color32::from_rgb(255, 70, 70))
-                    };
-                    ui.label(egui::RichText::new(icon).strong().size(16.0).color(color)
-                        .background_color(if r.ok { egui::Color32::from_rgb(20, 50, 20) }
-                                         else { egui::Color32::from_rgb(60, 20, 20) }));
+                    let icon = if r.ok { "\u{2705}" } else { "\u{274C}" };
+                    ui.label(egui::RichText::new(icon).size(16.0));
                     ui.label(egui::RichText::new(&r.label).strong().size(16.0));
                     ui.label(egui::RichText::new(&r.detail).weak().size(16.0));
                 });
@@ -2091,15 +2148,28 @@ impl ApiHubApp {
     // ── Widget helpers ──────────────────────────────────────────────────
 
     fn vcp_slider(&mut self, ui: &mut egui::Ui, snap: &SharedState, name: &str, vcp: u8) {
+        self.vcp_slider_colored(ui, snap, name, vcp, None);
+    }
+
+    fn vcp_slider_colored(&mut self, ui: &mut egui::Ui, snap: &SharedState, name: &str, vcp: u8, color: Option<egui::Color32>) {
         let cur = ddc_cur(snap, name) as f32;
         let max = ddc_max(snap, name) as f32;
         let max_val = if max == 0.0 { 100.0 } else { max };
         let mut val = cur;
+        let label_text = vcp_label(name);
+        let is_percent = max_val <= 100.0;
 
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(name).monospace().size(16.0));
+            let rt = if let Some(c) = color {
+                egui::RichText::new(label_text).size(16.0).color(c).strong()
+            } else {
+                egui::RichText::new(label_text).size(16.0)
+            };
+            ui.label(rt);
+            let suffix = if is_percent { "%" } else { "" };
             let slider = egui::Slider::new(&mut val, 0.0..=max_val)
-                .show_value(true);
+                .custom_formatter(move |v, _| format!("{:.0}{}", v, suffix))
+                .custom_parser(|s| s.trim_end_matches('%').trim().parse::<f64>().ok());
             if ui.add(slider).changed() {
                 self.pending_writes.push((vcp, val as u16));
             }
