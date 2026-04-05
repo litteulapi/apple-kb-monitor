@@ -207,36 +207,47 @@ pub fn detect_battery_type(voltage: f64) -> &'static str {
 
 // ── Main reader ───────────────────────────────────────────────────────────
 
-/// Read all keyboard telemetry via HID Feature Reports.
-///
-/// Opens the hidraw device, reads battery/firmware/identity reports,
-/// and returns a fully populated `KbReport`. The fd is closed automatically
-/// via `HidFd` RAII guard.
-pub fn read_keyboard() -> Option<KbReport> {
+/// Persistent HID fd + path — opened once, reused forever.
+static HID_FD: Mutex<Option<(libc::c_int, String)>> = Mutex::new(None);
+
+fn get_hid_fd() -> Option<(libc::c_int, String)> {
+    let mut fd_lock = HID_FD.lock().ok()?;
+    if let Some((fd, ref path)) = *fd_lock {
+        let ret = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+        if ret >= 0 { return Some((fd, path.clone())); }
+        *fd_lock = None;
+    }
     let path = find_apple_hidraw()?;
     let c_path = std::ffi::CString::new(path.as_str()).ok()?;
     let raw_fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
     if raw_fd < 0 { return None; }
-    let fd = HidFd(raw_fd);
+    *fd_lock = Some((raw_fd, path.clone()));
+    Some((raw_fd, path))
+}
+
+/// Read all keyboard telemetry via HID Feature Reports.
+/// Uses persistent fd — no open/close per call.
+pub fn read_keyboard() -> Option<KbReport> {
+    let (fd_val, path) = get_hid_fd()?;
 
     let mut report = KbReport::default();
 
     // Battery precise (0xEA) — pre-rounding ADC value
-    if let Some(buf) = hid_read_feature(fd.0, HID_BATTERY_PRECISE) {
+    if let Some(buf) = hid_read_feature(fd_val, HID_BATTERY_PRECISE) {
         if buf.len() >= 2 {
             report.battery.percentage_fine = Some(buf[1] as f64);
         }
     }
 
     // Battery standard (0x47) — firmware-rounded
-    if let Some(buf) = hid_read_feature(fd.0, HID_BATTERY_STANDARD) {
+    if let Some(buf) = hid_read_feature(fd_val, HID_BATTERY_STANDARD) {
         if buf.len() >= 2 {
             report.battery.percentage = Some(buf[1] as f64);
         }
     }
 
     // ADC raw voltage (0xF5) — 10-bit, 3.3V reference
-    if let Some(buf) = hid_read_feature(fd.0, HID_ADC_RAW) {
+    if let Some(buf) = hid_read_feature(fd_val, HID_ADC_RAW) {
         if buf.len() >= 3 {
             let adc = ((buf[1] as u32) << 8) | buf[2] as u32;
             report.battery.adc_raw = Some(adc);
@@ -246,7 +257,7 @@ pub fn read_keyboard() -> Option<KbReport> {
 
     // Calibration curve (0x5A) — 4 x u16 mV thresholds [100%, 75%, 50%, 25%]
     let mut calib = DEFAULT_CALIBRATION_MV;
-    if let Some(buf) = hid_read_feature(fd.0, HID_CALIBRATION) {
+    if let Some(buf) = hid_read_feature(fd_val, HID_CALIBRATION) {
         if buf.len() >= 9 {
             for i in 0..4 {
                 let off = 1 + i * 2;
@@ -263,7 +274,7 @@ pub fn read_keyboard() -> Option<KbReport> {
     }
 
     // Firmware (0x4F) — high nibble = major, low nibble = minor
-    if let Some(buf) = hid_read_feature(fd.0, HID_FIRMWARE_VERSION) {
+    if let Some(buf) = hid_read_feature(fd_val, HID_FIRMWARE_VERSION) {
         if buf.len() >= 2 {
             let major = buf[1] >> 4;
             let minor = buf[1] & 0x0F;
@@ -272,7 +283,7 @@ pub fn read_keyboard() -> Option<KbReport> {
     }
 
     // Firmware build (0xFF) — u16 build + u8 flag
-    if let Some(buf) = hid_read_feature(fd.0, HID_FIRMWARE_BUILD) {
+    if let Some(buf) = hid_read_feature(fd_val, HID_FIRMWARE_BUILD) {
         if buf.len() >= 3 {
             let build = ((buf[1] as u32) << 8) | buf[2] as u32;
             report.firmware.build = Some(build);
@@ -282,7 +293,7 @@ pub fn read_keyboard() -> Option<KbReport> {
     // Device name (0x51 + 0x52 + 0x53) — 3 chunks of 8 bytes
     let mut name_bytes = Vec::new();
     for rid in [HID_NAME_1, HID_NAME_2, HID_NAME_3] {
-        if let Some(buf) = hid_read_feature(fd.0, rid) {
+        if let Some(buf) = hid_read_feature(fd_val, rid) {
             name_bytes.extend_from_slice(&buf[1..]);
         }
     }
@@ -292,7 +303,7 @@ pub fn read_keyboard() -> Option<KbReport> {
     }
 
     // Connection params (0x46) — byte[1]=interval, byte[2]=latency
-    if let Some(buf) = hid_read_feature(fd.0, HID_CONNECTION_PARAMS) {
+    if let Some(buf) = hid_read_feature(fd_val, HID_CONNECTION_PARAMS) {
         if buf.len() >= 3 {
             report.bluetooth.connected = true;
             let interval = buf[1] as f64 * 1.25; // × 1.25ms per BT spec
@@ -303,7 +314,7 @@ pub fn read_keyboard() -> Option<KbReport> {
     }
 
     // Supervision timeout (0x49) — LE u16 × 10ms
-    if let Some(buf) = hid_read_feature(fd.0, 0x49) {
+    if let Some(buf) = hid_read_feature(fd_val, 0x49) {
         if buf.len() >= 3 {
             let timeout = ((buf[2] as u16) << 8) | buf[1] as u16; // LE
             report.bluetooth.supervision_timeout_s = Some(timeout as f64 * 0.01);
@@ -311,14 +322,14 @@ pub fn read_keyboard() -> Option<KbReport> {
     }
 
     // ADC reference (0xF4) — factory calibration constant
-    if let Some(buf) = hid_read_feature(fd.0, 0xF4) {
+    if let Some(buf) = hid_read_feature(fd_val, 0xF4) {
         if buf.len() >= 3 {
             report.firmware.adc_ref = Some(((buf[1] as u16) << 8) | buf[2] as u16);
         }
     }
 
     // Device identity (0x4C) — MAC in LE order + identity key
-    if let Some(buf) = hid_read_feature(fd.0, HID_DEVICE_IDENTITY) {
+    if let Some(buf) = hid_read_feature(fd_val, HID_DEVICE_IDENTITY) {
         if buf.len() >= 7 {
             let mac = format!("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
                 buf[6], buf[5], buf[4], buf[3], buf[2], buf[1]);
@@ -332,7 +343,7 @@ pub fn read_keyboard() -> Option<KbReport> {
     }
 
     // Device state (0x09) — 1=OK, 0=LOW
-    if let Some(buf) = hid_read_feature(fd.0, HID_DEVICE_STATE) {
+    if let Some(buf) = hid_read_feature(fd_val, HID_DEVICE_STATE) {
         if buf.len() >= 2 && buf[1] == 0 {
             // Device reports LOW state — override percentage if it's above threshold
             if report.battery.percentage_interpolated.unwrap_or(100.0) > 15.0 {
@@ -361,7 +372,7 @@ pub fn read_keyboard() -> Option<KbReport> {
     report.device.chip = Some(chip.to_string());
     report.device.driver = Some("hid-apple".to_string());
 
-    // fd is closed automatically by HidFd Drop
+    // fd stays open (persistent) for next call
     Some(report)
 }
 

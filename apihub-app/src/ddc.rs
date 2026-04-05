@@ -80,8 +80,30 @@ pub fn default_bus() -> String {
 }
 
 /// Global I2C bus lock — serializes all DDC transactions on the same bus.
-/// Prevents concurrent reads/writes from corrupting the I2C pipeline.
 static BUS_LOCK: Mutex<()> = Mutex::new(());
+
+/// Persistent I2C file descriptor — opened once, reused forever.
+/// Eliminates open()/close() syscall overhead per read cycle.
+static PERSISTENT_FD: Mutex<Option<libc::c_int>> = Mutex::new(None);
+
+/// Get or create the persistent I2C fd for the given bus path.
+fn get_fd(path: &str) -> Result<libc::c_int, String> {
+    let mut fd_lock = PERSISTENT_FD.lock().map_err(|e| format!("fd lock: {}", e))?;
+    if let Some(fd) = *fd_lock {
+        // Verify fd is still valid
+        let ret = unsafe { libc::fcntl(fd, libc::F_GETFD) };
+        if ret >= 0 { return Ok(fd); }
+        // fd went stale, reopen
+        *fd_lock = None;
+    }
+    let c_path = CString::new(path).map_err(|e| e.to_string())?;
+    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
+    if fd < 0 {
+        return Err(format!("open {}: {}", path, std::io::Error::last_os_error()));
+    }
+    *fd_lock = Some(fd);
+    Ok(fd)
+}
 
 // ── I2C kernel structs ──────────────────────────────────────────────────────
 
@@ -205,39 +227,28 @@ pub const ESSENTIAL_VCPS: &[VcpInfo] = &[
 // ── Low-level I2C ───────────────────────────────────────────────────────────
 
 /// Write a VCP value via I2C_SLAVE + raw write.
-/// NVIDIA I2C adapters require this path (I2C_RDWR fails for writes).
+/// Uses persistent fd — no open/close overhead.
 pub fn ddc_write_vcp(path: &str, vcp: u8, value: u16) -> Result<(), String> {
     let _lock = BUS_LOCK.lock().map_err(|e| format!("bus lock: {}", e))?;
-
-    let c_path = CString::new(path).map_err(|e| e.to_string())?;
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
-    if fd < 0 {
-        return Err(format!("open {}: {}", path, std::io::Error::last_os_error()));
-    }
+    let fd = get_fd(path)?;
 
     if unsafe { libc::ioctl(fd, I2C_SLAVE, DDC_ADDR as libc::c_ulong) } < 0 {
-        let err = std::io::Error::last_os_error();
-        unsafe { libc::close(fd); }
-        return Err(format!("ioctl I2C_SLAVE: {}", err));
+        return Err(format!("ioctl I2C_SLAVE: {}", std::io::Error::last_os_error()));
     }
 
-    // DDC/CI VCP Set: [0x51] [0x84] [0x03] [vcp] [val_hi] [val_lo] [chk]
     let payload: [u8; 6] = [
         0x51, 0x84, 0x03, vcp,
         (value >> 8) as u8, (value & 0xFF) as u8,
     ];
-    let mut chk: u8 = 0x6E; // seed = destination address (0x37 << 1)
+    let mut chk: u8 = 0x6E;
     for b in &payload { chk ^= b; }
     let mut msg = [0u8; 7];
     msg[..6].copy_from_slice(&payload);
     msg[6] = chk;
 
     let ret = unsafe { libc::write(fd, msg.as_ptr() as *const libc::c_void, 7) };
-    let err = std::io::Error::last_os_error(); // capture BEFORE close
-    unsafe { libc::close(fd); }
-
     if ret < 0 {
-        return Err(format!("write VCP 0x{:02X}: {}", vcp, err));
+        return Err(format!("write VCP 0x{:02X}: {}", vcp, std::io::Error::last_os_error()));
     }
     Ok(())
 }
@@ -313,36 +324,23 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16), String> {
     Ok((cur_val, max_val))
 }
 
-/// Read a single VCP value with validation and auto-retry.
-/// Used by diagnostics and single-VCP reads. For bulk reads, use read_burst().
-#[allow(dead_code)]
+/// Read a single VCP using the persistent fd.
 pub fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16), String> {
     let _lock = BUS_LOCK.lock().map_err(|e| format!("bus lock: {}", e))?;
-
-    let c_path = CString::new(path).map_err(|e| e.to_string())?;
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
-    if fd < 0 {
-        return Err(format!("open {}: {}", path, std::io::Error::last_os_error()));
-    }
-
-    let result = ddc_read_vcp_fd(fd, vcp);
-    unsafe { libc::close(fd); }
-    result
+    let fd = get_fd(path)?;
+    ddc_read_vcp_fd(fd, vcp)
 }
 
-/// Burst-read VCPs: single fd, combined I2C_RDWR per VCP (no sleep between reads).
-/// 100% reliable with combined 2-message ioctl — kernel handles I2C timing.
+/// Burst-read VCPs using the persistent fd. No open/close per call.
 pub fn read_batch(path: &str, vcps: &[VcpInfo]) -> Vec<(&'static str, u16, u16)> {
     let _lock = match BUS_LOCK.lock() {
         Ok(g) => g,
         Err(_) => return Vec::new(),
     };
-    let c_path = match CString::new(path) {
-        Ok(p) => p,
+    let fd = match get_fd(path) {
+        Ok(f) => f,
         Err(_) => return Vec::new(),
     };
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
-    if fd < 0 { return Vec::new(); }
 
     let mut results = Vec::with_capacity(vcps.len());
     for v in vcps {
@@ -350,6 +348,5 @@ pub fn read_batch(path: &str, vcps: &[VcpInfo]) -> Vec<(&'static str, u16, u16)>
             results.push((v.name, cur, max));
         }
     }
-    unsafe { libc::close(fd); }
     results
 }
