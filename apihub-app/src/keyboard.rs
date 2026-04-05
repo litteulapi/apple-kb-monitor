@@ -3,9 +3,7 @@
 //! Pure Rust — reads HID Feature Reports via ioctl, no subprocess.
 //! Supports BCM2042-based keyboards (A1314 in ISO/ANSI/JIS variants).
 
-// Public API surface — some fields/functions are not yet consumed internally
-// but are part of the keyboard telemetry contract.
-#![allow(dead_code)]
+use std::sync::{Arc, Mutex};
 
 // ── HID Report IDs ────────────────────────────────────────────────────────
 
@@ -68,16 +66,6 @@ pub const DEFAULT_CALIBRATION_MV: [u16; 4] = [2900, 2450, 2350, 2000];
 /// HIDIOCGFEATURE = _IOWR('H', 0x07, 256) — read HID Feature Report
 const HIDIOCGFEATURE: libc::c_ulong = 0xC1004807;
 
-// ── RAII fd guard ─────────────────────────────────────────────────────────
-
-struct HidFd(libc::c_int);
-
-impl Drop for HidFd {
-    fn drop(&mut self) {
-        unsafe { libc::close(self.0); }
-    }
-}
-
 // ── Data structs ──────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Default)]
@@ -104,7 +92,6 @@ pub struct KbBluetooth {
     pub paired: bool,
     pub rssi_dbus: Option<i32>,
     pub tx_power_dbus: Option<i32>,
-    pub address_type: Option<String>,
     pub conn_interval_ms: Option<f64>,
     pub slave_latency: Option<u8>,
     pub supervision_timeout_s: Option<f64>,
@@ -115,7 +102,6 @@ pub struct KbBluetooth {
 pub struct KbRadio {
     pub rssi_dbm: Option<i32>,
     pub tx_power_dbm: Option<i32>,
-    pub max_tx_power_dbm: Option<i32>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -453,8 +439,6 @@ pub fn read_led_state() -> (bool, bool) {
     }
     (caps, num)
 }
-
-use std::sync::{Arc, Mutex};
 
 // ── LED control via evdev ───────────────────────────────────────────────
 
