@@ -207,7 +207,10 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
     let battery_provider: Option<bluez::BatteryProvider> = {
         if let Some(kb) = keyboard::read_keyboard() {
             if let Some(ref mac) = kb.device.mac {
-                bluez::BatteryProvider::start(mac)
+                let initial_pct = kb.battery.percentage_fine
+                    .or(kb.battery.percentage)
+                    .unwrap_or(0.0) as u8;
+                bluez::BatteryProvider::start(mac, initial_pct)
             } else { None }
         } else { None }
     };

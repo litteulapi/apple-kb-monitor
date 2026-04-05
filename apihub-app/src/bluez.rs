@@ -131,9 +131,9 @@ impl BatteryProvider {
     /// Spawn a D-Bus thread that registers with BlueZ as a battery provider
     /// for the given MAC address. Returns `None` if the MAC is invalid.
     ///
-    /// The initial percentage is 0; call `update_percentage` once you have
-    /// a real reading.
-    pub fn start(mac: &str) -> Option<Self> {
+    /// `initial_pct` should be the current battery reading (not 0).
+    /// BlueZ caches the initial value; PropertiesChanged is not emitted.
+    pub fn start(mac: &str, initial_pct: u8) -> Option<Self> {
         let mac_path = mac.to_uppercase().replace(':', "_");
         if mac_path.is_empty() {
             return None;
@@ -143,7 +143,7 @@ impl BatteryProvider {
         let bluez_dev_path = format!("/org/bluez/hci0/dev_{}", mac_path);
         let source = "apihub-app (HID 0xEA)".to_string();
 
-        let pct = Arc::new(AtomicU8::new(0));
+        let pct = Arc::new(AtomicU8::new(initial_pct));
         let pct_thread = pct.clone();
 
         let handle = thread::Builder::new()
