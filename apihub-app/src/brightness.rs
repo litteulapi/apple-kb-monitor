@@ -185,12 +185,10 @@ fn run_evdev_loop(bus: &str) -> Result<(), String> {
         let new = (old + delta).clamp(0, 100);
         BRIGHTNESS.store(new, Ordering::Relaxed);
 
-        // Fire-and-forget DDC write
-        let bus_owned = bus.to_string();
-        let val = new as u16;
-        thread::spawn(move || {
-            let _ = ddc::ddc_write_vcp(&bus_owned, 0x10, val);
-        });
+        // Direct blocking DDC write — this thread is already dedicated to evdev,
+        // so blocking here is fine and avoids spawning unbounded threads per
+        // keypress (M8). The bus lock serializes with other DDC callers.
+        let _ = ddc::ddc_write_vcp(bus, 0x10, new as u16);
 
         // Fire-and-forget KDE OSD notification
         let bri_str = new.to_string();

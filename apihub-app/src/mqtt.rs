@@ -336,4 +336,20 @@ impl MqttBridge {
     pub fn is_connected(&self) -> bool {
         self.connected.lock().map(|c| *c).unwrap_or(false)
     }
+
+    /// Clone the internal MQTT client handle for fire-and-forget publishes.
+    pub fn tx_clone(&self) -> Option<Client> {
+        self.tx.clone()
+    }
+
+    /// Reconstruct a bridge handle from pre-existing shared parts.
+    /// Used for fire-and-forget publishes on a background thread (M11).
+    pub fn from_parts(
+        connected: Arc<Mutex<bool>>,
+        last_publish: Arc<Mutex<Option<std::time::Instant>>>,
+        last_cmd: Arc<Mutex<Option<String>>>,
+        tx: Client,
+    ) -> Self {
+        Self { connected, last_publish, last_cmd, tx: Some(tx) }
+    }
 }

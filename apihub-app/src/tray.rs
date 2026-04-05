@@ -172,6 +172,7 @@ struct DbusmenuServer {
     state: State,
     i2c_bus: String,
     show_window: Arc<AtomicBool>,
+    quit_flag: Arc<AtomicBool>,
     revision: Arc<AtomicU32>,
 }
 
@@ -295,7 +296,7 @@ impl DbusmenuServer {
         root_children.push(sub(menu_id::MONITOR_SUB, "Monitor", monitor));
 
         // ── MQTT submenu ──────────────────────────────────────────
-        let mqtt_connected = snap.is_some();
+        let mqtt_connected = snap.as_ref().map(|s| s.mqtt_connected).unwrap_or(false);
         root_children.push(sub(
             menu_id::MQTT_SUB,
             "MQTT",
@@ -347,7 +348,7 @@ impl DbusmenuServer {
             PM_PHOTO => { let _ = ddc::ddc_write_vcp(bus, 0x15, 48); }
             MQTT_PUBLISH => eprintln!("[tray] publish requested"),
             SHOW_WINDOW => self.show_window.store(true, Ordering::Relaxed),
-            QUIT => std::process::exit(0),
+            QUIT => self.quit_flag.store(true, Ordering::Relaxed),
             _ => {}
         }
     }
@@ -412,6 +413,9 @@ impl DbusmenuServer {
     }
 
     /// Signal the host to re-fetch layout (dynamic info items update on open).
+    /// Note: `fetch_add(1, Relaxed)` on `AtomicU32` wraps at u32::MAX naturally
+    /// (defined behavior per Rust atomics spec). The revision is only used by the
+    /// DBusMenu host to detect changes — monotonicity across wrap is irrelevant.
     fn about_to_show(&self, _id: i32) -> bool {
         self.revision.fetch_add(1, Ordering::Relaxed);
         true
@@ -495,11 +499,12 @@ pub fn spawn(
     state: State,
     i2c_bus: String,
     show_window: Arc<AtomicBool>,
+    quit_flag: Arc<AtomicBool>,
 ) {
     std::thread::Builder::new()
         .name("tray-sni".into())
         .spawn(move || {
-            if let Err(e) = run(tooltip, state, i2c_bus, show_window) {
+            if let Err(e) = run(tooltip, state, i2c_bus, show_window, quit_flag) {
                 eprintln!("[tray] fatal: {}", e);
             }
         })
@@ -511,6 +516,7 @@ fn run(
     state: State,
     i2c_bus: String,
     show_window: Arc<AtomicBool>,
+    quit_flag: Arc<AtomicBool>,
 ) -> zbus::Result<()> {
     let sni = SniItem {
         tooltip,
@@ -521,6 +527,7 @@ fn run(
         state,
         i2c_bus,
         show_window,
+        quit_flag,
         revision: Arc::new(AtomicU32::new(1)),
     };
 

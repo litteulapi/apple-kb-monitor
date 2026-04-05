@@ -182,6 +182,8 @@ pub(crate) struct SharedState {
     pub(crate) caps_lock: bool,
     pub(crate) num_lock: bool,
     pub(crate) remaining_display: Option<String>,
+    /// MQTT connection status — set by the MqttBridge thread, read by tray menu.
+    pub(crate) mqtt_connected: bool,
 }
 
 type State = Arc<Mutex<SharedState>>;
@@ -202,19 +204,7 @@ fn apply_burst(state: &State, results: &[(&str, u16, u16)]) {
 /// Shared app presets (read by poll thread, written by UI).
 type SharedPresets = Arc<Mutex<(bool, Vec<AppPreset>)>>;
 
-fn spawn_poll_thread(state: State, presets: SharedPresets) {
-    // Start BlueZ Battery Provider (register once, update in loop)
-    let battery_provider: Option<bluez::BatteryProvider> = {
-        if let Some(kb) = keyboard::read_keyboard() {
-            if let Some(ref mac) = kb.device.mac {
-                let initial_pct = kb.battery.percentage_fine
-                    .or(kb.battery.percentage)
-                    .unwrap_or(0.0) as u8;
-                bluez::BatteryProvider::start(mac, initial_pct)
-            } else { None }
-        } else { None }
-    };
-
+fn spawn_poll_thread(state: State, presets: SharedPresets, quit_flag: Arc<std::sync::atomic::AtomicBool>) {
     // Start brightness F1/F2 handler
     let bus_for_bri = ddc::default_bus();
     brightness::spawn_brightness_thread(bus_for_bri);
@@ -230,7 +220,16 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
         let mut ddc_fail_streak: u32 = 0;
         let mut ddc_fail_notified = false;
 
+        // BlueZ Battery Provider — lazy init: created when keyboard is first found.
+        // This avoids None-forever if the keyboard is absent at startup (M6).
+        let mut battery_provider: Option<bluez::BatteryProvider> = None;
+
         loop {
+            // Check quit flag before each cycle
+            if quit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                eprintln!("[poll] quit flag set, exiting poll thread");
+                break;
+            }
             // ── Keyboard: direct HID ioctl — every 2nd cycle (~10s) ──
             let mut kb = if cycle % 4 == 0 {
                 keyboard::read_keyboard()
@@ -245,6 +244,14 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
                     .or(k.battery.percentage_interpolated)
                     .or(k.battery.percentage)
                     .unwrap_or(100.0);
+
+                // Lazy-init BlueZ Battery Provider on first keyboard detection (M6).
+                // If the provider is None and we have a MAC, try to create it.
+                if battery_provider.is_none() {
+                    if let Some(ref mac) = k.device.mac {
+                        battery_provider = bluez::BatteryProvider::start(mac, pct.round() as u8);
+                    }
+                }
 
                 // Update BlueZ Battery Provider (KDE/GNOME battery display)
                 if let Some(ref bp) = battery_provider {
@@ -430,12 +437,20 @@ impl MqttConfig {
         ];
         for path in paths.into_iter().flatten() {
             if let Ok(content) = std::fs::read_to_string(&path) {
-                // Section-aware TOML parser — only read keys from their proper section
+                // Section-aware TOML parser — only read keys from their proper section.
+                // Limitation: nested/dotted sections (e.g. [foo.bar]) are not supported;
+                // lines with dots in the section name are rejected to avoid silent misparse.
                 let mut section = String::new();
                 for line in content.lines() {
                     let line = line.trim();
                     if line.starts_with('[') {
-                        section = line.trim_matches(|c| c == '[' || c == ']').trim().to_string();
+                        let name = line.trim_matches(|c| c == '[' || c == ']').trim();
+                        if name.contains('.') {
+                            // Reject dotted/nested section — treat as unknown section
+                            section = String::new();
+                        } else {
+                            section = name.to_string();
+                        }
                         continue;
                     }
                     if line.is_empty() || line.starts_with('#') { continue; }
@@ -478,6 +493,7 @@ impl Default for MqttConfig {
     }
 }
 
+#[derive(Clone)]
 struct DiagResult {
     label: String,
     ok: bool,
@@ -491,8 +507,8 @@ struct ApiHubApp {
     pending_writes: Vec<(u8, u16)>,
     style_initialized: bool,
     mqtt: MqttConfig,
-    diag_results: Vec<DiagResult>,
-    diag_running: bool,
+    diag_results: Arc<Mutex<Vec<DiagResult>>>,
+    diag_running: Arc<std::sync::atomic::AtomicBool>,
     mqtt_bridge: Option<mqtt::MqttBridge>,
     // DDC profile presets
     profiles: Vec<DdcProfile>,
@@ -515,6 +531,7 @@ struct ApiHubApp {
     // Battery history graph
     battery_history: Vec<(f64, f64)>,    // (timestamp, percentage)
     voltage_history: Vec<(f64, f64)>,    // (timestamp, voltage)
+    monitor_info: ddc::MonitorInfo,
 }
 
 impl ApiHubApp {
@@ -528,6 +545,7 @@ impl ApiHubApp {
     ) -> Self {
         let mqtt = MqttConfig::default();
         let i2c_bus = ddc::default_bus();
+        let monitor_info = ddc::read_monitor_info(&i2c_bus);
         let mqtt_bridge: Option<mqtt::MqttBridge> = None; // owned by main(), not us
         let app_presets = load_app_presets();
         let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets.clone())));
@@ -550,8 +568,8 @@ impl ApiHubApp {
             pending_writes: Vec::new(),
             style_initialized: false,
             mqtt,
-            diag_results: Vec::new(),
-            diag_running: false,
+            diag_results: Arc::new(Mutex::new(Vec::new())),
+            diag_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             mqtt_bridge,
             profiles: load_profiles(),
             profile_name: String::new(),
@@ -567,6 +585,7 @@ impl ApiHubApp {
             tray_show_window,
             battery_history,
             voltage_history,
+            monitor_info,
         }
     }
 }
@@ -1044,7 +1063,17 @@ impl ApiHubApp {
     }
 
     fn tab_display(&mut self, ui: &mut egui::Ui, snap: &SharedState) {
-        ui.label(egui::RichText::new("Display Controls").strong().size(18.0));
+        // Monitor identity header
+        let mi = &self.monitor_info;
+        if !mi.name.is_empty() {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(format!("{} {}", mi.manufacturer, mi.name)).strong().size(18.0));
+                ui.label(egui::RichText::new(format!("  {}  {}  {}", mi.connector, mi.adapter, mi.serial))
+                    .weak().size(16.0));
+            });
+        } else {
+            ui.label(egui::RichText::new("Display Controls").strong().size(18.0));
+        }
         ui.separator();
 
         if let Some(ref err) = snap.ddc.error {
@@ -1289,7 +1318,9 @@ impl ApiHubApp {
 
                 if let Some(idx) = delete_preset_idx {
                     self.app_presets.remove(idx);
-                    save_app_presets(&self.app_presets);
+                    // Fire-and-forget disk write (M15) — avoid blocking UI thread.
+                    let presets_copy = self.app_presets.clone();
+                    thread::spawn(move || save_app_presets(&presets_copy));
                     presets_changed = true;
                 }
 
@@ -1322,7 +1353,9 @@ impl ApiHubApp {
                         } else {
                             self.app_presets.push((class, self.app_preset_new_mode));
                         }
-                        save_app_presets(&self.app_presets);
+                        // Fire-and-forget disk write (M15) — avoid blocking UI thread.
+                        let presets_copy = self.app_presets.clone();
+                        thread::spawn(move || save_app_presets(&presets_copy));
                         self.app_preset_new_class.clear();
                         presets_changed = true;
                     }
@@ -1703,8 +1736,21 @@ impl ApiHubApp {
                     }
                     if ui.button(egui::RichText::new("Publish Now").size(16.0)).clicked() {
                         if let Some(bridge) = &self.mqtt_bridge {
+                            // Fire-and-forget to avoid blocking the UI thread (M11).
                             let snap = self.state.lock().map(|s| s.clone()).unwrap_or_default();
-                            bridge.publish_telemetry(&snap.keyboard, &snap.ddc.data, &self.mqtt_cfg());
+                            let cfg = self.mqtt_cfg();
+                            let b_connected = bridge.connected.clone();
+                            let b_last_publish = bridge.last_publish.clone();
+                            let b_last_cmd = bridge.last_cmd.clone();
+                            let b_tx = bridge.tx_clone();
+                            thread::spawn(move || {
+                                if let Some(tx) = b_tx {
+                                    let tmp_bridge = mqtt::MqttBridge::from_parts(
+                                        b_connected, b_last_publish, b_last_cmd, tx,
+                                    );
+                                    tmp_bridge.publish_telemetry(&snap.keyboard, &snap.ddc.data, &cfg);
+                                }
+                            });
                         }
                     }
                 });
@@ -1819,168 +1865,197 @@ impl ApiHubApp {
         });
     }
 
+    /// Run diagnostics in a background thread (M10) to avoid blocking the UI.
     fn run_diagnostics(&mut self) {
-        self.diag_results.clear();
-        self.diag_running = true;
+        // Guard against concurrent runs
+        if self.diag_running.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
+        self.diag_running.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Ok(mut r) = self.diag_results.lock() {
+            r.clear();
+        }
 
-        // Extract bus number from path (e.g. "/dev/i2c-6" -> "6")
-        let bus_num = self.i2c_bus.rsplit('-').next().unwrap_or("6").to_string();
-        let checks: Vec<(&str, Vec<&str>, &str)> = vec![
-            ("apple-kb-monitor", vec!["--version"], "Main daemon binary"),
-            ("ddc-tool", vec!["read", &bus_num, "0x10"], "DDC/CI I2C tool"),
-            ("keyd", vec!["-v"], "Key remapping daemon"),
-            ("bluetoothctl", vec!["--version"], "BlueZ CLI"),
-            ("mosquitto_pub", vec!["--help"], "MQTT publish tool"),
-        ];
+        let results = self.diag_results.clone();
+        let running = self.diag_running.clone();
+        let bus = self.i2c_bus.clone();
 
-        for (bin, args, desc) in &checks {
-            let result = Command::new(bin).args(args)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output();
-            match result {
-                Ok(o) if o.status.success() => {
-                    let out = String::from_utf8_lossy(&o.stdout);
-                    let first = out.lines().next().unwrap_or("OK").trim();
-                    self.diag_results.push(DiagResult {
-                        label: desc.to_string(), ok: true,
-                        detail: format!("{}: {}", bin, if first.is_empty() { "OK" } else { first }),
-                    });
-                }
-                Ok(o) => {
-                    let err = String::from_utf8_lossy(&o.stderr);
-                    // Some tools return non-zero for --help but still work
-                    if err.contains("Usage") || err.contains("usage") || err.contains("mosquitto_pub") {
-                        self.diag_results.push(DiagResult {
+        thread::spawn(move || {
+            let mut out: Vec<DiagResult> = Vec::new();
+
+            // Extract bus number from path (e.g. "/dev/i2c-6" -> "6")
+            let bus_num = bus.rsplit('-').next().unwrap_or("6").to_string();
+            let checks: Vec<(&str, Vec<String>, &str)> = vec![
+                ("apple-kb-monitor", vec!["--version".into()], "Main daemon binary"),
+                ("ddc-tool", vec!["read".into(), bus_num, "0x10".into()], "DDC/CI I2C tool"),
+                ("keyd", vec!["-v".into()], "Key remapping daemon"),
+                ("bluetoothctl", vec!["--version".into()], "BlueZ CLI"),
+                ("mosquitto_pub", vec!["--help".into()], "MQTT publish tool"),
+            ];
+
+            for (bin, args, desc) in &checks {
+                let result = Command::new(bin)
+                    .args(args.iter().map(|s| s.as_str()))
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .output();
+                match result {
+                    Ok(o) if o.status.success() => {
+                        let stdout = String::from_utf8_lossy(&o.stdout);
+                        let first = stdout.lines().next().unwrap_or("OK").trim();
+                        out.push(DiagResult {
                             label: desc.to_string(), ok: true,
-                            detail: format!("{}: installed", bin),
+                            detail: format!("{}: {}", bin, if first.is_empty() { "OK" } else { first }),
                         });
-                    } else {
-                        self.diag_results.push(DiagResult {
+                    }
+                    Ok(o) => {
+                        let err = String::from_utf8_lossy(&o.stderr);
+                        if err.contains("Usage") || err.contains("usage") || err.contains("mosquitto_pub") {
+                            out.push(DiagResult {
+                                label: desc.to_string(), ok: true,
+                                detail: format!("{}: installed", bin),
+                            });
+                        } else {
+                            out.push(DiagResult {
+                                label: desc.to_string(), ok: false,
+                                detail: format!("{}: exit {}", bin, o.status.code().unwrap_or(-1)),
+                            });
+                        }
+                    }
+                    Err(_) => {
+                        out.push(DiagResult {
                             label: desc.to_string(), ok: false,
-                            detail: format!("{}: exit {}", bin, o.status.code().unwrap_or(-1)),
+                            detail: format!("{}: NOT FOUND", bin),
                         });
                     }
                 }
-                Err(_) => {
-                    self.diag_results.push(DiagResult {
-                        label: desc.to_string(), ok: false,
-                        detail: format!("{}: NOT FOUND", bin),
-                    });
-                }
             }
-        }
 
-        // Services
-        for svc in ["apple-kb-monitor", "apple-brightness", "mqtt-bridge"] {
-            let result = Command::new("systemctl")
-                .args(["--user", "is-active", &format!("{}.service", svc)])
-                .output();
-            let active = result.map(|o| o.status.success()).unwrap_or(false);
-            self.diag_results.push(DiagResult {
-                label: format!("{}.service", svc), ok: active,
-                detail: if active { "active (running)".into() } else { "inactive / not found".into() },
+            // Services
+            for svc in ["apple-kb-monitor", "apple-brightness", "mqtt-bridge"] {
+                let result = Command::new("systemctl")
+                    .args(["--user", "is-active", &format!("{}.service", svc)])
+                    .output();
+                let active = result.map(|o| o.status.success()).unwrap_or(false);
+                out.push(DiagResult {
+                    label: format!("{}.service", svc), ok: active,
+                    detail: if active { "active (running)".into() } else { "inactive / not found".into() },
+                });
+            }
+
+            // I2C bus
+            let i2c_ok = std::path::Path::new(&bus).exists();
+            out.push(DiagResult {
+                label: "I2C bus".into(), ok: i2c_ok,
+                detail: if i2c_ok { format!("{}: accessible", bus) } else { format!("{}: NOT FOUND", bus) },
             });
-        }
 
-        // I2C bus
-        let bus = &self.i2c_bus;
-        let i2c_ok = std::path::Path::new(bus).exists();
-        self.diag_results.push(DiagResult {
-            label: "I2C bus".into(), ok: i2c_ok,
-            detail: if i2c_ok { format!("{}: accessible", bus) } else { format!("{}: NOT FOUND", bus) },
-        });
+            // hidraw (keyboard) — enumerate /dev/hidraw*
+            let hidraw_count = std::fs::read_dir("/dev").map(|rd| {
+                rd.filter_map(|e| e.ok())
+                    .filter(|e| e.file_name().to_string_lossy().starts_with("hidraw"))
+                    .count()
+            }).unwrap_or(0);
+            out.push(DiagResult {
+                label: "HID raw device".into(), ok: hidraw_count > 0,
+                detail: if hidraw_count > 0 { format!("{} hidraw device(s) in /dev/", hidraw_count) }
+                        else { "no hidraw device found".into() },
+            });
 
-        // hidraw (keyboard) — enumerate /dev/hidraw*
-        let hidraw_count = std::fs::read_dir("/dev").map(|rd| {
-            rd.filter_map(|e| e.ok())
-                .filter(|e| e.file_name().to_string_lossy().starts_with("hidraw"))
-                .count()
-        }).unwrap_or(0);
-        self.diag_results.push(DiagResult {
-            label: "HID raw device".into(), ok: hidraw_count > 0,
-            detail: if hidraw_count > 0 { format!("{} hidraw device(s) in /dev/", hidraw_count) }
-                    else { "no hidraw device found".into() },
-        });
+            // Config file
+            let cfg_path = dirs::config_dir()
+                .map(|d| d.join("apple-kb-monitor/config.toml"))
+                .unwrap_or_default();
+            let cfg_ok = cfg_path.exists();
+            out.push(DiagResult {
+                label: "Config file".into(), ok: cfg_ok,
+                detail: if cfg_ok { format!("{}", cfg_path.display()) } else { "not found — copy config.toml.example".into() },
+            });
 
-        // Config file
-        let cfg_path = dirs::config_dir()
-            .map(|d| d.join("apple-kb-monitor/config.toml"))
-            .unwrap_or_default();
-        let cfg_ok = cfg_path.exists();
-        self.diag_results.push(DiagResult {
-            label: "Config file".into(), ok: cfg_ok,
-            detail: if cfg_ok { format!("{}", cfg_path.display()) } else { "not found — copy config.toml.example".into() },
-        });
+            // keyd config
+            let keyd_ok = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
+            out.push(DiagResult {
+                label: "keyd config".into(), ok: keyd_ok,
+                detail: if keyd_ok { "/etc/keyd/apple-keyboard.conf".into() } else { "NOT FOUND".into() },
+            });
 
-        // keyd config
-        let keyd_ok = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
-        self.diag_results.push(DiagResult {
-            label: "keyd config".into(), ok: keyd_ok,
-            detail: if keyd_ok { "/etc/keyd/apple-keyboard.conf".into() } else { "NOT FOUND".into() },
-        });
+            // udev rules
+            let udev_ok = std::path::Path::new("/usr/lib/udev/rules.d/99-apple-kb-hidraw.rules").exists();
+            out.push(DiagResult {
+                label: "udev rules".into(), ok: udev_ok,
+                detail: if udev_ok { "99-apple-kb-hidraw.rules installed".into() } else { "NOT FOUND".into() },
+            });
 
-        // udev rules
-        let udev_ok = std::path::Path::new("/usr/lib/udev/rules.d/99-apple-kb-hidraw.rules").exists();
-        self.diag_results.push(DiagResult {
-            label: "udev rules".into(), ok: udev_ok,
-            detail: if udev_ok { "99-apple-kb-hidraw.rules installed".into() } else { "NOT FOUND".into() },
-        });
+            // modprobe
+            let mod_ok = std::path::Path::new("/etc/modprobe.d/hid_apple.conf").exists();
+            out.push(DiagResult {
+                label: "hid_apple fnmode".into(), ok: mod_ok,
+                detail: if mod_ok { "fnmode=1 configured".into() } else { "NOT FOUND — media keys won't be default".into() },
+            });
 
-        // modprobe
-        let mod_ok = std::path::Path::new("/etc/modprobe.d/hid_apple.conf").exists();
-        self.diag_results.push(DiagResult {
-            label: "hid_apple fnmode".into(), ok: mod_ok,
-            detail: if mod_ok { "fnmode=1 configured".into() } else { "NOT FOUND — media keys won't be default".into() },
-        });
+            // rssi-helper caps
+            let rssi_path = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper");
+            let rssi_ok = rssi_path.exists();
+            out.push(DiagResult {
+                label: "RSSI helper".into(), ok: rssi_ok,
+                detail: if rssi_ok { "rssi-helper installed (needs CAP_NET_ADMIN)".into() } else { "NOT FOUND".into() },
+            });
 
-        // rssi-helper caps
-        let rssi_path = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper");
-        let rssi_ok = rssi_path.exists();
-        self.diag_results.push(DiagResult {
-            label: "RSSI helper".into(), ok: rssi_ok,
-            detail: if rssi_ok { "rssi-helper installed (needs CAP_NET_ADMIN)".into() } else { "NOT FOUND".into() },
-        });
+            // user in input group (pure libc — no subprocess)
+            let input_ok = {
+                let mut buf = [0i32; 64];
+                let n = unsafe { libc::getgroups(64, buf.as_mut_ptr() as *mut u32) };
+                if n > 0 {
+                    let input_content = std::fs::read_to_string("/etc/group").unwrap_or_default();
+                    let input_gid = input_content.lines()
+                        .find(|l| l.starts_with("input:"))
+                        .and_then(|l| l.split(':').nth(2))
+                        .and_then(|s| s.parse::<i32>().ok());
+                    input_gid.map(|gid| buf[..n as usize].contains(&gid)).unwrap_or(false)
+                } else {
+                    false
+                }
+            };
+            out.push(DiagResult {
+                label: "User in input group".into(), ok: input_ok,
+                detail: if input_ok { "input group: OK".into() } else { "NOT in input group — run: sudo usermod -aG input $USER".into() },
+            });
 
-        // user in input group (pure libc — no subprocess)
-        let input_ok = {
-            let mut buf = [0i32; 64];
-            let n = unsafe { libc::getgroups(64, buf.as_mut_ptr() as *mut u32) };
-            if n > 0 {
-                let input_content = std::fs::read_to_string("/etc/group").unwrap_or_default();
-                let input_gid = input_content.lines()
-                    .find(|l| l.starts_with("input:"))
-                    .and_then(|l| l.split(':').nth(2))
-                    .and_then(|s| s.parse::<i32>().ok());
-                input_gid.map(|gid| buf[..n as usize].contains(&gid)).unwrap_or(false)
-            } else {
-                false
+            // Store results and clear running flag
+            if let Ok(mut r) = results.lock() {
+                *r = out;
             }
-        };
-        self.diag_results.push(DiagResult {
-            label: "User in input group".into(), ok: input_ok,
-            detail: if input_ok { "input group: OK".into() } else { "NOT in input group — run: sudo usermod -aG input $USER".into() },
+            running.store(false, std::sync::atomic::Ordering::Relaxed);
         });
-
-        self.diag_running = false;
     }
 
     fn tab_diag(&mut self, ui: &mut egui::Ui) {
+        let is_running = self.diag_running.load(std::sync::atomic::Ordering::Relaxed);
+
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("System Diagnostics").strong().size(18.0));
-            if ui.button(egui::RichText::new("Run Full Check").size(16.0).strong()).clicked() {
+            if is_running {
+                ui.label(egui::RichText::new("Running...").size(16.0)
+                    .color(egui::Color32::from_rgb(255, 200, 50)));
+            } else if ui.button(egui::RichText::new("Run Full Check").size(16.0).strong()).clicked() {
                 self.run_diagnostics();
             }
         });
         ui.separator();
 
-        if self.diag_results.is_empty() {
-            ui.label(egui::RichText::new("Press 'Run Full Check' to scan all components.").weak().size(16.0));
+        let results = self.diag_results.lock().map(|r| r.clone()).unwrap_or_default();
+
+        if results.is_empty() {
+            if is_running {
+                ui.label(egui::RichText::new("Diagnostics in progress...").weak().size(16.0));
+            } else {
+                ui.label(egui::RichText::new("Press 'Run Full Check' to scan all components.").weak().size(16.0));
+            }
             return;
         }
 
-        let total = self.diag_results.len();
-        let ok_count = self.diag_results.iter().filter(|r| r.ok).count();
+        let total = results.len();
+        let ok_count = results.iter().filter(|r| r.ok).count();
         let fail_count = total - ok_count;
 
         ui.horizontal(|ui| {
@@ -1996,7 +2071,7 @@ impl ApiHubApp {
         ui.add_space(8.0);
 
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for r in &self.diag_results {
+            for r in &results {
                 ui.horizontal(|ui| {
                     let (icon, color) = if r.ok {
                         ("OK", egui::Color32::from_rgb(80, 220, 100))
@@ -2114,9 +2189,13 @@ fn main() -> eframe::Result<()> {
     // 2. Start poll thread + MQTT + services
     // 3. Wait for "Show Window" → open eframe in THIS process
     // 4. When window closes → back to tray-only (no subprocess, no zombie)
+    // 5. Quit flag (M2/M13) — graceful shutdown, lets destructors run
 
     let state: State = Arc::new(Mutex::new(SharedState::default()));
     let i2c_bus = ddc::default_bus();
+
+    // ── Shared quit flag (M2/M13) — set by tray "Quit", checked by main loop + poll thread
+    let quit_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     // ── Tray icon ────────────────────────────────────────────────────
     let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("ApiHub \u{2014} starting...".into()));
@@ -2126,14 +2205,16 @@ fn main() -> eframe::Result<()> {
         state.clone(),
         i2c_bus.clone(),
         show_window.clone(),
+        quit_flag.clone(),
     );
 
     // ── Polling + services ───────────────────────────────────────────
     let app_presets = load_app_presets();
     let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets)));
-    spawn_poll_thread(Arc::clone(&state), shared_presets);
+    spawn_poll_thread(Arc::clone(&state), shared_presets, quit_flag.clone());
 
     let mqtt = MqttConfig::default();
+    let mqtt_connected_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     if !mqtt.broker.is_empty() {
         let cfg = mqtt::MqttCfg {
             broker: mqtt.broker, port: mqtt.port.parse().unwrap_or(1883),
@@ -2143,18 +2224,35 @@ fn main() -> eframe::Result<()> {
             bus: i2c_bus,
         };
         eprintln!("[mqtt] auto-start: {}:{}", cfg.broker, cfg.port);
-        let _bridge = mqtt::MqttBridge::start(cfg);
-        std::mem::forget(_bridge);
+        let bridge = mqtt::MqttBridge::start(cfg);
+        // Keep the bridge's connected flag to sync with SharedState (M7)
+        let bridge_connected = bridge.connected.clone();
+        let mc_flag = mqtt_connected_flag.clone();
+        thread::spawn(move || {
+            loop {
+                let connected = bridge_connected.lock().map(|c| *c).unwrap_or(false);
+                mc_flag.store(connected, std::sync::atomic::Ordering::Relaxed);
+                thread::sleep(Duration::from_secs(5));
+            }
+        });
+        std::mem::forget(bridge);
     }
 
     eprintln!("[apihub] tray mode — click scarab icon to open window");
 
     // ── Main loop: tray-only until "Show Window" ─────────────────────
     loop {
+        // Check quit flag (M2) — break out and let destructors run
+        if quit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            eprintln!("[apihub] quit flag set — shutting down gracefully");
+            break;
+        }
+
         std::thread::sleep(Duration::from_secs(2));
 
-        // Update tray tooltip
-        if let Ok(snap) = state.lock() {
+        // Update tray tooltip + MQTT connected state in SharedState (M7)
+        if let Ok(mut snap) = state.lock() {
+            snap.mqtt_connected = mqtt_connected_flag.load(std::sync::atomic::Ordering::Relaxed);
             let pct = snap.keyboard.as_ref()
                 .and_then(|kb| kb.battery.percentage_fine
                     .or(kb.battery.percentage))
@@ -2188,7 +2286,9 @@ fn main() -> eframe::Result<()> {
                 }),
             );
             eprintln!("[apihub] window closed — back to tray mode");
-            // Window closed → loop back to tray-only mode
+            // Window closed → loop back to tray-only mode (unless quit flag is set)
         }
     }
+
+    Ok(())
 }

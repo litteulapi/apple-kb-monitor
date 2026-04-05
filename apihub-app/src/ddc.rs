@@ -10,6 +10,70 @@ const DDC_ADDR: u16 = 0x37;
 const I2C_SLAVE: libc::c_ulong = 0x0703;
 const I2C_RDWR: libc::c_ulong = 0x0707;
 
+/// Monitor identity from EDID (parsed from sysfs DRM connector).
+#[derive(Clone, Default)]
+pub struct MonitorInfo {
+    pub name: String,        // e.g. "34GN850"
+    pub manufacturer: String, // e.g. "GSM" (LG)
+    pub connector: String,   // e.g. "DP-2"
+    pub adapter: String,     // e.g. "NVIDIA i2c adapter 5"
+    pub serial: String,      // e.g. "008NTRL0W606"
+}
+
+/// Read monitor identity from DRM EDID + sysfs.
+pub fn read_monitor_info(bus_path: &str) -> MonitorInfo {
+    let mut info = MonitorInfo::default();
+
+    // I2C adapter name
+    let bus_num = bus_path.rsplit('-').next().unwrap_or("6");
+    let adapter_path = format!("/sys/bus/i2c/devices/i2c-{}/name", bus_num);
+    if let Ok(name) = std::fs::read_to_string(&adapter_path) {
+        info.adapter = name.trim().to_string();
+    }
+
+    // Find connected DRM connector with EDID
+    if let Ok(rd) = std::fs::read_dir("/sys/class/drm") {
+        for entry in rd.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !name.contains('-') { continue; }
+            let status_path = entry.path().join("status");
+            if let Ok(status) = std::fs::read_to_string(&status_path) {
+                if status.trim() != "connected" { continue; }
+                let edid_path = entry.path().join("edid");
+                if let Ok(edid) = std::fs::read(&edid_path) {
+                    if edid.len() >= 128 {
+                        // Parse EDID manufacturer (bytes 8-9)
+                        let m1 = ((edid[8] >> 2) & 0x1F) + 64;
+                        let m2 = (((edid[8] & 3) << 3) | (edid[9] >> 5)) + 64;
+                        let m3 = (edid[9] & 0x1F) + 64;
+                        info.manufacturer = format!("{}{}{}", m1 as char, m2 as char, m3 as char);
+
+                        // Parse EDID descriptor blocks for monitor name (0xFC) and serial (0xFF)
+                        let mut i = 54;
+                        while i + 18 <= edid.len().min(126) {
+                            if edid[i] == 0 && edid[i+1] == 0 && edid[i+2] == 0 && i+4 < edid.len() {
+                                let tag = edid[i+3];
+                                let text = String::from_utf8_lossy(&edid[i+5..i+18])
+                                    .split('\n').next().unwrap_or("").trim().to_string();
+                                if tag == 0xFC { info.name = text.clone(); }
+                                if tag == 0xFF { info.serial = text; }
+                            }
+                            i += 18;
+                        }
+
+                        if !info.name.is_empty() {
+                            info.connector = name.split('-').skip(1).collect::<Vec<_>>().join("-");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    info
+}
+
 /// Auto-detect I2C bus by probing for a DDC-capable display.
 /// Tests each /dev/i2c-* for a valid DDC/CI response to VCP 0xDF (version).
 pub fn detect_bus() -> Option<String> {
@@ -50,7 +114,9 @@ pub fn default_bus() -> String {
             for line in content.lines() {
                 let line = line.trim();
                 if line.starts_with('[') {
-                    in_ddc = line.trim_matches(|c| c == '[' || c == ']').trim() == "ddc";
+                    let name = line.trim_matches(|c| c == '[' || c == ']').trim();
+                    // Reject dotted/nested section names (e.g. [foo.bar]) — not supported (M14).
+                    in_ddc = name == "ddc" && !name.contains('.');
                     continue;
                 }
                 if !in_ddc { continue; }
@@ -86,15 +152,37 @@ static BUS_LOCK: Mutex<()> = Mutex::new(());
 /// Eliminates open()/close() syscall overhead per read cycle.
 static PERSISTENT_FD: Mutex<Option<libc::c_int>> = Mutex::new(None);
 
+/// Counter for periodic deep probe of the persistent fd (M3).
+static FD_USE_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
 /// Get or create the persistent I2C fd for the given bus path.
+///
+/// Staleness detection (M3): besides the fast `fcntl(F_GETFD)` check on every
+/// call, every 100th call performs a real DDC VCP 0xDF read probe to detect
+/// a monitor that has been power-cycled or unplugged (the fd stays valid at
+/// the kernel level but the I2C device no longer responds).
 fn get_fd(path: &str) -> Result<libc::c_int, String> {
     let mut fd_lock = PERSISTENT_FD.lock().map_err(|e| format!("fd lock: {}", e))?;
     if let Some(fd) = *fd_lock {
-        // Verify fd is still valid
+        // Fast check: fd still open at kernel level
         let ret = unsafe { libc::fcntl(fd, libc::F_GETFD) };
-        if ret >= 0 { return Ok(fd); }
-        // fd went stale, reopen
-        *fd_lock = None;
+        if ret < 0 {
+            *fd_lock = None;
+        } else {
+            // Deep probe every 100th call: verify the monitor actually responds
+            let count = FD_USE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if count % 100 == 99 {
+                if ddc_read_vcp_fd(fd, 0xDF).is_err() {
+                    eprintln!("[ddc] periodic probe failed — closing stale fd");
+                    unsafe { libc::close(fd); }
+                    *fd_lock = None;
+                } else {
+                    return Ok(fd);
+                }
+            } else {
+                return Ok(fd);
+            }
+        }
     }
     let c_path = CString::new(path).map_err(|e| e.to_string())?;
     let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
@@ -228,6 +316,13 @@ pub const ESSENTIAL_VCPS: &[VcpInfo] = &[
 
 /// Write a VCP value via I2C_SLAVE + raw write.
 /// Uses persistent fd — no open/close overhead.
+///
+/// Note (M5): this function uses I2C_SLAVE + write() while `ddc_read_vcp_fd`
+/// uses I2C_RDWR on the same fd. Mixing the two is safe in practice: the
+/// kernel's I2C subsystem serializes transactions per-adapter, and the
+/// BUS_LOCK mutex ensures we never interleave from userspace. The I2C_SLAVE
+/// ioctl only sets the target address for subsequent read()/write() calls
+/// and does not conflict with I2C_RDWR which carries its own address.
 pub fn ddc_write_vcp(path: &str, vcp: u8, value: u16) -> Result<(), String> {
     let _lock = BUS_LOCK.lock().map_err(|e| format!("bus lock: {}", e))?;
     let fd = get_fd(path)?;
