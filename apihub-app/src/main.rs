@@ -2127,84 +2127,86 @@ impl ApiHubApp {
 // ── Entrypoint ──────────────────────────────────────────────────────────────
 
 fn main() -> eframe::Result<()> {
-    let gui_now = std::env::args().any(|a| a == "--gui");
+    // ── Single process architecture ──────────────────────────────────
+    // 1. Start tray (always, zero CPU via zbus epoll)
+    // 2. Start poll thread + MQTT + services
+    // 3. Wait for "Show Window" → open eframe in THIS process
+    // 4. When window closes → back to tray-only (no subprocess, no zombie)
 
-    // ── Create shared state ──────────────────────────────────────────
-    let tray_state: State = Arc::new(Mutex::new(SharedState::default()));
+    let state: State = Arc::new(Mutex::new(SharedState::default()));
     let i2c_bus = ddc::default_bus();
 
-    // ── Spawn system tray (zbus SNI — epoll, near-zero idle CPU) ────
+    // ── Tray icon ────────────────────────────────────────────────────
     let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("ApiHub \u{2014} starting...".into()));
     let show_window = Arc::new(std::sync::atomic::AtomicBool::new(false));
     tray::spawn(
         tray_tooltip.clone(),
-        tray_state.clone(),
+        state.clone(),
         i2c_bus.clone(),
         show_window.clone(),
     );
 
-    if gui_now {
-        // ── GUI mode (--gui): open window immediately ────────────────
-        let options = eframe::NativeOptions {
-            viewport: egui::ViewportBuilder::default()
-                .with_title("ApiHub \u{2014} Monitor + Keyboard")
-                .with_inner_size([720.0, 600.0])
-                .with_min_inner_size([500.0, 400.0]),
-            vsync: true,
-            ..Default::default()
-        };
-        eframe::run_native(
-            "apihub",
-            options,
-            Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, tray_tooltip, tray_state, show_window)))),
-        )
-    } else {
-        // ── Daemon mode: tray only, no GPU, <1% CPU ──────────────────
-        // Start polling + services here (not in ApiHubApp::new)
-        let app_presets = load_app_presets();
-        let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets)));
-        spawn_poll_thread(Arc::clone(&tray_state), shared_presets);
+    // ── Polling + services ───────────────────────────────────────────
+    let app_presets = load_app_presets();
+    let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets)));
+    spawn_poll_thread(Arc::clone(&state), shared_presets);
 
-        let mqtt = MqttConfig::default();
-        if !mqtt.broker.is_empty() {
-            let cfg = mqtt::MqttCfg {
-                broker: mqtt.broker, port: mqtt.port.parse().unwrap_or(1883),
-                user: mqtt.user, pass: mqtt.pass,
-                topic_prefix: "homeassistant".into(), monitor_model: "lg_34gn850".into(),
-                bri_min: mqtt.bri_min as u16, bri_max: mqtt.bri_max as u16,
-                bus: i2c_bus,
-            };
-            eprintln!("[mqtt] auto-start: {}:{}", cfg.broker, cfg.port);
-            let _bridge = mqtt::MqttBridge::start(cfg);
-            // Keep _bridge alive by leaking it (daemon runs forever)
-            std::mem::forget(_bridge);
+    let mqtt = MqttConfig::default();
+    if !mqtt.broker.is_empty() {
+        let cfg = mqtt::MqttCfg {
+            broker: mqtt.broker, port: mqtt.port.parse().unwrap_or(1883),
+            user: mqtt.user, pass: mqtt.pass,
+            topic_prefix: "homeassistant".into(), monitor_model: "lg_34gn850".into(),
+            bri_min: mqtt.bri_min as u16, bri_max: mqtt.bri_max as u16,
+            bus: i2c_bus,
+        };
+        eprintln!("[mqtt] auto-start: {}:{}", cfg.broker, cfg.port);
+        let _bridge = mqtt::MqttBridge::start(cfg);
+        std::mem::forget(_bridge);
+    }
+
+    eprintln!("[apihub] tray mode — click scarab icon to open window");
+
+    // ── Main loop: tray-only until "Show Window" ─────────────────────
+    loop {
+        std::thread::sleep(Duration::from_secs(2));
+
+        // Update tray tooltip
+        if let Ok(snap) = state.lock() {
+            let pct = snap.keyboard.as_ref()
+                .and_then(|kb| kb.battery.percentage_fine
+                    .or(kb.battery.percentage))
+                .unwrap_or(0.0);
+            let bri = snap.ddc.data.get("brightness").map(|v| v.0).unwrap_or(0);
+            if let Ok(mut tt) = tray_tooltip.lock() {
+                *tt = format!("ApiHub \u{2014} Battery: {:.0}% \u{2014} Brightness: {}%", pct, bri);
+            }
         }
 
-        eprintln!("[daemon] tray-only mode (<1% CPU) — click tray 'Show Window' to open GUI");
-
-        // Update tray tooltip periodically from SharedState
-        loop {
-            std::thread::sleep(Duration::from_secs(2));
-
-            // Update tray tooltip
-            if let Ok(snap) = tray_state.lock() {
-                let pct = snap.keyboard.as_ref()
-                    .and_then(|kb| kb.battery.percentage_fine
-                        .or(kb.battery.percentage))
-                    .unwrap_or(0.0);
-                let bri = snap.ddc.data.get("brightness").map(|v| v.0).unwrap_or(0);
-                let text = format!("ApiHub \u{2014} Battery: {:.0}% \u{2014} Brightness: {}%", pct, bri);
-                if let Ok(mut tt) = tray_tooltip.lock() {
-                    *tt = text;
-                }
-            }
-
-            // Show Window requested → spawn GUI subprocess
-            if show_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
-                eprintln!("[daemon] opening GUI window...");
-                let exe = std::env::current_exe().unwrap_or_else(|_| "apihub-app".into());
-                let _ = Command::new(exe).arg("--gui").spawn();
-            }
+        // Show Window → open eframe in THIS process (blocks until window closed)
+        if show_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            eprintln!("[apihub] opening window...");
+            let options = eframe::NativeOptions {
+                viewport: egui::ViewportBuilder::default()
+                    .with_title("ApiHub \u{2014} Monitor + Keyboard")
+                    .with_inner_size([720.0, 600.0])
+                    .with_min_inner_size([500.0, 400.0]),
+                vsync: true,
+                ..Default::default()
+            };
+            // eframe::run_native blocks until the window is closed
+            let _ = eframe::run_native(
+                "apihub",
+                options,
+                Box::new({
+                    let tt = tray_tooltip.clone();
+                    let st = state.clone();
+                    let sw = show_window.clone();
+                    move |cc| Ok(Box::new(ApiHubApp::new(cc, tt, st, sw)))
+                }),
+            );
+            eprintln!("[apihub] window closed — back to tray mode");
+            // Window closed → loop back to tray-only mode
         }
     }
 }
