@@ -29,7 +29,7 @@ pub const HID_NAME_2: u8 = 0x52;
 pub const HID_NAME_3: u8 = 0x53;
 /// Connection parameters — BT interval + latency
 pub const HID_CONNECTION_PARAMS: u8 = 0x46;
-/// Device identity — MAC in LE order
+/// Device identity — BCM2042 internal identity key (NOT the BT MAC)
 pub const HID_DEVICE_IDENTITY: u8 = 0x4C;
 /// Device state — 1=OK, 0=LOW
 pub const HID_DEVICE_STATE: u8 = 0x09;
