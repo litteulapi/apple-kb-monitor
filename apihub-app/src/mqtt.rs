@@ -86,14 +86,14 @@ impl MqttBridge {
 
                         if msg.topic == cmd_brightness {
                             if let Ok(val) = payload_str.trim().parse::<f32>() {
-                                let v = (val as u16).clamp(cfg.bri_min, cfg.bri_max);
+                                let v = (val.round() as u16).clamp(cfg.bri_min, cfg.bri_max);
                                 let _ = ddc::ddc_write_vcp(bus, 0x10, v);
                                 let _ = client.publish(format!("{}/number/{}/brightness/state", prefix, model), QoS::AtMostOnce, true, v.to_string().as_bytes());
                                 if let Ok(mut l) = lc_thread.lock() { *l = Some(format!("brightness → {}", v)); }
                             }
                         } else if msg.topic == cmd_volume {
                             if let Ok(val) = payload_str.trim().parse::<f32>() {
-                                let v = (val as u16).clamp(0, 100);
+                                let v = (val.round() as u16).clamp(0, 100);
                                 let _ = ddc::ddc_write_vcp(bus, 0x62, v);
                                 let _ = client.publish(format!("{}/number/{}/volume/state", prefix, model), QoS::AtMostOnce, true, v.to_string().as_bytes());
                                 if let Ok(mut l) = lc_thread.lock() { *l = Some(format!("volume → {}", v)); }

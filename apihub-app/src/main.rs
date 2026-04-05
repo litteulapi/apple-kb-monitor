@@ -248,7 +248,7 @@ fn spawn_poll_thread(state: State, presets: SharedPresets) {
 
                 // Update BlueZ Battery Provider (KDE/GNOME battery display)
                 if let Some(ref bp) = battery_provider {
-                    bp.update_percentage(pct as u8);
+                    bp.update_percentage(pct.round() as u8);
                 }
 
                 // Save MAC for RSSI read after this borrow ends
@@ -518,37 +518,19 @@ struct ApiHubApp {
 }
 
 impl ApiHubApp {
+    /// Create the GUI app. Does NOT spawn poll thread, MQTT, or BlueZ —
+    /// those are owned by main() and shared via Arc<Mutex<SharedState>>.
     fn new(
         _cc: &eframe::CreationContext<'_>,
         tray_tooltip: Arc<Mutex<String>>,
         state: State,
         tray_show_window: Arc<std::sync::atomic::AtomicBool>,
     ) -> Self {
-        let app_presets = load_app_presets();
-        let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets.clone())));
-        spawn_poll_thread(Arc::clone(&state), Arc::clone(&shared_presets));
-
         let mqtt = MqttConfig::default();
         let i2c_bus = ddc::default_bus();
-
-        // Auto-start MQTT bridge if broker is configured
-        let mqtt_bridge = if !mqtt.broker.is_empty() {
-            let cfg = mqtt::MqttCfg {
-                broker: mqtt.broker.clone(),
-                port: mqtt.port.parse().unwrap_or(1883),
-                user: mqtt.user.clone(),
-                pass: mqtt.pass.clone(),
-                topic_prefix: "homeassistant".to_string(),
-                monitor_model: "lg_34gn850".to_string(),
-                bri_min: mqtt.bri_min as u16,
-                bri_max: mqtt.bri_max as u16,
-                bus: i2c_bus.clone(),
-            };
-            eprintln!("[mqtt] auto-start: {}:{}", cfg.broker, cfg.port);
-            Some(mqtt::MqttBridge::start(cfg))
-        } else {
-            None
-        };
+        let mqtt_bridge: Option<mqtt::MqttBridge> = None; // owned by main(), not us
+        let app_presets = load_app_presets();
+        let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets.clone())));
 
         // Load battery history from disk (once at startup)
         let entries = history::read_history();
