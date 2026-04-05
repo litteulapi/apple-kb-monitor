@@ -225,15 +225,23 @@ fn get_hid_fd() -> Option<(libc::c_int, String)> {
     Some((raw_fd, path))
 }
 
-/// Read all keyboard telemetry via HID Feature Reports.
-/// Uses persistent fd — no open/close per call.
+/// Read keyboard telemetry via HID Feature Reports.
+/// Uses persistent fd. Reads only essential reports to minimize BT traffic
+/// and avoid triggering HIDP timeouts that cause disconnections.
 pub fn read_keyboard() -> Option<KbReport> {
     let (fd_val, path) = get_hid_fd()?;
 
     let mut report = KbReport::default();
 
-    // Battery precise (0xEA) — pre-rounding ADC value
-    if let Some(buf) = hid_read_feature(fd_val, HID_BATTERY_PRECISE) {
+    // First: try battery precise (0xEA) as a connectivity probe.
+    // If this fails, the keyboard is disconnected — don't hammer with more reads.
+    let probe = hid_read_feature(fd_val, HID_BATTERY_PRECISE);
+    if probe.is_none() {
+        // Keyboard not responding — invalidate persistent fd so we reopen next time
+        if let Ok(mut fd_lock) = HID_FD.lock() { *fd_lock = None; }
+        return None;
+    }
+    if let Some(ref buf) = probe {
         if buf.len() >= 2 {
             report.battery.percentage_fine = Some(buf[1] as f64);
         }
@@ -328,16 +336,25 @@ pub fn read_keyboard() -> Option<KbReport> {
         }
     }
 
-    // Device identity (0x4C) — MAC in LE order + identity key
+    // Device identity (0x4C) — internal BCM2042 identity, NOT the BT MAC
     if let Some(buf) = hid_read_feature(fd_val, HID_DEVICE_IDENTITY) {
-        if buf.len() >= 7 {
-            let mac = format!("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                buf[6], buf[5], buf[4], buf[3], buf[2], buf[1]);
-            report.device.mac = Some(mac);
-            // Identity key (bytes 7+)
-            if buf.len() > 7 {
-                let key_hex: String = buf[7..].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(":");
-                report.bluetooth.identity_key = Some(key_hex);
+        if buf.len() > 7 {
+            let key_hex: String = buf[1..].iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(":");
+            report.bluetooth.identity_key = Some(key_hex);
+        }
+    }
+
+    // Real BT MAC from sysfs HID_UNIQ in uevent
+    // (0x4C identity report contains BCM2042 internal ID, not BT MAC)
+    let hidraw_name = path.trim_start_matches("/dev/");
+    let uevent_path = format!("/sys/class/hidraw/{}/device/uevent", hidraw_name);
+    if let Ok(uevent) = std::fs::read_to_string(&uevent_path) {
+        for line in uevent.lines() {
+            if let Some(mac) = line.strip_prefix("HID_UNIQ=") {
+                let mac = mac.trim().to_uppercase();
+                if mac.contains(':') && mac.len() >= 17 {
+                    report.device.mac = Some(mac);
+                }
             }
         }
     }
