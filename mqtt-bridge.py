@@ -8,6 +8,7 @@ Configuration: ~/.config/apple-kb-monitor/config.toml
 Fallback:      /etc/apple-kb-monitor/config.toml
 """
 
+import json
 import pathlib
 import subprocess
 import sys
@@ -20,13 +21,45 @@ CONFIG_PATHS = [
     pathlib.Path("/etc/apple-kb-monitor/config.toml"),
 ]
 
-def _build_topics(cfg: dict) -> tuple[str, str]:
-    """Build MQTT command/state topics from config."""
+def _build_topics(cfg: dict) -> tuple[str, str, str]:
+    """Build MQTT command/state/discovery topics from config."""
     prefix = cfg.get("mqtt", {}).get("topic_prefix", "homeassistant")
     model = cfg.get("monitor", {}).get("model", "lg_34gn850")
     topic_cmd = f"{prefix}/number/{model}/brightness/set"
     topic_state = f"{prefix}/number/{model}/brightness/state"
-    return topic_cmd, topic_state
+    topic_config = f"{prefix}/number/{model}/brightness/config"
+    return topic_cmd, topic_state, topic_config
+
+
+def _build_discovery_payload(cfg: dict, topic_cmd: str, topic_state: str) -> dict:
+    """Build the retained HA MQTT discovery payload for the brightness entity.
+
+    Republished on every (re)connect so the entity survives a broker
+    restart or a loss of retained messages without manual intervention
+    (root cause of the 2026-08 outage: this discovery config was never
+    republished after being lost, leaving the entity 'restored'/unavailable
+    even though state publishes kept arriving on an unwatched topic).
+    """
+    bri_cfg = cfg.get("brightness", {})
+    model = cfg.get("monitor", {}).get("model", "lg_34gn850")
+    return {
+        "name": "LG Monitor Brightness",
+        "unique_id": "lg_34gn850_brightness_ctrl",
+        "command_topic": topic_cmd,
+        "state_topic": topic_state,
+        "min": bri_cfg.get("min", 2),
+        "max": bri_cfg.get("max", 70),
+        "step": 1,
+        "mode": "auto",
+        "icon": "mdi:monitor-shimmer",
+        "unit_of_measurement": "%",
+        "device": {
+            "identifiers": [model],
+            "manufacturer": "LG Electronics",
+            "model": "34GN850",
+            "name": "LG 34GN850",
+        },
+    }
 
 
 def load_config() -> dict:
@@ -85,8 +118,14 @@ def ddc_read_brightness(bus: str) -> int:
 def on_connect(client, userdata, _flags, rc):
     if rc == 0:
         topic_cmd = userdata["topic_cmd"]
+        topic_config = userdata["topic_config"]
+        # Re-publish (retained) HA discovery on every reconnect: makes the
+        # entity self-healing across broker restarts / retained-message loss.
+        client.publish(
+            topic_config, json.dumps(userdata["discovery_payload"]), retain=True
+        )
         client.subscribe(topic_cmd)
-        print(f"[mqtt] connected, subscribed to {topic_cmd}", file=sys.stderr)
+        print(f"[mqtt] connected, discovery published, subscribed to {topic_cmd}", file=sys.stderr)
         bri = ddc_read_brightness(userdata["bus"])
         if bri >= 0:
             client.publish(userdata["topic_state"], str(bri), retain=True)
@@ -128,7 +167,7 @@ def main():
     bri_max = bri_cfg.get("max", 70)
     bus = _bus_number(cfg)
 
-    topic_cmd, topic_state = _build_topics(cfg)
+    topic_cmd, topic_state, topic_config = _build_topics(cfg)
 
     userdata = {
         "bus": bus,
@@ -136,6 +175,8 @@ def main():
         "bri_max": bri_max,
         "topic_cmd": topic_cmd,
         "topic_state": topic_state,
+        "topic_config": topic_config,
+        "discovery_payload": _build_discovery_payload(cfg, topic_cmd, topic_state),
     }
 
     client = mqtt.Client(client_id="lg-ddc-bridge", userdata=userdata)
