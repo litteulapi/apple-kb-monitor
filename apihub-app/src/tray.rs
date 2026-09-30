@@ -105,7 +105,7 @@ impl SniItem {
         if orientation == "vertical" || orientation == "Vertical" {
             if let Ok((cur, _)) = ddc::ddc_read_vcp(&self.i2c_bus, 0x10) {
                 let new_val = if delta > 0 {
-                    (cur + 1).min(100)
+                    cur.saturating_add(1).min(100)
                 } else {
                     cur.saturating_sub(1)
                 };
@@ -504,8 +504,22 @@ pub fn spawn(
     std::thread::Builder::new()
         .name("tray-sni".into())
         .spawn(move || {
-            if let Err(e) = run(tooltip, state, i2c_bus, show_window, quit_flag) {
-                eprintln!("[tray] fatal: {}", e);
+            // Retry: the session bus may not be ready yet at login. `run` only
+            // returns on error (it parks forever on success).
+            loop {
+                if quit_flag.load(Ordering::Relaxed) {
+                    break;
+                }
+                if let Err(e) = run(
+                    tooltip.clone(),
+                    state.clone(),
+                    i2c_bus.clone(),
+                    show_window.clone(),
+                    quit_flag.clone(),
+                ) {
+                    eprintln!("[tray] error: {} — retrying in 10s", e);
+                }
+                std::thread::sleep(std::time::Duration::from_secs(10));
             }
         })
         .expect("failed to spawn tray thread");
@@ -541,15 +555,26 @@ fn run(
     conn.object_server().at("/MenuBar", menu)?;
 
     // Register with the host panel's StatusNotifierWatcher
-    match conn.call_method(
-        Some("org.kde.StatusNotifierWatcher"),
-        "/StatusNotifierWatcher",
-        Some("org.kde.StatusNotifierWatcher"),
-        "RegisterStatusNotifierItem",
-        &bus_name,
-    ) {
-        Ok(_) => eprintln!("[tray] registered with StatusNotifierWatcher"),
-        Err(e) => eprintln!("[tray] watcher unavailable (icon may not appear): {}", e),
+    // The panel may start after us (login autostart): retry for ~1 minute.
+    for attempt in 1..=12 {
+        match conn.call_method(
+            Some("org.kde.StatusNotifierWatcher"),
+            "/StatusNotifierWatcher",
+            Some("org.kde.StatusNotifierWatcher"),
+            "RegisterStatusNotifierItem",
+            &bus_name,
+        ) {
+            Ok(_) => {
+                eprintln!("[tray] registered with StatusNotifierWatcher");
+                break;
+            }
+            Err(e) => {
+                eprintln!("[tray] watcher unavailable (attempt {}/12): {}", attempt, e);
+                if attempt < 12 {
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                }
+            }
+        }
     }
 
     // Block forever. zbus serves D-Bus messages internally via its async
