@@ -133,6 +133,23 @@ pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> Option<Vec<u8>> {
     }
 }
 
+/// Identify an Apple keyboard from the `HID_ID=bus:vendor:product` line of a
+/// hidraw uevent. Matches vendor and product exactly (hex), never as a
+/// substring of unrelated fields (MAC, name, modalias).
+pub fn apple_model_from_uevent(uevent: &str) -> Option<(&'static str, &'static str)> {
+    let line = uevent.lines().find_map(|l| l.strip_prefix("HID_ID="))?;
+    let mut parts = line.trim().split(':');
+    let _bus = parts.next()?;
+    let vid = u32::from_str_radix(parts.next()?, 16).ok()?;
+    let pid = u32::from_str_radix(parts.next()?, 16).ok()?;
+    if vid != u32::from_str_radix(APPLE_VENDOR_ID, 16).ok()? {
+        return None;
+    }
+    APPLE_PIDS.iter()
+        .find(|(p, _, _)| u32::from_str_radix(p, 16).ok() == Some(pid))
+        .map(|&(_, model, chip)| (model, chip))
+}
+
 /// Find the first Apple keyboard hidraw device by scanning sysfs uevent.
 /// Matches all 10 known Apple Wireless/Magic Keyboard PIDs.
 pub fn find_apple_hidraw() -> Option<String> {
@@ -141,12 +158,8 @@ pub fn find_apple_hidraw() -> Option<String> {
         let name = entry.file_name().to_string_lossy().to_string();
         let device_path = entry.path().join("device/uevent");
         if let Ok(uevent) = std::fs::read_to_string(&device_path) {
-            if uevent.contains(APPLE_VENDOR_ID) {
-                for &(pid, _, _) in APPLE_PIDS {
-                    if uevent.contains(pid) {
-                        return Some(format!("/dev/{}", name));
-                    }
-                }
+            if apple_model_from_uevent(&uevent).is_some() {
+                return Some(format!("/dev/{}", name));
             }
         }
     }
@@ -154,6 +167,13 @@ pub fn find_apple_hidraw() -> Option<String> {
 }
 
 // ── Battery helpers ───────────────────────────────────────────────────────
+
+/// A calibration curve is usable only if it is strictly decreasing and non-zero
+/// ([100%, 75%, 50%, 25%] thresholds). A garbled report (zeros, unordered)
+/// would otherwise yield meaningless percentages.
+pub fn calibration_valid(t: &[u16; 4]) -> bool {
+    t[3] > 0 && t[0] > t[1] && t[1] > t[2] && t[2] > t[3]
+}
 
 /// Interpolate battery % from voltage using the BCM2042 calibration curve.
 /// Thresholds: [100%, 75%, 50%, 25%] in mV, linear interpolation between segments.
@@ -167,6 +187,7 @@ pub fn interpolate_battery(voltage_v: f64, thresholds_mv: &[u16; 4]) -> f64 {
         thresholds_mv[3] as i32,
         0,
     ];
+    if !calibration_valid(thresholds_mv) { return interpolate_battery(voltage_v, &DEFAULT_CALIBRATION_MV); }
     if mv >= levels_mv[0] { return 100.0; }
     if mv <= 0 { return 0.0; }
     for i in 0..4 {
@@ -201,11 +222,12 @@ fn get_hid_fd() -> Option<(libc::c_int, String)> {
     if let Some((fd, ref path)) = *fd_lock {
         let ret = unsafe { libc::fcntl(fd, libc::F_GETFD) };
         if ret >= 0 { return Some((fd, path.clone())); }
+        // fd already invalid at kernel level: nothing to close.
         *fd_lock = None;
     }
     let path = find_apple_hidraw()?;
     let c_path = std::ffi::CString::new(path.as_str()).ok()?;
-    let raw_fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
+    let raw_fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR | libc::O_CLOEXEC) };
     if raw_fd < 0 { return None; }
     *fd_lock = Some((raw_fd, path.clone()));
     Some((raw_fd, path))
@@ -224,7 +246,11 @@ pub fn read_keyboard() -> Option<KbReport> {
     let probe = hid_read_feature(fd_val, HID_BATTERY_PRECISE);
     if probe.is_none() {
         // Keyboard not responding — invalidate persistent fd so we reopen next time
-        if let Ok(mut fd_lock) = HID_FD.lock() { *fd_lock = None; }
+        if let Ok(mut fd_lock) = HID_FD.lock() {
+            if let Some((old_fd, _)) = fd_lock.take() {
+                unsafe { libc::close(old_fd); }
+            }
+        }
         return None;
     }
     if let Some(ref buf) = probe {
@@ -253,9 +279,13 @@ pub fn read_keyboard() -> Option<KbReport> {
     let mut calib = DEFAULT_CALIBRATION_MV;
     if let Some(buf) = hid_read_feature(fd_val, HID_CALIBRATION) {
         if buf.len() >= 9 {
+            let mut c = [0u16; 4];
             for i in 0..4 {
                 let off = 1 + i * 2;
-                calib[i] = ((buf[off] as u16) << 8) | buf[off + 1] as u16;
+                c[i] = ((buf[off] as u16) << 8) | buf[off + 1] as u16;
+            }
+            if calibration_valid(&c) {
+                calib = c;
             }
         }
     }
@@ -288,10 +318,14 @@ pub fn read_keyboard() -> Option<KbReport> {
     let mut name_bytes = Vec::new();
     for rid in [HID_NAME_1, HID_NAME_2, HID_NAME_3] {
         if let Some(buf) = hid_read_feature(fd_val, rid) {
-            name_bytes.extend_from_slice(&buf[1..]);
+            // Each chunk is NUL-padded: cut at the first NUL so padding never
+            // ends up in the middle of the assembled name.
+            let chunk = &buf[1..];
+            let end = chunk.iter().position(|&b| b == 0).unwrap_or(chunk.len());
+            name_bytes.extend_from_slice(&chunk[..end]);
         }
     }
-    let name = String::from_utf8_lossy(&name_bytes).trim_end_matches('\0').to_string();
+    let name = String::from_utf8_lossy(&name_bytes).trim().to_string();
     if !name.is_empty() {
         report.device.name = Some(name);
     }
@@ -361,16 +395,8 @@ pub fn read_keyboard() -> Option<KbReport> {
             .join(path.trim_start_matches("/dev/"))
             .join("device/uevent")
     ).unwrap_or_default();
-    let (model, chip) = {
-        let mut found = ("Apple Wireless Keyboard", "BCM2042");
-        for &(pid, name, c) in APPLE_PIDS {
-            if uevent.contains(pid) {
-                found = (name, c);
-                break;
-            }
-        }
-        found
-    };
+    let (model, chip) = apple_model_from_uevent(&uevent)
+        .unwrap_or(("Apple Wireless Keyboard", "BCM2042"));
     report.device.model = Some(model.to_string());
     report.device.chip = Some(chip.to_string());
     report.device.driver = Some("hid-apple".to_string());
@@ -386,36 +412,70 @@ pub fn read_keyboard() -> Option<KbReport> {
 pub fn spawn_wake_monitor(hidraw_path: &str) -> Arc<Mutex<Option<std::time::Instant>>> {
     let last_wake: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
     let lw = last_wake.clone();
-    let path = hidraw_path.to_string();
+    let mut path = hidraw_path.to_string();
 
-    std::thread::spawn(move || {
-        let c_path = match std::ffi::CString::new(path.as_str()) {
-            Ok(p) => p,
-            Err(_) => return,
-        };
-        let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK) };
-        if fd < 0 { return; }
-
-        let mut buf = [0u8; 64];
-        loop {
-            // poll with 2s timeout
-            let mut pfd = libc::pollfd { fd, events: libc::POLLIN, revents: 0 };
-            let ret = unsafe { libc::poll(&mut pfd, 1, 2000) };
-            if ret <= 0 { continue; }
-
-            let n = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
-            if n <= 0 { continue; }
-
-            // Report 0x13 = vendor wake event (FF01 usage page)
-            if buf[0] == 0x13 {
-                if let Ok(mut lw) = lw.lock() {
-                    *lw = Some(std::time::Instant::now());
-                }
+    let spawned = std::thread::Builder::new()
+        .name("kb-wake-monitor".into())
+        .spawn(move || loop {
+            wake_loop(&path, &lw);
+            // Device gone (keyboard off / re-paired) or not openable yet:
+            // wait, then retry — the hidraw node number may have changed.
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            if let Some(p) = find_apple_hidraw() {
+                path = p;
             }
-        }
-    });
+        });
+    if let Err(e) = spawned {
+        eprintln!("[keyboard] cannot spawn wake monitor: {}", e);
+    }
 
     last_wake
+}
+
+/// True if an input report is the vendor wake/connection event (report 0x13).
+fn is_wake_report(report: &[u8]) -> bool {
+    report.first() == Some(&0x13)
+}
+
+/// Read input reports until the device disappears or errors. Closes the fd.
+fn wake_loop(path: &str, lw: &Arc<Mutex<Option<std::time::Instant>>>) {
+    let c_path = match std::ffi::CString::new(path) {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    let fd = unsafe {
+        libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC)
+    };
+    if fd < 0 { return; }
+
+    let mut buf = [0u8; 64];
+    loop {
+        let mut pfd = libc::pollfd { fd, events: libc::POLLIN, revents: 0 };
+        let ret = unsafe { libc::poll(&mut pfd, 1, 2000) };
+        if ret < 0 {
+            if std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) { continue; }
+            break;
+        }
+        if ret == 0 { continue; }
+        // POLLHUP/POLLERR/POLLNVAL: hidraw node is gone. Without this exit the
+        // loop spins at 100% CPU because poll returns immediately forever.
+        if pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL) != 0 { break; }
+
+        let n = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+        if n < 0 {
+            let e = std::io::Error::last_os_error().raw_os_error();
+            if e == Some(libc::EAGAIN) || e == Some(libc::EINTR) { continue; }
+            break;
+        }
+        if n == 0 { break; }
+
+        if is_wake_report(&buf[..n as usize]) {
+            if let Ok(mut lw) = lw.lock() {
+                *lw = Some(std::time::Instant::now());
+            }
+        }
+    }
+    unsafe { libc::close(fd); }
 }
 
 // ── LED state reader ────────────────────────────────────────────────────
@@ -465,7 +525,7 @@ pub fn find_apple_evdev() -> Option<String> {
 pub fn set_led(led: u16, value: bool) {
     if let Some(evdev) = find_apple_evdev() {
         if let Ok(c_path) = std::ffi::CString::new(evdev.as_str()) {
-            let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_WRONLY) };
+            let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_WRONLY | libc::O_CLOEXEC) };
             if fd >= 0 {
                 // struct input_event: tv_sec(8) + tv_usec(8) + type(2) + code(2) + value(4) = 24
                 let mut event = [0u8; 24];
@@ -477,7 +537,10 @@ pub fn set_led(led: u16, value: bool) {
                 event[19] = (led >> 8) as u8;
                 // value = 0 or 1
                 event[20] = if value { 1 } else { 0 };
-                unsafe { libc::write(fd, event.as_ptr() as *const libc::c_void, 24); }
+                let w = unsafe { libc::write(fd, event.as_ptr() as *const libc::c_void, 24) };
+                if w != 24 {
+                    eprintln!("[keyboard] set_led({}) write failed: {}", led, std::io::Error::last_os_error());
+                }
                 unsafe { libc::close(fd); }
             }
         }
@@ -487,11 +550,92 @@ pub fn set_led(led: u16, value: bool) {
 /// Flash CapsLock LED N times (for notifications).
 pub fn flash_capslock(times: u8) {
     std::thread::spawn(move || {
+        // Restore the real CapsLock state afterwards (not unconditionally "off").
+        let was_on = read_led_state().0;
         for _ in 0..times {
-            set_led(1, true);
+            set_led(1, !was_on);
             std::thread::sleep(std::time::Duration::from_millis(300));
-            set_led(1, false);
+            set_led(1, was_on);
             std::thread::sleep(std::time::Duration::from_millis(300));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uevent_matches_exact_vendor_and_product() {
+        let u = "DRIVER=hid-generic\nHID_ID=0005:000005AC:00000255\nHID_NAME=Apple Wireless Keyboard\n";
+        let (m, c) = apple_model_from_uevent(u).unwrap();
+        assert!(m.contains("A1314") && m.contains("ANSI"));
+        assert_eq!(c, "BCM2042");
+    }
+
+    #[test]
+    fn uevent_rejects_non_apple_and_substring_false_positives() {
+        // Non-Apple vendor whose product id happens to be 0255.
+        assert!(apple_model_from_uevent("HID_ID=0003:0000046D:00000255\n").is_none());
+        // Apple vendor, unknown product, "0255" only appears in the MAC.
+        let u = "HID_ID=0005:000005AC:00000999\nHID_UNIQ=aa:bb:02:55:cc:dd\nHID_PHYS=05AC0255\n";
+        assert!(apple_model_from_uevent(u).is_none());
+        assert!(apple_model_from_uevent("").is_none());
+        assert!(apple_model_from_uevent("HID_ID=garbage\n").is_none());
+        assert!(apple_model_from_uevent("HID_ID=0005:000005AC\n").is_none());
+    }
+
+    #[test]
+    fn calibration_validation() {
+        assert!(calibration_valid(&DEFAULT_CALIBRATION_MV));
+        assert!(!calibration_valid(&[0, 0, 0, 0]));
+        assert!(!calibration_valid(&[2000, 2450, 2350, 2900]));
+        assert!(!calibration_valid(&[2900, 2900, 2350, 2000]));
+    }
+
+    #[test]
+    fn interpolation_bounds_and_midpoints() {
+        let c = DEFAULT_CALIBRATION_MV;
+        assert_eq!(interpolate_battery(3.3, &c), 100.0);
+        assert_eq!(interpolate_battery(2.9, &c), 100.0);
+        assert_eq!(interpolate_battery(2.45, &c), 75.0);
+        assert_eq!(interpolate_battery(2.35, &c), 50.0);
+        assert_eq!(interpolate_battery(2.0, &c), 25.0);
+        assert_eq!(interpolate_battery(0.0, &c), 0.0);
+        assert_eq!(interpolate_battery(-1.0, &c), 0.0);
+        let mid = interpolate_battery(2.675, &c); // halfway 2450..2900
+        assert!((mid - 87.5).abs() < 0.01, "{}", mid);
+        // below the 25% threshold it decays linearly to 0
+        assert!((interpolate_battery(1.0, &c) - 12.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn interpolation_survives_garbled_calibration() {
+        for bad in [[0u16; 4], [100, 200, 300, 400], [2900, 2900, 2900, 2900]] {
+            for mv in [0.0, 1.0, 2.2, 2.6, 3.3] {
+                let p = interpolate_battery(mv, &bad);
+                assert!((0.0..=100.0).contains(&p), "{:?} {} -> {}", bad, mv, p);
+                assert_eq!(p, interpolate_battery(mv, &DEFAULT_CALIBRATION_MV));
+            }
+        }
+    }
+
+    #[test]
+    fn battery_type_thresholds() {
+        assert_eq!(detect_battery_type(3.2), "Lithium (fresh)");
+        assert_eq!(detect_battery_type(2.9), "Alkaline (fresh)");
+        assert_eq!(detect_battery_type(1.0), "Critical — replace");
+    }
+
+    #[test]
+    fn wake_report_detection() {
+        assert!(is_wake_report(&[0x13, 1, 2]));
+        assert!(!is_wake_report(&[0x12]));
+        assert!(!is_wake_report(&[]));
+    }
+
+    #[test]
+    fn hid_read_feature_on_invalid_fd_is_none() {
+        assert!(hid_read_feature(-1, HID_BATTERY_PRECISE).is_none());
+    }
 }
