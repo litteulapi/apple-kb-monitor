@@ -107,50 +107,61 @@ fn active_window_class() -> Option<String> {
 }
 
 fn active_window_kwin() -> Option<String> {
-    // Write temp script
-    let script = "console.log('APIHUB_CLASS:' + workspace.activeWindow.resourceClass);";
-    let tmp = std::env::temp_dir().join("apihub_kwin_detect.js");
+    // Unique marker per call so a stale journal line is never mistaken for
+    // the current answer; script is null-safe when no window is active.
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let marker = format!("APIHUB_CLASS_{}:", nonce);
+    let script = format!(
+        "console.log('{}' + (workspace.activeWindow ? workspace.activeWindow.resourceClass : ''));",
+        marker
+    );
+    let tmp = std::env::temp_dir().join(format!("apihub_kwin_detect_{}.js", std::process::id()));
     std::fs::write(&tmp, script).ok()?;
 
-    // Load script
-    let load = Command::new("qdbus6")
-        .args(["org.kde.KWin", "/Scripting",
-               "org.kde.kwin.Scripting.loadScript",
-               &tmp.to_string_lossy(), "apihub-detect"])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output().ok()?;
-    let sid = String::from_utf8_lossy(&load.stdout).trim().to_string();
-    if sid.is_empty() { let _ = std::fs::remove_file(&tmp); return None; }
+    let qdbus = |args: &[&str]| {
+        Command::new("qdbus6")
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .output()
+    };
 
-    // Run
-    let _ = Command::new("qdbus6")
-        .args(["org.kde.KWin", &format!("/Scripting/Script{}", sid),
-               "org.kde.kwin.Script.run"])
-        .output();
+    // Load script
+    let tmp_s = tmp.to_string_lossy().to_string();
+    let load = qdbus(&["org.kde.KWin", "/Scripting",
+                       "org.kde.kwin.Scripting.loadScript", &tmp_s, "apihub-detect"]);
+    let _ = std::fs::remove_file(&tmp);
+    let load = load.ok()?;
+    let sid = String::from_utf8_lossy(&load.stdout).trim().to_string();
+    // loadScript returns the script id, or -1 on failure.
+    if sid.is_empty() || sid.parse::<i64>().map(|n| n < 0).unwrap_or(true) {
+        return None;
+    }
+    let script_path = format!("/Scripting/Script{}", sid);
+
+    // Run, read the journal, then always clean up (no early return in between).
+    let _ = qdbus(&["org.kde.KWin", &script_path, "org.kde.kwin.Script.run"]);
     thread::sleep(Duration::from_millis(100));
 
-    // Read from journal
-    let journal = Command::new("journalctl")
-        .args(["--user", "-t", "kwin_wayland", "-n", "5", "--no-pager", "-o", "cat"])
+    let class = Command::new("journalctl")
+        .args(["--user", "-t", "kwin_wayland", "-n", "20", "--no-pager", "-o", "cat"])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
-        .output().ok()?;
-    let out = String::from_utf8_lossy(&journal.stdout);
-    let class = out.lines().rev()
-        .find(|l| l.contains("APIHUB_CLASS:"))
-        .and_then(|l| l.split("APIHUB_CLASS:").nth(1))
-        .map(|s| s.trim().to_lowercase());
+        .output()
+        .ok()
+        .and_then(|journal| {
+            let out = String::from_utf8_lossy(&journal.stdout).to_string();
+            out.lines().rev()
+                .find(|l| l.contains(&marker))
+                .and_then(|l| l.split(&marker).nth(1).map(|s| s.trim().to_lowercase()))
+        });
 
-    // Cleanup
-    let _ = Command::new("qdbus6")
-        .args(["org.kde.KWin", &format!("/Scripting/Script{}", sid),
-               "org.kde.kwin.Script.stop"])
-        .output();
-    let _ = Command::new("qdbus6")
-        .args(["org.kde.KWin", "/Scripting",
-               "org.kde.kwin.Scripting.unloadScript", "apihub-detect"])
-        .output();
+    let _ = qdbus(&["org.kde.KWin", &script_path, "org.kde.kwin.Script.stop"]);
+    let _ = qdbus(&["org.kde.KWin", "/Scripting",
+                    "org.kde.kwin.Scripting.unloadScript", "apihub-detect"]);
 
     class.filter(|s| !s.is_empty())
 }
@@ -365,27 +376,31 @@ fn spawn_poll_thread(state: State, presets: SharedPresets, quit_flag: Arc<std::s
             }
 
             // ── App Preset: auto picture mode by active window ────
-            // Every 10th cycle (~7s) — reduces subprocess spawning
+            // Every 10th cycle (~7s) — reduces subprocess spawning.
+            // Snapshot the presets first: never hold the lock across subprocesses.
             if cycle % 10 == 0 {
-                if let Ok(p) = presets.lock() {
-                    if p.0 && !p.1.is_empty() {
-                        if let Some(wclass) = active_window_class() {
-                            for (class, mode) in &p.1 {
-                                if wclass.contains(&class.to_lowercase()) {
-                                    // Only write if picture mode differs
-                                    let current_mode = state.lock().ok()
-                                        .and_then(|s| s.ddc.data.get("picture_mode").map(|v| v.0))
-                                        .unwrap_or(0);
-                                    if current_mode != *mode {
-                                        let _ = ddc::ddc_write_vcp(&bus, 0x15, *mode);
-                                        if let Ok(mut s) = state.lock() {
-                                            let max = s.ddc.data.get("picture_mode").map(|v| v.1).unwrap_or(255);
-                                            s.ddc.data.insert("picture_mode".to_string(), (*mode, max));
-                                        }
-                                    }
-                                    break;
+                let (enabled, list) = presets.lock()
+                    .map(|p| (p.0, p.1.clone()))
+                    .unwrap_or((false, Vec::new()));
+                if enabled && !list.is_empty() {
+                    if let Some(wclass) = active_window_class() {
+                        for (class, mode) in &list {
+                            let class = class.trim().to_lowercase();
+                            // An empty class would match every window.
+                            if class.is_empty() || !wclass.contains(&class) {
+                                continue;
+                            }
+                            // Only write if picture mode differs
+                            let current_mode = state.lock().ok()
+                                .and_then(|s| s.ddc.data.get("picture_mode").map(|v| v.0))
+                                .unwrap_or(0);
+                            if current_mode != *mode && ddc::ddc_write_vcp(&bus, 0x15, *mode).is_ok() {
+                                if let Ok(mut s) = state.lock() {
+                                    let max = s.ddc.data.get("picture_mode").map(|v| v.1).unwrap_or(255);
+                                    s.ddc.data.insert("picture_mode".to_string(), (*mode, max));
                                 }
                             }
+                            break;
                         }
                     }
                 }
@@ -542,13 +557,18 @@ impl ApiHubApp {
         tray_tooltip: Arc<Mutex<String>>,
         state: State,
         tray_show_window: Arc<std::sync::atomic::AtomicBool>,
+        shared_presets: SharedPresets,
     ) -> Self {
         let mqtt = MqttConfig::default();
         let i2c_bus = ddc::default_bus();
         let monitor_info = ddc::read_monitor_info(&i2c_bus);
         let mqtt_bridge: Option<mqtt::MqttBridge> = None; // owned by main(), not us
-        let app_presets = load_app_presets();
-        let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets.clone())));
+        // Use the SAME shared presets as the poll thread (owned by main()),
+        // so UI changes actually reach the poller.
+        let (app_presets_enabled, app_presets) = shared_presets
+            .lock()
+            .map(|p| (p.0, p.1.clone()))
+            .unwrap_or_else(|_| (false, load_app_presets()));
 
         // Load battery history from disk (once at startup)
         let entries = history::read_history();
@@ -576,7 +596,7 @@ impl ApiHubApp {
             auto_brightness: false,
             last_auto_bri: 0,
             app_presets,
-            app_presets_enabled: false,
+            app_presets_enabled,
             app_preset_new_class: String::new(),
             app_preset_new_mode: 15, // default: sRGB
             shared_presets,
@@ -2281,7 +2301,7 @@ fn main() -> eframe::Result<()> {
     // ── Polling + services ───────────────────────────────────────────
     let app_presets = load_app_presets();
     let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets)));
-    spawn_poll_thread(Arc::clone(&state), shared_presets, quit_flag.clone());
+    spawn_poll_thread(Arc::clone(&state), shared_presets.clone(), quit_flag.clone());
 
     let mqtt = MqttConfig::default();
     let mqtt_connected_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -2352,7 +2372,8 @@ fn main() -> eframe::Result<()> {
                     let tt = tray_tooltip.clone();
                     let st = state.clone();
                     let sw = show_window.clone();
-                    move |cc| Ok(Box::new(ApiHubApp::new(cc, tt, st, sw)))
+                    let sp = shared_presets.clone();
+                    move |cc| Ok(Box::new(ApiHubApp::new(cc, tt, st, sw, sp)))
                 }),
             );
             eprintln!("[apihub] window closed — back to tray mode");
