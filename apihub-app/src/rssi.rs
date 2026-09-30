@@ -16,7 +16,7 @@ pub fn read_rssi(mac: &str) -> Option<(i8, i8)> {
     let octets = parse_mac(mac)?;
 
     // AF_BLUETOOTH = 31, BTPROTO_HCI = 1
-    let fd = unsafe { libc::socket(31, libc::SOCK_RAW, 1) };
+    let fd = unsafe { libc::socket(31, libc::SOCK_RAW | libc::SOCK_CLOEXEC, 1) };
     if fd < 0 {
         return None;
     }
@@ -93,34 +93,61 @@ pub fn read_rssi(mac: &str) -> Option<(i8, i8)> {
         return None;
     }
 
-    // Read response
-    let n = unsafe { libc::recv(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 0) };
+    // Read until our own command reply shows up. The control channel also
+    // delivers unrelated events (index added, class changed, ...) that used to
+    // be mistaken for the reply and made the read fail.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(400);
+    let mut result = None;
+    while std::time::Instant::now() < deadline {
+        let n = unsafe { libc::recv(fd, buf.as_mut_ptr() as *mut libc::c_void, buf.len(), 0) };
+        if n < 0 {
+            if std::io::Error::last_os_error().raw_os_error() == Some(libc::EINTR) { continue; }
+            break; // timeout or socket error
+        }
+        match parse_conn_info_reply(&buf[..n as usize]) {
+            Reply::NotOurs => continue,
+            Reply::Failed => break,
+            Reply::Info(r) => { result = Some(r); break; }
+        }
+    }
     unsafe { libc::close(fd) };
+    result
+}
 
-    if n < 19 {
-        return None;
+/// Outcome of inspecting one MGMT event packet.
+#[derive(Debug, PartialEq)]
+enum Reply {
+    /// Event for something else (other opcode / other event type).
+    NotOurs,
+    /// Our command was answered with a non-zero status or unusable values.
+    Failed,
+    /// (rssi_dbm, tx_power_dbm)
+    Info((i8, i8)),
+}
+
+/// BlueZ reports 127 when RSSI / TX power is not available.
+const MGMT_VALUE_INVALID: i8 = 127;
+
+/// Parse a MGMT event: header `event(u16) index(u16) len(u16)` followed by
+/// `opcode(u16) status(u8)` and, for Get Connection Info, `addr[6] type(u8)
+/// rssi tx_power max_tx_power`.
+fn parse_conn_info_reply(pkt: &[u8]) -> Reply {
+    if pkt.len() < 9 { return Reply::NotOurs; }
+    let event = u16::from_le_bytes([pkt[0], pkt[1]]);
+    let opcode = u16::from_le_bytes([pkt[6], pkt[7]]);
+    // MGMT_EV_CMD_COMPLETE = 1, MGMT_EV_CMD_STATUS = 2
+    if (event != 0x0001 && event != 0x0002) || opcode != 0x0031 {
+        return Reply::NotOurs;
     }
-    let n = n as usize;
-
-    // Validate: first 2 bytes = MGMT_EV_CMD_COMPLETE (0x0001)
-    let ev_opcode = u16::from_le_bytes([buf[0], buf[1]]);
-    if ev_opcode != 0x0001 {
-        return None;
+    if pkt[8] != 0x00 || event == 0x0002 || pkt.len() < 19 {
+        return Reply::Failed;
     }
-
-    // Status byte at offset 8 must be 0 (success)
-    if n <= 8 || buf[8] != 0x00 {
-        return None;
+    let rssi = pkt[16] as i8;
+    let tx = pkt[17] as i8;
+    if rssi == MGMT_VALUE_INVALID || tx == MGMT_VALUE_INVALID {
+        return Reply::Failed;
     }
-
-    // RSSI at offset 16, TX power at offset 17
-    if n < 18 {
-        return None;
-    }
-    let rssi = buf[16] as i8;
-    let tx_power = buf[17] as i8;
-
-    Some((rssi, tx_power))
+    Reply::Info((rssi, tx))
 }
 
 /// Parse a colon-separated MAC string into 6 bytes.
@@ -131,7 +158,70 @@ fn parse_mac(mac: &str) -> Option<[u8; 6]> {
     }
     let mut octets = [0u8; 6];
     for (i, part) in parts.iter().enumerate() {
+        // Exactly two hex digits: from_str_radix alone accepts "+A" and "1".
+        if part.len() != 2 || !part.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
         octets[i] = u8::from_str_radix(part, 16).ok()?;
     }
     Some(octets)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn complete(opcode: u16, status: u8, rssi: i8, tx: i8) -> Vec<u8> {
+        let mut p = vec![0u8; 19];
+        p[0..2].copy_from_slice(&1u16.to_le_bytes());
+        p[6..8].copy_from_slice(&opcode.to_le_bytes());
+        p[8] = status;
+        p[16] = rssi as u8;
+        p[17] = tx as u8;
+        p[18] = 4;
+        p
+    }
+
+    #[test]
+    fn valid_reply() {
+        assert_eq!(parse_conn_info_reply(&complete(0x31, 0, -42, 4)), Reply::Info((-42, 4)));
+    }
+
+    #[test]
+    fn foreign_events_are_skipped_not_failed() {
+        assert_eq!(parse_conn_info_reply(&complete(0x30, 0, -42, 4)), Reply::NotOurs);
+        let mut ev = complete(0x31, 0, -42, 4);
+        ev[0] = 0x04; // some other event type
+        assert_eq!(parse_conn_info_reply(&ev), Reply::NotOurs);
+        assert_eq!(parse_conn_info_reply(&[1, 0, 0]), Reply::NotOurs);
+        assert_eq!(parse_conn_info_reply(&[]), Reply::NotOurs);
+    }
+
+    #[test]
+    fn failures_and_invalid_values() {
+        assert_eq!(parse_conn_info_reply(&complete(0x31, 0x02, 0, 0)), Reply::Failed); // not connected
+        assert_eq!(parse_conn_info_reply(&complete(0x31, 0, 127, 4)), Reply::Failed);
+        assert_eq!(parse_conn_info_reply(&complete(0x31, 0, -40, 127)), Reply::Failed);
+        let truncated = complete(0x31, 0, -40, 4)[..15].to_vec();
+        assert_eq!(parse_conn_info_reply(&truncated), Reply::Failed);
+        let mut st = complete(0x31, 0, -40, 4);
+        st[0] = 2; // CMD_STATUS
+        assert_eq!(parse_conn_info_reply(&st), Reply::Failed);
+    }
+
+    #[test]
+    fn mac_parsing_is_strict() {
+        assert_eq!(parse_mac("AA:bb:0C:dd:EE:01"), Some([0xAA, 0xBB, 0x0C, 0xDD, 0xEE, 0x01]));
+        assert_eq!(parse_mac("+A:bb:0C:dd:EE:01"), None);
+        assert_eq!(parse_mac("A:bb:0C:dd:EE:01"), None);
+        assert_eq!(parse_mac("AA:bb:0C:dd:EE"), None);
+        assert_eq!(parse_mac("AA:bb:0C:dd:EE:01:02"), None);
+        assert_eq!(parse_mac("ZZ:bb:0C:dd:EE:01"), None);
+        assert_eq!(parse_mac(""), None);
+    }
+
+    #[test]
+    fn read_rssi_bad_mac_is_none() {
+        assert_eq!(read_rssi("not a mac"), None);
+    }
 }
