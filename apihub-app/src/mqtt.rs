@@ -12,6 +12,47 @@ use rumqttc::{Client, Event, Incoming, MqttOptions, QoS};
 
 use crate::ddc;
 
+/// Picture-mode names exposed to Home Assistant, with their DDC values (VCP 0x15).
+const PICTURE_MODES: &[(&str, u16)] = &[
+    ("Custom", 45), ("Reader", 1), ("Vivid", 20), ("HDR Effect", 22), ("Cinema", 46),
+    ("Color Weakness", 6), ("FPS 1", 30), ("FPS 2", 31), ("RTS", 39), ("sRGB", 15),
+    ("DCI-P3", 24), ("EBU", 25), ("Photo", 48), ("Calibration", 49),
+];
+
+/// Input sources exposed to Home Assistant, with their DDC values (VCP 0x60).
+const INPUT_SOURCES: &[(&str, u16)] = &[("DisplayPort", 0x0F), ("HDMI 1", 0x11), ("HDMI 2", 0x12)];
+
+fn picture_mode_value(name: &str) -> Option<u16> {
+    PICTURE_MODES.iter().find(|(n, _)| *n == name).map(|&(_, v)| v)
+}
+
+/// `None` for values that are not a select option (HA rejects unknown states).
+fn picture_mode_name(value: u16) -> Option<&'static str> {
+    PICTURE_MODES.iter().find(|(_, v)| *v == value).map(|&(n, _)| n)
+}
+
+fn input_value(name: &str) -> Option<u16> {
+    INPUT_SOURCES.iter().find(|(n, _)| *n == name).map(|&(_, v)| v)
+}
+
+fn input_name(value: u16) -> Option<&'static str> {
+    INPUT_SOURCES.iter().find(|(_, v)| *v == value).map(|&(n, _)| n)
+}
+
+/// Parse an HA "number" payload ("42", "42.0") into a rounded, non-negative value.
+/// Rejects NaN/inf and saturates negatives to 0 and huge values to u16::MAX.
+fn parse_percent(payload: &str) -> Option<u16> {
+    let v: f32 = payload.trim().parse().ok()?;
+    if !v.is_finite() { return None; }
+    Some(v.round() as u16)
+}
+
+/// Clamp into [min, max] without panicking when the config has min > max.
+fn clamp_range(v: u16, min: u16, max: u16) -> u16 {
+    let (lo, hi) = if min <= max { (min, max) } else { (max, min) };
+    v.clamp(lo, hi)
+}
+
 /// MQTT bridge state shared with the UI thread.
 pub struct MqttBridge {
     pub connected: Arc<Mutex<bool>>,
@@ -59,10 +100,10 @@ impl MqttBridge {
         let cmd_volume = format!("{}/number/{}/volume/set", cfg.topic_prefix, cfg.monitor_model);
         let cmd_picture = format!("{}/select/{}/picture_mode/set", cfg.topic_prefix, cfg.monitor_model);
         let cmd_input = format!("{}/select/{}/input_source/set", cfg.topic_prefix, cfg.monitor_model);
-        let _ = client.subscribe(&cmd_brightness, QoS::AtMostOnce);
-        let _ = client.subscribe(&cmd_volume, QoS::AtMostOnce);
-        let _ = client.subscribe(&cmd_picture, QoS::AtMostOnce);
-        let _ = client.subscribe(&cmd_input, QoS::AtMostOnce);
+        let _ = client.try_subscribe(&cmd_brightness, QoS::AtMostOnce);
+        let _ = client.try_subscribe(&cmd_volume, QoS::AtMostOnce);
+        let _ = client.try_subscribe(&cmd_picture, QoS::AtMostOnce);
+        let _ = client.try_subscribe(&cmd_input, QoS::AtMostOnce);
 
         let tx = client.clone();
 
@@ -72,10 +113,10 @@ impl MqttBridge {
                 match notification {
                     Ok(Event::Incoming(Incoming::ConnAck(_))) => {
                         if let Ok(mut c) = conn.lock() { *c = true; }
-                        let _ = client.subscribe(&cmd_brightness, QoS::AtMostOnce);
-                        let _ = client.subscribe(&cmd_volume, QoS::AtMostOnce);
-                        let _ = client.subscribe(&cmd_picture, QoS::AtMostOnce);
-                        let _ = client.subscribe(&cmd_input, QoS::AtMostOnce);
+                        let _ = client.try_subscribe(&cmd_brightness, QoS::AtMostOnce);
+                        let _ = client.try_subscribe(&cmd_volume, QoS::AtMostOnce);
+                        let _ = client.try_subscribe(&cmd_picture, QoS::AtMostOnce);
+                        let _ = client.try_subscribe(&cmd_input, QoS::AtMostOnce);
                         eprintln!("[mqtt] connected to {}:{}", cfg.broker, cfg.port);
                     }
                     Ok(Event::Incoming(Incoming::Publish(msg))) => {
@@ -84,41 +125,46 @@ impl MqttBridge {
                         let prefix = &cfg.topic_prefix;
                         let model = &cfg.monitor_model;
 
-                        if msg.topic == cmd_brightness {
-                            if let Ok(val) = payload_str.trim().parse::<f32>() {
-                                let v = (val.round() as u16).clamp(cfg.bri_min, cfg.bri_max);
-                                let _ = ddc::ddc_write_vcp(bus, 0x10, v);
-                                let _ = client.publish(format!("{}/number/{}/brightness/state", prefix, model), QoS::AtMostOnce, true, v.to_string().as_bytes());
-                                if let Ok(mut l) = lc_thread.lock() { *l = Some(format!("brightness → {}", v)); }
-                            }
+                        let trimmed = payload_str.trim();
+                        // (vcp, value, state subtopic, state payload, log label)
+                        let action: Option<(u8, u16, String, String, String)> = if msg.topic == cmd_brightness {
+                            parse_percent(trimmed).map(|v| {
+                                let v = clamp_range(v, cfg.bri_min, cfg.bri_max);
+                                (0x10, v, format!("{}/number/{}/brightness/state", prefix, model),
+                                 v.to_string(), format!("brightness → {}", v))
+                            })
                         } else if msg.topic == cmd_volume {
-                            if let Ok(val) = payload_str.trim().parse::<f32>() {
-                                let v = (val.round() as u16).clamp(0, 100);
-                                let _ = ddc::ddc_write_vcp(bus, 0x62, v);
-                                let _ = client.publish(format!("{}/number/{}/volume/state", prefix, model), QoS::AtMostOnce, true, v.to_string().as_bytes());
-                                if let Ok(mut l) = lc_thread.lock() { *l = Some(format!("volume → {}", v)); }
-                            }
+                            parse_percent(trimmed).map(|v| {
+                                let v = v.min(100);
+                                (0x62, v, format!("{}/number/{}/volume/state", prefix, model),
+                                 v.to_string(), format!("volume → {}", v))
+                            })
                         } else if msg.topic == cmd_picture {
-                            let mode_val = match payload_str.trim() {
-                                "Custom" => Some(45u16), "Reader" => Some(1), "Vivid" => Some(20),
-                                "HDR Effect" => Some(22), "Cinema" => Some(46), "Color Weakness" => Some(6),
-                                "FPS 1" => Some(30), "FPS 2" => Some(31), "RTS" => Some(39),
-                                "sRGB" => Some(15), "DCI-P3" => Some(24), "EBU" => Some(25),
-                                "Photo" => Some(48), "Calibration" => Some(49), _ => None,
-                            };
-                            if let Some(v) = mode_val {
-                                let _ = ddc::ddc_write_vcp(bus, 0x15, v);
-                                let _ = client.publish(format!("{}/select/{}/picture_mode/state", prefix, model), QoS::AtMostOnce, true, payload_str.trim().as_bytes());
-                                if let Ok(mut l) = lc_thread.lock() { *l = Some(format!("mode → {}", payload_str.trim())); }
-                            }
+                            picture_mode_value(trimmed).map(|v| {
+                                (0x15, v, format!("{}/select/{}/picture_mode/state", prefix, model),
+                                 trimmed.to_string(), format!("mode → {}", trimmed))
+                            })
                         } else if msg.topic == cmd_input {
-                            let input_val = match payload_str.trim() {
-                                "DisplayPort" => Some(0x0Fu16), "HDMI 1" => Some(0x11), "HDMI 2" => Some(0x12), _ => None,
-                            };
-                            if let Some(v) = input_val {
-                                let _ = ddc::ddc_write_vcp(bus, 0x60, v);
-                                let _ = client.publish(format!("{}/select/{}/input_source/state", prefix, model), QoS::AtMostOnce, true, payload_str.trim().as_bytes());
-                                if let Ok(mut l) = lc_thread.lock() { *l = Some(format!("input → {}", payload_str.trim())); }
+                            input_value(trimmed).map(|v| {
+                                (0x60, v, format!("{}/select/{}/input_source/state", prefix, model),
+                                 trimmed.to_string(), format!("input → {}", trimmed))
+                            })
+                        } else {
+                            None
+                        };
+
+                        if let Some((vcp, v, state_topic, state, label)) = action {
+                            // Acknowledge only what was really applied: echoing the state
+                            // after a failed DDC write would show a wrong value in HA.
+                            match ddc::ddc_write_vcp(bus, vcp, v) {
+                                Ok(()) => {
+                                    let _ = client.try_publish(state_topic, QoS::AtMostOnce, true, state.as_bytes());
+                                    if let Ok(mut l) = lc_thread.lock() { *l = Some(label); }
+                                }
+                                Err(e) => {
+                                    eprintln!("[mqtt] DDC write 0x{:02X}={} failed: {}", vcp, v, e);
+                                    if let Ok(mut l) = lc_thread.lock() { *l = Some(format!("{} (FAILED)", label)); }
+                                }
                             }
                         }
                     }
@@ -186,11 +232,11 @@ impl MqttBridge {
                 r#"{{"name":"Apple KB Connected","unique_id":"apple_kb_{}_connected","state_topic":"{}/binary_sensor/apple_kb_{}/connected/state","device_class":"connectivity","icon":"mdi:keyboard-wireless","device":{}}}"#,
                 mac, prefix, mac, device
             );
-            let _ = tx.publish(
+            let _ = tx.try_publish(
                 format!("{}/binary_sensor/apple_kb_{}/connected/config", prefix, mac),
                 QoS::AtMostOnce, true, connected_config.as_bytes(),
             );
-            let _ = tx.publish(
+            let _ = tx.try_publish(
                 format!("{}/binary_sensor/apple_kb_{}/connected/state", prefix, mac),
                 QoS::AtMostOnce, true,
                 if kb.bluetooth.connected { b"ON" as &[u8] } else { b"OFF" },
@@ -209,11 +255,11 @@ impl MqttBridge {
                             sid, mac, sid, prefix, mac, sid, unit, icon, device
                         )
                     };
-                    let _ = tx.publish(
+                    let _ = tx.try_publish(
                         format!("{}/sensor/apple_kb_{}/{}/config", prefix, mac, sid),
                         QoS::AtMostOnce, true, config.as_bytes(),
                     );
-                    let _ = tx.publish(
+                    let _ = tx.try_publish(
                         format!("{}/sensor/apple_kb_{}/{}/state", prefix, mac, sid),
                         QoS::AtMostOnce, true, val.as_bytes(),
                     );
@@ -242,11 +288,11 @@ impl MqttBridge {
                     r#"{{"name":"LG {}","unique_id":"{}_{}","state_topic":"{}/sensor/{}/{}/state","unit_of_measurement":"{}","icon":"{}","device":{}}}"#,
                     sid.replace('_', " "), model, sid, prefix, model, sid, unit, icon, device_mon
                 );
-                let _ = tx.publish(
+                let _ = tx.try_publish(
                     format!("{}/sensor/{}/{}/config", prefix, model, sid),
                     QoS::AtMostOnce, true, config.as_bytes(),
                 );
-                let _ = tx.publish(
+                let _ = tx.try_publish(
                     format!("{}/sensor/{}/{}/state", prefix, model, sid),
                     QoS::AtMostOnce, true, cur.to_string().as_bytes(),
                 );
@@ -258,12 +304,12 @@ impl MqttBridge {
             r#"{{"name":"LG Monitor Brightness","unique_id":"{}_brightness_ctrl","command_topic":"{}/number/{}/brightness/set","state_topic":"{}/number/{}/brightness/state","min":{},"max":{},"step":1,"unit_of_measurement":"%","icon":"mdi:monitor-shimmer","device":{}}}"#,
             model, prefix, model, prefix, model, cfg.bri_min, cfg.bri_max, device_mon
         );
-        let _ = tx.publish(
+        let _ = tx.try_publish(
             format!("{}/number/{}/brightness/config", prefix, model),
             QoS::AtMostOnce, true, num_config.as_bytes(),
         );
         if let Some((cur, _)) = ddc_data.get("brightness") {
-            let _ = tx.publish(
+            let _ = tx.try_publish(
                 format!("{}/number/{}/brightness/state", prefix, model),
                 QoS::AtMostOnce, true, cur.to_string().as_bytes(),
             );
@@ -274,12 +320,12 @@ impl MqttBridge {
             r#"{{"name":"LG Monitor Volume","unique_id":"{}_volume_ctrl","command_topic":"{}/number/{}/volume/set","state_topic":"{}/number/{}/volume/state","min":0,"max":100,"step":1,"unit_of_measurement":"%","icon":"mdi:volume-high","device":{}}}"#,
             model, prefix, model, prefix, model, device_mon
         );
-        let _ = tx.publish(
+        let _ = tx.try_publish(
             format!("{}/number/{}/volume/config", prefix, model),
             QoS::AtMostOnce, true, vol_config.as_bytes(),
         );
         if let Some((cur, _)) = ddc_data.get("volume") {
-            let _ = tx.publish(
+            let _ = tx.try_publish(
                 format!("{}/number/{}/volume/state", prefix, model),
                 QoS::AtMostOnce, true, cur.to_string().as_bytes(),
             );
@@ -293,22 +339,17 @@ impl MqttBridge {
             modes.split(',').map(|m| format!("\"{}\"", m)).collect::<Vec<_>>().join(","),
             device_mon
         );
-        let _ = tx.publish(
+        let _ = tx.try_publish(
             format!("{}/select/{}/picture_mode/config", prefix, model),
             QoS::AtMostOnce, true, pm_config.as_bytes(),
         );
         if let Some((cur, _)) = ddc_data.get("picture_mode") {
-            let name = match *cur {
-                1 => "Reader", 6 => "Color Weakness", 15 => "sRGB",
-                20 => "Vivid", 22 => "HDR Effect", 24 => "DCI-P3",
-                25 => "EBU", 30 => "FPS 1", 31 => "FPS 2", 39 => "RTS",
-                45 => "Custom", 46 => "Cinema", 48 => "Photo", 49 => "Calibration",
-                _ => "Unknown",
-            };
-            let _ = tx.publish(
-                format!("{}/select/{}/picture_mode/state", prefix, model),
-                QoS::AtMostOnce, true, name.as_bytes(),
-            );
+            if let Some(name) = picture_mode_name(*cur) {
+                let _ = tx.try_publish(
+                    format!("{}/select/{}/picture_mode/state", prefix, model),
+                    QoS::AtMostOnce, true, name.as_bytes(),
+                );
+            }
         }
 
         // ── Input source select entity ─────────────────────────────
@@ -316,16 +357,17 @@ impl MqttBridge {
             r#"{{"name":"LG Input Source","unique_id":"{}_input_source","command_topic":"{}/select/{}/input_source/set","state_topic":"{}/select/{}/input_source/state","options":["DisplayPort","HDMI 1","HDMI 2"],"icon":"mdi:video-input-hdmi","device":{}}}"#,
             model, prefix, model, prefix, model, device_mon
         );
-        let _ = tx.publish(
+        let _ = tx.try_publish(
             format!("{}/select/{}/input_source/config", prefix, model),
             QoS::AtMostOnce, true, is_config.as_bytes(),
         );
         if let Some((cur, _)) = ddc_data.get("input_source") {
-            let name = match *cur { 0x0F => "DisplayPort", 0x11 => "HDMI 1", 0x12 => "HDMI 2", _ => "Unknown" };
-            let _ = tx.publish(
-                format!("{}/select/{}/input_source/state", prefix, model),
-                QoS::AtMostOnce, true, name.as_bytes(),
-            );
+            if let Some(name) = input_name(*cur) {
+                let _ = tx.try_publish(
+                    format!("{}/select/{}/input_source/state", prefix, model),
+                    QoS::AtMostOnce, true, name.as_bytes(),
+                );
+            }
         }
 
         if let Ok(mut lp) = self.last_publish.lock() {
@@ -351,5 +393,66 @@ impl MqttBridge {
         tx: Client,
     ) -> Self {
         Self { connected, last_publish, last_cmd, tx: Some(tx) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn percent_parsing() {
+        assert_eq!(parse_percent("42"), Some(42));
+        assert_eq!(parse_percent(" 42.6 \n"), Some(43));
+        assert_eq!(parse_percent("-5"), Some(0));
+        assert_eq!(parse_percent("1e9"), Some(u16::MAX));
+        assert_eq!(parse_percent("nan"), None);
+        assert_eq!(parse_percent("inf"), None);
+        assert_eq!(parse_percent(""), None);
+        assert_eq!(parse_percent("abc"), None);
+    }
+
+    #[test]
+    fn clamp_never_panics_on_inverted_bounds() {
+        assert_eq!(clamp_range(50, 10, 100), 50);
+        assert_eq!(clamp_range(5, 10, 100), 10);
+        assert_eq!(clamp_range(500, 10, 100), 100);
+        // min > max in config.toml used to panic inside u16::clamp
+        assert_eq!(clamp_range(50, 100, 10), 50);
+        assert_eq!(clamp_range(500, 100, 10), 100);
+    }
+
+    #[test]
+    fn picture_modes_round_trip_and_unique() {
+        for &(n, v) in PICTURE_MODES {
+            assert_eq!(picture_mode_value(n), Some(v));
+            assert_eq!(picture_mode_name(v), Some(n));
+        }
+        let mut vals: Vec<u16> = PICTURE_MODES.iter().map(|m| m.1).collect();
+        vals.sort_unstable();
+        vals.dedup();
+        assert_eq!(vals.len(), PICTURE_MODES.len());
+        assert_eq!(picture_mode_value("Nope"), None);
+        assert_eq!(picture_mode_name(9999), None);
+    }
+
+    #[test]
+    fn inputs_round_trip() {
+        assert_eq!(input_value("HDMI 2"), Some(0x12));
+        assert_eq!(input_name(0x0F), Some("DisplayPort"));
+        assert_eq!(input_name(0x22), None);
+        assert_eq!(input_value("USB-C"), None);
+    }
+
+    #[test]
+    fn bridge_publish_does_not_block_when_broker_is_down() {
+        // Nothing listens on this port; the event loop is never polled, so the
+        // request queue (cap 64) fills up. Blocking publish() would hang here.
+        let opts = MqttOptions::new("test-down", "127.0.0.1", 1);
+        let (client, _conn) = Client::new(opts, 4);
+        for _ in 0..50 {
+            let _ = client.try_publish("t", QoS::AtMostOnce, false, b"x".as_slice());
+        }
+        assert!(client.try_publish("t", QoS::AtMostOnce, false, b"x".as_slice()).is_err());
     }
 }
