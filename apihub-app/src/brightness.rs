@@ -17,6 +17,8 @@ const KEY_BRIGHTNESSUP: u16 = 225;
 const EV_KEY: u16 = 1;
 const INPUT_EVENT_SIZE: usize = 24; // sizeof(struct input_event) on x86_64
 const STEP: i32 = 5;
+/// Re-read the real brightness from the monitor if no key was pressed for this long.
+const RESYNC_AFTER: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// Cached brightness level shared across event iterations.
 static BRIGHTNESS: AtomicI32 = AtomicI32::new(-1);
@@ -31,7 +33,11 @@ pub fn circadian_brightness() -> u16 {
         libc::localtime_r(&epoch, &mut tm);
         tm
     };
-    let h = now.tm_hour as f32 + now.tm_min as f32 / 60.0;
+    circadian_for_hour(now.tm_hour as f32 + now.tm_min as f32 / 60.0)
+}
+
+/// Pure curve behind [`circadian_brightness`]; `h` is the local hour in 0.0..24.0.
+fn circadian_for_hour(h: f32) -> u16 {
     let bri = if h < 6.0 {
         30.0
     } else if h < 9.0 {
@@ -54,14 +60,25 @@ pub fn circadian_brightness() -> u16 {
 /// `bus` is the I2C bus path (e.g. `/dev/i2c-6`).
 /// The thread is detached — it runs until the process exits.
 pub fn spawn_brightness_thread(bus: String) {
-    thread::Builder::new()
+    let spawned = thread::Builder::new()
         .name("brightness-evdev".into())
         .spawn(move || {
-            if let Err(e) = run_evdev_loop(&bus) {
-                eprintln!("[brightness] {}", e);
+            // keyd may start after us or be restarted (ENODEV on the old node):
+            // retry forever instead of silently losing the brightness keys.
+            let mut last_err = String::new();
+            loop {
+                if let Err(e) = run_evdev_loop(&bus) {
+                    if e != last_err {
+                        eprintln!("[brightness] {} (retrying every 5s)", e);
+                        last_err = e;
+                    }
+                }
+                thread::sleep(std::time::Duration::from_secs(5));
             }
-        })
-        .expect("failed to spawn brightness-evdev thread");
+        });
+    if let Err(e) = spawned {
+        eprintln!("[brightness] cannot spawn evdev thread: {}", e);
+    }
 }
 
 /// Scan `/dev/input/event*` for the keyd virtual keyboard.
@@ -81,7 +98,7 @@ fn find_keyd_device() -> Option<String> {
     for path in &candidates {
         // Read device name via EVIOCGNAME ioctl
         let c_path = CString::new(path.as_str()).ok()?;
-        let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK) };
+        let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC) };
         if fd < 0 {
             continue;
         }
@@ -109,13 +126,37 @@ fn find_keyd_device() -> Option<String> {
     None
 }
 
+/// Decode a raw `struct input_event` (x86_64 layout):
+/// `u64 sec, u64 usec, u16 type, u16 code, i32 value`.
+/// Returns the brightness delta for a press/repeat of the brightness keys.
+fn key_delta(buf: &[u8; INPUT_EVENT_SIZE]) -> Option<i32> {
+    let ev_type = u16::from_ne_bytes([buf[16], buf[17]]);
+    let ev_code = u16::from_ne_bytes([buf[18], buf[19]]);
+    let ev_value = i32::from_ne_bytes([buf[20], buf[21], buf[22], buf[23]]);
+
+    // EV_KEY, value 1 (press) or 2 (repeat/hold)
+    if ev_type != EV_KEY || (ev_value != 1 && ev_value != 2) {
+        return None;
+    }
+    match ev_code {
+        KEY_BRIGHTNESSDOWN => Some(-STEP),
+        KEY_BRIGHTNESSUP => Some(STEP),
+        _ => None,
+    }
+}
+
+/// Apply a delta and clamp to the 0..=100 range.
+fn apply_delta(old: i32, delta: i32) -> i32 {
+    old.saturating_add(delta).clamp(0, 100)
+}
+
 /// Main evdev loop — blocks forever reading key events.
 fn run_evdev_loop(bus: &str) -> Result<(), String> {
     let dev_path = find_keyd_device()
         .ok_or_else(|| "keyd virtual keyboard not found".to_string())?;
 
     let c_path = CString::new(dev_path.as_str()).map_err(|e| e.to_string())?;
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY) };
+    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
     if fd < 0 {
         return Err(format!(
             "open {}: {}",
@@ -143,6 +184,7 @@ fn run_evdev_loop(bus: &str) -> Result<(), String> {
     }
 
     let mut buf = [0u8; INPUT_EVENT_SIZE];
+    let mut last_key: Option<std::time::Instant> = None;
 
     loop {
         let n = unsafe {
@@ -160,39 +202,36 @@ fn run_evdev_loop(bus: &str) -> Result<(), String> {
             continue;
         }
 
-        // struct input_event (x86_64):
-        //   u64 tv_sec    (bytes 0..8)
-        //   u64 tv_usec   (bytes 8..16)
-        //   u16 type      (bytes 16..18)
-        //   u16 code      (bytes 18..20)
-        //   i32 value     (bytes 20..24)
-        let ev_type = u16::from_ne_bytes([buf[16], buf[17]]);
-        let ev_code = u16::from_ne_bytes([buf[18], buf[19]]);
-        let ev_value = i32::from_ne_bytes([buf[20], buf[21], buf[22], buf[23]]);
-
-        // EV_KEY, value 1 (press) or 2 (repeat/hold)
-        if ev_type != EV_KEY || (ev_value != 1 && ev_value != 2) {
-            continue;
-        }
-
-        let delta = match ev_code {
-            KEY_BRIGHTNESSDOWN => -STEP,
-            KEY_BRIGHTNESSUP => STEP,
-            _ => continue,
+        let delta = match key_delta(&buf) {
+            Some(d) => d,
+            None => continue,
         };
 
+        // Resync the cached level when idle: brightness may have been changed
+        // meanwhile by the tray, Home Assistant or the monitor's own OSD.
+        if last_key.map_or(true, |t| t.elapsed() > RESYNC_AFTER) {
+            if let Ok((cur, _)) = ddc::ddc_read_vcp(bus, 0x10) {
+                BRIGHTNESS.store((cur as i32).clamp(0, 100), Ordering::Relaxed);
+            }
+        }
+        last_key = Some(std::time::Instant::now());
+
         let old = BRIGHTNESS.load(Ordering::Relaxed);
-        let new = (old + delta).clamp(0, 100);
+        let new = apply_delta(old, delta);
         BRIGHTNESS.store(new, Ordering::Relaxed);
 
         // Direct blocking DDC write — this thread is already dedicated to evdev,
         // so blocking here is fine and avoids spawning unbounded threads per
         // keypress (M8). The bus lock serializes with other DDC callers.
-        let _ = ddc::ddc_write_vcp(bus, 0x10, new as u16);
+        if let Err(e) = ddc::ddc_write_vcp(bus, 0x10, new as u16) {
+            eprintln!("[brightness] DDC write failed: {}", e);
+        }
 
         // Fire-and-forget KDE OSD notification
         let bri_str = new.to_string();
         thread::spawn(move || {
+            // status() waits for the child; a dropped spawn() would leave a
+            // zombie process per key press.
             let _ = std::process::Command::new("qdbus6")
                 .args([
                     "org.kde.plasmashell",
@@ -202,7 +241,58 @@ fn run_evdev_loop(bus: &str) -> Result<(), String> {
                 ])
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
-                .spawn();
+                .status();
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ev(ty: u16, code: u16, value: i32) -> [u8; INPUT_EVENT_SIZE] {
+        let mut b = [0u8; INPUT_EVENT_SIZE];
+        b[16..18].copy_from_slice(&ty.to_ne_bytes());
+        b[18..20].copy_from_slice(&code.to_ne_bytes());
+        b[20..24].copy_from_slice(&value.to_ne_bytes());
+        b
+    }
+
+    #[test]
+    fn key_press_and_repeat_map_to_delta() {
+        assert_eq!(key_delta(&ev(EV_KEY, KEY_BRIGHTNESSUP, 1)), Some(STEP));
+        assert_eq!(key_delta(&ev(EV_KEY, KEY_BRIGHTNESSUP, 2)), Some(STEP));
+        assert_eq!(key_delta(&ev(EV_KEY, KEY_BRIGHTNESSDOWN, 1)), Some(-STEP));
+    }
+
+    #[test]
+    fn key_release_other_keys_and_other_types_ignored() {
+        assert_eq!(key_delta(&ev(EV_KEY, KEY_BRIGHTNESSUP, 0)), None);
+        assert_eq!(key_delta(&ev(EV_KEY, 30, 1)), None);
+        assert_eq!(key_delta(&ev(0, KEY_BRIGHTNESSUP, 1)), None);
+        assert_eq!(key_delta(&[0u8; INPUT_EVENT_SIZE]), None);
+    }
+
+    #[test]
+    fn delta_is_clamped() {
+        assert_eq!(apply_delta(98, STEP), 100);
+        assert_eq!(apply_delta(2, -STEP), 0);
+        assert_eq!(apply_delta(50, STEP), 55);
+        assert_eq!(apply_delta(i32::MAX, STEP), 100);
+    }
+
+    #[test]
+    fn circadian_curve_shape() {
+        assert_eq!(circadian_for_hour(0.0), 30);
+        assert_eq!(circadian_for_hour(5.99), 30);
+        assert_eq!(circadian_for_hour(6.0), 30);
+        assert_eq!(circadian_for_hour(7.5), 50);
+        assert_eq!(circadian_for_hour(9.0), 70);
+        assert_eq!(circadian_for_hour(16.99), 70);
+        assert_eq!(circadian_for_hour(19.0), 50);
+        assert_eq!(circadian_for_hour(21.0), 30);
+        assert_eq!(circadian_for_hour(23.99), 30);
+        let now = circadian_brightness();
+        assert!((30..=70).contains(&now));
     }
 }
