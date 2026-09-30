@@ -26,8 +26,8 @@ struct I2cRdwrData {
 
 fn ddc_write_vcp(path: &str, vcp: u8, value: u16) -> Result<(), String> {
     use std::ffi::CString;
-    let c_path = CString::new(path).unwrap();
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
+    let c_path = CString::new(path).map_err(|e| format!("bad path: {}", e))?;
+    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR | libc::O_CLOEXEC) };
     if fd < 0 {
         return Err(format!("open: {}", std::io::Error::last_os_error()));
     }
@@ -50,6 +50,9 @@ fn ddc_write_vcp(path: &str, vcp: u8, value: u16) -> Result<(), String> {
     if ret < 0 {
         return Err(format!("write: {}", std::io::Error::last_os_error()));
     }
+    if ret != msg.len() as isize {
+        return Err(format!("short write ({} of {} bytes)", ret, msg.len()));
+    }
     Ok(())
 }
 
@@ -69,15 +72,38 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16, u8), String> {
     ];
     let data = I2cRdwrData { msgs: msgs.as_mut_ptr(), nmsgs: 2 };
     if unsafe { libc::ioctl(fd, I2C_RDWR, &data as *const _) } < 0 {
-        return Err("I2C combined failed".into());
+        return Err(format!("I2C combined failed: {}", std::io::Error::last_os_error()));
     }
 
+    parse_vcp_reply(&buf, vcp)
+}
+
+/// Parse and validate a DDC/CI VCP Get Reply: length, opcode, result code
+/// (an unsupported VCP answers with result != 0 and zeroed values, which used
+/// to be shown as a real 0/0 reading), VCP echo and checksum.
+/// Returns (current, max, type).
+fn parse_vcp_reply(buf: &[u8; 12], vcp: u8) -> Result<(u16, u16, u8), String> {
     let off: usize = if buf[0] == 0x6E { 1 } else { 0 };
+    if buf[off] != 0x88 {
+        return Err(format!("bad length 0x{:02X}", buf[off]));
+    }
     if buf[off + 1] != 0x02 {
         return Err(format!("opcode 0x{:02X}", buf[off + 1]));
     }
+    if buf[off + 2] != 0x00 {
+        return Err(format!("unsupported (result=0x{:02X})", buf[off + 2]));
+    }
     if buf[off + 3] != vcp {
         return Err(format!("aliased 0x{:02X}", buf[off + 3]));
+    }
+    // Checksum: 0x50 ^ every byte before it, including the source byte 0x6E
+    // even if the bus did not return it.
+    let chk_idx = off + 9;
+    let mut computed: u8 = 0x50;
+    if off == 0 { computed ^= 0x6E; }
+    for b in &buf[..chk_idx] { computed ^= b; }
+    if computed != buf[chk_idx] {
+        return Err(format!("checksum mismatch (got 0x{:02X}, expected 0x{:02X})", buf[chk_idx], computed));
     }
     let vcp_type = buf[off + 4];
     let max_val = ((buf[off + 5] as u16) << 8) | buf[off + 6] as u16;
@@ -88,7 +114,7 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16, u8), String> {
 /// Open path, read one VCP, close.
 fn ddc_read_vcp(path: &str, vcp: u8) -> Result<(u16, u16, u8), String> {
     let file = OpenOptions::new().read(true).write(true).open(path)
-        .map_err(|e| format!("{}: {}", path, e))?;
+        .map_err(|e| format!("{}: {}", path, e))?; // std sets O_CLOEXEC
     ddc_read_vcp_fd(file.as_raw_fd(), vcp)
 }
 
@@ -211,14 +237,32 @@ fn parse_vcp(s: &str) -> Option<u8> {
     }
 }
 
+/// Decimal or 0x-prefixed hex u16 (VCP values such as gamma 0x7800).
+fn parse_value(s: &str) -> Option<u16> {
+    if let Some(h) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
+        u16::from_str_radix(h, 16).ok()
+    } else {
+        s.parse().ok()
+    }
+}
+
+fn usage() -> ! {
+    eprintln!("ddc-tool v1.0 — Direct I2C DDC/CI");
+    eprintln!("  ddc-tool read <bus> <vcp|all>");
+    eprintln!("  ddc-tool write <bus> <vcp> <value>");
+    eprintln!("  ddc-tool json <bus>");
+    std::process::exit(1);
+}
+
+fn die(msg: &str) -> ! {
+    eprintln!("{}", msg);
+    std::process::exit(1);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        eprintln!("ddc-tool v1.0 — Direct I2C DDC/CI");
-        eprintln!("  ddc-tool read <bus> <vcp|all>");
-        eprintln!("  ddc-tool write <bus> <vcp> <value>");
-        eprintln!("  ddc-tool json <bus>");
-        std::process::exit(1);
+        usage();
     }
 
     let cmd = &args[1];
@@ -226,15 +270,16 @@ fn main() {
 
     match cmd.as_str() {
         "write" => {
-            let vcp = parse_vcp(&args[3]).expect("bad vcp");
-            let val: u16 = args[4].parse().expect("bad value");
+            if args.len() < 5 { usage(); }
+            let vcp = parse_vcp(&args[3]).unwrap_or_else(|| die(&format!("bad vcp: {}", args[3])));
+            let val = parse_value(&args[4]).unwrap_or_else(|| die(&format!("bad value: {}", args[4])));
             ddc_write_vcp(&path, vcp, val).unwrap_or_else(|e| { eprintln!("{}", e); std::process::exit(1); });
             println!("OK");
         }
         "read" => {
+            if args.len() < 4 { usage(); }
             if args[3] == "all" {
                 let results = ddc_read_burst(&path, KNOWN_VCPS);
-                let found: std::collections::HashSet<u8> = results.iter().map(|r| r.0).collect();
                 for v in KNOWN_VCPS {
                     if let Some(r) = results.iter().find(|r| r.0 == v.code) {
                         println!("0x{:02X} {:20} {:5} {:5}", r.0, r.1, r.2, r.3);
@@ -242,9 +287,8 @@ fn main() {
                         println!("0x{:02X} {:20} -     -", v.code, v.name);
                     }
                 }
-                let _ = found;
             } else {
-                let vcp = parse_vcp(&args[3]).expect("bad vcp");
+                let vcp = parse_vcp(&args[3]).unwrap_or_else(|| die(&format!("bad vcp: {}", args[3])));
                 match ddc_read_vcp(&path, vcp) {
                     Ok((cur, max, t)) => println!("{} {} {}", cur, max, t),
                     Err(e) => { eprintln!("{}", e); std::process::exit(1); }
@@ -296,5 +340,60 @@ fn main() {
             println!("}}");
         }
         _ => { eprintln!("unknown: {}", cmd); std::process::exit(1); }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame(vcp: u8, max: u16, cur: u16) -> [u8; 12] {
+        let mut b = [0u8; 12];
+        b[0] = 0x6E; b[1] = 0x88; b[2] = 0x02; b[4] = vcp; b[5] = 1;
+        b[6] = (max >> 8) as u8; b[7] = max as u8; b[8] = (cur >> 8) as u8; b[9] = cur as u8;
+        b[10] = b[..10].iter().fold(0x50u8, |a, x| a ^ x);
+        b
+    }
+
+    #[test]
+    fn valid_frame() {
+        assert_eq!(parse_vcp_reply(&frame(0x10, 100, 50), 0x10), Ok((50, 100, 1)));
+    }
+
+    #[test]
+    fn frame_without_source_byte() {
+        let f = frame(0x10, 100, 50);
+        let mut g = [0u8; 12];
+        g[..10].copy_from_slice(&f[1..11]);
+        assert_eq!(parse_vcp_reply(&g, 0x10), Ok((50, 100, 1)));
+    }
+
+    #[test]
+    fn unsupported_vcp_is_an_error_not_zero() {
+        let mut f = frame(0x10, 0, 0);
+        f[3] = 0x01; // result: unsupported
+        f[10] = f[..10].iter().fold(0x50u8, |a, x| a ^ x);
+        assert!(parse_vcp_reply(&f, 0x10).unwrap_err().contains("unsupported"));
+    }
+
+    #[test]
+    fn corrupted_frames_rejected() {
+        let mut f = frame(0x10, 100, 50);
+        f[10] ^= 1;
+        assert!(parse_vcp_reply(&f, 0x10).unwrap_err().contains("checksum"));
+        assert!(parse_vcp_reply(&frame(0x12, 1, 1), 0x10).unwrap_err().contains("aliased"));
+        assert!(parse_vcp_reply(&[0u8; 12], 0x10).is_err());
+        assert!(parse_vcp_reply(&[0xFFu8; 12], 0x10).is_err());
+    }
+
+    #[test]
+    fn argument_parsing() {
+        assert_eq!(parse_vcp("0x10"), Some(0x10));
+        assert_eq!(parse_vcp("16"), Some(16));
+        assert_eq!(parse_vcp("0x100"), None);
+        assert_eq!(parse_vcp("zz"), None);
+        assert_eq!(parse_value("0x7800"), Some(0x7800));
+        assert_eq!(parse_value("70000"), None);
+        assert_eq!(parse_value("-1"), None);
     }
 }
