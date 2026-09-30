@@ -21,6 +21,51 @@ use eframe::egui;
 
 type DdcProfile = (String, HashMap<String, u16>);
 
+/// Serializes every config/profile write (callers may be on different threads).
+static WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+/// Atomic file write (tmp + rename) with explicit permissions, so a crash or a
+/// concurrent writer never leaves a truncated/mixed file.
+fn atomic_write(path: &std::path::Path, data: &[u8], mode: u32) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(format!(".tmp.{}", std::process::id()));
+    let tmp = std::path::PathBuf::from(tmp);
+    let res = (|| {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true).create(true).truncate(true).mode(mode)
+            .open(&tmp)?;
+        f.write_all(data)?;
+        f.sync_all()?;
+        std::fs::rename(&tmp, path)
+    })();
+    if res.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    res
+}
+
+/// Read and parse a JSON file. A corrupt file is moved aside to `<name>.bad`
+/// (instead of being silently overwritten by the next save).
+fn load_json_or_backup<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Option<T> {
+    let data = std::fs::read_to_string(path).ok()?;
+    match serde_json::from_str::<T>(&data) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            let mut bad = path.as_os_str().to_owned();
+            bad.push(".bad");
+            eprintln!("[config] {} is corrupt ({}), moved to {:?}", path.display(), e, bad);
+            let _ = std::fs::rename(path, std::path::PathBuf::from(bad));
+            None
+        }
+    }
+}
+
 fn profiles_path() -> std::path::PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
@@ -28,20 +73,15 @@ fn profiles_path() -> std::path::PathBuf {
 }
 
 fn load_profiles() -> Vec<DdcProfile> {
-    let path = profiles_path();
-    match std::fs::read_to_string(&path) {
-        Ok(data) => serde_json::from_str::<Vec<DdcProfile>>(&data).unwrap_or_default(),
-        Err(_) => Vec::new(),
-    }
+    load_json_or_backup::<Vec<DdcProfile>>(&profiles_path()).unwrap_or_default()
 }
 
 fn save_profiles(profiles: &[DdcProfile]) {
     let path = profiles_path();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
     if let Ok(json) = serde_json::to_string_pretty(profiles) {
-        let _ = std::fs::write(&path, json);
+        if let Err(e) = atomic_write(&path, json.as_bytes(), 0o644) {
+            eprintln!("[config] cannot save profiles: {}", e);
+        }
     }
 }
 
@@ -58,23 +98,22 @@ fn app_presets_path() -> std::path::PathBuf {
 
 fn load_app_presets() -> Vec<AppPreset> {
     let path = app_presets_path();
-    match std::fs::read_to_string(&path) {
-        Ok(data) => serde_json::from_str::<Vec<AppPreset>>(&data).unwrap_or_default(),
-        Err(_) => vec![
+    if !path.exists() {
+        return vec![
             ("firefox".to_string(), 15),   // sRGB
             ("steam".to_string(), 30),      // FPS 1
             ("gimp".to_string(), 48),       // Photo
-        ],
+        ];
     }
+    load_json_or_backup::<Vec<AppPreset>>(&path).unwrap_or_default()
 }
 
 fn save_app_presets(presets: &[AppPreset]) {
     let path = app_presets_path();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
     if let Ok(json) = serde_json::to_string_pretty(presets) {
-        let _ = std::fs::write(&path, json);
+        if let Err(e) = atomic_write(&path, json.as_bytes(), 0o644) {
+            eprintln!("[config] cannot save app presets: {}", e);
+        }
     }
 }
 
@@ -198,6 +237,106 @@ pub(crate) struct SharedState {
 }
 
 type State = Arc<Mutex<SharedState>>;
+
+/// Tray tooltip text; shows "n/a" instead of an invented 0 when a source is absent.
+fn tooltip_text(snap: &SharedState) -> String {
+    let pct = snap.keyboard.as_ref().and_then(|kb| {
+        kb.battery.percentage_fine
+            .or(kb.battery.percentage_interpolated)
+            .or(kb.battery.percentage)
+    });
+    let bri = snap.ddc.data.get("brightness").map(|v| v.0);
+    format!(
+        "ApiHub \u{2014} Battery: {} \u{2014} Brightness: {}",
+        pct.map(|p| format!("{:.0}%", p)).unwrap_or_else(|| "n/a".into()),
+        bri.map(|b| format!("{}%", b)).unwrap_or_else(|| "n/a".into()),
+    )
+}
+
+// ── Single ordered DDC writer (#33) ────────────────────────────────────────
+
+type WriteBatch = (String, Vec<(u8, u16)>);
+
+/// One long-lived writer thread: batches are applied strictly in submission
+/// order (a thread per frame could reorder slider values).
+fn ddc_writer() -> &'static std::sync::mpsc::Sender<WriteBatch> {
+    static TX: std::sync::OnceLock<std::sync::mpsc::Sender<WriteBatch>> = std::sync::OnceLock::new();
+    TX.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<WriteBatch>();
+        thread::Builder::new()
+            .name("ddc-writer".into())
+            .spawn(move || {
+                for (bus, batch) in rx {
+                    for (vcp, val) in batch {
+                        if let Err(e) = ddc::ddc_write_vcp(&bus, vcp, val) {
+                            eprintln!("DDC write 0x{:02X}={}: {}", vcp, val, e);
+                        }
+                    }
+                }
+            })
+            .expect("failed to spawn ddc-writer thread");
+        tx
+    })
+}
+
+// ── Process-wide MQTT bridge (#29) ─────────────────────────────────────────
+
+struct BridgeGlobal {
+    connected: Arc<Mutex<bool>>,
+    last_publish: Arc<Mutex<Option<Instant>>>,
+    last_cmd: Arc<Mutex<Option<String>>>,
+    tx: rumqttc::Client,
+    cfg: mqtt::MqttCfg,
+}
+
+static BRIDGE: Mutex<Option<BridgeGlobal>> = Mutex::new(None);
+
+/// Handle on the running bridge, if any.
+fn bridge_handle() -> Option<mqtt::MqttBridge> {
+    let g = BRIDGE.lock().ok()?;
+    let b = g.as_ref()?;
+    Some(mqtt::MqttBridge::from_parts(
+        b.connected.clone(), b.last_publish.clone(), b.last_cmd.clone(), b.tx.clone(),
+    ))
+}
+
+/// Start the bridge once per process (fixed MQTT client id: a 2nd connection
+/// would make the broker kick the 1st in a loop); later calls attach to it.
+fn bridge_start_or_attach(cfg: mqtt::MqttCfg) -> mqtt::MqttBridge {
+    if let Some(h) = bridge_handle() {
+        return h;
+    }
+    let bridge = mqtt::MqttBridge::start(cfg.clone());
+    if let (Some(tx), Ok(mut g)) = (bridge.tx_clone(), BRIDGE.lock()) {
+        *g = Some(BridgeGlobal {
+            connected: bridge.connected.clone(),
+            last_publish: bridge.last_publish.clone(),
+            last_cmd: bridge.last_cmd.clone(),
+            tx,
+            cfg,
+        });
+    }
+    bridge
+}
+
+/// Publish telemetry now on a background thread (UI "Publish Now" + tray menu).
+pub(crate) fn mqtt_publish_now(state: &State) {
+    let parts = BRIDGE.lock().ok().and_then(|g| {
+        g.as_ref().map(|b| (
+            b.connected.clone(), b.last_publish.clone(), b.last_cmd.clone(),
+            b.tx.clone(), b.cfg.clone(),
+        ))
+    });
+    let Some((c, lp, lc, tx, cfg)) = parts else {
+        eprintln!("[mqtt] publish requested but the bridge is not running");
+        return;
+    };
+    let snap = state.lock().map(|s| s.clone()).unwrap_or_default();
+    thread::spawn(move || {
+        let b = mqtt::MqttBridge::from_parts(c, lp, lc, tx);
+        b.publish_telemetry(&snap.keyboard, &snap.ddc.data, &cfg);
+    });
+}
 
 // ── Background polling ──────────────────────────────────────────────────────
 
@@ -455,6 +594,34 @@ struct MqttConfig {
     bri_max: f32,
 }
 
+/// Parse the right-hand side of a `key = value` TOML line: quoted strings
+/// (with `\\`, `\"`, `\n`, `\t` escapes), literal 'strings', or bare values
+/// with an optional trailing `# comment`.
+fn parse_toml_string_value(raw: &str) -> String {
+    let raw = raw.trim();
+    if let Some(rest) = raw.strip_prefix('"') {
+        let mut out = String::new();
+        let mut chars = rest.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '"' => break,
+                '\\' => match chars.next() {
+                    Some('n') => out.push('\n'),
+                    Some('t') => out.push('\t'),
+                    Some(other) => out.push(other),
+                    None => break,
+                },
+                _ => out.push(c),
+            }
+        }
+        out
+    } else if let Some(rest) = raw.strip_prefix('\'') {
+        rest.split('\'').next().unwrap_or("").to_string()
+    } else {
+        raw.split('#').next().unwrap_or("").trim().to_string()
+    }
+}
+
 impl MqttConfig {
     fn from_config_file() -> Self {
         let mut cfg = Self {
@@ -477,7 +644,9 @@ impl MqttConfig {
                 for line in content.lines() {
                     let line = line.trim();
                     if line.starts_with('[') {
-                        let name = line.trim_matches(|c| c == '[' || c == ']').trim();
+                        // Drop a trailing comment ("[mqtt] # note") before the brackets.
+                        let head = line.split('#').next().unwrap_or("").trim();
+                        let name = head.trim_matches(|c| c == '[' || c == ']').trim();
                         if name.contains('.') {
                             // Reject dotted/nested section — treat as unknown section
                             section = String::new();
@@ -489,25 +658,16 @@ impl MqttConfig {
                     if line.is_empty() || line.starts_with('#') { continue; }
                     if let Some((key, val)) = line.split_once('=') {
                         let key = key.trim();
-                        // Strip inline comments then trim quotes
-                        let val = val.trim();
-                        let val = if val.starts_with('"') {
-                            // Quoted value: find closing quote
-                            val.trim_start_matches('"')
-                                .splitn(2, '"').next().unwrap_or("")
-                        } else {
-                            // Unquoted value: strip inline comment
-                            val.split('#').next().unwrap_or("").trim()
-                        };
+                        let val = parse_toml_string_value(val);
                         match (section.as_str(), key) {
-                            ("mqtt", "broker") => cfg.broker = val.to_string(),
-                            ("mqtt", "port") => cfg.port = val.to_string(),
-                            ("mqtt", "user") => cfg.user = val.to_string(),
-                            ("mqtt", "password") => cfg.pass = val.to_string(),
+                            ("mqtt", "broker") => cfg.broker = val,
+                            ("mqtt", "port") => cfg.port = val,
+                            ("mqtt", "user") => cfg.user = val,
+                            ("mqtt", "password") => cfg.pass = val,
                             ("mqtt", "topic_prefix") => {} // recognized but not stored in MqttConfig
                             ("brightness", "min") => cfg.bri_min = val.parse().unwrap_or(2.0),
                             ("brightness", "max") => cfg.bri_max = val.parse().unwrap_or(70.0),
-                            ("brightness", "lamp_entity") => cfg.lamp_entity = val.to_string(),
+                            ("brightness", "lamp_entity") => cfg.lamp_entity = val,
                             _ => {}
                         }
                     }
@@ -516,6 +676,14 @@ impl MqttConfig {
                 break;
             }
         }
+        // Sanitize: finite, within 0..=100, min <= max (used as u16 clamp bounds).
+        if !cfg.bri_min.is_finite() || !(0.0..=100.0).contains(&cfg.bri_min) { cfg.bri_min = 2.0; }
+        if !cfg.bri_max.is_finite() || !(0.0..=100.0).contains(&cfg.bri_max) { cfg.bri_max = 70.0; }
+        if cfg.bri_min > cfg.bri_max {
+            cfg.bri_min = 2.0;
+            cfg.bri_max = 70.0;
+        }
+        if cfg.port.trim().parse::<u16>().is_err() { cfg.port = "1883".to_string(); }
         cfg
     }
 }
@@ -543,6 +711,8 @@ struct ApiHubApp {
     diag_results: Arc<Mutex<Vec<DiagResult>>>,
     diag_running: Arc<std::sync::atomic::AtomicBool>,
     mqtt_bridge: Option<mqtt::MqttBridge>,
+    mqtt_note: String,
+    quit_flag: Arc<std::sync::atomic::AtomicBool>,
     // DDC profile presets
     profiles: Vec<DdcProfile>,
     profile_name: String,
@@ -576,11 +746,13 @@ impl ApiHubApp {
         state: State,
         tray_show_window: Arc<std::sync::atomic::AtomicBool>,
         shared_presets: SharedPresets,
+        quit_flag: Arc<std::sync::atomic::AtomicBool>,
     ) -> Self {
         let mqtt = MqttConfig::default();
         let i2c_bus = ddc::default_bus();
         let monitor_info = ddc::read_monitor_info(&i2c_bus);
-        let mqtt_bridge: Option<mqtt::MqttBridge> = None; // owned by main(), not us
+        // Handle on the process-wide bridge started by main() (if any).
+        let mqtt_bridge: Option<mqtt::MqttBridge> = bridge_handle();
         // Use the SAME shared presets as the poll thread (owned by main()),
         // so UI changes actually reach the poller.
         let (app_presets_enabled, app_presets) = shared_presets
@@ -609,6 +781,8 @@ impl ApiHubApp {
             diag_results: Arc::new(Mutex::new(Vec::new())),
             diag_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             mqtt_bridge,
+            mqtt_note: String::new(),
+            quit_flag,
             profiles: load_profiles(),
             profile_name: String::new(),
             auto_brightness: false,
@@ -630,36 +804,47 @@ impl ApiHubApp {
 
 impl eframe::App for ApiHubApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Tray "Quit" while the window is open: close it so main() can exit.
+        if self.quit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
         // ── Update tray tooltip (every frame, lightweight) ─────
         {
             let snap_for_tray = self.state.lock().map(|s| s.clone()).ok();
             if let Some(ref snap) = snap_for_tray {
-                let pct = snap.keyboard.as_ref()
-                    .and_then(|kb| kb.battery.percentage_fine
-                        .or(kb.battery.percentage_interpolated)
-                        .or(kb.battery.percentage))
-                    .unwrap_or(0.0);
-                let bri = snap.ddc.data.get("brightness")
-                    .map(|v| v.0)
-                    .unwrap_or(0);
-                let text = format!("ApiHub \u{2014} Battery: {:.0}% \u{2014} Brightness: {}%", pct, bri);
+                let text = tooltip_text(snap);
                 if let Ok(mut tt) = self.tray_tooltip.lock() {
                     *tt = text;
                 }
             }
         }
 
+        // Circadian auto-brightness: evaluated every frame, whatever tab is shown.
+        if self.auto_brightness {
+            let target = brightness::circadian_brightness();
+            if target != self.last_auto_bri {
+                self.last_auto_bri = target;
+                self.pending_writes.push((0x10, target));
+            }
+        } else {
+            // Re-enabling must re-apply the current target.
+            self.last_auto_bri = 0;
+        }
+
         // Process pending DDC writes — deduplicate per VCP, optimistic UI update
         {
-            // Keep only the LAST value per VCP (dedup rapid slider drags)
-            let mut deduped: HashMap<u8, u16> = HashMap::new();
+            // Keep only the LAST value per VCP (dedup rapid slider drags),
+            // preserving submission order.
+            let mut deduped: Vec<(u8, u16)> = Vec::new();
             for (vcp, val) in self.pending_writes.drain(..) {
-                deduped.insert(vcp, val);
+                deduped.retain(|(v, _)| *v != vcp);
+                deduped.push((vcp, val));
             }
             if !deduped.is_empty() {
                 // Optimistic update: immediately reflect new values in UI
                 if let Ok(mut s) = self.state.lock() {
-                    for (&vcp, &val) in &deduped {
+                    for &(vcp, val) in &deduped {
                         for v in ddc::ESSENTIAL_VCPS {
                             if v.code == vcp {
                                 let max = s.ddc.data.get(v.name).map(|d| d.1).unwrap_or(255);
@@ -669,15 +854,8 @@ impl eframe::App for ApiHubApp {
                         }
                     }
                 }
-                // Single thread for all writes (bus lock serializes anyway)
-                let bus = self.i2c_bus.clone();
-                thread::spawn(move || {
-                    for (vcp, val) in deduped {
-                        if let Err(e) = ddc::ddc_write_vcp(&bus, vcp, val) {
-                            eprintln!("DDC write 0x{:02X}={}: {}", vcp, val, e);
-                        }
-                    }
-                });
+                // Single ordered writer thread (bus lock alone doesn't order threads)
+                let _ = ddc_writer().send((self.i2c_bus.clone(), deduped));
             }
         }
 
@@ -947,7 +1125,8 @@ impl ApiHubApp {
                             }
                             if let Some(ref key) = kb.bluetooth.identity_key {
                                 ui.label(egui::RichText::new("Identity").weak().size(16.0));
-                                ui.label(egui::RichText::new(&key[..key.len().min(23)]).monospace().size(16.0));
+                                let short: String = key.chars().take(23).collect();
+                                ui.label(egui::RichText::new(short).monospace().size(16.0));
                                 ui.end_row();
                             }
                         });
@@ -1274,10 +1453,6 @@ impl ApiHubApp {
                         ui.label(egui::RichText::new(format!("Target: {}%", target))
                             .strong().size(16.0)
                             .color(egui::Color32::from_rgb(120, 200, 255)));
-                        if target != self.last_auto_bri {
-                            self.last_auto_bri = target;
-                            self.pending_writes.push((0x10, target));
-                        }
                     }
                 });
             });
@@ -1753,7 +1928,7 @@ impl ApiHubApp {
             cols[1].group(|ui| {
                 ui.label(egui::RichText::new("Raw VCP Values").strong().size(18.0));
                 ui.add_space(4.0);
-                egui::ScrollArea::vertical().max_height(ui.available_height() - 8.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height((ui.available_height() - 8.0).max(50.0)).show(ui, |ui| {
                     egui::Grid::new("raw_vcp")
                         .num_columns(3)
                         .spacing([12.0, 4.0])
@@ -1830,29 +2005,14 @@ impl ApiHubApp {
                         }
                     } else {
                         if ui.button(egui::RichText::new("Start").size(16.0)).clicked() {
-                            if !self.mqtt.broker.is_empty() {
-                                self.mqtt_bridge = Some(mqtt::MqttBridge::start(self.mqtt_cfg()));
+                            if bridge_handle().is_some() || !self.mqtt.broker.is_empty() {
+                                self.mqtt_bridge = Some(bridge_start_or_attach(self.mqtt_cfg()));
                             }
                         }
                     }
                     if ui.button(egui::RichText::new("Publish Now").size(16.0)).clicked() {
-                        if let Some(bridge) = &self.mqtt_bridge {
-                            // Fire-and-forget to avoid blocking the UI thread (M11).
-                            let snap = self.state.lock().map(|s| s.clone()).unwrap_or_default();
-                            let cfg = self.mqtt_cfg();
-                            let b_connected = bridge.connected.clone();
-                            let b_last_publish = bridge.last_publish.clone();
-                            let b_last_cmd = bridge.last_cmd.clone();
-                            let b_tx = bridge.tx_clone();
-                            thread::spawn(move || {
-                                if let Some(tx) = b_tx {
-                                    let tmp_bridge = mqtt::MqttBridge::from_parts(
-                                        b_connected, b_last_publish, b_last_cmd, tx,
-                                    );
-                                    tmp_bridge.publish_telemetry(&snap.keyboard, &snap.ddc.data, &cfg);
-                                }
-                            });
-                        }
+                        // Fire-and-forget on a background thread (M11).
+                        mqtt_publish_now(&self.state);
                     }
                 });
 
@@ -1946,21 +2106,41 @@ impl ApiHubApp {
 
                 ui.add_space(12.0);
                 if ui.button(egui::RichText::new("Save Config & Reconnect").size(16.0).strong()).clicked() {
-                    let config_dir = dirs::config_dir()
+                    let config_path = dirs::config_dir()
                         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                        .join("apple-kb-monitor");
-                    let _ = std::fs::create_dir_all(&config_dir);
-                    let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+                        .join("apple-kb-monitor/config.toml");
+                    let esc = |s: &str| {
+                        s.replace('\\', "\\\\").replace('"', "\\\"")
+                            .replace('\n', "\\n").replace('\r', "")
+                    };
+                    // Always write a valid integer port (raw text could break the TOML).
+                    let port: u16 = self.mqtt.port.trim().parse().unwrap_or(1883);
+                    self.mqtt.port = port.to_string();
                     let toml = format!(
                         "[ddc]\nbus = \"{}\"\n\n[mqtt]\nbroker = \"{}\"\nport = {}\nuser = \"{}\"\npassword = \"{}\"\ntopic_prefix = \"homeassistant\"\n\n[monitor]\nmodel = \"lg_34gn850\"\n\n[brightness]\nmin = {}\nmax = {}\nlamp_entity = \"{}\"\n",
-                        esc(&self.i2c_bus), esc(&self.mqtt.broker), self.mqtt.port,
+                        esc(&self.i2c_bus), esc(&self.mqtt.broker), port,
                         esc(&self.mqtt.user), esc(&self.mqtt.pass),
                         self.mqtt.bri_min as u16, self.mqtt.bri_max as u16,
                         esc(&self.mqtt.lamp_entity),
                     );
-                    let _ = std::fs::write(config_dir.join("config.toml"), &toml);
-                    // Restart in-process bridge with new config
-                    self.mqtt_bridge = Some(mqtt::MqttBridge::start(self.mqtt_cfg()));
+                    // 0600: the file holds the MQTT password.
+                    self.mqtt_note = match atomic_write(&config_path, toml.as_bytes(), 0o600) {
+                        Ok(()) => String::new(),
+                        Err(e) => format!("Cannot save config: {}", e),
+                    };
+                    if bridge_handle().is_some() {
+                        // The single in-process bridge keeps its connection
+                        // (fixed MQTT client id: a 2nd one would fight with it).
+                        if self.mqtt_note.is_empty() {
+                            self.mqtt_note = "Saved. Broker/credentials apply at next launch.".into();
+                        }
+                        self.mqtt_bridge = bridge_handle();
+                    } else if !self.mqtt.broker.is_empty() {
+                        self.mqtt_bridge = Some(bridge_start_or_attach(self.mqtt_cfg()));
+                    }
+                }
+                if !self.mqtt_note.is_empty() {
+                    ui.label(egui::RichText::new(&self.mqtt_note).weak().size(14.0));
                 }
             });
         });
@@ -1981,7 +2161,16 @@ impl ApiHubApp {
         let running = self.diag_running.clone();
         let bus = self.i2c_bus.clone();
 
+        /// Clears the "running" flag even if the diagnostics thread panics.
+        struct RunningGuard(Arc<std::sync::atomic::AtomicBool>);
+        impl Drop for RunningGuard {
+            fn drop(&mut self) {
+                self.0.store(false, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+
         thread::spawn(move || {
+            let _guard = RunningGuard(running);
             let mut out: Vec<DiagResult> = Vec::new();
 
             // Extract bus number from path (e.g. "/dev/i2c-6" -> "6")
@@ -2122,11 +2311,10 @@ impl ApiHubApp {
                 detail: if input_ok { "input group: OK".into() } else { "NOT in input group — run: sudo usermod -aG input $USER".into() },
             });
 
-            // Store results and clear running flag
+            // Store results (the guard clears the running flag on drop)
             if let Ok(mut r) = results.lock() {
                 *r = out;
             }
-            running.store(false, std::sync::atomic::Ordering::Relaxed);
         });
     }
 
@@ -2322,28 +2510,29 @@ fn main() -> eframe::Result<()> {
     spawn_poll_thread(Arc::clone(&state), shared_presets.clone(), quit_flag.clone());
 
     let mqtt = MqttConfig::default();
-    let mqtt_connected_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
     if !mqtt.broker.is_empty() {
         let cfg = mqtt::MqttCfg {
-            broker: mqtt.broker, port: mqtt.port.parse().unwrap_or(1883),
+            broker: mqtt.broker, port: mqtt.port.trim().parse().unwrap_or(1883),
             user: mqtt.user, pass: mqtt.pass,
             topic_prefix: "homeassistant".into(), monitor_model: "lg_34gn850".into(),
             bri_min: mqtt.bri_min as u16, bri_max: mqtt.bri_max as u16,
             bus: i2c_bus,
         };
         eprintln!("[mqtt] auto-start: {}:{}", cfg.broker, cfg.port);
-        let bridge = mqtt::MqttBridge::start(cfg);
-        // Keep the bridge's connected flag to sync with SharedState (M7)
+        let bridge = bridge_start_or_attach(cfg);
+        // Mirror the bridge status into SharedState (tray menu) from its own
+        // thread: main() is blocked in eframe while the window is open.
         let bridge_connected = bridge.connected.clone();
-        let mc_flag = mqtt_connected_flag.clone();
+        let st = state.clone();
         thread::spawn(move || {
             loop {
                 let connected = bridge_connected.lock().map(|c| *c).unwrap_or(false);
-                mc_flag.store(connected, std::sync::atomic::Ordering::Relaxed);
-                thread::sleep(Duration::from_secs(5));
+                if let Ok(mut s) = st.lock() {
+                    s.mqtt_connected = connected;
+                }
+                thread::sleep(Duration::from_secs(2));
             }
         });
-        std::mem::forget(bridge);
     }
 
     eprintln!("[apihub] tray mode — click scarab icon to open window");
@@ -2359,15 +2548,9 @@ fn main() -> eframe::Result<()> {
         std::thread::sleep(Duration::from_secs(2));
 
         // Update tray tooltip + MQTT connected state in SharedState (M7)
-        if let Ok(mut snap) = state.lock() {
-            snap.mqtt_connected = mqtt_connected_flag.load(std::sync::atomic::Ordering::Relaxed);
-            let pct = snap.keyboard.as_ref()
-                .and_then(|kb| kb.battery.percentage_fine
-                    .or(kb.battery.percentage))
-                .unwrap_or(0.0);
-            let bri = snap.ddc.data.get("brightness").map(|v| v.0).unwrap_or(0);
+        if let Ok(snap) = state.lock() {
             if let Ok(mut tt) = tray_tooltip.lock() {
-                *tt = format!("ApiHub \u{2014} Battery: {:.0}% \u{2014} Brightness: {}%", pct, bri);
+                *tt = tooltip_text(&snap);
             }
         }
 
@@ -2383,7 +2566,7 @@ fn main() -> eframe::Result<()> {
                 ..Default::default()
             };
             // eframe::run_native blocks until the window is closed
-            let _ = eframe::run_native(
+            if let Err(e) = eframe::run_native(
                 "apihub",
                 options,
                 Box::new({
@@ -2391,13 +2574,38 @@ fn main() -> eframe::Result<()> {
                     let st = state.clone();
                     let sw = show_window.clone();
                     let sp = shared_presets.clone();
-                    move |cc| Ok(Box::new(ApiHubApp::new(cc, tt, st, sw, sp)))
+                    let qf = quit_flag.clone();
+                    move |cc| Ok(Box::new(ApiHubApp::new(cc, tt, st, sw, sp, qf)))
                 }),
-            );
+            ) {
+                // No display / GPU init failure: stay in tray mode instead of dying silently.
+                eprintln!("[apihub] cannot open window: {}", e);
+            }
             eprintln!("[apihub] window closed — back to tray mode");
             // Window closed → loop back to tray-only mode (unless quit flag is set)
         }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn toml_value_roundtrips_escapes() {
+        let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
+        let pw = r#"a"b\c#d"#;
+        assert_eq!(parse_toml_string_value(&format!("\"{}\"  # comment", esc(pw))), pw);
+        assert_eq!(parse_toml_string_value(" 1883 # port"), "1883");
+        assert_eq!(parse_toml_string_value("'lit#eral'"), "lit#eral");
+    }
+
+    #[test]
+    fn tooltip_shows_na_without_sources() {
+        let t = tooltip_text(&SharedState::default());
+        assert!(t.contains("n/a"));
+        assert!(!t.contains("0%"));
+    }
 }

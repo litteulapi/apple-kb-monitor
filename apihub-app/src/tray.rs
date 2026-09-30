@@ -346,7 +346,7 @@ impl DbusmenuServer {
             PM_HDR => { let _ = ddc::ddc_write_vcp(bus, 0x15, 22); }
             PM_DCIP3 => { let _ = ddc::ddc_write_vcp(bus, 0x15, 24); }
             PM_PHOTO => { let _ = ddc::ddc_write_vcp(bus, 0x15, 48); }
-            MQTT_PUBLISH => eprintln!("[tray] publish requested"),
+            MQTT_PUBLISH => crate::mqtt_publish_now(&self.state),
             SHOW_WINDOW => self.show_window.store(true, Ordering::Relaxed),
             QUIT => self.quit_flag.store(true, Ordering::Relaxed),
             _ => {}
