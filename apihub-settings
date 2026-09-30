@@ -31,12 +31,32 @@ from PySide6.QtWidgets import (
 _i2c_lock = threading.Lock()
 
 
+def _as_int(v, default=0):
+    """Coerce a JSON value (None, str, float...) to int; never raises."""
+    if isinstance(v, bool):
+        return int(v)
+    if isinstance(v, (int, float)):
+        return int(v)
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _txt(v, default="--"):
+    """Text for a QLabel: JSON null/empty -> default, everything else str()."""
+    return default if v is None or v == "" else str(v)
+
+
 def ddc_write(vcp, value):
     """Write DDC VCP — blocking, with lock."""
     def _do():
-        with _i2c_lock:
-            subprocess.run(["ddc-tool", "write", "6", str(vcp), str(value)],
-                           capture_output=True, timeout=5)
+        try:
+            with _i2c_lock:
+                subprocess.run(["ddc-tool", "write", "6", str(vcp), str(value)],
+                               capture_output=True, timeout=5)
+        except (OSError, subprocess.SubprocessError) as e:
+            print(f"[ddc] write vcp={vcp} failed: {e}", file=sys.stderr)
     # Run in thread to not block UI slider
     threading.Thread(target=_do, daemon=True).start()
 
@@ -58,7 +78,9 @@ class LoaderThread(QThread):
                                    capture_output=True, text=True, timeout=8)
                 if r.returncode == 0 and r.stdout.strip():
                     mon = json.loads(r.stdout)
-            except Exception:
+                    if not isinstance(mon, dict):
+                        mon = {}
+            except (OSError, subprocess.SubprocessError, ValueError):
                 pass
 
         try:
@@ -66,7 +88,11 @@ class LoaderThread(QThread):
                                capture_output=True, text=True, timeout=5)
             if r.returncode == 0 and r.stdout.strip():
                 kb = json.loads(r.stdout)
-        except Exception:
+                if isinstance(kb, list):  # several keyboards: show the first
+                    kb = kb[0] if kb else {}
+                if not isinstance(kb, dict):
+                    kb = {}
+        except (OSError, subprocess.SubprocessError, ValueError):
             pass
 
         self.data_ready.emit(json.dumps({"mon": mon, "kb": kb}))
@@ -110,6 +136,13 @@ class ValueSlider(QWidget):
         self.slider.setRange(0, max_val)
         self.slider.valueChanged.connect(self._changed)
         lay.addWidget(self.slider)
+        # Debounce: a drag emits one valueChanged per pixel; send only the
+        # last value, not one subprocess thread per tick.
+        self._pending = None
+        self._debounce = QTimer(self)
+        self._debounce.setSingleShot(True)
+        self._debounce.setInterval(150)
+        self._debounce.timeout.connect(self._flush)
         self.val = QLabel("--")
         self.val.setFixedWidth(45)
         self.val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -117,6 +150,7 @@ class ValueSlider(QWidget):
         lay.addWidget(self.val)
 
     def set_value(self, v):
+        v = _as_int(v)
         self.slider.blockSignals(True)
         self.slider.setValue(v)
         self.slider.blockSignals(False)
@@ -124,7 +158,13 @@ class ValueSlider(QWidget):
 
     def _changed(self, v):
         self.val.setText(str(v))
-        ddc_write(self.vcp, v)
+        self._pending = v
+        self._debounce.start()
+
+    def _flush(self):
+        if self._pending is not None:
+            v, self._pending = self._pending, None
+            ddc_write(self.vcp, v)
 
 
 class ButtonGroup(QWidget):
@@ -205,8 +245,10 @@ class ApiHubWindow(QMainWindow):
     def closeEvent(self, event):
         self._timer.stop()
         if self._loader and self._loader.isRunning():
-            self._loader.quit()
-            self._loader.wait(2000)
+            # run() has no event loop (quit() is a no-op) and blocks in
+            # subprocess calls (8 s + 5 s timeouts): wait for it, otherwise
+            # Qt aborts with "Destroyed while thread is still running".
+            self._loader.wait(15000)
         event.accept()
 
     def _start_load(self):
@@ -379,7 +421,8 @@ class ApiHubWindow(QMainWindow):
     def _update(self, mon, kb):
         if mon:
             def g(k):
-                return mon.get(k, {}).get("current", 0)
+                entry = mon.get(k)
+                return _as_int(entry.get("current") if isinstance(entry, dict) else None)
 
             self._bri.set_value(g("brightness"))
             self._con.set_value(g("contrast"))
@@ -426,42 +469,44 @@ class ApiHubWindow(QMainWindow):
             self._badges["SmartEnergy"].set_active(g("smart_energy") > 0)
 
         if kb:
-            bat = kb.get("battery", {})
-            pct = bat.get("percentage_fine") or bat.get("percentage") or 0
+            bat = kb.get("battery") or {}
+            pct = _as_int(bat.get("percentage_fine") or bat.get("percentage"))
             self._kb_bat.setText(f"{pct}%")
-            self._kb_bar.setValue(pct)
-            self._kb_volt.setText(f"{bat.get('voltage', 0):.3f} V")
-            radio = kb.get("radio", {})
-            self._kb_rssi.setText(f"{radio.get('rssi_dbm', '--')} dBm")
+            self._kb_bar.setValue(max(0, min(100, pct)))
+            volt = bat.get("voltage")
+            self._kb_volt.setText(
+                f"{volt:.3f} V" if isinstance(volt, (int, float)) else "-- V")
+            radio = kb.get("radio") or {}
+            self._kb_rssi.setText(f"{_txt(radio.get('rssi_dbm'))} dBm")
 
-            d = kb.get("device", {})
-            self._kb["model"].setText(d.get("model", "--"))
-            self._kb["firmware"].setText(kb.get("firmware", {}).get("version", "--"))
+            d = kb.get("device") or {}
+            self._kb["model"].setText(_txt(d.get("model")))
+            self._kb["firmware"].setText(_txt((kb.get("firmware") or {}).get("version")))
             self._kb["status"].setText("Connected" if d.get("mac") else "Offline")
-            self._kb["chip"].setText(d.get("chip", "--"))
-            self._kb["mac"].setText(d.get("mac", "--"))
-            self._kb["driver"].setText(d.get("driver", "--"))
+            self._kb["chip"].setText(_txt(d.get("chip")))
+            self._kb["mac"].setText(_txt(d.get("mac")))
+            self._kb["driver"].setText(_txt(d.get("driver")))
 
             v = bat.get("voltage")
-            if v:
+            if isinstance(v, (int, float)) and v:
                 h = "Fresh" if v >= 2.8 else "Good" if v >= 2.4 else "Low" if v >= 2.1 else "Critical"
                 self._kb["health"].setText(f"{h} ({v:.3f}V)")
             interp = bat.get("percentage_interpolated")
             self._kb["interpolated"].setText(f"{interp}%" if interp else "--")
 
-            bt = kb.get("bluetooth", {})
+            bt = kb.get("bluetooth") or {}
             itv = bt.get("interval")
-            if itv:
+            if isinstance(itv, (int, float)) and itv:
                 self._kb["bt_interval"].setText(f"{itv} ({itv * 1.25:.1f} ms)")
             lat = bt.get("latency")
             if lat is not None:
                 self._kb["bt_latency"].setText(str(lat))
 
-            an = kb.get("analysis", {})
-            btype = an.get("battery_type", {})
-            self._kb["type"].setText(btype.get("detail", "--") if btype else "--")
-            dr = an.get("discharge", {})
-            self._kb["drain"].setText(dr.get("remaining_display", "--") if dr else "--")
+            an = kb.get("analysis") or {}
+            btype = an.get("battery_type") or {}
+            self._kb["type"].setText(_txt(btype.get("detail")))
+            dr = an.get("discharge") or {}
+            self._kb["drain"].setText(_txt(dr.get("remaining_display")))
 
         n = len(mon) if mon else 0
         self.statusBar().showMessage(f"Monitor: {n} VCPs | Keyboard: {'OK' if kb else 'N/A'}")

@@ -66,8 +66,12 @@ def load_config() -> dict:
     """Load the first existing TOML config file, or exit with an error."""
     for path in CONFIG_PATHS:
         if path.is_file():
-            with open(path, "rb") as fh:
-                cfg = tomllib.load(fh)
+            try:
+                with open(path, "rb") as fh:
+                    cfg = tomllib.load(fh)
+            except (OSError, tomllib.TOMLDecodeError) as e:
+                print(f"[config] fatal: cannot read {path}: {e}", file=sys.stderr)
+                sys.exit(1)
             print(f"[config] loaded {path}", file=sys.stderr)
             return cfg
 
@@ -86,6 +90,16 @@ def _bus_number(cfg: dict) -> str:
     return raw.rsplit("-", 1)[-1] if raw.startswith("/dev/") else raw
 
 
+def new_mqtt_client(client_id, userdata):
+    """Build a paho Client on both 1.x and 2.x (2.x requires an API version).
+
+    VERSION1 keeps the (client, userdata, flags, rc) callback signatures."""
+    api = getattr(mqtt, "CallbackAPIVersion", None)
+    if api is not None:
+        return mqtt.Client(api.VERSION1, client_id=client_id, userdata=userdata)
+    return mqtt.Client(client_id=client_id, userdata=userdata)
+
+
 def ddc_write_brightness(bus: str, bri_min: int, bri_max: int, value: int) -> bool:
     value = max(bri_min, min(bri_max, value))
     try:
@@ -97,7 +111,7 @@ def ddc_write_brightness(bus: str, bri_min: int, bri_max: int, value: int) -> bo
             print(f"[ddc] brightness → {value}", file=sys.stderr)
             return True
         print(f"[ddc] write error: {r.stderr}", file=sys.stderr)
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         print(f"[ddc] exception: {e}", file=sys.stderr)
     return False
 
@@ -110,7 +124,7 @@ def ddc_read_brightness(bus: str) -> int:
         )
         if r.returncode == 0:
             return int(r.stdout.strip().split()[0])
-    except Exception:
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
         pass
     return -1
 
@@ -136,7 +150,7 @@ def on_connect(client, userdata, _flags, rc):
 def on_message(client, userdata, msg):
     try:
         value = int(float(msg.payload.decode()))
-    except (ValueError, UnicodeDecodeError):
+    except (ValueError, OverflowError, UnicodeDecodeError):
         print(f"[mqtt] bad payload: {msg.payload}", file=sys.stderr)
         return
 
@@ -179,14 +193,17 @@ def main():
         "discovery_payload": _build_discovery_payload(cfg, topic_cmd, topic_state),
     }
 
-    client = mqtt.Client(client_id="lg-ddc-bridge", userdata=userdata)
+    client = new_mqtt_client("lg-ddc-bridge", userdata)
     if user:
         client.username_pw_set(user, password)
     client.on_connect = on_connect
     client.on_message = on_message
-    client.connect(broker, port, 60)
+    client.reconnect_delay_set(min_delay=1, max_delay=60)
     print("[mqtt-bridge] starting...", file=sys.stderr)
-    client.loop_forever()
+    # retry_first_connection: a broker that is down at start-up is retried,
+    # like later disconnections, instead of crashing the process.
+    client.connect_async(broker, port, 60)
+    client.loop_forever(retry_first_connection=True)
 
 
 if __name__ == "__main__":

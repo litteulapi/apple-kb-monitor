@@ -124,7 +124,12 @@ ADC_MAX = (1 << ADC_BITS) - 1  # 1023
 ADC_VREF = 3.3
 
 # Paths
-STATE_DIR = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "apple-kb-monitor"
+_RUNTIME_DIR = os.environ.get("XDG_RUNTIME_DIR")
+if _RUNTIME_DIR:
+    STATE_DIR = Path(_RUNTIME_DIR) / "apple-kb-monitor"
+else:
+    # /tmp is world-writable: per-uid name, created 0700 and owner-checked
+    STATE_DIR = Path("/tmp") / f"apple-kb-monitor-{os.getuid()}"
 HISTORY_FILE = STATE_DIR / "history.jsonl"
 NOTIFIED_FILE = STATE_DIR / "low_notified"
 
@@ -159,6 +164,14 @@ BCM_CHIPS = {
 }
 
 
+def ensure_state_dir():
+    """Create STATE_DIR (0700) and refuse a directory owned by someone else."""
+    STATE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    st = STATE_DIR.lstat()
+    if st.st_uid != os.getuid() or STATE_DIR.is_symlink():
+        raise PermissionError(f"{STATE_DIR} is not owned by the current user")
+
+
 def identify_chip(pid):
     for (lo, hi), chip in BCM_CHIPS.items():
         if lo <= pid <= hi:
@@ -191,10 +204,14 @@ def find_devices():
         bus, vid, pid = parts
         if bus != "0005":
             continue
-        if int(vid, 16) != APPLE_VID:
+        try:
+            vid_int = int(vid, 16)
+            pid_int = int(pid, 16)
+        except ValueError:
+            continue
+        if vid_int != APPLE_VID:
             continue
 
-        pid_int = int(pid, 16)
         mac = props.get("HID_UNIQ", "")
         devnode = f"/dev/{os.path.basename(hidraw)}"
         ps_path = f"/sys/class/power_supply/hid-{mac}-battery" if mac else None
@@ -468,6 +485,11 @@ def dump_all_reports(devpath):
     fd = None
     try:
         fd = os.open(devpath, os.O_RDWR)
+    except OSError as e:
+        print(f"Cannot open {devpath}: {e.strerror} "
+              "(check hidraw permissions / udev rule)", file=sys.stderr)
+        return results
+    try:
         for rid in range(256):
             buf = bytearray(64)
             buf[0] = rid
@@ -503,38 +525,41 @@ def get_conn_info(mac):
     """
     # Try rssi-helper binary (setcap'd, no root needed)
     for helper in [RSSI_HELPER_INSTALLED, RSSI_HELPER]:
-        if helper.is_file():
-            try:
-                r = subprocess.run(
-                    [str(helper), mac],
-                    capture_output=True, text=True, timeout=3,
-                )
-                if r.returncode == 0:
-                    d = json.loads(r.stdout)
-                    return {
-                        "rssi_dbm": d["rssi"],
-                        "tx_power_dbm": d["tx_power"],
-                        "max_tx_power_dbm": d["max_tx_power"],
-                    }
-            except (subprocess.TimeoutExpired, json.JSONDecodeError, KeyError,
-                    FileNotFoundError):
-                pass
-            break
+        if not helper.is_file():
+            continue
+        try:
+            r = subprocess.run(
+                [str(helper), mac],
+                capture_output=True, text=True, timeout=3,
+            )
+            if r.returncode == 0:
+                d = json.loads(r.stdout)
+                return {
+                    "rssi_dbm": d["rssi"],
+                    "tx_power_dbm": d["tx_power"],
+                    "max_tx_power_dbm": d["max_tx_power"],
+                }
+        except (subprocess.TimeoutExpired, ValueError, KeyError, TypeError,
+                OSError):
+            # not executable / bad output: try the next helper, then MGMT
+            continue
 
     # Fallback: direct MGMT socket (needs CAP_NET_ADMIN)
+    sock = None
     try:
+        addr_bytes = bytes(int(x, 16) for x in mac.split(":"))
+        if len(addr_bytes) != 6:
+            return None
         sock = socket.socket(31, socket.SOCK_RAW, BTPROTO_HCI)
         sock.bind((0xFFFF, HCI_CHANNEL_CONTROL))
         sock.settimeout(2)
 
-        addr_bytes = bytes(int(x, 16) for x in mac.split(":"))
         addr_le = bytes(reversed(addr_bytes))
         payload = addr_le + struct.pack("B", 0x00)
 
         header = struct.pack("<HHH", MGMT_OP_GET_CONN_INFO, 0, len(payload))
         sock.send(header + payload)
         data = sock.recv(1024)
-        sock.close()
 
         if len(data) < 19:
             return None
@@ -548,8 +573,11 @@ def get_conn_info(mac):
         max_tx = struct.unpack_from("<b", data, 18)[0]
 
         return {"rssi_dbm": rssi, "tx_power_dbm": tx_power, "max_tx_power_dbm": max_tx}
-    except (OSError, TimeoutError, PermissionError):
+    except (OSError, ValueError, struct.error):
         return None
+    finally:
+        if sock is not None:
+            sock.close()
 
 
 def rssi_quality(rssi):
@@ -641,9 +669,14 @@ def _parse_sdp_record(data):
     return record
 
 
-def _read_sdp_element(data, offset):
-    """Read one SDP Data Element, return (value, bytes_consumed)."""
-    if offset >= len(data):
+SDP_MAX_DEPTH = 16
+
+
+def _read_sdp_element(data, offset, _depth=0):
+    """Read one SDP Data Element, return (value, bytes_consumed).
+
+    Truncated or over-nested input never raises: it yields (None, 0)."""
+    if offset >= len(data) or _depth > SDP_MAX_DEPTH:
         return None, 0
     header = data[offset]
     dtype = (header >> 3) & 0x1F
@@ -677,11 +710,13 @@ def _read_sdp_element(data, offset):
 
     start = offset + hdr_len
     end = start + size
-
-    # Type decode
     if dtype == 0:  # Nil
         return None, hdr_len
-    elif dtype == 1:  # Unsigned int
+    if end > len(data):  # truncated element
+        return None, 0
+
+    # Type decode
+    if dtype == 1:  # Unsigned int
         if size == 1: return data[start], hdr_len + size
         elif size == 2: return int.from_bytes(data[start:end], 'big'), hdr_len + size
         elif size == 4: return int.from_bytes(data[start:end], 'big'), hdr_len + size
@@ -698,12 +733,12 @@ def _read_sdp_element(data, offset):
     elif dtype == 4:  # Text string
         return data[start:end].decode('utf-8', errors='replace').rstrip('\x00'), hdr_len + size
     elif dtype == 5:  # Boolean
-        return bool(data[start]) if size >= 1 else False, hdr_len + size
+        return (bool(data[start]) if size >= 1 else False), hdr_len + size
     elif dtype == 6:  # Sequence
         items = []
         pos = start
         while pos < end:
-            val, consumed = _read_sdp_element(data, pos)
+            val, consumed = _read_sdp_element(data, pos, _depth + 1)
             if consumed == 0: break
             items.append(val)
             pos += consumed
@@ -712,7 +747,7 @@ def _read_sdp_element(data, offset):
         items = []
         pos = start
         while pos < end:
-            val, consumed = _read_sdp_element(data, pos)
+            val, consumed = _read_sdp_element(data, pos, _depth + 1)
             if consumed == 0: break
             items.append(val)
             pos += consumed
@@ -785,6 +820,10 @@ LED_BITS = {
     "compose": 0x08,
     "kana": 0x10,
 }
+
+
+LED_STATES_ON = frozenset({"on", "1", "true"})
+LED_STATES_OFF = frozenset({"off", "0", "false"})
 
 
 def read_leds(evdev):
@@ -1047,6 +1086,17 @@ async def collect_report(bus, dev):
 # ---------------------------------------------------------------------------
 # Output: pretty report
 # ---------------------------------------------------------------------------
+
+def json_default(obj):
+    """json.dump fallback: unwrap dbus Variant, render bytes as hex."""
+    if hasattr(obj, "signature") and hasattr(obj, "value"):  # dbus_fast Variant
+        return obj.value
+    if isinstance(obj, (bytes, bytearray)):
+        return bytes(obj).hex()
+    if isinstance(obj, (set, tuple)):
+        return list(obj)
+    return str(obj)
+
 
 def bar(pct, width=20):
     if pct is None:
@@ -1318,7 +1368,7 @@ def notify(title, body, urgency="normal", icon="battery-low"):
              "--app-name=Apple KB Monitor", title, body],
             timeout=5, capture_output=True,
         )
-    except FileNotFoundError:
+    except (OSError, subprocess.TimeoutExpired):
         pass
 
 
@@ -1327,7 +1377,7 @@ def notify(title, body, urgency="normal", icon="battery-low"):
 # ---------------------------------------------------------------------------
 
 def append_history(entry):
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_state_dir()
     with open(HISTORY_FILE, "a") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     try:
@@ -1340,26 +1390,47 @@ def append_history(entry):
         pass
 
 
-def print_history():
-    if not HISTORY_FILE.exists():
-        print("No history yet.", file=sys.stderr)
-        return
-    lines = HISTORY_FILE.read_text().splitlines()
-    print(f"  {'Timestamp':20s} {'Bat%':>5s} {'Fine%':>6s} {'Voltage':>8s} {'RSSI':>6s}")
-    print(f"  {'\u2500' * 20} {'\u2500' * 5} {'\u2500' * 6} {'\u2500' * 8} {'\u2500' * 6}")
-    for line in lines[-100:]:
+def _is_num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def read_history(history_file=None):
+    """Return history entries as a list of dicts (None if no file).
+
+    Corrupt/non-object JSON lines and unreadable files are skipped, never
+    raised: history is best-effort telemetry."""
+    history_file = history_file or HISTORY_FILE
+    try:
+        text = history_file.read_text(errors="replace")
+    except OSError:
+        return None
+    entries = []
+    for line in text.splitlines():
         try:
             e = json.loads(line)
-            t = e.get("t", "?")[:19]
-            bat = e.get("bat", "")
-            fine = e.get("fine", "")
-            volt = e.get("volt", "")
-            rssi = e.get("rssi", "")
-            volt_s = f"{volt:.3f}V" if isinstance(volt, (int, float)) else ""
-            rssi_s = f"{rssi}dBm" if rssi else ""
-            print(f"  {t:20s} {str(bat):>5s} {str(fine):>6s} {volt_s:>8s} {rssi_s:>6s}")
-        except json.JSONDecodeError:
-            pass
+        except ValueError:
+            continue
+        if isinstance(e, dict):
+            entries.append(e)
+    return entries
+
+
+def print_history():
+    entries = read_history()
+    if entries is None:
+        print("No history yet.", file=sys.stderr)
+        return
+    print(f"  {'Timestamp':20s} {'Bat%':>5s} {'Fine%':>6s} {'Voltage':>8s} {'RSSI':>6s}")
+    print(f"  {'\u2500' * 20} {'\u2500' * 5} {'\u2500' * 6} {'\u2500' * 8} {'\u2500' * 6}")
+    for e in entries[-100:]:
+        t = str(e.get("t") or "?")[:19]
+        bat = "" if e.get("bat") is None else e.get("bat")
+        fine = "" if e.get("fine") is None else e.get("fine")
+        volt = e.get("volt")
+        rssi = e.get("rssi")  # 0 dBm is a valid (optimal) reading
+        volt_s = f"{volt:.3f}V" if _is_num(volt) else ""
+        rssi_s = f"{rssi}dBm" if _is_num(rssi) else ""
+        print(f"  {t:20s} {str(bat):>5s} {str(fine):>6s} {volt_s:>8s} {rssi_s:>6s}")
 
 
 # ---------------------------------------------------------------------------
@@ -1402,32 +1473,30 @@ def detect_battery_type(voltage):
 
 def estimate_discharge(history_file=HISTORY_FILE, window_hours=24):
     """Estimate discharge rate and remaining time from history data."""
-    if not history_file.exists():
-        return None
-    try:
-        lines = history_file.read_text().splitlines()
-    except OSError:
+    hist = read_history(history_file)
+    if hist is None:
         return None
 
     # Parse entries with voltage data
     entries = []
-    for line in lines:
+    for e in hist:
+        v = e.get("volt")
+        t = e.get("t")
+        if not (_is_num(v) and v and isinstance(t, str)):
+            continue
         try:
-            e = json.loads(line)
-            v = e.get("volt")
-            t = e.get("t")
-            if v and t:
-                ts = datetime.fromisoformat(t)
-                entries.append((ts, v))
-        except (json.JSONDecodeError, ValueError):
-            pass
+            ts = datetime.fromisoformat(t)
+        except ValueError:
+            continue
+        if ts.tzinfo is not None:  # history is written naive-local
+            ts = ts.astimezone().replace(tzinfo=None)
+        entries.append((ts, v))
 
     if len(entries) < 2:
         return None
 
     # Filter to window
     now = datetime.now()
-    cutoff = now.replace(hour=0, minute=0, second=0) if window_hours >= 24 else now
     recent = [(t, v) for t, v in entries if (now - t).total_seconds() < window_hours * 3600]
     if len(recent) < 2:
         recent = entries[-50:]  # fallback to last 50 entries
@@ -1477,21 +1546,10 @@ SPARK_CHARS = "\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
 
 def print_graph(history_file=HISTORY_FILE):
     """Print voltage/battery history as terminal sparkline graph."""
-    if not history_file.exists():
+    entries = read_history(history_file)
+    if entries is None:
         print("No history yet.", file=sys.stderr)
         return
-    try:
-        lines = history_file.read_text().splitlines()
-    except OSError:
-        return
-
-    entries = []
-    for line in lines:
-        try:
-            e = json.loads(line)
-            entries.append(e)
-        except json.JSONDecodeError:
-            pass
 
     if not entries:
         print("No data in history.", file=sys.stderr)
@@ -1500,7 +1558,7 @@ def print_graph(history_file=HISTORY_FILE):
     W = 70
 
     # Voltage sparkline
-    volts = [e.get("volt") for e in entries if e.get("volt")]
+    volts = [e["volt"] for e in entries if _is_num(e.get("volt")) and e["volt"]]
     if volts:
         vmin, vmax = min(volts), max(volts)
         vrange = vmax - vmin if vmax > vmin else 0.1
@@ -1517,7 +1575,8 @@ def print_graph(history_file=HISTORY_FILE):
         print()
 
     # Battery % sparkline
-    bats = [e.get("fine") or e.get("bat") for e in entries if e.get("fine") or e.get("bat")]
+    bats = [e.get("fine") or e.get("bat") for e in entries
+            if _is_num(e.get("fine") or e.get("bat")) and (e.get("fine") or e.get("bat"))]
     if bats:
         bmin, bmax = min(bats), max(bats)
         brange = bmax - bmin if bmax > bmin else 1
@@ -1533,7 +1592,7 @@ def print_graph(history_file=HISTORY_FILE):
         print()
 
     # RSSI sparkline
-    rssis = [e.get("rssi") for e in entries if e.get("rssi") is not None]
+    rssis = [e["rssi"] for e in entries if _is_num(e.get("rssi"))]
     if rssis:
         rmin, rmax = min(rssis), max(rssis)
         rrange = rmax - rmin if rmax > rmin else 1
@@ -1567,26 +1626,18 @@ def print_graph(history_file=HISTORY_FILE):
 
 def export_csv(history_file=HISTORY_FILE):
     """Export history to CSV on stdout."""
-    if not history_file.exists():
+    entries = read_history(history_file)
+    if entries is None:
         print("No history yet.", file=sys.stderr)
         return
-    lines = history_file.read_text().splitlines()
     print("timestamp,mac,battery_pct,battery_fine,voltage,adc_raw,rssi_dbm,tx_power_dbm")
-    for line in lines:
-        try:
-            e = json.loads(line)
-            print(",".join([
-                e.get("t", ""),
-                e.get("mac", ""),
-                str(e.get("bat", "")),
-                str(e.get("fine", "")),
-                str(e.get("volt", "")),
-                str(e.get("adc", "")),
-                str(e.get("rssi", "")),
-                str(e.get("tx", "")),
-            ]))
-        except json.JSONDecodeError:
-            pass
+    def cell(key):
+        v = e.get(key)
+        return "" if v is None else str(v).replace(",", " ").replace("\n", " ")
+
+    for e in entries:
+        print(",".join(cell(k) for k in
+                       ("t", "mac", "bat", "fine", "volt", "adc", "rssi", "tx")))
 
 
 # ---------------------------------------------------------------------------
@@ -1637,6 +1688,14 @@ def print_metrics(devices):
 # MQTT Home Assistant auto-discovery
 # ---------------------------------------------------------------------------
 
+def new_mqtt_client(mod, client_id):
+    """Build a paho Client on both 1.x and 2.x (2.x requires an API version)."""
+    api = getattr(mod, "CallbackAPIVersion", None)
+    if api is not None:
+        return mod.Client(api.VERSION1, client_id=client_id)
+    return mod.Client(client_id=client_id)
+
+
 def mqtt_publish(host, port, topic_prefix, devices, username=None, password=None):
     """Publish telemetry to MQTT with Home Assistant auto-discovery."""
     try:
@@ -1644,17 +1703,25 @@ def mqtt_publish(host, port, topic_prefix, devices, username=None, password=None
     except ImportError:
         return _mqtt_publish_cli(host, port, topic_prefix, devices, username, password)
 
-    client = mqtt_client.Client(client_id="apple-kb-monitor")
-    if username:
-        client.username_pw_set(username, password)
     try:
+        client = new_mqtt_client(mqtt_client, "apple-kb-monitor")
+        if username:
+            client.username_pw_set(username, password)
         client.connect(host, port, 10)
     except Exception as e:
         print(f"[mqtt] connection failed: {e}", file=sys.stderr)
         return
 
+    client.loop_start()
+    infos = []
+
+    def _pub(topic, payload):
+        infos.append(client.publish(topic, payload, retain=True))
+
     for dev in devices:
         mac = dev["mac"]
+        if not mac:
+            continue
         mac_id = mac.replace(":", "").lower()
         reps = read_all_reports(dev["path"])
         conn = get_conn_info(mac) if mac else None
@@ -1696,8 +1763,8 @@ def mqtt_publish(host, port, topic_prefix, devices, username=None, password=None
             }
             if dev_class:
                 config["device_class"] = dev_class
-            client.publish(config_topic, json.dumps(config), retain=True)
-            client.publish(state_topic, str(value), retain=True)
+            _pub(config_topic, json.dumps(config))
+            _pub(state_topic, str(value))
 
     # Monitor DDC data
     try:
@@ -1736,23 +1803,29 @@ def mqtt_publish(host, port, topic_prefix, devices, username=None, password=None
                 }
                 if dev_class:
                     config["device_class"] = dev_class
-                client.publish(config_topic, json.dumps(config), retain=True)
-                client.publish(state_topic, str(value), retain=True)
+                _pub(config_topic, json.dumps(config))
+                _pub(state_topic, str(value))
 
             # Auto-brightness recommendation
             auto_bri = auto_brightness_value()
-            client.publish(f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/state", str(auto_bri), retain=True)
-            client.publish(f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/config", json.dumps({
+            _pub(f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/state", str(auto_bri))
+            _pub(f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/config", json.dumps({
                 "name": "LG Auto Brightness (Circadian)",
                 "unique_id": "lg_34gn850_auto_brightness",
                 "state_topic": f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/state",
                 "unit_of_measurement": "%",
                 "icon": "mdi:weather-sunny",
                 "device": mon_device,
-            }), retain=True)
+            }))
     except Exception as e:
         print(f"[mqtt] monitor publish error: {e}", file=sys.stderr)
 
+    for info in infos:
+        try:
+            info.wait_for_publish(timeout=5)
+        except (RuntimeError, ValueError):
+            pass
+    client.loop_stop()
     client.disconnect()
     print(f"[mqtt] published {len(devices)} keyboard(s) + monitor to {host}:{port}", file=sys.stderr)
 
@@ -1763,9 +1836,11 @@ def _mqtt_publish_cli(host, port, topic_prefix, devices, username=None, password
     if username:
         auth_args = ["-u", username, "-P", password or ""]
     for dev in devices:
+        if not dev["mac"]:
+            continue
         mac_id = dev["mac"].replace(":", "").lower()
         reps = read_all_reports(dev["path"])
-        conn = get_conn_info(dev["mac"]) if dev["mac"] else None
+        conn = get_conn_info(dev["mac"])
 
         state = {
             "battery": reps.get("battery_fine") or reps.get("battery_pct"),
@@ -1777,13 +1852,18 @@ def _mqtt_publish_cli(host, port, topic_prefix, devices, username=None, password
 
         topic = f"{topic_prefix}/sensor/apple_kb_{mac_id}/state"
         try:
-            subprocess.run(
+            r = subprocess.run(
                 ["mosquitto_pub", "-h", host, "-p", str(port)] + auth_args +
                 ["-t", topic, "-m", json.dumps(state), "-r"],
                 capture_output=True, timeout=5,
             )
+            if r.returncode != 0:
+                print(f"[mqtt] mosquitto_pub failed (rc={r.returncode})", file=sys.stderr)
         except FileNotFoundError:
             print("[mqtt] neither paho-mqtt nor mosquitto_pub available", file=sys.stderr)
+            return
+        except (subprocess.TimeoutExpired, OSError) as e:
+            print(f"[mqtt] mosquitto_pub error: {e}", file=sys.stderr)
             return
 
 
@@ -1910,8 +1990,28 @@ if HAS_DBUS_FAST:
                 pass
             self._registered = False
 
+        @staticmethod
+        def _key(mac):
+            # HID_UNIQ is lower-case, BlueZ object paths are upper-case
+            return mac.upper()
+
+        def has_device(self, mac):
+            return self._key(mac) in self.batteries
+
+        def reset(self):
+            """Drop every exported battery (BlueZ restart / adapter removed)."""
+            for mac in list(self.batteries):
+                self.remove_device(mac)
+            self._registered = False
+
         def add_device(self, mac, percentage):
-            mac_path = mac.upper().replace(":", "_")
+            if not mac:
+                return
+            mac = self._key(mac)
+            if mac in self.batteries:
+                self.update_device(mac, percentage)
+                return
+            mac_path = mac.replace(":", "_")
             child_path = f"{PROVIDER_ROOT}/dev_{mac_path}"
             bluez_dev_path = f"/org/bluez/hci0/dev_{mac_path}"
             source = f"apple-kb-monitor v{__version__} (HID 0xEA)"
@@ -1922,19 +2022,24 @@ if HAS_DBUS_FAST:
             self.om.add_battery(child_path, bluez_dev_path, percentage, source)
 
         def remove_device(self, mac):
+            mac = self._key(mac)
             if mac not in self.batteries:
                 return
-            mac_path = mac.upper().replace(":", "_")
+            mac_path = mac.replace(":", "_")
             child_path = f"{PROVIDER_ROOT}/dev_{mac_path}"
-            self.bus.unexport(child_path, self.batteries[mac])
+            try:
+                self.bus.unexport(child_path, self.batteries[mac])
+            except Exception as e:
+                print(f"[provider] unexport {child_path} failed: {e}", file=sys.stderr)
             del self.batteries[mac]
             self.om.remove_battery(child_path)
 
         def update_device(self, mac, percentage):
+            mac = self._key(mac)
             if mac not in self.batteries:
                 return
             self.batteries[mac].update(percentage)
-            mac_path = mac.upper().replace(":", "_")
+            mac_path = mac.replace(":", "_")
             child_path = f"{PROVIDER_ROOT}/dev_{mac_path}"
             self.om.update_percentage(child_path, percentage)
 
@@ -1943,9 +2048,15 @@ if HAS_DBUS_FAST:
 # Async daemon
 # ---------------------------------------------------------------------------
 
-async def _setup_provider(bus):
-    """Create Battery Provider and register with BlueZ."""
-    provider = BatteryProvider(bus)
+async def _setup_provider(bus, provider=None):
+    """Create (or reset and reuse) the Battery Provider and register it.
+
+    The D-Bus objects must not be exported twice, so a re-registration after
+    a BlueZ restart reuses the existing provider instead of building a new one."""
+    if provider is None:
+        provider = BatteryProvider(bus)
+    else:
+        provider.reset()
     devices = find_devices()
     for dev in devices:
         reps = read_all_reports(dev["path"])
@@ -1960,9 +2071,57 @@ async def _setup_provider(bus):
     return provider
 
 
+def _poll_device(dev, provider, threshold):
+    """One polling step for one keyboard: provider, history, low-battery alert."""
+    mac = dev["mac"]
+    reps = read_all_reports(dev["path"])
+    pct_fine = reps.get("battery_fine")
+    pct = reps.get("battery_pct")
+    volts = reps.get("voltage")
+    adc = reps.get("adc_raw")
+
+    level = pct_fine if pct_fine is not None else pct
+    if level is None:
+        return
+
+    # Update Battery Provider
+    if provider:
+        provider.add_device(mac, level)  # adds or updates
+
+    # History
+    entry = {
+        "t": datetime.now().isoformat(),
+        "mac": mac,
+        "bat": pct,
+        "fine": pct_fine,
+        "volt": volts,
+        "adc": adc,
+    }
+    conn = get_conn_info(mac) if mac else None
+    if conn:
+        entry["rssi"] = conn["rssi_dbm"]
+        entry["tx"] = conn["tx_power_dbm"]
+    append_history(entry)
+
+    # Low battery notification
+    if level <= threshold:
+        if not NOTIFIED_FILE.exists():
+            urgency = "critical" if level <= 5 else "normal"
+            icon = "battery-caution" if level <= 5 else "battery-low"
+            v_str = f" ({volts:.2f}V)" if volts else ""
+            notify(
+                f"Batterie faible \u2014 {dev['name']}",
+                f"{level}%{v_str} restant",
+                urgency=urgency, icon=icon,
+            )
+            NOTIFIED_FILE.write_text(str(level))
+    elif level > threshold and NOTIFIED_FILE.exists():
+        NOTIFIED_FILE.unlink(missing_ok=True)
+
+
 async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mqtt_port=1883, mqtt_topic="homeassistant", mqtt_user=None, mqtt_pass=None):
     """Main async daemon: Battery Provider + telemetry monitor."""
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_state_dir()
 
     if not HAS_DBUS_FAST:
         print("dbus-fast not installed — running without Battery Provider", file=sys.stderr)
@@ -1973,9 +2132,19 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
     bluez_reregister = asyncio.Event()
 
     if not no_provider:
-        bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-        provider = await _setup_provider(bus)
+        try:
+            bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+            provider = await _setup_provider(bus)
+        except Exception as e:
+            print(f"[daemon] system bus / BlueZ unavailable ({e}) — running without Battery Provider",
+                  file=sys.stderr)
+            if bus is not None:
+                bus.disconnect()
+            bus = None
+            provider = None
+            no_provider = True
 
+    if not no_provider:
         # --- Monitor BlueZ signals ---
         for match_rule in [
             # 1. PropertiesChanged for device connect/disconnect
@@ -2023,8 +2192,7 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
                     reregister_event.set()
                 elif old_owner != "" and new_owner == "":
                     print("[event] BlueZ stopped — provider invalidated", file=sys.stderr)
-                    prov.batteries.clear()
-                    prov._registered = False
+                    prov.reset()
                 return
 
             # Device appeared (InterfacesAdded) — happens after adapter power cycle
@@ -2044,10 +2212,7 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
                         if d["mac"].upper() == mac.upper():
                             reps = read_all_reports(d["path"])
                             pct = reps.get("battery_fine") or reps.get("battery_pct") or 0
-                            if mac not in prov.batteries:
-                                prov.add_device(mac, pct)
-                            else:
-                                prov.update_device(mac, pct)
+                            prov.add_device(mac, pct)
                             print(f"[event] {mac} appeared (connected) — battery {pct}%", file=sys.stderr)
                             break
                 return
@@ -2055,14 +2220,13 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
             # Device disappeared (InterfacesRemoved) — adapter power off
             if msg.member == "InterfacesRemoved":
                 obj_path = msg.body[0]
-                if not obj_path.startswith("/org/bluez/hci0/dev_"):
-                    return
                 if obj_path == "/org/bluez/hci0":
                     # Adapter removed — schedule re-registration when it comes back
                     print("[event] adapter removed — provider invalidated", file=sys.stderr)
-                    prov.batteries.clear()
-                    prov._registered = False
+                    prov.reset()
                     reregister_event.set()
+                    return
+                if not obj_path.startswith("/org/bluez/hci0/dev_"):
                     return
                 mac = obj_path.split("/")[-1].replace("dev_", "").replace("_", ":")
                 prov.remove_device(mac)
@@ -2092,8 +2256,7 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
                     if d["mac"].upper() == mac.upper():
                         reps = read_all_reports(d["path"])
                         pct = reps.get("battery_fine") or reps.get("battery_pct") or 0
-                        if mac not in prov.batteries:
-                            prov.add_device(mac, pct)
+                        prov.add_device(mac, pct)
                         print(f"[event] {mac} connected — battery {pct}%", file=sys.stderr)
                         break
             else:
@@ -2142,63 +2305,23 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
                 bluez_reregister.clear()
                 await asyncio.sleep(2)  # let BlueZ finish starting
                 try:
-                    provider = await _setup_provider(bus)
+                    provider = await _setup_provider(bus, provider)
                 except Exception as e:
                     print(f"[provider] re-registration failed: {e}", file=sys.stderr)
 
             for dev in find_devices():
-                mac = dev["mac"]
-                reps = read_all_reports(dev["path"])
-                pct_fine = reps.get("battery_fine")
-                pct = reps.get("battery_pct")
-                volts = reps.get("voltage")
-                adc = reps.get("adc_raw")
-
-                level = pct_fine if pct_fine is not None else pct
-                if level is None:
-                    continue
-
-                # Update Battery Provider
-                if provider:
-                    if mac in provider.batteries:
-                        provider.update_device(mac, level)
-                    else:
-                        provider.add_device(mac, level)
-
-                # History
-                entry = {
-                    "t": datetime.now().isoformat(),
-                    "mac": mac,
-                    "bat": pct,
-                    "fine": pct_fine,
-                    "volt": volts,
-                    "adc": adc,
-                }
-                conn = get_conn_info(mac) if mac else None
-                if conn:
-                    entry["rssi"] = conn["rssi_dbm"]
-                    entry["tx"] = conn["tx_power_dbm"]
-                append_history(entry)
-
-                # Low battery notification
-                if level <= threshold:
-                    if not NOTIFIED_FILE.exists():
-                        urgency = "critical" if level <= 5 else "normal"
-                        icon = "battery-caution" if level <= 5 else "battery-low"
-                        v_str = f" ({volts:.2f}V)" if volts else ""
-                        notify(
-                            f"Batterie faible \u2014 {dev['name']}",
-                            f"{level}%{v_str} restant",
-                            urgency=urgency, icon=icon,
-                        )
-                        NOTIFIED_FILE.write_text(str(level))
-                elif level > threshold and NOTIFIED_FILE.exists():
-                    NOTIFIED_FILE.unlink(missing_ok=True)
+                try:
+                    _poll_device(dev, provider, threshold)
+                except Exception as e:
+                    print(f"[daemon] poll error for {dev.get('mac')}: {e}", file=sys.stderr)
 
             # MQTT publish
             if mqtt_host:
                 try:
-                    mqtt_publish(mqtt_host, mqtt_port, mqtt_topic, find_devices(), mqtt_user, mqtt_pass)
+                    # blocking network/subprocess work: keep it off the event loop
+                    await asyncio.to_thread(
+                        lambda: mqtt_publish(mqtt_host, mqtt_port, mqtt_topic,
+                                             find_devices(), mqtt_user, mqtt_pass))
                 except Exception as e:
                     print(f"[mqtt] error: {e}", file=sys.stderr)
 
@@ -2255,7 +2378,6 @@ async def watch_mode(watch_interval):
 
 def auto_brightness_value():
     """Calculate optimal brightness based on time of day."""
-    from datetime import datetime
     hour = datetime.now().hour
     # Circadian curve: bright during day, dim at night
     # 06:00-08:00: ramp up 30→80
@@ -2273,6 +2395,26 @@ def auto_brightness_value():
         return 40 - (hour - 21) * 10  # 40→20
     else:
         return 20
+
+
+def positive_int(text):
+    try:
+        v = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid integer: {text!r}") from None
+    if v < 1:
+        raise argparse.ArgumentTypeError("must be >= 1")
+    return v
+
+
+def percent_int(text):
+    try:
+        v = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid integer: {text!r}") from None
+    if not 0 <= v <= 100:
+        raise argparse.ArgumentTypeError("must be between 0 and 100")
+    return v
 
 
 def main():
@@ -2310,9 +2452,9 @@ license: GPL-2.0-or-later
     mode.add_argument("--led", nargs=2, metavar=("NAME", "STATE"),
                       help="Control LED: --led capslock on/off")
 
-    p.add_argument("--threshold", type=int, default=15, help="Low battery notification %% (default: 15)")
-    p.add_argument("--interval", type=int, default=300, help="Daemon poll interval in seconds (default: 300)")
-    p.add_argument("--watch-interval", type=int, default=5, help="Watch refresh in seconds (default: 5)")
+    p.add_argument("--threshold", type=percent_int, default=15, help="Low battery notification %% (default: 15)")
+    p.add_argument("--interval", type=positive_int, default=300, help="Daemon poll interval in seconds (default: 300)")
+    p.add_argument("--watch-interval", type=positive_int, default=5, help="Watch refresh in seconds (default: 5)")
     p.add_argument("--no-provider", action="store_true", help="Disable BlueZ Battery Provider registration")
     p.add_argument("--mqtt", metavar="HOST", help="Publish to MQTT broker (e.g. 192.168.8.3)")
     p.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port (default: 1883)")
@@ -2325,11 +2467,23 @@ license: GPL-2.0-or-later
     # --- Auto-brightness mode ---
     if args.auto_brightness:
         target = auto_brightness_value()
-        print(f"Circadian brightness: {target}% (hour={__import__('datetime').datetime.now().hour})")
-        subprocess.run(["ddc-tool", "write", "6", "16", str(target)], capture_output=True, timeout=5)
-        subprocess.Popen(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService",
-                         "org.kde.osdService.brightnessChanged", str(target)],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"Circadian brightness: {target}% (hour={datetime.now().hour})")
+        try:
+            r = subprocess.run(["ddc-tool", "write", "6", "16", str(target)],
+                               capture_output=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            print(f"ddc-tool failed: {e}", file=sys.stderr)
+            sys.exit(1)
+        if r.returncode != 0:
+            print(f"ddc-tool write failed (rc={r.returncode})", file=sys.stderr)
+            sys.exit(1)
+        try:  # OSD is cosmetic: ignore a missing qdbus6
+            subprocess.run(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService",
+                            "org.kde.osdService.brightnessChanged", str(target)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
         return
 
     # --- Sync modes (no D-Bus needed) ---
@@ -2344,11 +2498,15 @@ license: GPL-2.0-or-later
             pct = reps.get("battery_pct")
             fine = reps.get("battery_fine")
             volts = reps.get("voltage")
+            if not reps:
+                print(f"Cannot read HID reports from {dev['path']} "
+                      "(permission denied or device asleep)", file=sys.stderr)
             conn = get_conn_info(dev["mac"]) if dev["mac"] else None
             rssi_s = f"  RSSI:{conn['rssi_dbm']}dBm" if conn and conn.get("rssi_dbm") is not None else ""
             volt_s = f"  {volts:.3f}V" if volts else ""
             fine_s = f" (fine:{fine}%)" if fine is not None and fine != pct else ""
-            print(f"{dev['model']:48s} {pct}%{fine_s}{volt_s}{rssi_s}")
+            pct_s = f"{pct}%" if pct is not None else "?"
+            print(f"{dev['model']:48s} {pct_s}{fine_s}{volt_s}{rssi_s}")
         return
 
     if args.dump:
@@ -2386,12 +2544,16 @@ license: GPL-2.0-or-later
         return
 
     if args.led:
+        state_word = args.led[1].lower()
+        if state_word not in LED_STATES_ON | LED_STATES_OFF:
+            print(f"Invalid LED state {args.led[1]!r}: use on/off", file=sys.stderr)
+            sys.exit(2)
         devices = find_devices()
         if not devices:
             print("No Apple Bluetooth keyboard found.", file=sys.stderr)
             sys.exit(1)
         led_name = args.led[0].lower()
-        led_state = args.led[1].lower() in ("on", "1", "true")
+        led_state = state_word in LED_STATES_ON
         ok, msg = set_led(devices[0]["path"], led_name, led_state)
         print(msg)
         sys.exit(0 if ok else 1)
@@ -2428,12 +2590,14 @@ license: GPL-2.0-or-later
                 devices = find_devices()
                 if not devices:
                     json.dump({"error": "no device"}, sys.stdout, indent=2)
+                    print()
                     sys.exit(1)
                 reports = []
                 for dev in devices:
                     reports.append(await collect_report(bus, dev))
                 json.dump(reports[0] if len(reports) == 1 else reports,
-                          sys.stdout, indent=2, ensure_ascii=False)
+                          sys.stdout, indent=2, ensure_ascii=False,
+                          default=json_default)
                 print()
             finally:
                 bus.disconnect()
