@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased] - 3.0.1 stabilisation (audit/debug-complet)
+
+Full audit and debug pass. Bugs are tracked one per Gitea issue (label `bug`); tracking issue: #8. Milestone: v3.0.1.
+
+### Fixed (commits on audit/debug-complet, at time of writing)
+- **ddc**: checksum computed without the source byte, short writes ignored, fds without `O_CLOEXEC`, fragile `[ddc]` parsing (#25)
+- **history**: invalid points (voltage <= 0, NaN) rejected on write and ignored in the estimate (#39)
+- **keyboard**: leaking HID fd, wake-monitor busy loop at 100 % CPU after disconnect, unvalidated battery calibration, PID match by substring, NUL in device name, CapsLock LED (#52, #53)
+- **brightness**: evdev reconnection when keyd is absent/restarted, qdbus6 zombies, stale cache resynchronised (#54)
+
+### Documentation
+- README rewritten to match the repository (Rust app first, Gitea URLs, real project structure)
+- ARCHITECTURE line counts re-measured with `wc -l`; tray.rs documented (pure zbus)
+- New: docs/FEATURES.md, CONFIGURATION.md, TROUBLESHOOTING.md, TESTING.md; Gitea wiki pages (Home, Fonctionnalités, Installation, Configuration, Architecture, Dépannage, Développement et tests, Matériel supporté, Feuille de route)
+
+### Open (see milestones v3.0.1 / v3.1 / v3.2)
+Open bugs #2-#7, #26-#38, #40-#51 at time of writing; evolutions and debt #9-#24. Roadmap: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/milestones
+
 ## [3.1.0] - 2026-04-02
 
 Broad feature expansion: 10 keyboard models, system tray, battery analytics, App Presets, expanded MQTT entities, and DDC/CI improvements.
