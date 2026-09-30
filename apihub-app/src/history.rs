@@ -27,6 +27,10 @@ fn history_path() -> std::path::PathBuf {
 /// Creates the parent directory if needed. Silently ignores write errors
 /// (the history file is best-effort, not critical).
 pub fn append_history(pct: f64, voltage: f64) {
+    // Reject invalid samples (missing voltage reported as 0.0, NaN, out-of-range %).
+    if !pct.is_finite() || !voltage.is_finite() || voltage <= 0.0 || !(0.0..=100.0).contains(&pct) {
+        return;
+    }
     let ts = unsafe { libc::time(std::ptr::null_mut()) } as u64;
     let entry = HistoryEntry { ts, pct, voltage };
 
@@ -50,7 +54,10 @@ pub fn append_history(pct: f64, voltage: f64) {
 /// Estimate battery discharge rate and remaining time from history.
 /// Returns (rate_mv_per_hour, remaining_hours) or None if insufficient data.
 pub fn estimate_remaining() -> Option<(f64, f64)> {
-    let entries = read_history();
+    let entries: Vec<HistoryEntry> = read_history()
+        .into_iter()
+        .filter(|e| e.voltage.is_finite() && e.voltage > 0.0)
+        .collect();
     if entries.len() < 2 { return None; }
 
     // Use last 50 entries
