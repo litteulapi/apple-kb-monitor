@@ -88,13 +88,42 @@ pub fn detect_bus() -> Option<String> {
                 Ok(p) => p,
                 Err(_) => continue,
             };
-            let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
+            let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR | libc::O_CLOEXEC) };
             if fd < 0 { continue; }
             let result = ddc_read_vcp_fd(fd, 0xDF); // VCP version
             unsafe { libc::close(fd); }
             if result.is_ok() {
                 eprintln!("[ddc] auto-detected monitor on {}", bus);
                 return Some(bus.clone());
+            }
+        }
+    }
+    None
+}
+
+/// Extract `bus = "/dev/i2c-N"` from the `[ddc]` section of a config.toml.
+/// Section headers may carry trailing comments; `[[array]]` tables and nested
+/// `[a.b]` sections are not `[ddc]`. Both "..." and '...' strings are accepted.
+fn parse_bus_from_config(content: &str) -> Option<String> {
+    let mut in_ddc = false;
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            let inner = line.trim_start_matches('[');
+            let name = inner.split(']').next().unwrap_or("").trim();
+            in_ddc = !line.starts_with("[[") && name == "ddc";
+            continue;
+        }
+        if !in_ddc || line.is_empty() || line.starts_with('#') { continue; }
+        if let Some((key, val)) = line.split_once('=') {
+            if key.trim() != "bus" { continue; }
+            let val = val.trim();
+            let val = match val.chars().next() {
+                Some(q @ ('"' | '\'')) => val[1..].split(q).next().unwrap_or(""),
+                _ => val.split('#').next().unwrap_or("").trim(),
+            };
+            if val.starts_with("/dev/") {
+                return Some(val.to_string());
             }
         }
     }
@@ -110,31 +139,8 @@ pub fn default_bus() -> String {
     ];
     for path in paths.into_iter().flatten() {
         if let Ok(content) = std::fs::read_to_string(&path) {
-            let mut in_ddc = false;
-            for line in content.lines() {
-                let line = line.trim();
-                if line.starts_with('[') {
-                    let name = line.trim_matches(|c| c == '[' || c == ']').trim();
-                    // Reject dotted/nested section names (e.g. [foo.bar]) — not supported (M14).
-                    in_ddc = name == "ddc" && !name.contains('.');
-                    continue;
-                }
-                if !in_ddc { continue; }
-                if line.is_empty() || line.starts_with('#') { continue; }
-                if let Some((key, val)) = line.split_once('=') {
-                    if key.trim() == "bus" {
-                        let val = val.trim();
-                        let val = if val.starts_with('"') {
-                            val.trim_start_matches('"')
-                                .splitn(2, '"').next().unwrap_or("")
-                        } else {
-                            val.split('#').next().unwrap_or("").trim()
-                        };
-                        if val.starts_with("/dev/") {
-                            return val.to_string();
-                        }
-                    }
-                }
+            if let Some(bus) = parse_bus_from_config(&content) {
+                return bus;
             }
         }
     }
@@ -185,7 +191,7 @@ fn get_fd(path: &str) -> Result<libc::c_int, String> {
         }
     }
     let c_path = CString::new(path).map_err(|e| e.to_string())?;
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR) };
+    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDWR | libc::O_CLOEXEC) };
     if fd < 0 {
         return Err(format!("open {}: {}", path, std::io::Error::last_os_error()));
     }
@@ -345,6 +351,9 @@ pub fn ddc_write_vcp(path: &str, vcp: u8, value: u16) -> Result<(), String> {
     if ret < 0 {
         return Err(format!("write VCP 0x{:02X}: {}", vcp, std::io::Error::last_os_error()));
     }
+    if ret != msg.len() as isize {
+        return Err(format!("write VCP 0x{:02X}: short write ({} of {} bytes)", vcp, ret, msg.len()));
+    }
     Ok(())
 }
 
@@ -373,8 +382,13 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16), String> {
         return Err(format!("I2C combined 0x{:02X}: {}", vcp, std::io::Error::last_os_error()));
     }
 
-    // Parse DDC/CI VCP Get Reply
-    // Wire: [src=0x6E] [len=0x88] [op=0x02] [result] [vcp] [type] [max_hi] [max_lo] [cur_hi] [cur_lo] [chk]
+    parse_vcp_reply(&buf, vcp)
+}
+
+/// Parse and validate a DDC/CI VCP Get Reply.
+/// Wire: [src=0x6E] [len=0x88] [op=0x02] [result] [vcp] [type] [max_hi] [max_lo] [cur_hi] [cur_lo] [chk]
+/// The leading source byte may be absent; the checksum still covers it (virtual 0x6E).
+fn parse_vcp_reply(buf: &[u8; 12], vcp: u8) -> Result<(u16, u16), String> {
     let off: usize = if buf[0] == 0x6E { 1 } else { 0 };
 
     // Validate length byte (0x88 = 0x80 | 8 data bytes)
@@ -400,18 +414,17 @@ fn ddc_read_vcp_fd(fd: libc::c_int, vcp: u8) -> Result<(u16, u16), String> {
         return Err(format!("VCP 0x{:02X}: aliased (got 0x{:02X})", vcp, resp_vcp));
     }
 
-    // Validate checksum: XOR of host addr (0x50) with ALL reply bytes including source (0x6E)
-    // Formula: chk = 0x50 ^ buf[0] ^ buf[1] ^ ... ^ buf[9], must equal buf[10]
+    // Checksum: XOR of host addr (0x50) with every reply byte before the checksum,
+    // including the source byte (0x6E) even when the bus did not return it.
     let chk_idx = off + 9;
-    if chk_idx < buf.len() {
-        let mut computed: u8 = 0x50;
-        for i in 0..=chk_idx - 1 {
-            computed ^= buf[i];
-        }
-        if computed != buf[chk_idx] {
-            return Err(format!("VCP 0x{:02X}: checksum mismatch (got 0x{:02X}, expected 0x{:02X})",
-                vcp, buf[chk_idx], computed));
-        }
+    let mut computed: u8 = 0x50;
+    if off == 0 { computed ^= 0x6E; }
+    for b in &buf[..chk_idx] {
+        computed ^= b;
+    }
+    if computed != buf[chk_idx] {
+        return Err(format!("VCP 0x{:02X}: checksum mismatch (got 0x{:02X}, expected 0x{:02X})",
+            vcp, buf[chk_idx], computed));
     }
 
     let max_val = ((buf[off + 5] as u16) << 8) | buf[off + 6] as u16;
@@ -444,4 +457,94 @@ pub fn read_batch(path: &str, vcps: &[VcpInfo]) -> Vec<(&'static str, u16, u16)>
         }
     }
     results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a valid reply frame (with source byte) for `vcp`.
+    fn frame(vcp: u8, max: u16, cur: u16) -> [u8; 12] {
+        let mut b = [0u8; 12];
+        b[0] = 0x6E; b[1] = 0x88; b[2] = 0x02; b[3] = 0x00; b[4] = vcp; b[5] = 0x00;
+        b[6] = (max >> 8) as u8; b[7] = max as u8; b[8] = (cur >> 8) as u8; b[9] = cur as u8;
+        let mut c = 0x50u8;
+        for x in &b[..10] { c ^= x; }
+        b[10] = c;
+        b
+    }
+
+    /// Same frame without the leading source byte.
+    fn frame_nosrc(vcp: u8, max: u16, cur: u16) -> [u8; 12] {
+        let f = frame(vcp, max, cur);
+        let mut b = [0u8; 12];
+        b[..10].copy_from_slice(&f[1..11]);
+        b
+    }
+
+    #[test]
+    fn reply_with_source_ok() {
+        assert_eq!(parse_vcp_reply(&frame(0x10, 100, 50), 0x10), Ok((50, 100)));
+    }
+
+    #[test]
+    fn reply_without_source_uses_virtual_source_in_checksum() {
+        assert_eq!(parse_vcp_reply(&frame_nosrc(0x10, 100, 50), 0x10), Ok((50, 100)));
+    }
+
+    #[test]
+    fn reply_bad_checksum_rejected() {
+        let mut f = frame(0x10, 100, 50);
+        f[10] ^= 0x01;
+        assert!(parse_vcp_reply(&f, 0x10).unwrap_err().contains("checksum"));
+        let mut g = frame_nosrc(0x10, 100, 50);
+        g[9] ^= 0x01;
+        assert!(parse_vcp_reply(&g, 0x10).unwrap_err().contains("checksum"));
+    }
+
+    #[test]
+    fn reply_rejects_bad_length_opcode_result_alias() {
+        let mut f = frame(0x10, 100, 50);
+        f[1] = 0x87;
+        assert!(parse_vcp_reply(&f, 0x10).unwrap_err().contains("length"));
+        let mut f = frame(0x10, 100, 50);
+        f[2] = 0x24;
+        assert!(parse_vcp_reply(&f, 0x10).unwrap_err().contains("opcode"));
+        let mut f = frame(0x10, 100, 50);
+        f[3] = 0x01;
+        assert!(parse_vcp_reply(&f, 0x10).unwrap_err().contains("unsupported"));
+        assert!(parse_vcp_reply(&frame(0x12, 100, 50), 0x10).unwrap_err().contains("aliased"));
+    }
+
+    #[test]
+    fn reply_all_zero_buffer_is_error_not_panic() {
+        assert!(parse_vcp_reply(&[0u8; 12], 0x10).is_err());
+        assert!(parse_vcp_reply(&[0xFFu8; 12], 0x10).is_err());
+    }
+
+    #[test]
+    fn config_bus_basic_and_comments() {
+        let c = "[ddc]\nbus = \"/dev/i2c-4\" # c\n";
+        assert_eq!(parse_bus_from_config(c).as_deref(), Some("/dev/i2c-4"));
+        let c = "[ddc] # monitor\nbus = '/dev/i2c-7'\n";
+        assert_eq!(parse_bus_from_config(c).as_deref(), Some("/dev/i2c-7"));
+        let c = "[ddc]\nbus = /dev/i2c-2 # bare\n";
+        assert_eq!(parse_bus_from_config(c).as_deref(), Some("/dev/i2c-2"));
+    }
+
+    #[test]
+    fn config_bus_ignores_other_sections() {
+        let c = "[mqtt]\nbus = \"/dev/i2c-1\"\n[[ddc]]\nbus = \"/dev/i2c-3\"\n[ddc.sub]\nbus = \"/dev/i2c-5\"\n";
+        assert_eq!(parse_bus_from_config(c), None);
+        assert_eq!(parse_bus_from_config("[ddc]\nbus = \"relative\"\n"), None);
+        assert_eq!(parse_bus_from_config(""), None);
+    }
+
+    #[test]
+    fn write_checksum_matches_spec_example() {
+        // 6E ^ 51 ^ 84 ^ 03 ^ 10 ^ 00 ^ 32 computed independently
+        let payload = [0x51u8, 0x84, 0x03, 0x10, 0x00, 0x32];
+        let chk = payload.iter().fold(0x6Eu8, |a, b| a ^ b);
+        assert_eq!(chk, 0x6E ^ 0x51 ^ 0x84 ^ 0x03 ^ 0x10 ^ 0x32);
+    }
 }
