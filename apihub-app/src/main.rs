@@ -242,44 +242,59 @@ fn spawn_poll_thread(state: State, presets: SharedPresets, quit_flag: Arc<std::s
                 break;
             }
             // ── Keyboard: direct HID ioctl — every 2nd cycle (~10s) ──
+            let prev_kb = state.lock().ok().and_then(|s| s.keyboard.clone());
             let mut kb = if cycle % 4 == 0 {
-                keyboard::read_keyboard()
+                let mut fresh = keyboard::read_keyboard();
+                // RSSI is only refreshed every 10th cycle: carry the last known
+                // values over a HID re-read so they don't flicker to "absent".
+                if let (Some(nk), Some(pk)) = (fresh.as_mut(), prev_kb.as_ref()) {
+                    if nk.radio.rssi_dbm.is_none() { nk.radio.rssi_dbm = pk.radio.rssi_dbm; }
+                    if nk.radio.tx_power_dbm.is_none() { nk.radio.tx_power_dbm = pk.radio.tx_power_dbm; }
+                }
+                fresh
             } else {
-                state.lock().ok().and_then(|s| s.keyboard.clone())
+                prev_kb
             };
             let mut mac_for_rssi: Option<String> = None;
 
             // Battery low notification + BlueZ provider update + history
             if let Some(ref k) = kb {
-                let pct = k.battery.percentage_fine
+                let pct_opt = k.battery.percentage_fine
                     .or(k.battery.percentage_interpolated)
                     .or(k.battery.percentage)
-                    .unwrap_or(100.0);
+                    .filter(|p| p.is_finite());
+                let pct = pct_opt.unwrap_or(100.0);
 
                 // Lazy-init BlueZ Battery Provider on first keyboard detection (M6).
                 // If the provider is None and we have a MAC, try to create it.
-                if battery_provider.is_none() {
+                if battery_provider.is_none() && pct_opt.is_some() {
                     if let Some(ref mac) = k.device.mac {
                         battery_provider = bluez::BatteryProvider::start(mac, pct.round() as u8);
                     }
                 }
 
                 // Update BlueZ Battery Provider (KDE/GNOME battery display)
-                if let Some(ref bp) = battery_provider {
-                    bp.update_percentage(pct.round() as u8);
+                if let (Some(bp), true) = (battery_provider.as_ref(), pct_opt.is_some()) {
+                    bp.update_percentage(pct.round().clamp(0.0, 100.0) as u8);
                 }
 
                 // Save MAC for RSSI read after this borrow ends
                 mac_for_rssi = k.device.mac.clone();
 
                 // History logging (every 30th cycle = ~15s)
-                if cycle % 30 == 0 {
-                    let voltage = k.battery.voltage.unwrap_or(0.0);
-                    history::append_history(pct, voltage);
+                if cycle % 30 == 0 && pct_opt.is_some() {
+                    // Only log real samples (no invented 100 % / 0 V points).
+                    if let Some(voltage) = k.battery.voltage {
+                        history::append_history(pct, voltage);
+                    }
                 }
 
+                // Re-arm the low-battery alert once the battery has recovered
+                if pct_opt.is_some() && pct >= 20.0 {
+                    battery_notified = false;
+                }
                 // Low battery notification
-                if !battery_notified && pct < 15.0 {
+                if pct_opt.is_some() && !battery_notified && pct < 15.0 {
                     battery_notified = true;
                     let _ = notify_rust::Notification::new()
                         .summary("Apple Keyboard — Low Battery")
@@ -307,14 +322,16 @@ fn spawn_poll_thread(state: State, presets: SharedPresets, quit_flag: Arc<std::s
             let (caps, num) = keyboard::read_led_state();
 
             // Battery remaining (every 30th cycle)
-            let remaining = if cycle % 30 == 0 {
-                history::estimate_remaining().map(|(rate, hours)| {
+            // Outer Option: "was recomputed this cycle"; inner: the estimate
+            // (None clears a stale value, e.g. after a recharge).
+            let remaining: Option<Option<String>> = if cycle % 30 == 0 {
+                Some(history::estimate_remaining().map(|(rate, hours)| {
                     if hours < 24.0 {
                         format!("{:.1}h ({:.1} mV/h)", hours, rate)
                     } else {
                         format!("{:.1} days ({:.1} mV/h)", hours / 24.0, rate)
                     }
-                })
+                }))
             } else {
                 None
             };
@@ -324,8 +341,8 @@ fn spawn_poll_thread(state: State, presets: SharedPresets, quit_flag: Arc<std::s
                 s.keyboard = kb;
                 s.caps_lock = caps;
                 s.num_lock = num;
-                if remaining.is_some() {
-                    s.remaining_display = remaining;
+                if let Some(r) = remaining {
+                    s.remaining_display = r;
                 }
             }
 
@@ -350,6 +367,7 @@ fn spawn_poll_thread(state: State, presets: SharedPresets, quit_flag: Arc<std::s
                     }
                 } else {
                     ddc_fail_streak = 0;
+                    ddc_fail_notified = false;
                 }
                 apply_burst(&state, &hot);
             }
