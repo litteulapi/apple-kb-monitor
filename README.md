@@ -19,9 +19,12 @@
 
 The Linux `hid-apple` driver only exposes basic battery percentage via the standard HID Battery Strength report (`0x47`). This tool goes far beyond that — it reads **21 undocumented Feature Reports** to extract precise battery levels, raw ADC voltage, firmware version, device identity, Bluetooth connection parameters, and more.
 
-- **962-line single Python script** — pure stdlib, zero external dependencies
-- **77-line eBPF hook** for kernel-level HID tracing
-- Systemd user service, udev rules, AUR package — ready for production use
+- **`apihub-app`** — Rust/egui desktop app (6 tabs, tray, ~4900 lines): keyboard telemetry, DDC/CI monitor control, MQTT / Home Assistant, BlueZ battery provider
+- **`ddc-tool`** — Rust DDC/CI command line
+- **`apple-kb-monitor`** — legacy Python CLI (2455 lines, stdlib + dbus-fast): `--once`, `--json`, `--waybar`, `--metrics`…
+- systemd user service, udev rules, keyd config, Plasma widget, PKGBUILD
+
+Documentation: [docs/](docs/) (FEATURES, CONFIGURATION, INSTALL, ARCHITECTURE, TROUBLESHOOTING, TESTING) and the [wiki](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/wiki). Roadmap: [milestones](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/milestones).
 
 ## Features
 
@@ -89,7 +92,7 @@ yay -S apple-kb-monitor
 ### Manual
 
 ```bash
-git clone https://github.com/litteulapi/apple-kb-monitor.git
+git clone https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor.git
 cd apple-kb-monitor
 makepkg -si
 ```
@@ -146,7 +149,7 @@ The udev rule (`99-apple-kb-hidraw.rules`) grants `input` group read/write acces
 
 ## Dependencies
 
-All stdlib — no pip packages required.
+The Python CLI needs only `python-dbus-fast`; `apihub-app` is a compiled Rust binary (see [docs/INSTALL.md](docs/INSTALL.md)).
 
 | Dependency | Type | Purpose |
 |---|---|---|
@@ -193,11 +196,14 @@ RSSI is read via BlueZ MGMT `GET_CONN_INFO` (opcode `0x0031`), which triggers `H
 ## Project Structure
 
 ```
-apple-kb-monitor            # Main script (962 lines, Python 3)
-bpf/apple_kb_battery.bpf.c  # eBPF BPF hook (77 lines, C)
-udev/99-apple-kb-hidraw.rules
-systemd/apple-kb-monitor.service
-PKGBUILD                    # Arch Linux / AUR package
+apihub-app/                 # Rust/egui GUI (src/: main, ddc, keyboard, bluez, brightness, mqtt, rssi, history, tray)
+ddc-tool/                   # Rust DDC/CI CLI
+apple-kb-monitor            # Legacy Python CLI (2455 lines)
+mqtt-bridge.py, apihub-settings, rssi-helper.c   # legacy helpers (not packaged)
+udev/ systemd/ keyd/ modprobe/ dbus/             # system integration
+plasma/ kde/                # Plasma widget, Bluedevil panel patch
+docs/                       # documentation
+PKGBUILD                    # Arch Linux package
 ```
 
 ## Acknowledgments
@@ -213,4 +219,4 @@ PKGBUILD                    # Arch Linux / AUR package
 
 ## Author
 
-Han — [AgenceAPI](https://github.com/litteulapi)
+Han — [AgenceAPI](https://gitea.pika.agenceapi.fr/adminapi)
