@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Low-rate READ-ONLY time series of the 27 answering Feature reports (RE HID 2026-10-01).
+"""Low-rate READ-ONLY time series of the 26 answering Feature reports (0xFE excluded, #175) (RE HID 2026-10-01).
 
 Every --period seconds (>= 300), if and only if `bluetoothctl info` says the
 keyboard is connected, reads the 27 Feature report ids once each
@@ -23,7 +23,7 @@ import argparse, errno, fcntl, glob, hashlib, json, os, select, subprocess, sys,
 MAC = "04:DB:56:CA:42:EE"
 IDS = [0x09, 0x46, 0x47, 0x49, 0x4A, 0x4B, 0x4C, 0x4F, 0x51, 0x52, 0x53, 0x54,
        0x5A, 0x5B, 0x5C, 0x5D, 0x60, 0xD1, 0xD8, 0xEA, 0xEB, 0xF4, 0xF5, 0xF6,
-       0xF7, 0xFE, 0xFF]
+       0xF7, 0xFF]   # 0xFE never read (#175)
 
 
 def ioc_gfeature(length):

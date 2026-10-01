@@ -24,7 +24,12 @@ usage: exhaustive_probe.py --type feature --out pass.jsonl [--dev /dev/hidraw7]
 import argparse, errno, fcntl, hashlib, json, os, subprocess, sys, time
 
 MAC = "04:DB:56:CA:42:EE"
-LENGTHS = [1, 2, 3, 4, 8, 9, 16, 20, 32, 64, 256]
+# length 1 removed: refused locally by hidraw (count < 2), no radio traffic,
+# only floods the kernel log ("passed too short report"). The device never
+# receives the buffer size (BlueZ sends no BufferSize), see docs/RE-HID-EXHAUSTIF.md.
+LENGTHS = [2, 3, 4, 8, 9, 16, 20, 32, 64, 256]
+# 0xFE: last request before both instrumented link losses (04:00, 12:13), #175.
+NEVER_READ = {0xFE}
 NR = {"feature": 0x07, "input": 0x0A, "output": 0x0C}   # HIDIOCG* numbers
 SENSITIVE = {0x4C}
 LOCK = os.path.expanduser("~/.cache/apple-kb-monitor-re-lastpass")
@@ -82,6 +87,8 @@ def run_pass(args):
     abort = None
     try:
         for rid in range(256):
+            if rid in NEVER_READ:
+                continue
             for length in LENGTHS:
                 buf = bytearray(length)
                 buf[0] = rid
