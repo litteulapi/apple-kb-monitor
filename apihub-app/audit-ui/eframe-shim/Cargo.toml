@@ -1,0 +1,10 @@
+# Stands for `eframe` in the included sources (`use eframe::egui::...`)
+# without pulling winit/glow: only egui is needed by the pure view code.
+[package]
+name = "eframe"
+version = "0.29.1"
+edition = "2021"
+publish = false
+
+[dependencies]
+egui = { version = "=0.29.1", default-features = true }

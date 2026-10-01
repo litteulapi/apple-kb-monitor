@@ -1,0 +1,22 @@
+# Audit UI (docs/AUDIT-UI.md) : propriétés des fonctions de présentation de la
+# fenêtre (src/view.rs) et du tray du démon (apple-kb-monitord/src/tray/view.rs),
+# inclus par `#[path]`. Volontairement HORS du workspace principal (le
+# `[workspace]` ci-dessous en fait sa propre racine) : aucun fichier existant
+# n'est modifié. Lancer :
+#   cd apihub-app/audit-ui && cargo test
+#   cargo test --release -- --ignored --nocapture   (mesures de coût)
+[package]
+name = "akm-audit-ui"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+akm-core = { path = "../akm-core" }
+eframe = { path = "eframe-shim" }
+serde_json = "1"
+
+[dev-dependencies]
+proptest = { version = "1", default-features = false, features = ["std"] }
