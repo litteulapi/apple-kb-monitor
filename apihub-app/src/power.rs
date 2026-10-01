@@ -271,4 +271,15 @@ mod tests {
         assert!(kernel_battery_in(&t.0, MAC).is_none());
         assert!(kernel_battery_in(&t.0, "not-a-mac").is_none());
     }
+
+    /// Live read-only check against the real kernel tree:
+    /// `KB_MAC=04:DB:56:CA:42:EE cargo test -- --ignored live_kernel_battery --nocapture`
+    #[test]
+    #[ignore]
+    fn live_kernel_battery() {
+        let mac = std::env::var("KB_MAC").expect("set KB_MAC");
+        let r = kernel_battery(&mac);
+        println!("kernel_battery({mac}) = {r:?}");
+        assert!(r.is_some());
+    }
 }
