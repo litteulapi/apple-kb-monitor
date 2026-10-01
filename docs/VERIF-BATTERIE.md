@@ -171,7 +171,7 @@ La série « 3 h en direct » prévue a été remplacée par les mesures déjà 
 * à 12:13:12, la première salve de `verif_battery_series.py` a reçu un EIO (`hidp_report_req_timeout`)
   et l'outil s'est arrêté tout seul. Le clavier s'est déconnecté à 12:13:28, pendant les lectures
   d'un autre agent ;
-* consigne du coordinateur (12:20) : suspension. L'outil ne reprend que si `Connected: yes`, avec
+* consigne du coordinateur (12:20) : suspension. Reprise seulement si `Connected: yes`, avec
   4 rapports (`0x46`, `0x49`, `0x47`, `0xEA`) une fois par 5 min et arrêt à la première erreur. Les salves
   obtenues après cette heure sont dans `tests/live/re/verif_series_20261001.jsonl` (§3.3).
 
@@ -205,8 +205,23 @@ piles à l'autre : c'est la relaxation de la tension des piles neuves, pas une c
 
 ### 3.3 Salves légères après reprise
 
-Voir `verif_series_20261001.jsonl` (`--analyze`). Rempli seulement si le clavier s'est reconnecté de
-lui-même pendant l'étude.
+`verif_series_20261001.jsonl` : 11 salves de 12:30:49 à 13:21:13, une toutes les 5 min, 4 rapports par
+salve, sans aucune erreur. Le clavier s'était reconnecté de lui-même à 12:29:31. L'échantillonneur a été
+arrêté à la main à 13:21 et aucun processus ne reste actif.
+
+| Heure | `0x46` mV | `0x49` mV | `0x47` | `0xEA` | UPower |
+|---|---|---|---|---|---|
+| 12:30:49 | **2978** | 2935 | 96 | 98 | 96 % |
+| 12:35:52 | 2982 | 2935 | 96 | 98 | 96 % |
+| 12:40:55 | 2982 | 2935 | 96 | 98 | 96 % |
+| 12:45:57 → 13:21:13 (8 salves) | 2986 | 2935 | 96 | 98 | 96 % |
+
+* `0x46` **remonte** de 2978 à 2986 mV dans les 15 min qui suivent la reconnexion : c'est la récupération
+  d'une alcaline après un appel de courant. Cela appuie l'hypothèse d'une tension prise sous charge
+  au moment de la reconnexion (§1.2bis).
+* `0x49` reste fixe à 2935 et `0x47` à 96 pendant 50 min : aucune remontée de `0x47` dans la session,
+  ce qui confirme qu'il est figé jusqu'à la prochaine reconnexion. Pas de pente mesurable en 50 min.
+* UPower = `0x47` à chaque salve : aucune valeur périmée.
 
 ### 3.4 Estimation d'autonomie à partir de la pente : **non valable**
 
