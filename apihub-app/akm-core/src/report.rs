@@ -57,6 +57,14 @@ pub struct KbBattery {
     /// Batteries installed less than two days ago: no figure is drawn from
     /// the voltage (#178).
     pub new_batteries: bool,
+    /// Battery thresholds Full / Low / Critical / Empty read once per
+    /// connection from report 0x60 [plist] (#215).
+    pub thresholds: Option<crate::registry::Thresholds>,
+    /// Where the filtered voltage (else the instantaneous one) sits against
+    /// [`Self::thresholds`]: `ok` / `low` / `critical` / `empty`.
+    pub threshold_level: Option<String>,
+    /// Margins in mV above Full / Low / Critical / Empty (negative = below).
+    pub threshold_margins_mv: Option<[i32; 4]>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -113,6 +121,17 @@ pub struct KbFirmware {
     /// Report 0x4F as u16 little-endian, shown `0x0050`. [mesuré] equals the
     /// DID version of the BlueZ modalias (`usb:v05ACp0256d0050`).
     pub version: Option<String>,
+    /// Same value as `version` under its explicit JSON name (`firmware.version_hex`, #219).
+    pub version_hex: Option<String>,
+    /// Latest public version known for this product id (`0x0050`), from the
+    /// embedded table [`crate::firmware::KNOWN_FIRMWARE`]; `None` = model not in the table.
+    pub latest_known: Option<String>,
+    /// `up_to_date` / `update_available` / `unknown` (empty = never assessed).
+    pub status: String,
+    /// Where the table entry comes from.
+    pub source: Option<String>,
+    /// Date of the embedded table.
+    pub table_date: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

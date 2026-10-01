@@ -27,6 +27,9 @@ const EINTR_RETRIES: u32 = 3;
 /// an EINTR is retried, and a 0-byte answer is an empty report (`Ok(vec![])`,
 /// #134). The buffer returned starts with the report id.
 pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> io::Result<Vec<u8>> {
+    // The single door to the hardware: the register map decides (#219). A
+    // refused id never reaches the ioctl, whatever the caller.
+    crate::registry::check_read(report_id)?;
     let mut attempts = 0;
     loop {
         let mut buf = [0u8; 256];
@@ -355,11 +358,29 @@ mod tests {
         // SAFETY: valid NUL-terminated path; the open fails, nothing to close.
         let fd = unsafe { libc::open(c"/nonexistent-akm-test".as_ptr(), libc::O_RDONLY) };
         assert!(fd < 0);
-        let e = hid_read_feature(-1, crate::decode::HID_PROBE).unwrap_err();
+        let e = hid_read_feature(-1, crate::decode::HID_BATTERY_STRENGTH).unwrap_err();
         assert_eq!(e.raw_os_error(), Some(libc::EBADF));
         assert_eq!(
-            Hidraw(-1).feature(0xEA).unwrap_err().raw_os_error(),
+            Hidraw(-1).feature(0x47).unwrap_err().raw_os_error(),
             Some(libc::EBADF)
         );
+    }
+
+    #[test]
+    fn only_the_register_map_decides_what_reaches_the_ioctl() {
+        // On an invalid fd an allowed id fails in the ioctl (EBADF); every
+        // other id is refused before it (PermissionDenied): none of the 256
+        // ids reaches the hardware unless its class allows it (#219).
+        for id in 0..=255u8 {
+            let e = hid_read_feature(-1, id).unwrap_err();
+            let allowed = crate::registry::classify_feature(id).daemon_may_read();
+            if allowed {
+                assert_eq!(e.raw_os_error(), Some(libc::EBADF), "{id:#04x}");
+            } else {
+                assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{id:#04x}");
+                assert_eq!(e.raw_os_error(), None, "{id:#04x} must not reach the ioctl");
+            }
+            assert_eq!(Hidraw(-1).feature(id).unwrap_err().kind() == io::ErrorKind::PermissionDenied, !allowed);
+        }
     }
 }

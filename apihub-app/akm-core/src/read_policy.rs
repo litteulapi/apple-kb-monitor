@@ -6,9 +6,12 @@
 //! (supervision timeout, then `Host is down`). Until the BCM2042 firmware is
 //! understood, the daemon reads as little as possible:
 //!
-//! * **allow-list**: only `0x47` (declared Battery Strength), `0x46` (battery
-//!   voltage, mV LE [mesuré]) and `0x49` (filtered voltage [mesuré]). Never
-//!   `0xFE`, never an undeclared or unknown id, never a scan; no `0xEA` probe
+//! * **allow-list generated from the register map** ([`crate::registry`],
+//!   #219): routine reads are the `SafeRead` class (`0x47` declared Battery
+//!   Strength, `0x46` battery voltage mV LE, `0x49` latched voltage), and the
+//!   `OncePerConnection` class (`0x4F` firmware version, `0x60` battery
+//!   thresholds) is requested once after each connection. Never `0xFE` /
+//!   `0x4C`, never an undeclared or unknown id, never a scan; no `0xEA` probe
 //!   (the hidraw node + BlueZ `Connected` already say the link is up);
 //! * **only while the keyboard is in use**: a key press (any input report)
 //!   within [`ACTIVE_WINDOW`]. An idle keyboard sits in sniff mode and may be
@@ -43,8 +46,11 @@ use crate::model::{family_from_uevent, Family};
 use crate::power::BatteryReading;
 use crate::report::{KbReport, KbWake};
 
-/// The only Feature Reports the daemon may request.
-pub const ALLOWED: [u8; 3] = [0x47, 0x46, 0x49];
+/// The Feature Reports requested in routine: the `SafeRead` class of the
+/// register map, in the order they are requested.
+pub const ALLOWED: [u8; crate::registry::SAFE_READ_IDS.len()] = crate::registry::SAFE_READ_IDS;
+/// Time budget of the once-per-connection phase.
+pub const ONCE_BUDGET: Duration = Duration::from_secs(4);
 /// Reads happen only if a key was pressed this recently.
 pub const ACTIVE_WINDOW: Duration = Duration::from_secs(60);
 /// Minimum spacing between two requests.
@@ -56,8 +62,61 @@ pub const BUDGET: Duration = Duration::from_secs(2);
 /// Longest wait for the cross-process lock.
 pub const LOCK_WAIT: Duration = Duration::from_millis(500);
 
+/// May the daemon request this Feature id at all (routine or once per
+/// connection)? Answered by the register map, nowhere else.
 pub fn is_allowed(id: u8) -> bool {
-    ALLOWED.contains(&id)
+    crate::registry::check_read(id).is_ok()
+}
+
+// ── once per connection (#219) ─────────────────────────────────────────────
+
+/// What was read once in the current connection.
+#[derive(Debug, Default)]
+pub struct ConnState {
+    /// Ids already requested (successfully or not) since the connection.
+    done: std::collections::BTreeSet<u8>,
+    /// Frames (id first) answered since the connection.
+    values: std::collections::BTreeMap<u8, Vec<u8>>,
+}
+
+impl ConnState {
+    pub const fn new() -> Self {
+        Self {
+            done: std::collections::BTreeSet::new(),
+            values: std::collections::BTreeMap::new(),
+        }
+    }
+    /// New connection: everything may be read once more, old values are stale.
+    pub fn reset(&mut self) {
+        self.done.clear();
+        self.values.clear();
+    }
+    /// Claim the single request of `id`; false if it was already made.
+    pub fn claim(&mut self, id: u8) -> bool {
+        self.done.insert(id)
+    }
+    /// Was `id` already requested in this connection?
+    pub fn requested(&self, id: u8) -> bool {
+        self.done.contains(&id)
+    }
+    pub fn store(&mut self, id: u8, frame: Vec<u8>) {
+        self.values.insert(id, frame);
+    }
+    pub fn frame(&self, id: u8) -> Option<&[u8]> {
+        self.values.get(&id).map(Vec::as_slice)
+    }
+}
+
+static CONN: Mutex<ConnState> = Mutex::new(ConnState::new());
+
+fn global_conn() -> std::sync::MutexGuard<'static, ConnState> {
+    CONN.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Frame (id first) of a once-per-connection report answered in this
+/// connection, if any.
+pub fn cached_frame(id: u8) -> Option<Vec<u8>> {
+    global_conn().frame(id).map(<[u8]>::to_vec)
 }
 
 // ── input activity (timestamp only) ────────────────────────────────────────
@@ -166,6 +225,7 @@ fn global_breaker() -> std::sync::MutexGuard<'static, Breaker> {
 /// A new connection of the keyboard was announced: closes the breaker.
 pub fn note_connection() {
     global_breaker().reset();
+    global_conn().reset();
 }
 
 /// Is the global breaker open without a pending probe (reads are suspended)?
@@ -256,14 +316,17 @@ pub fn try_lock(wait: Duration) -> Option<ReadLock> {
 
 // ── the safe source ────────────────────────────────────────────────────────
 
-/// A [`HidSource`] that refuses (without any I/O) every id outside
-/// [`ALLOWED`] and spaces the requests by [`MIN_GAP`].
+/// A [`HidSource`] that refuses (without any I/O) every id the register map
+/// does not allow, serves a once-per-connection id once, and spaces the
+/// requests by [`MIN_GAP`].
 pub struct SafeSource<'a> {
     inner: &'a dyn HidSource,
     last: std::cell::Cell<Option<Instant>>,
     sent: std::cell::Cell<u32>,
     /// `None` = the process-wide breaker.
     breaker: Option<&'a Mutex<Breaker>>,
+    /// `None` = the process-wide once-per-connection state.
+    conn: Option<&'a Mutex<ConnState>>,
 }
 
 /// Time to wait before a request, given the previous one (pure, testable).
@@ -280,6 +343,7 @@ impl<'a> SafeSource<'a> {
             last: std::cell::Cell::new(None),
             sent: std::cell::Cell::new(0),
             breaker: None,
+            conn: None,
         }
     }
     /// Same with a private breaker (tests).
@@ -287,6 +351,24 @@ impl<'a> SafeSource<'a> {
         Self {
             breaker: Some(breaker),
             ..Self::new(inner)
+        }
+    }
+    /// Same with private breaker and once-per-connection state (tests).
+    pub fn with_parts(
+        inner: &'a dyn HidSource,
+        breaker: &'a Mutex<Breaker>,
+        conn: &'a Mutex<ConnState>,
+    ) -> Self {
+        Self {
+            breaker: Some(breaker),
+            conn: Some(conn),
+            ..Self::new(inner)
+        }
+    }
+    fn conn(&self) -> std::sync::MutexGuard<'_, ConnState> {
+        match self.conn {
+            Some(c) => c.lock().unwrap_or_else(|e| e.into_inner()),
+            None => global_conn(),
         }
     }
     fn breaker(&self) -> std::sync::MutexGuard<'_, Breaker> {
@@ -303,10 +385,13 @@ impl<'a> SafeSource<'a> {
 
 impl HidSource for SafeSource<'_> {
     fn feature(&self, report_id: u8) -> io::Result<Vec<u8>> {
-        if !is_allowed(report_id) {
+        // The register map decides: class SafeRead or OncePerConnection.
+        let class = crate::registry::check_read(report_id)?;
+        let once = class == crate::registry::Safety::OncePerConnection;
+        if once && self.conn().requested(report_id) {
             return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!("report {report_id:#04x} is not in the safe read list"),
+                io::ErrorKind::WouldBlock,
+                format!("report {report_id:#04x} is read once per connection and was already requested"),
             ));
         }
         if !self.breaker().allow() {
@@ -314,6 +399,9 @@ impl HidSource for SafeSource<'_> {
                 io::ErrorKind::ConnectionAborted,
                 "circuit breaker open: the keyboard stopped answering",
             ));
+        }
+        if once {
+            self.conn().claim(report_id);
         }
         let w = wait_before(self.last.get(), Instant::now());
         if !w.is_zero() {
@@ -342,15 +430,19 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Read the allowed reports into `report`. Stops at the first failure.
+/// Read the routine reports into `report`. Stops at the first failure.
 pub fn read_safe(src: &dyn HidSource, report: &mut KbReport) -> SafeRead {
-    read_with(SafeSource::new(src), report)
+    read_with(SafeSource::new(src), report, false)
 }
 
-fn read_with(safe: SafeSource<'_>, report: &mut KbReport) -> SafeRead {
+/// Routine reads, then (daemon only, `with_once`) the once-per-connection
+/// reads the daemon wants ([`crate::registry::DAEMON_ONCE_IDS`]) that were not
+/// yet made in this connection. Every request goes through the same
+/// [`SafeSource`]: same spacing, same breaker, stop at the first failure.
+fn read_with(safe: SafeSource<'_>, report: &mut KbReport, with_once: bool) -> SafeRead {
     let start = Instant::now();
     let mut complete = true;
-    for id in [0x47u8, 0x46, 0x49] {
+    for id in crate::registry::SAFE_READ_IDS {
         if safe.sent() > 0 && start.elapsed() >= BUDGET {
             complete = false;
             break;
@@ -381,12 +473,66 @@ fn read_with(safe: SafeSource<'_>, report: &mut KbReport) -> SafeRead {
             _ => {}
         }
     }
+    if complete && with_once {
+        let phase = Instant::now();
+        for id in crate::registry::DAEMON_ONCE_IDS {
+            if safe.conn().requested(id) {
+                continue;
+            }
+            if phase.elapsed() >= ONCE_BUDGET {
+                complete = false;
+                break;
+            }
+            match safe.feature(id) {
+                Ok(b) => safe.conn().store(id, b),
+                Err(_) => {
+                    complete = false;
+                    break;
+                }
+            }
+        }
+    }
     report.incomplete = !complete;
     if complete {
         SafeRead::Complete
     } else {
         SafeRead::Partial
     }
+}
+
+/// Fill the report from the frames read once in this connection: firmware
+/// version (`0x4F`), battery thresholds (`0x60`), then the firmware check
+/// against the embedded table for the model `pid`. Nothing is read here.
+pub fn apply_cached(report: &mut KbReport, pid: Option<u32>) {
+    apply_frames(report, pid, &global_conn());
+}
+
+fn apply_frames(report: &mut KbReport, pid: Option<u32>, st: &ConnState) {
+    use crate::registry::{u16_le, Thresholds};
+    if let Some(f) = st.frame(0x4F) {
+        if let Some(v) = f.get(1..).and_then(u16_le) {
+            report.firmware.version = Some(crate::firmware::hex(v));
+            report.raw.insert("0x4f".to_string(), hex(&f[1..]));
+        }
+    }
+    if let Some(f) = st.frame(0x60) {
+        if let Some(t) = f.get(1..).and_then(Thresholds::parse) {
+            report.battery.thresholds = Some(t);
+            report.raw.insert("0x60".to_string(), hex(&f[1..]));
+        }
+    }
+    if let (Some(t), Some(mv)) = (
+        report.battery.thresholds,
+        report
+            .battery
+            .voltage_filtered_mv
+            .or(report.battery.voltage_mv)
+            .or_else(|| report.battery.voltage.map(|v| (v * 1000.0).round() as u32)),
+    ) {
+        report.battery.threshold_level = Some(t.level(mv).as_str().to_string());
+        report.battery.threshold_margins_mv = Some(t.margins(mv));
+    }
+    crate::firmware::assess_report(pid, &mut report.firmware);
 }
 
 /// Full report for the daemon under the safe policy. The keyboard is present
@@ -408,12 +554,14 @@ pub fn build_report_safe(
     let outcome = match gate(last_input_age(now)) {
         Gate::Allowed if tripped() => SafeRead::Skipped(Gate::Tripped),
         Gate::Allowed => match try_lock(LOCK_WAIT) {
-            Some(_lock) => read_safe(src, &mut report),
+            Some(_lock) => read_with(SafeSource::new(src), &mut report, true),
             None => SafeRead::Skipped(Gate::Busy),
         },
         g => SafeRead::Skipped(g),
     };
     report.battery.percentage_fine = report.battery.percentage;
+    // Values read once in this connection survive the following reads.
+    apply_cached(&mut report, crate::model::parse_hid_id(uevent).map(|(_, p)| p));
     (report, outcome)
 }
 
@@ -460,8 +608,119 @@ mod tests {
         assert!(safe.feature(0x47).is_ok());
         assert_eq!(*spy.log.borrow(), vec![0x47]);
         for id in 0..=255u8 {
-            assert_eq!(is_allowed(id), [0x46, 0x47, 0x49].contains(&id));
+            let want = [0x46, 0x47, 0x49, 0x4F, 0x60, 0x51, 0x52, 0x53, 0x54].contains(&id);
+            assert_eq!(is_allowed(id), want, "{id:#04x}");
         }
+        // The routine list is generated from the register map.
+        assert_eq!(ALLOWED, [0x47, 0x46, 0x49]);
+    }
+
+    /// Never-read and never-write classes are refused without any I/O, for
+    /// every one of the 256 ids and through every entry of the policy.
+    #[test]
+    fn no_forbidden_class_is_reachable_through_the_policy() {
+        use crate::registry::{classify_feature, Safety};
+        let full = Fixture::from_hex_dump(&(0..=255u32).map(|i| format!("{i:02x} 00 00 00 00 00 00 00 00\n")).collect::<String>()).unwrap();
+        let spy = Spy {
+            inner: &full,
+            log: RefCell::new(Vec::new()),
+        };
+        let breaker = Mutex::new(Breaker::new());
+        let conn = Mutex::new(ConnState::new());
+        for id in 0..=255u8 {
+            let safe = SafeSource::with_parts(&spy, &breaker, &conn);
+            let class = classify_feature(id);
+            let r = safe.feature(id);
+            if matches!(class, Safety::NeverRead | Safety::NeverWrite | Safety::Unknown | Safety::ManualOnly | Safety::PassiveInput) {
+                assert_eq!(r.unwrap_err().kind(), io::ErrorKind::PermissionDenied, "{id:#04x} {class:?}");
+            }
+        }
+        let sent = spy.log.borrow().clone();
+        for id in sent {
+            assert!(
+                matches!(classify_feature(id), Safety::SafeRead | Safety::OncePerConnection),
+                "{id:#04x} reached the device"
+            );
+        }
+        // NeverRead ids in particular: 0xFE and 0x4C.
+        assert!(!spy.log.borrow().contains(&0xFE) && !spy.log.borrow().contains(&0x4C));
+    }
+
+    #[test]
+    fn a_once_per_connection_id_is_requested_once_until_the_next_connection() {
+        let f = Fixture::new().with(&[0x4F, 0x50, 0x00]);
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(Vec::new()),
+        };
+        let breaker = Mutex::new(Breaker::new());
+        let conn = Mutex::new(ConnState::new());
+        let safe = SafeSource::with_parts(&spy, &breaker, &conn);
+        assert!(safe.feature(0x4F).is_ok());
+        let e = safe.feature(0x4F).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::WouldBlock);
+        assert_eq!(spy.log.borrow().len(), 1);
+        // a second SafeSource (next read burst) shares the connection state
+        let safe2 = SafeSource::with_parts(&spy, &breaker, &conn);
+        assert_eq!(safe2.feature(0x4F).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        conn.lock().unwrap().reset(); // new connection
+        assert!(SafeSource::with_parts(&spy, &breaker, &conn).feature(0x4F).is_ok());
+        assert_eq!(spy.log.borrow().len(), 2);
+    }
+
+    #[test]
+    fn a_full_burst_reads_the_version_and_thresholds_once_then_serves_the_cache() {
+        let f = fixture()
+            .with(&[0x4F, 0x50, 0x00])
+            .with(&[0x60, 0x0b, 0x8a, 0x09, 0xca, 0x09, 0x64, 0x08, 0x06]);
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(Vec::new()),
+        };
+        let breaker = Mutex::new(Breaker::new());
+        let conn = Mutex::new(ConnState::new());
+        let mut r = KbReport::default();
+        let out = read_with(SafeSource::with_parts(&spy, &breaker, &conn), &mut r, true);
+        assert_eq!(out, SafeRead::Complete);
+        assert_eq!(*spy.log.borrow(), vec![0x47, 0x46, 0x49, 0x4F, 0x60]);
+        apply_frames(&mut r, Some(0x0256), &conn.lock().unwrap());
+        assert_eq!(r.firmware.version.as_deref(), Some("0x0050"));
+        assert_eq!(r.firmware.status, "up_to_date");
+        assert_eq!(r.battery.thresholds.unwrap().as_array(), [2954, 2506, 2404, 2054]);
+        assert_eq!(r.battery.threshold_level.as_deref(), Some("ok"));
+        assert_eq!(r.raw.get("0x4f").map(String::as_str), Some("5000"));
+        // second burst: routine reads only, once-ids are not requested again
+        let mut r2 = KbReport::default();
+        spy.log.borrow_mut().clear();
+        let out = read_with(SafeSource::with_parts(&spy, &breaker, &conn), &mut r2, true);
+        assert_eq!(out, SafeRead::Complete);
+        assert_eq!(*spy.log.borrow(), vec![0x47, 0x46, 0x49]);
+        apply_frames(&mut r2, Some(0x0256), &conn.lock().unwrap());
+        assert_eq!(r2.firmware.version.as_deref(), Some("0x0050"), "cache survives");
+        // the CLI path (read_safe) never makes the once-per-connection reads
+        let spy2 = Spy {
+            inner: &f,
+            log: RefCell::new(Vec::new()),
+        };
+        let mut r3 = KbReport::default();
+        let _ = read_with(SafeSource::with_parts(&spy2, &Mutex::new(Breaker::new()), &Mutex::new(ConnState::new())), &mut r3, false);
+        assert_eq!(*spy2.log.borrow(), vec![0x47, 0x46, 0x49]);
+    }
+
+    #[test]
+    fn unreadable_once_report_stops_the_burst_and_leaves_the_firmware_unknown() {
+        let f = fixture(); // no 0x4F: NotFound
+        let breaker = Mutex::new(Breaker::new());
+        let conn = Mutex::new(ConnState::new());
+        let mut r = KbReport::default();
+        let out = read_with(SafeSource::with_parts(&f, &breaker, &conn), &mut r, true);
+        assert_eq!(out, SafeRead::Partial);
+        apply_frames(&mut r, Some(0x0256), &conn.lock().unwrap());
+        assert_eq!(r.firmware.version, None);
+        assert_eq!(r.firmware.status, "unknown");
+        assert_eq!(r.battery.thresholds, None);
+        // the failed request counted for the breaker
+        assert!(!breaker.lock().unwrap().is_open());
     }
 
     #[test]
@@ -536,22 +795,22 @@ mod tests {
         for _ in 0..TRIP_AFTER {
             let mut r = KbReport::default();
             let s = SafeSource::with_breaker(&dead, &br);
-            assert_eq!(read_with(s, &mut r), SafeRead::Partial);
+            assert_eq!(read_with(s, &mut r, false), SafeRead::Partial);
         }
         assert_eq!(dead.0.get(), TRIP_AFTER);
         // breaker open: further reads send nothing
         for _ in 0..10 {
             let mut r = KbReport::default();
             let s = SafeSource::with_breaker(&dead, &br);
-            assert_eq!(read_with(s, &mut r), SafeRead::Partial);
+            assert_eq!(read_with(s, &mut r, false), SafeRead::Partial);
         }
         assert_eq!(dead.0.get(), TRIP_AFTER, "no request while open");
         // sign of life -> one probe only
         br.lock().unwrap().alive();
         let mut r = KbReport::default();
-        read_with(SafeSource::with_breaker(&dead, &br), &mut r);
+        read_with(SafeSource::with_breaker(&dead, &br), &mut r, false);
         assert_eq!(dead.0.get(), TRIP_AFTER + 1);
-        read_with(SafeSource::with_breaker(&dead, &br), &mut r);
+        read_with(SafeSource::with_breaker(&dead, &br), &mut r, false);
         assert_eq!(dead.0.get(), TRIP_AFTER + 1);
     }
 

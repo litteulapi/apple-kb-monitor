@@ -24,6 +24,8 @@
 //! * [`hid_params`]  `hid_apple` parameters: read + whitelist
 //! * [`passive`]     passive listening to input reports 0x04/0x05/0x30/0x13/0x11/0x12
 //!   (#130, #187, #129)
+//! * [`registry`]    register map of every known HID report + safety classes (#219)
+//! * [`firmware`]    firmware version check against the embedded table (#219)
 //! * [`alias`]       validation of the user-chosen keyboard name (#141)
 
 pub mod alerts;
@@ -34,6 +36,7 @@ pub mod chemistry;
 pub mod config;
 pub mod decode;
 pub mod discover;
+pub mod firmware;
 pub mod forecast;
 pub mod hid_params;
 pub mod hidraw;
@@ -46,6 +49,7 @@ pub mod passive;
 pub mod power;
 pub mod read_policy;
 pub mod recovery;
+pub mod registry;
 pub mod report;
 pub mod rssi;
 pub mod signal;
