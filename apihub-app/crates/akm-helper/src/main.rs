@@ -8,8 +8,9 @@
 //! ```
 //!
 //! * writes `/sys/module/hid_apple/parameters/fnmode` (root-only, mode 644);
-//! * `--persist` also rewrites the `fnmode=` token of `/etc/modprobe.d/hid_apple.conf`
-//!   (other options and comments of the file are kept; atomic rename).
+//! * `--persist` first rewrites the `fnmode=` token of `/etc/modprobe.d/hid_apple.conf`
+//!   (other options and comments kept; file forced to 0644 root:root, symlinks
+//!   refused, atomic rename) and then tolerates an unloaded module.
 //!
 //! Security stance: the argument list is a strict whitelist (one verb, one
 //! value in 0..=3, one optional flag); no path, no environment variable and
@@ -92,28 +93,87 @@ fn merge_fnmode(existing: &str, mode: u8) -> String {
     out
 }
 
-fn persist(path: &Path, mode: u8) -> std::io::Result<()> {
-    let existing = match fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(e),
+/// `O_NOFOLLOW` for the temp file and the read of the existing file.
+const O_NOFOLLOW: i32 = libc::O_NOFOLLOW;
+
+extern "C" {
+    fn umask(mask: u32) -> u32;
+}
+
+/// Called first thing in `main`: whatever umask `pkexec` inherited from the
+/// caller (an unprivileged process may pick 000), root-created files never
+/// start world-writable.
+fn lock_umask() {
+    // SAFETY: umask(2) only changes the process file-mode creation mask.
+    unsafe { umask(0o077) };
+}
+
+/// Reads the existing config without following a symlink and refuses
+/// anything that is not a regular file.
+fn read_existing(path: &Path) -> std::io::Result<String> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut f = match OpenOptions::new().read(true).custom_flags(O_NOFOLLOW).open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(e) => return Err(std::io::Error::new(e.kind(), format!("{} (symlink refused?): {e}", path.display()))),
     };
-    let new = merge_fnmode(&existing, mode);
+    if !f.metadata()?.file_type().is_file() {
+        return Err(std::io::Error::other("not a regular file"));
+    }
+    let mut s = String::new();
+    f.read_to_string(&mut s)?;
+    Ok(s)
+}
+
+/// Atomic rewrite: temp file created `O_EXCL|O_NOFOLLOW` with mode 0600,
+/// forced to 0644 root:root (explicit chmod/chown, independent of umask),
+/// fsync, then `rename`. Refuses a symlink at the destination.
+fn persist(path: &Path, mode: u8) -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    if let Ok(md) = fs::symlink_metadata(path) {
+        if !md.file_type().is_file() {
+            return Err(std::io::Error::other(format!("{} is not a regular file (symlink?)", path.display())));
+        }
+    }
+    let new = merge_fnmode(&read_existing(path)?, mode);
     let tmp = path.with_extension("conf.akm-tmp");
-    {
-        let mut f = OpenOptions::new()
+    let open_tmp = || {
+        OpenOptions::new()
             .write(true)
             .create_new(true)
+            .mode(0o600)
+            .custom_flags(O_NOFOLLOW)
             .open(&tmp)
-            .or_else(|_| {
-                // stale temp from a crashed run
-                let _ = fs::remove_file(&tmp);
-                OpenOptions::new().write(true).create_new(true).open(&tmp)
-            })?;
+    };
+    let mut f = open_tmp().or_else(|_| {
+        // stale temp from a crashed run (remove_file never follows a link)
+        let _ = fs::remove_file(&tmp);
+        open_tmp()
+    })?;
+    let res = (|| {
+        f.set_permissions(fs::Permissions::from_mode(0o644))?;
+        // SAFETY: plain fchown(2) on an fd we own.
+        let rc = unsafe { libc::fchown(f.as_raw_fd(), 0, 0) };
+        // As root this must succeed; unprivileged (unit tests) it cannot.
+        if rc != 0 && unsafe { libc::geteuid() } == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
         f.write_all(new.as_bytes())?;
         f.sync_all()?;
+        fs::rename(&tmp, path)
+    })();
+    if res.is_err() {
+        let _ = fs::remove_file(&tmp);
     }
-    fs::rename(&tmp, path)
+    res?;
+    if let Some(dir) = path.parent() {
+        if let Ok(d) = fs::File::open(dir) {
+            let _ = d.sync_all();
+        }
+    }
+    Ok(())
 }
 
 fn set_sysfs(path: &Path, mode: u8) -> std::io::Result<()> {
@@ -122,7 +182,35 @@ fn set_sysfs(path: &Path, mode: u8) -> std::io::Result<()> {
     f.write_all(format!("{mode}\n").as_bytes())
 }
 
+/// Outcome of a request, for the exit code and the message.
+#[derive(Debug, PartialEq, Eq)]
+enum Outcome {
+    Applied,
+    /// Persisted; `hid_apple` not loaded, applied at next module load.
+    PersistedOnly,
+    Failed(String),
+}
+
+/// With `--persist` the config is written FIRST and independently of sysfs
+/// (module not loaded = parameter file absent is not an error then).
+fn run(req: &Request, sysfs: &Path, conf: &Path) -> Outcome {
+    if req.persist {
+        if let Err(e) = persist(conf, req.mode) {
+            return Outcome::Failed(format!("{} not updated: {e}", conf.display()));
+        }
+    }
+    match set_sysfs(sysfs, req.mode) {
+        Ok(()) => Outcome::Applied,
+        Err(e) if req.persist && e.kind() == std::io::ErrorKind::NotFound => Outcome::PersistedOnly,
+        Err(e) if req.persist => {
+            Outcome::Failed(format!("{} updated but cannot write {}: {e}", conf.display(), sysfs.display()))
+        }
+        Err(e) => Outcome::Failed(format!("cannot write {}: {e}", sysfs.display())),
+    }
+}
+
 fn main() -> ExitCode {
+    lock_umask();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let req = match parse_args(&args) {
         Ok(r) => r,
@@ -131,17 +219,17 @@ fn main() -> ExitCode {
             return ExitCode::from(EX_USAGE);
         }
     };
-    if let Err(e) = set_sysfs(Path::new(SYSFS_FNMODE), req.mode) {
-        eprintln!("akm-helper: cannot write {SYSFS_FNMODE}: {e}");
-        return ExitCode::from(1);
-    }
-    if req.persist {
-        if let Err(e) = persist(Path::new(MODPROBE_CONF), req.mode) {
-            eprintln!("akm-helper: fnmode applied but {MODPROBE_CONF} not updated: {e}");
-            return ExitCode::from(1);
+    match run(&req, Path::new(SYSFS_FNMODE), Path::new(MODPROBE_CONF)) {
+        Outcome::Applied => ExitCode::SUCCESS,
+        Outcome::PersistedOnly => {
+            eprintln!("akm-helper: hid_apple not loaded: fnmode={} saved, applied at next module load", req.mode);
+            ExitCode::SUCCESS
+        }
+        Outcome::Failed(m) => {
+            eprintln!("akm-helper: {m}");
+            ExitCode::from(1)
         }
     }
-    ExitCode::SUCCESS
 }
 
 #[cfg(test)]
@@ -195,15 +283,126 @@ mod tests {
         assert_eq!(merge_fnmode("# only comment\n", 1), "# only comment\noptions hid_apple fnmode=1\n");
     }
 
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    use std::sync::Mutex;
+
+    static UMASK: Mutex<()> = Mutex::new(());
+
+    fn tmpdir(tag: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("akm-helper-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn perm(p: &Path) -> u32 {
+        fs::metadata(p).unwrap().permissions().mode() & 0o7777
+    }
+
+    /// The pre-fix implementation, kept to reproduce the defect (#152).
+    fn persist_legacy(path: &Path, mode: u8) -> std::io::Result<()> {
+        let new = merge_fnmode("", mode);
+        let tmp = path.with_extension("conf.akm-tmp");
+        let mut f = OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+        f.write_all(new.as_bytes())?;
+        fs::rename(&tmp, path)
+    }
+
+    #[test]
+    fn umask_000_old_defect_then_fix() {
+        let _g = UMASK.lock().unwrap_or_else(|e| e.into_inner());
+        let d = tmpdir("umask");
+        // SAFETY: test-only, serialised by UMASK.
+        let old = unsafe { umask(0) };
+        let legacy = d.join("legacy.conf");
+        persist_legacy(&legacy, 1).unwrap();
+        let fixed = d.join("hid_apple.conf");
+        persist(&fixed, 1).unwrap();
+        unsafe { umask(0o077) };
+        let strict = d.join("strict.conf");
+        persist(&strict, 1).unwrap();
+        unsafe { umask(old) };
+        assert_eq!(perm(&legacy), 0o666, "old code: world-writable under umask 000");
+        assert_eq!(perm(&fixed), 0o644, "umask 000 must still give 0644");
+        assert_eq!(perm(&strict), 0o644, "umask 077 must still give 0644");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn existing_world_writable_file_is_tightened() {
+        let d = tmpdir("tighten");
+        let p = d.join("hid_apple.conf");
+        fs::write(&p, "options hid_apple fnmode=1\n").unwrap();
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o666)).unwrap();
+        persist(&p, 2).unwrap();
+        assert_eq!(perm(&p), 0o644);
+        assert!(!d.join("hid_apple.conf.akm-tmp").exists());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn refuses_symlink_destination() {
+        let d = tmpdir("symlink");
+        let target = d.join("victim");
+        fs::write(&target, "keep\n").unwrap();
+        let p = d.join("hid_apple.conf");
+        symlink(&target, &p).unwrap();
+        assert!(persist(&p, 2).is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "keep\n");
+        assert!(fs::symlink_metadata(&p).unwrap().file_type().is_symlink());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn stale_symlink_tmp_is_not_followed() {
+        let d = tmpdir("staletmp");
+        let target = d.join("victim");
+        fs::write(&target, "keep\n").unwrap();
+        symlink(&target, d.join("hid_apple.conf.akm-tmp")).unwrap();
+        let p = d.join("hid_apple.conf");
+        persist(&p, 3).unwrap();
+        assert_eq!(fs::read_to_string(&target).unwrap(), "keep\n");
+        assert_eq!(fs::read_to_string(&p).unwrap(), "options hid_apple fnmode=3\n");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
     #[test]
     fn persist_roundtrip_in_tempdir() {
-        let dir = std::env::temp_dir().join(format!("akm-helper-test-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let p = dir.join("hid_apple.conf");
+        let d = tmpdir("rt");
+        let p = d.join("hid_apple.conf");
         persist(&p, 2).unwrap();
         assert_eq!(fs::read_to_string(&p).unwrap(), "options hid_apple fnmode=2\n");
         persist(&p, 0).unwrap();
         assert_eq!(fs::read_to_string(&p).unwrap(), "options hid_apple fnmode=0\n");
-        fs::remove_dir_all(&dir).unwrap();
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn persist_without_module_loaded_still_persists() {
+        let d = tmpdir("nomod");
+        let conf = d.join("hid_apple.conf");
+        let sysfs = d.join("absent/fnmode");
+        let req = Request { mode: 2, persist: true };
+        assert_eq!(run(&req, &sysfs, &conf), Outcome::PersistedOnly);
+        assert_eq!(fs::read_to_string(&conf).unwrap(), "options hid_apple fnmode=2\n");
+        // without --persist a missing module stays an error and writes nothing
+        let conf2 = d.join("other.conf");
+        let req = Request { mode: 2, persist: false };
+        assert!(matches!(run(&req, &sysfs, &conf2), Outcome::Failed(_)));
+        assert!(!conf2.exists());
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn persist_with_module_loaded_writes_both() {
+        let d = tmpdir("both");
+        let conf = d.join("hid_apple.conf");
+        let sysfs = d.join("fnmode");
+        fs::write(&sysfs, "1\n").unwrap();
+        let req = Request { mode: 3, persist: true };
+        assert_eq!(run(&req, &sysfs, &conf), Outcome::Applied);
+        assert_eq!(fs::read_to_string(&sysfs).unwrap(), "3\n");
+        assert_eq!(fs::read_to_string(&conf).unwrap(), "options hid_apple fnmode=3\n");
+        fs::remove_dir_all(&d).unwrap();
     }
 }
