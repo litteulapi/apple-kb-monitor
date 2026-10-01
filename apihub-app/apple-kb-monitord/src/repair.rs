@@ -76,6 +76,11 @@ pub trait LinkBus {
     /// [`KMsg::ConnectDone`]. Must not block.
     fn connect(&mut self, path: &str, mac: &str);
     fn notify(&mut self, summary: &str, body: &str, urgency: Urgency);
+    /// Same, knowing which notice it is (KDE event, buttons); defaults to
+    /// the plain notification.
+    fn notify_notice(&mut self, _notice: &Notice, summary: &str, body: &str, urgency: Urgency) {
+        self.notify(summary, body, urgency);
+    }
     /// Tell the acquisition machine which keyboards are really connected.
     fn reconcile(&mut self, connected: Vec<String>);
     /// Fresh enumeration; `None` if BlueZ cannot be reached.
@@ -431,7 +436,7 @@ impl<B: LinkBus> Keeper<B> {
             let (s, b, u) = notice_text(&n, &name, now, self.fr);
             tracing::warn!("link: {s} — {b}");
             if self.notify {
-                self.bus.notify(&s, &b, u);
+                self.bus.notify_notice(&n, &s, &b, u);
             }
         }
         self.publish(now);
@@ -579,6 +584,16 @@ impl LinkBus for SystemBus {
             urgency,
             urgency == Urgency::Low,
         );
+    }
+
+    fn notify_notice(&mut self, notice: &Notice, summary: &str, body: &str, urgency: Urgency) {
+        use crate::notify::Event;
+        let event = match notice {
+            Notice::Unreachable { .. } => Event::KeyboardUnreachable,
+            Notice::RepairNeeded { .. } => Event::RepairNeeded,
+            Notice::Recovered => Event::KeyboardReconnected,
+        };
+        crate::notify::notice(event, summary, body, urgency);
     }
 
     fn reconcile(&mut self, connected: Vec<String>) {

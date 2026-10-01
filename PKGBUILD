@@ -99,6 +99,9 @@ package() {
 
     # ── Desktop entry ───────────────────────────────────────────────────
     install -Dm644 "$srcdir/com.agenceapi.AppleKbMonitor.desktop"                "$pkgdir/usr/share/applications/com.agenceapi.AppleKbMonitor.desktop"
+    # KNotification events (docs/NOTIFICATIONS.md, #249): makes the daemon an
+    # application of System Settings > Notifications (popup, sound, history, DND).
+    install -Dm644 "$startdir/data/apple-kb-monitor.notifyrc"                    "$pkgdir/usr/share/knotifications6/apple-kb-monitor.notifyrc"
     install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.service"
 
     # ── Plasma widget ───────────────────────────────────────────────────

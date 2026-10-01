@@ -1,0 +1,113 @@
+# KNotification events of the Apple Keyboard Monitor daemon (apple-kb-monitord).
+# Installed in /usr/share/knotifications6/. The daemon sends these hints:
+#   desktop-entry=com.agenceapi.AppleKbMonitor  x-kde-appname=apple-kb-monitor
+#   x-kde-eventId=<id of an [Event/<id>] below>
+# Plasma then lists the application in System Settings > Notifications and applies
+# the user's choices (popup, sound, history, Do Not Disturb) per event.
+# Documentation: docs/NOTIFICATIONS.md
+
+[Global]
+IconName=apihub-scarab
+Name=Apple Keyboard Monitor
+Name[fr]=Moniteur de clavier Apple
+Comment=Apple Bluetooth keyboard: battery, connection, repair
+Comment[fr]=Clavier Bluetooth Apple : piles, connexion, réparation
+DesktopEntry=com.agenceapi.AppleKbMonitor
+
+[Event/BatteryLow]
+Name=Battery low
+Name[fr]=Piles faibles
+Comment=A low-battery threshold (30, 15 %) was crossed
+Comment[fr]=Un seuil de piles faibles (30, 15 %) a été franchi
+Icon=battery-caution
+Action=Popup
+
+[Event/BatteryCritical]
+Name=Battery critical
+Name[fr]=Piles critiques
+Comment=The last threshold (5 %) was crossed: replace the batteries now
+Comment[fr]=Le dernier seuil (5 %) est franchi : changez les piles maintenant
+Icon=battery-empty
+Action=Popup
+ShowPopupsInDndMode=true
+
+[Event/KeyboardAlert]
+Name=Battery alert from the keyboard
+Name[fr]=Alerte de piles du clavier
+Comment=The keyboard itself reports a low or critical battery
+Comment[fr]=Le clavier signale lui-même des piles faibles ou critiques
+Icon=battery-caution
+Action=Popup
+
+[Event/KeyboardDisconnected]
+Name=Keyboard disconnected
+Name[fr]=Clavier déconnecté
+Comment=The keyboard is no longer connected
+Comment[fr]=Le clavier n'est plus connecté
+Icon=input-keyboard-virtual-off
+Action=Popup
+
+[Event/KeyboardReconnected]
+Name=Keyboard reconnected
+Name[fr]=Clavier reconnecté
+Comment=The keyboard is connected again
+Comment[fr]=Le clavier est de nouveau connecté
+Icon=input-keyboard
+Action=Popup
+
+[Event/KeyboardOff]
+Name=Keyboard switched off
+Name[fr]=Clavier éteint
+Comment=The keyboard was switched off (not a lost connection)
+Comment[fr]=Le clavier a été éteint (ce n'est pas une connexion perdue)
+Icon=input-keyboard-virtual-off
+Action=Popup
+
+[Event/KeyboardUnreachable]
+Name=Keyboard unreachable
+Name[fr]=Clavier injoignable
+Comment=The keyboard no longer answers while it is paired
+Comment[fr]=Le clavier ne répond plus alors qu'il est appairé
+Icon=dialog-warning
+Action=Popup
+
+[Event/RepairNeeded]
+Name=Link to repair
+Name[fr]=Liaison à réparer
+Comment=The keyboard must be paired again (button: Repair)
+Comment[fr]=Le clavier doit être ré-appairé (bouton : Réparer)
+Icon=dialog-warning
+Action=Popup
+ShowPopupsInDndMode=true
+
+[Event/FirmwareUpdate]
+Name=Known firmware update
+Name[fr]=Mise à jour du firmware connue
+Comment=A firmware newer than the keyboard's is known
+Comment[fr]=Un firmware plus récent que celui du clavier est connu
+Icon=software-update-available
+Action=Popup
+
+[Event/BatteryReminder]
+Name=Reminder: change the batteries
+Name[fr]=Rappel : changez les piles
+Comment=Reminder while the batteries have not been replaced (button: Ignore this reminder)
+Comment[fr]=Rappel tant que les piles n'ont pas été changées (bouton : Ignorer ce rappel)
+Icon=battery-caution
+Action=Popup
+
+[Event/BatteryReplaced]
+Name=New batteries detected
+Name[fr]=Piles neuves détectées
+Comment=New batteries were detected; the alerts are re-armed
+Comment[fr]=Des piles neuves ont été détectées ; les alertes sont réarmées
+Icon=battery-full
+Action=Popup
+
+[Event/Error]
+Name=Error
+Name[fr]=Erreur
+Comment=An operation of the application failed
+Comment[fr]=Une opération de l'application a échoué
+Icon=dialog-error
+Action=Popup

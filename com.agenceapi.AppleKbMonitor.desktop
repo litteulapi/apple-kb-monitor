@@ -1,12 +1,23 @@
 [Desktop Entry]
 Name=Apple Keyboard Monitor
+Name[fr]=Moniteur de clavier Apple
 GenericName=Keyboard Monitor
+GenericName[fr]=Moniteur de clavier
 Comment=Apple Bluetooth keyboard telemetry and battery
+Comment[fr]=Télémétrie et batterie du clavier Bluetooth Apple
 Exec=apihub-app
 Icon=apihub-scarab
 Terminal=false
 Type=Application
 Categories=System;Monitor;
 Keywords=keyboard;apple;bluetooth;battery;rssi;
+Keywords[fr]=clavier;apple;bluetooth;batterie;piles;rssi;
 StartupWMClass=com.agenceapi.AppleKbMonitor
+StartupNotify=true
+X-KDE-StartupNotify=true
+# D-Bus activation: com.agenceapi.AppleKbMonitor.service (single instance); the
+# notification buttons "Open" call org.freedesktop.Application.Activate on it.
 DBusActivatable=true
+# Notifications of the daemon: events in apple-kb-monitor.notifyrc, bound to
+# this file by [Global] DesktopEntry= and by the desktop-entry hint.
+X-GNOME-UsesNotifications=true
