@@ -1,3 +1,4 @@
+mod diag;
 mod fnmode_diag;
 mod framestats;
 mod history_view;
@@ -574,11 +575,7 @@ impl ApiHubApp {
             ];
 
             for (bin, args, desc) in &checks {
-                let result = Command::new(bin)
-                    .args(args.iter().map(|s| s.as_str()))
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped())
-                    .output();
+                let result = diag::run_bounded(Command::new(bin).args(args.iter().map(|s| s.as_str())), diag::COMMAND_TIMEOUT);
                 match result {
                     Ok(o) if o.status.success() => {
                         let stdout = String::from_utf8_lossy(&o.stdout);
@@ -602,7 +599,13 @@ impl ApiHubApp {
                             });
                         }
                     }
-                    Err(_) => {
+                    Err(diag::RunError::Timeout) => {
+                        out.push(DiagResult {
+                            label: desc.to_string(), ok: false,
+                            detail: format!("{}: no answer within {} s (killed)", bin, diag::COMMAND_TIMEOUT.as_secs()),
+                        });
+                    }
+                    Err(diag::RunError::Spawn) => {
                         out.push(DiagResult {
                             label: desc.to_string(), ok: false,
                             detail: format!("{}: NOT FOUND", bin),
@@ -612,18 +615,18 @@ impl ApiHubApp {
             }
 
             // Daemon: owner of the keyboard, reached over the session bus
-            let active = Command::new("systemctl")
-                .args(["--user", "is-active", "apple-kb-monitord.service"])
-                .output()
+            let active = diag::run_bounded(Command::new("systemctl").args(["--user", "is-active", "apple-kb-monitord.service"]), diag::COMMAND_TIMEOUT)
                 .map(|o| o.status.success())
                 .unwrap_or(false);
             out.push(DiagResult {
                 label: "apple-kb-monitord.service".into(), ok: active,
                 detail: if active { "active (running)".into() } else { "inactive / not found".into() },
             });
-            let on_bus = zbus::blocking::Connection::session()
-                .map(|c| apple_kb_monitord::client::daemon_present(&c))
-                .unwrap_or(false);
+            let on_bus = instance::bounded(diag::COMMAND_TIMEOUT, false, || {
+                zbus::blocking::Connection::session()
+                    .map(|c| apple_kb_monitord::client::daemon_present(&c))
+                    .unwrap_or(false)
+            });
             out.push(DiagResult {
                 label: "D-Bus com.agenceapi.AppleKbMonitor1".into(), ok: on_bus,
                 detail: if on_bus { "daemon reachable (this window is a client)".into() }
@@ -643,10 +646,8 @@ impl ApiHubApp {
 
             // keyd config
             let keyd_conf = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
-            let keyd_running = Command::new("systemctl")
-                .args(["is-active", "--quiet", "keyd.service"])
-                .status()
-                .map(|s| s.success())
+            let keyd_running = diag::run_bounded(Command::new("systemctl").args(["is-active", "--quiet", "keyd.service"]), diag::COMMAND_TIMEOUT)
+                .map(|o| o.status.success())
                 .unwrap_or(false);
             out.push(DiagResult {
                 label: "keyd config".into(), ok: keyd_conf && keyd_running,
