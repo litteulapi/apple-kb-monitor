@@ -618,10 +618,14 @@ fn invariants_catch_impossible_states() {
     assert!(m.check().is_ok());
     m.send(GET47, t0 + s(1)).unwrap();
     m.link.sleeping = true;
+    m.link.next_battery = None;
+    assert!(m.link.check().is_ok());
     assert!(m.check().is_err());
     let mut m = ready(t0);
     m.send(GET47, t0 + s(1)).unwrap();
     m.link.state = LinkState::Disconnected;
+    m.link.next_battery = None;
+    assert!(m.link.check().is_ok());
     assert!(m.check().is_err());
     let mut m = ready(t0);
     m.battery_state = 4;
