@@ -215,8 +215,9 @@ done
     }
 }
 
-/// Fake `apple-kb-monitord` on the private bus: serves the anonymised real
-/// snapshot, but answers `History()` only after `$DELAY` seconds, like a
+/// Fake `apple-kb-monitord` and desktop portal on the private bus: serves the
+/// anonymised real snapshot, but answers `History()` and the portal's
+/// `Settings.Read` only after `$DELAY` seconds, like a
 /// daemon busy on a slow keyboard read. Timestamps of the real history
 /// fixture are shifted so that its last point is "now".
 const SLOW_DAEMON: &str = r#"
@@ -244,6 +245,16 @@ def acquired(conn, name):
 def owned(conn, name):
     open(sys.argv[4], "w").write("ready")
 Gio.bus_own_name(Gio.BusType.SESSION, "com.agenceapi.AppleKbMonitor1", 0, acquired, owned, None)
+# Desktop portal whose Settings.Read answers after the same delay (#232).
+PXML = """<node><interface name="org.freedesktop.portal.Settings">
+<method name="Read"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="v" direction="out"/></method>
+<signal name="SettingChanged"><arg type="s"/><arg type="s"/><arg type="v"/></signal></interface></node>"""
+piface = Gio.DBusNodeInfo.new_for_xml(PXML).interfaces[0]
+def pcall(conn, sender, path, iname, method, params, inv):
+    GLib.timeout_add_seconds(delay, lambda: (inv.return_value(GLib.Variant("(v)", (GLib.Variant("v", GLib.Variant("u", 1)),))), False)[1])
+def pacquired(conn, name):
+    conn.register_object("/org/freedesktop/portal/desktop", piface, pcall, None, None)
+Gio.bus_own_name(Gio.BusType.SESSION, "org.freedesktop.portal.Desktop", 0, pacquired, None, None)
 GLib.MainLoop().run()
 "#;
 
@@ -286,8 +297,9 @@ while time.time() < end:
 print(sent, ok, round(worst))
 "#;
 
-/// #230: 3.1.0 froze ("not responding") because the UI thread made
-/// blocking D-Bus calls (History() at start and on Refresh, no timeout).
+/// #230/#232: 3.1.0 froze ("not responding") because the UI thread waited
+/// on D-Bus: History() at start and on Refresh (no timeout), and the
+/// appearance lock held by the portal thread during its Read calls.
 /// With the real (anonymised) history and a daemon that takes 20 s to answer
 /// History(), the window must answer every WM ping for 30 s, through tab
 /// switches, resizes and Refresh clicks, and no frame may take 100 ms.
