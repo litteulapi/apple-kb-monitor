@@ -35,23 +35,27 @@ Apple's driver stops **every** emission after three consecutive silences, HID_CO
 
 ```text
 /run/user/<uid>/apple-kb-monitor/breaker.state      ($XDG_RUNTIME_DIR, next to hid.lock)
-schema=1
+schema=2                     (schema 1 = without starttime, still read)
 mac=04:DB:56:CA:42:EE        (keyboard followed, or -)
 open=1                       (R3 flag)
 counter=3                    (consecutive silences)
 written_unix=1790000000
 pid=4242                     (the daemon)
+starttime=123456             (/proc/<pid>/stat field 22 of the daemon: a recycled pid does not match)
 ```
 
 * **Writer** (`akm-core/src/read_policy.rs::publish_breaker_state`, `breaker_state.rs`): after every pass of the actor loop, rewritten atomically (temp + rename, 0644 in the user's private 0700 directory) only on a change or every 20 s (heartbeat); removed when the daemon stops.
-* **Reader** (`hidctl::breaker_verdict`, same `breaker_state.rs` compiled in by path, `libc` only): every `/run/user/<uid>/apple-kb-monitor/breaker.state` is read with the checks of the other root readers (`fsutil::read_user_file`: owner = `<uid>` of the path, regular file, `O_NOFOLLOW`, one hard link, ≤ 1 KiB). The unit already holds `CAP_DAC_READ_SEARCH`.
-* **Decision** (`breaker_state::verdict`, pure, one refusal from any user's daemon is enough), per keyboard:
+* **Reader** (`hidctl::breaker_verdict`, same `breaker_state.rs` compiled in by path, `libc` only): only the state of the **active user of the seat** (`ACTIVE_UID=` of logind's `/run/systemd/seats/seat0`, the owner of the keyboard through `uaccess`) is read, never an aggregate of every `/run/user/<uid>` (#256: another local account must not be able to block the keyboard of the user at the seat). No active user known = **refused** (fail closed). The file is read with the checks of the other root readers (`fsutil::read_user_file`: owner = `<uid>` of the path, regular file, `O_NOFOLLOW`, one hard link, ≤ 1 KiB). The unit already holds `CAP_DAC_READ_SEARCH`.
+* **Liveness of the daemon** (#256, `breaker_state::daemon_alive_in`): `/proc/<pid>/exe` = `/usr/bin/apple-kb-monitord` (or the same with ` (deleted)` after an upgrade), real uid = the user, and, when the state carries it, the start time of the writer. `comm` is never trusted (any process sets it with `prctl(PR_SET_NAME)`).
+* **Decision** (`breaker_state::verdict`, pure), per keyboard:
 
 | Published state | Daemon | Verdict |
 |---|---|---|
-| `open=1` for this MAC, fresh (≤ 60 s) | running or just dead | **refused** (Apple's verdict for this connection) |
+| dated more than 5 s in the future (#256) | running | **refused** (clock or file not trusted: fail closed) |
+| dated more than 5 s in the future | gone | sent (a file left by a daemon whose clock ran ahead never blocks for ever) |
+| `open=1` for this MAC, fresh (≤ 60 s) | running or just dead | **refused** (Apple's verdict for this connection, 65 s at most) |
 | closed, fresh | — | sent |
-| older than 60 s | running (`/proc/<pid>/comm` = `apple-kb-monito`, same uid) | **refused** (wedged daemon, breaker unknown: fail closed) |
+| older than 60 s | running (exe, uid and start time of the writer) | **refused** (wedged daemon, breaker unknown: fail closed) |
 | older than 60 s | gone | sent |
 | unreadable / malformed | running (any `apple-kb-monitord` of that uid) | **refused** |
 | unreadable / malformed | gone | sent |

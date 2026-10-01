@@ -138,8 +138,8 @@ pub fn published_breaker_blocks(mac: &str) -> bool {
     let found = akm_core::breaker_state::read_own(&akm_core::read_policy::breaker_state_path());
     // SAFETY: getuid(2) has no preconditions.
     let uid = unsafe { libc::getuid() };
-    let alive = |pid: Option<u32>| {
-        akm_core::breaker_state::daemon_alive_in(std::path::Path::new("/proc"), pid, uid)
+    let alive = |w: Option<akm_core::breaker_state::Writer>| {
+        akm_core::breaker_state::daemon_alive_in(std::path::Path::new("/proc"), w, uid)
     };
     !akm_core::breaker_state::verdict(&found, mac, akm_core::breaker_state::now_unix(), &alive)
         .allows()

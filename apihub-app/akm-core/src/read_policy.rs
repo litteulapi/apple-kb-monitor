@@ -301,6 +301,10 @@ pub fn publish_breaker_state(mac: Option<&str>) -> io::Result<bool> {
         counter: breaker_counter(),
         written_unix: crate::breaker_state::now_unix(),
         pid: std::process::id(),
+        starttime: crate::breaker_state::proc_starttime(
+            std::path::Path::new("/proc"),
+            std::process::id(),
+        ),
     };
     let path = breaker_state_path();
     ensure_private_dir(path.parent().ok_or_else(|| io::Error::other("no parent"))?)?;

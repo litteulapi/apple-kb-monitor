@@ -242,8 +242,9 @@ fn daemon_breaker_verdict(mac: &str) -> crate::breaker_state::Verdict {
     let found = crate::breaker_state::read_own(&crate::read_policy::breaker_state_path());
     // SAFETY: getuid(2) has no preconditions.
     let uid = unsafe { libc::getuid() };
-    let alive =
-        |pid: Option<u32>| crate::breaker_state::daemon_alive_in(Path::new("/proc"), pid, uid);
+    let alive = |w: Option<crate::breaker_state::Writer>| {
+        crate::breaker_state::daemon_alive_in(Path::new("/proc"), w, uid)
+    };
     crate::breaker_state::verdict(&found, mac, crate::breaker_state::now_unix(), &alive)
 }
 

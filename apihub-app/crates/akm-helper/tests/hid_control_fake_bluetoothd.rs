@@ -51,6 +51,11 @@ fn ino(fd: &OwnedFd) -> u64 {
 /// Describes the child's socketpair ends as L2CAP channels to `KB`.
 struct FakeL2cap {
     by_ino: HashMap<u64, u16>,
+    /// `drained()` answers `Some(false)` this many times before `Some(true)`
+    /// (`u32::MAX` = never drained).
+    undrained: std::cell::Cell<u32>,
+    /// Number of `drained()` calls.
+    drain_polls: std::cell::Cell<u32>,
 }
 
 impl ControlSocket for FakeL2cap {
@@ -76,7 +81,15 @@ impl ControlSocket for FakeL2cap {
         })
     }
     fn drained(&self, _fd: BorrowedFd<'_>) -> Option<bool> {
-        Some(true)
+        self.drain_polls.set(self.drain_polls.get() + 1);
+        let n = self.undrained.get();
+        if n == 0 {
+            return Some(true);
+        }
+        if n != u32::MAX {
+            self.undrained.set(n - 1);
+        }
+        Some(false)
     }
 }
 
@@ -97,6 +110,10 @@ struct Fake {
     run_user_root: PathBuf,
     /// What the fake liveness check answers for the daemon.
     daemon_alive: std::cell::Cell<bool>,
+    /// The active user of the seat as the fake logind reports it.
+    active_uid: std::cell::Cell<Option<u32>>,
+    /// The uid `bluetoothd` must run as.
+    required_uid: std::cell::Cell<u32>,
     _serial: std::sync::MutexGuard<'static, ()>,
 }
 
@@ -129,6 +146,7 @@ impl Fake {
             counter,
             written_unix: akm_helper::breaker_state::now_unix().saturating_sub(age_s),
             pid: 4242,
+            starttime: Some(1),
         }
         .render()
     }
@@ -176,11 +194,17 @@ fn spawn(tag: &str) -> Fake {
         child,
         ctrl_local,
         intr_local,
-        cs: FakeL2cap { by_ino },
+        cs: FakeL2cap {
+            by_ino,
+            undrained: std::cell::Cell::new(0),
+            drain_polls: std::cell::Cell::new(0),
+        },
         exe,
         hid_root,
         run_user_root,
         daemon_alive: std::cell::Cell::new(false),
+        active_uid: std::cell::Cell::new(Some(Fake::uid())),
+        required_uid: std::cell::Cell::new(Fake::uid()),
         _serial: serial,
     }
 }
@@ -214,15 +238,19 @@ fn go(
 ) -> (akm_helper::hidctl::Report, Vec<Event>) {
     let pid = f.child.id() as i32;
     let pidf = move || Ok(pid);
-    let alive = |uid: u32, _pid: Option<u32>| uid == Fake::uid() && f.daemon_alive.get();
+    let alive = |uid: u32, _w: Option<akm_helper::breaker_state::Writer>| {
+        uid == Fake::uid() && f.daemon_alive.get()
+    };
+    let active = || f.active_uid.get();
     let env = Env {
         proc_root: PathBuf::from("/proc"),
         hid_root: f.hid_root.clone(),
         allowed_exes: exes,
-        required_uid: Fake::uid(),
+        required_uid: f.required_uid.get(),
         daemon_pid: &pidf,
         run_user_root: f.run_user_root.clone(),
         daemon_alive: &alive,
+        active_uid: &active,
     };
     let mut ev = Vec::new();
     let rep = run(
@@ -272,7 +300,8 @@ fn inspect_reports_the_control_channel_mtu_and_sends_nothing() {
     let exe = f.exe.clone();
     let pid = f.child.id() as i32;
     let pidf = move || Ok(pid);
-    let alive = |_: u32, _: Option<u32>| false;
+    let alive = |_: u32, _: Option<akm_helper::breaker_state::Writer>| false;
+    let active = || Some(Fake::uid());
     let env = Env {
         proc_root: PathBuf::from("/proc"),
         hid_root: f.hid_root.clone(),
@@ -281,6 +310,7 @@ fn inspect_reports_the_control_channel_mtu_and_sends_nothing() {
         daemon_pid: &pidf,
         run_user_root: f.run_user_root.clone(),
         daemon_alive: &alive,
+        active_uid: &active,
     };
     let mut ev = Vec::new();
     let rep = akm_helper::hidctl::inspect(Some(Mac::parse(KB).unwrap()), &env, &f.cs, &mut |e| {
@@ -430,8 +460,8 @@ fn the_daemons_breaker_blocks_the_hid_control_byte() {
     let (rep, _) = go(&f, HidControl::Suspend, false, &[&exe], None);
     assert_eq!(rep.per_keyboard[0].1, KbOutcome::Sent);
     assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x13u8]]);
-    // 6. a state file owned by another uid's directory is not trusted (owner
-    //    check): placed under /<uid+1>/ it is an error, refused while "alive"
+    // 6. a state file under another uid's directory is never read (#256:
+    //    only the active user's breaker counts)
     let foreign = akm_helper::breaker_state::path_for_uid(&f.run_user_root, Fake::uid() + 1);
     fs::create_dir_all(foreign.parent().unwrap()).unwrap();
     fs::write(&foreign, f.state(false, 0, 0, KB)).unwrap();
@@ -440,7 +470,7 @@ fn the_daemons_breaker_blocks_the_hid_control_byte() {
     assert_eq!(
         rep.per_keyboard[0].1,
         KbOutcome::Sent,
-        "alive() answers false for the foreign uid: ignored; {ev:?}"
+        "the foreign uid is not the active user: never read; {ev:?}"
     );
     assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x13u8]]);
     assert!(
@@ -465,4 +495,94 @@ fn two_control_candidates_write_nothing() {
     assert!(!rep.ok());
     assert!(recv_all(&f.ctrl_local).is_empty());
     assert!(recv_all(&f.intr_local).is_empty());
+}
+
+/// #256: only the ACTIVE user's breaker counts. An open state in a directory
+/// that is not the active user's is never read; no active user = fail closed;
+/// a state dated in the future from a dead daemon no longer blocks.
+#[test]
+fn only_the_active_users_breaker_counts_and_future_states_expire() {
+    let f = spawn("active");
+    let exe = f.exe.clone();
+    // open, fresh, daemon alive: but this uid is not the active user
+    f.publish(&f.state(true, 3, 1, KB));
+    f.daemon_alive.set(true);
+    f.active_uid.set(Some(Fake::uid() + 1));
+    let (rep, ev) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert_eq!(rep.per_keyboard[0].1, KbOutcome::Sent, "{ev:?}");
+    assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x13u8]]);
+    // no active user known: nothing sent, exit 0
+    f.active_uid.set(None);
+    let (rep, ev) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert!(
+        matches!(&rep.per_keyboard[0].1, KbOutcome::BreakerOpen(m) if m.contains("no active user")),
+        "{ev:?}"
+    );
+    assert!(rep.ok());
+    assert!(recv_all(&f.ctrl_local).is_empty());
+    // a future-dated open state left by a dead daemon: the byte goes
+    f.active_uid.set(Some(Fake::uid()));
+    f.daemon_alive.set(false);
+    f.publish(&format!(
+        "schema=2\nmac={KB}\nopen=1\ncounter=3\nwritten_unix=999999999999\npid=4242\nstarttime=1\n"
+    ));
+    let (rep, ev) = go(&f, HidControl::ExitSuspend, false, &[&exe], None);
+    assert_eq!(rep.per_keyboard[0].1, KbOutcome::Sent, "{ev:?}");
+    assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x14u8]]);
+    // ... and is refused while its writer runs (fail closed)
+    f.daemon_alive.set(true);
+    let (rep, ev) = go(&f, HidControl::ExitSuspend, false, &[&exe], None);
+    assert!(
+        matches!(&rep.per_keyboard[0].1, KbOutcome::BreakerOpen(m) if m.contains("future")),
+        "{ev:?}"
+    );
+    assert!(recv_all(&f.ctrl_local).is_empty());
+}
+
+/// #261: `bluetoothd` running under another uid than required is refused
+/// (`WrongUid`) and nothing is written.
+#[test]
+fn bluetoothd_with_the_wrong_uid_is_refused() {
+    let f = spawn("wronguid");
+    let exe = f.exe.clone();
+    f.required_uid.set(Fake::uid() + 1);
+    let (rep, ev) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert!(!rep.ok(), "{ev:?}");
+    assert_eq!(rep.global, Some(Refusal::WrongUid(Fake::uid())), "{ev:?}");
+    assert!(rep.per_keyboard.is_empty());
+    assert!(recv_all(&f.ctrl_local).is_empty());
+    assert!(recv_all(&f.intr_local).is_empty());
+}
+
+/// #261: the wait for the queue to drain is observed: polled until drained,
+/// and bounded by DRAIN_WAIT when it never drains.
+#[test]
+fn the_drain_wait_polls_until_drained_and_is_bounded() {
+    let f = spawn("drain");
+    let exe = f.exe.clone();
+    f.cs.undrained.set(3);
+    let (rep, ev) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert_eq!(rep.per_keyboard[0].1, KbOutcome::Sent, "{ev:?}");
+    assert_eq!(f.cs.drain_polls.get(), 4, "3 x not drained, then drained");
+    assert!(
+        ev.iter()
+            .any(|e| matches!(e, Event::Info(m) if m.contains("queue drained"))),
+        "{ev:?}"
+    );
+    assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x13u8]]);
+    f.cs.undrained.set(u32::MAX);
+    f.cs.drain_polls.set(0);
+    let t0 = std::time::Instant::now();
+    let (rep, ev) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    let took = t0.elapsed();
+    assert_eq!(rep.per_keyboard[0].1, KbOutcome::Sent, "{ev:?}");
+    assert!(
+        ev.iter()
+            .any(|e| matches!(e, Event::Warn(m) if m.contains("not drained after 1000 ms"))),
+        "{ev:?}"
+    );
+    assert!(took >= akm_helper::hidctl::DRAIN_WAIT, "{took:?}");
+    assert!(took < akm_helper::hidctl::DRAIN_WAIT * 3, "{took:?}");
+    assert!(f.cs.drain_polls.get() > 1);
+    assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x13u8]]);
 }

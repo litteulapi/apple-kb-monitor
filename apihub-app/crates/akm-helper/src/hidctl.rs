@@ -22,8 +22,11 @@
 //! 5. Apple's R3 (#251): the circuit breaker of the user daemon, published in
 //!    `/run/user/<uid>/apple-kb-monitor/breaker.state` ([`crate::breaker_state`]),
 //!    is consulted ([`breaker_verdict`]): open for this keyboard, or stale /
-//!    unreadable while the daemon runs, nothing is sent ([`KbOutcome::BreakerOpen`],
-//!    exit 0: nothing to do); no state or a dead daemon = the byte goes;
+//!    unreadable / dated in the future while the daemon runs, nothing is sent
+//!    ([`KbOutcome::BreakerOpen`], exit 0: nothing to do); no state or a dead
+//!    daemon = the byte goes. Only the state of the ACTIVE user of the seat is
+//!    read (#256: another account cannot block the keyboard); no active user
+//!    known = nothing sent (fail closed);
 //! 6. one `send(2)` of one byte, `MSG_DONTWAIT | MSG_NOSIGNAL` (never blocks,
 //!    never retried), the byte coming from [`HidControl`] only (`0x13`,
 //!    `0x14`); then a wait of at most [`DRAIN_WAIT`] for the byte to leave the
@@ -443,12 +446,19 @@ pub struct Env<'a> {
     /// Root of the per-user runtime directories where `apple-kb-monitord`
     /// publishes its circuit breaker (`<root>/<uid>/apple-kb-monitor/breaker.state`).
     pub run_user_root: PathBuf,
-    /// Is `apple-kb-monitord` running as `uid` (`Some(pid)`: that process)?
-    pub daemon_alive: &'a dyn Fn(u32, Option<u32>) -> bool,
+    /// Is `apple-kb-monitord` running as `uid` (`Some((pid, starttime))`:
+    /// that process)?
+    pub daemon_alive: &'a dyn Fn(u32, Option<breaker_state::Writer>) -> bool,
+    /// The user whose breaker applies: the active user of the seat (#256).
+    pub active_uid: &'a dyn Fn() -> Option<u32>,
 }
 
-fn system_daemon_alive(uid: u32, pid: Option<u32>) -> bool {
-    breaker_state::daemon_alive_in(Path::new("/proc"), pid, uid)
+fn system_daemon_alive(uid: u32, w: Option<breaker_state::Writer>) -> bool {
+    breaker_state::daemon_alive_in(Path::new("/proc"), w, uid)
+}
+
+fn system_active_uid() -> Option<u32> {
+    breaker_state::seat_active_uid(Path::new(breaker_state::SEAT0))
 }
 
 impl Env<'static> {
@@ -463,48 +473,38 @@ impl Env<'static> {
             daemon_pid: &bluetoothd_main_pid,
             run_user_root: PathBuf::from(breaker_state::RUN_USER_ROOT),
             daemon_alive: &system_daemon_alive,
+            active_uid: &system_active_uid,
         }
     }
 }
 
-/// Published breaker states of every user, read with the checks of a root
-/// reader ([`crate::fsutil::read_user_file`]: owner = the `<uid>` of the path,
-/// regular file, no symlink, single link, ≤ 1 KiB). An absent file is
-/// `Ok(None)`; anything else wrong is `Err`.
-pub fn published_breakers(run_user_root: &Path) -> Vec<(u32, breaker_state::Found)> {
-    let mut v: Vec<(u32, breaker_state::Found)> = fs::read_dir(run_user_root)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
-        .map(|uid| {
-            let p = breaker_state::path_for_uid(run_user_root, uid);
-            let found = match crate::fsutil::read_user_file(&p, uid, breaker_state::MAX_LEN) {
-                Ok(s) => breaker_state::BreakerState::parse(&s)
-                    .map(Some)
-                    .map_err(|e| format!("{}: {e}", p.display())),
-                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-                Err(e) => Err(e.to_string()),
-            };
-            (uid, found)
-        })
-        .collect();
-    v.sort_by_key(|(uid, _)| *uid);
-    v
+/// Published breaker state of user `uid`, read with the checks of a root
+/// reader ([`crate::fsutil::read_user_file`]: owner = `uid`, regular file, no
+/// symlink, single link, ≤ 1 KiB). An absent file is `Ok(None)`; anything else
+/// wrong is `Err`.
+pub fn published_breaker(run_user_root: &Path, uid: u32) -> breaker_state::Found {
+    let p = breaker_state::path_for_uid(run_user_root, uid);
+    match crate::fsutil::read_user_file(&p, uid, breaker_state::MAX_LEN) {
+        Ok(s) => breaker_state::BreakerState::parse(&s)
+            .map(Some)
+            .map_err(|e| format!("{}: {e}", p.display())),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
-/// Apple's R3 for this program: may a HID_CONTROL byte go to `mac` now? One
-/// refusal from any user's daemon is enough (#251).
+/// Apple's R3 for this program: may a HID_CONTROL byte go to `mac` now? The
+/// breaker of the ACTIVE user of the seat decides (#251, #256): the files of
+/// the other `/run/user/<uid>` are never read, so another local account
+/// cannot block the keyboard of the user at the seat. No active user known =
+/// [`breaker_state::Refuse::NoActiveUser`] (fail closed).
 pub fn breaker_verdict(env: &Env<'_>, mac: Mac, now_unix: u64) -> breaker_state::Verdict {
-    let mac = mac.to_string();
-    breaker_state::combine(
-        published_breakers(&env.run_user_root)
-            .iter()
-            .map(|(uid, found)| {
-                let alive = |pid: Option<u32>| (env.daemon_alive)(*uid, pid);
-                breaker_state::verdict(found, &mac, now_unix, &alive)
-            }),
-    )
+    let Some(uid) = (env.active_uid)() else {
+        return breaker_state::Verdict::Refuse(breaker_state::Refuse::NoActiveUser);
+    };
+    let found = published_breaker(&env.run_user_root, uid);
+    let alive = |w: Option<breaker_state::Writer>| (env.daemon_alive)(uid, w);
+    breaker_state::verdict(&found, &mac.to_string(), now_unix, &alive)
 }
 
 /// `systemctl show -p MainPID --value bluetooth.service` (absolute path, empty environment).
