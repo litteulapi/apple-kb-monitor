@@ -7,8 +7,10 @@
 //! Properties (all emit `PropertiesChanged`):
 //! * `Battery`  i  percentage 0..100, **-1 = unknown**
 //! * `Voltage`  d  volts, **0 = unknown** (HID diagnostic)
-//! * `Rssi`     i  dBm, **127 = unknown / stale** (MGMT convention; on
-//!   BR/EDR 0 is a valid value: inside the golden receive power range)
+//! * `Rssi`     i  **relative dB, not dBm** (#174): on BR/EDR the gap to the
+//!   controller's golden receive power range, 0 = ideal, negative = below,
+//!   positive = above (legal); **127 = unknown / stale**. The name is kept for
+//!   compatibility; `Json` carries `radio.rssi_rel_db` and `radio.rssi_quality`
 //! * `Connected` b, `Model` s, `Mac` s (empty = unknown), `Name` s (alias,
 //!   else the keyboard's own name; empty = unknown)
 //! * `LastUpdate` t (unix s, 0 = never), `LastError` s (empty = none)
@@ -18,7 +20,7 @@
 //!
 //! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `SetAlias(s mac, s name) -> s`
 //! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (JSON array of
-//! `{ts,pct,voltage?,event?}`); since API 2 `GetDevices() -> ao`,
+//! `{ts,pct,voltage?,event?,schema?,mv_0x46?,mv_0x49?,voltage_valid?}`, `voltage_valid=false` = legacy value, #180); since API 2 `GetDevices() -> ao`,
 //! `BatterySets() -> s`. Signal: `StateChanged(t revision, s json)`.
 //!
 //! API 2 adds one object per keyboard and `org.freedesktop.DBus.ObjectManager`

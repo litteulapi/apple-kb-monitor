@@ -153,12 +153,7 @@ mod tests {
     const DAY: u64 = 86_400;
 
     fn entry(ts: u64, pct: f64) -> HistoryEntry {
-        HistoryEntry {
-            ts,
-            pct,
-            voltage: None,
-            event: None,
-        }
+        HistoryEntry::sample(ts, pct, None)
     }
 
     /// 1 %/day from 80 %, kernel-quantised to whole %, sampled every 5 min

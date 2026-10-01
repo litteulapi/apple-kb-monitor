@@ -51,6 +51,12 @@ pub struct KbBattery {
     /// [mesuré] Report 0xF5, u16 big-endian, uninterpreted (constant across a
     /// battery change: not a voltage).
     pub adc_raw: Option<u32>,
+    /// [hypothèse] Real charge estimated by the declared chemistry (#178),
+    /// filled by the daemon. `percentage` stays the keyboard's own indication.
+    pub charge_estimate: Option<crate::chemistry::ChargeEstimate>,
+    /// Batteries installed less than two days ago: no figure is drawn from
+    /// the voltage (#178).
+    pub new_batteries: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -69,8 +75,36 @@ pub struct KbBluetooth {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct KbRadio {
+    /// **Deprecated name, kept for compatibility** (#174): on the BR/EDR link
+    /// of this keyboard this is NOT a power in dBm but the gap in dB to the
+    /// controller's ideal reception range (0 = ideal), same value as
+    /// `rssi_rel_db`. Prefer `rssi_rel_db` and `rssi_quality`.
     pub rssi_dbm: Option<i32>,
+    /// Relative RSSI in dB, 0 = ideal range, negative = below, positive =
+    /// above (legal). Meaning given by `rssi_kind`.
+    pub rssi_rel_db: Option<i32>,
+    /// `"bredr-golden-range"` for the classic link of this keyboard.
+    pub rssi_kind: Option<String>,
+    /// `"excellent"`, `"good"` or `"weak"`.
+    pub rssi_quality: Option<String>,
     pub tx_power_dbm: Option<i32>,
+}
+
+impl KbRadio {
+    /// Sets the RSSI fields from one BR/EDR relative measurement (all of them,
+    /// or all cleared when the value is unknown).
+    pub fn set_rssi_rel(&mut self, rel: Option<i32>) {
+        let rel = crate::signal::valid_rel(rel);
+        self.rssi_dbm = rel;
+        self.rssi_rel_db = rel;
+        self.rssi_kind = rel.map(|_| crate::signal::KIND_BREDR.to_string());
+        self.rssi_quality = rel.map(|r| crate::signal::quality(r).as_str().to_string());
+    }
+
+    /// Relative RSSI whatever the writer: new field, else the old name.
+    pub fn rel_db(&self) -> Option<i32> {
+        crate::signal::valid_rel(self.rssi_rel_db.or(self.rssi_dbm))
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -125,6 +159,24 @@ impl KbReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rssi_fields_are_set_together_and_old_json_still_reads() {
+        let mut r = KbRadio::default();
+        r.set_rssi_rel(Some(0));
+        assert_eq!(r.rssi_rel_db, Some(0));
+        assert_eq!(r.rssi_dbm, Some(0), "compat mirror");
+        assert_eq!(r.rssi_kind.as_deref(), Some("bredr-golden-range"));
+        assert_eq!(r.rssi_quality.as_deref(), Some("excellent"));
+        r.set_rssi_rel(Some(-7));
+        assert_eq!(r.rssi_quality.as_deref(), Some("weak"));
+        r.set_rssi_rel(Some(127));
+        assert_eq!((r.rssi_dbm, r.rssi_rel_db, r.rssi_quality.clone()), (None, None, None));
+        // JSON written before #174 only has rssi_dbm.
+        let old: KbReport = serde_json::from_str(r#"{"radio":{"rssi_dbm":-2}}"#).unwrap();
+        assert_eq!(old.radio.rel_db(), Some(-2));
+        assert_eq!(old.radio.rssi_quality, None);
+    }
 
     #[test]
     fn battery_pct_out_of_range_falls_through() {

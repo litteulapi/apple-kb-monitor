@@ -8,15 +8,50 @@ pub const RADIO_UNKNOWN: i32 = 127;
 /// Shown instead of any unknown value.
 pub const DASH: &str = "—";
 
-/// RSSI in dBm, `None` when unknown (absent, 127 or not a plausible negative value).
+/// Relative BR/EDR RSSI in dB (0 = ideal reception range), **not** dBm
+/// (#174). `None` when unknown (absent, 127, out of range); 0 and positive
+/// values are legal.
 pub fn rssi_valid(r: Option<i32>) -> Option<i32> {
-    r.filter(|v| *v != RADIO_UNKNOWN && (-127..0).contains(v))
+    akm_core::signal::valid_rel(r)
 }
 
+/// `"excellent (0)"`, `"good (−3)"`, `"weak (−12)"`: words first, the raw
+/// value in parentheses, no unit.
 pub fn rssi_text(r: Option<i32>) -> String {
     match rssi_valid(r) {
-        Some(v) => format!("{v} dBm"),
+        Some(v) => format!(
+            "{} ({})",
+            akm_core::signal::quality(v).en(),
+            akm_core::signal::raw_text(v)
+        ),
         None => DASH.to_string(),
+    }
+}
+
+/// Estimated charge by chemistry, always marked as an estimate (#178).
+pub fn estimate_text(b: &akm_core::report::KbBattery) -> Option<String> {
+    if b.new_batteries {
+        return Some("new batteries, no estimate yet".to_string());
+    }
+    let e = b.charge_estimate.as_ref()?;
+    Some(format!(
+        "\u{2248} {:.0}% ({:.0} to {:.0}%), {}",
+        e.pct,
+        e.low,
+        e.high,
+        e.chemistry.as_str()
+    ))
+}
+
+/// Age of the last reading. The kernel percentage only steps down at
+/// reconnections, so this age says how stale the indication can be (#179).
+pub fn age_text(age_s: Option<u64>) -> String {
+    match age_s {
+        None => DASH.to_string(),
+        Some(a) if a < 60 => format!("{a} s ago"),
+        Some(a) if a < 3600 => format!("{} min ago", a / 60),
+        Some(a) if a < 86_400 => format!("{} h ago", a / 3600),
+        Some(a) => format!("{} d ago", a / 86_400),
     }
 }
 
@@ -81,20 +116,20 @@ pub fn voltage_level(v: f64) -> Level {
 pub fn rssi_level(r: Option<i32>) -> Level {
     match rssi_valid(r) {
         None => Level::Unknown,
-        Some(v) if v > -60 => Level::Good,
-        Some(v) if v > -80 => Level::Warn,
+        Some(v) if v >= -5 => Level::Good,
+        Some(v) if v >= -15 => Level::Warn,
         Some(_) => Level::Bad,
     }
 }
 
-/// Four-step signal bars; unknown is empty.
+/// Four-step signal bars on the relative scale; unknown is empty.
 pub fn rssi_bars(r: Option<i32>) -> &'static str {
     match rssi_valid(r) {
         None => "\u{2581}\u{2581}\u{2581}\u{2581}",
-        Some(v) if v > -50 => "\u{2582}\u{2584}\u{2586}\u{2588}",
-        Some(v) if v > -60 => "\u{2582}\u{2584}\u{2586}\u{2581}",
-        Some(v) if v > -70 => "\u{2582}\u{2584}\u{2581}\u{2581}",
-        Some(v) if v > -80 => "\u{2582}\u{2581}\u{2581}\u{2581}",
+        Some(v) if v >= 0 => "\u{2582}\u{2584}\u{2586}\u{2588}",
+        Some(v) if v >= -2 => "\u{2582}\u{2584}\u{2586}\u{2581}",
+        Some(v) if v >= -5 => "\u{2582}\u{2584}\u{2581}\u{2581}",
+        Some(v) if v >= -10 => "\u{2582}\u{2581}\u{2581}\u{2581}",
         Some(_) => "\u{2581}\u{2581}\u{2581}\u{2581}",
     }
 }
@@ -157,10 +192,33 @@ mod tests {
     fn unknown_rssi_is_a_dash_never_127() {
         assert_eq!(rssi_text(None), "—");
         assert_eq!(rssi_text(Some(127)), "—");
-        assert_eq!(rssi_text(Some(0)), "—");
-        assert_eq!(rssi_text(Some(-55)), "-55 dBm");
+        assert_eq!(rssi_text(Some(-200)), "—");
+        // #174: 0 is the ideal range, a real value; no dBm unit.
+        assert_eq!(rssi_text(Some(0)), "excellent (0)");
+        assert_eq!(rssi_text(Some(-3)), "good (\u{2212}3)");
+        assert_eq!(rssi_text(Some(-12)), "weak (\u{2212}12)");
+        assert_eq!(rssi_text(Some(2)), "excellent (+2)");
         assert_eq!(rssi_level(Some(127)), Level::Unknown);
         assert_eq!(rssi_bars(Some(127)), rssi_bars(None));
+    }
+
+    #[test]
+    fn estimate_and_age_texts() {
+        let mut b = akm_core::report::KbBattery::default();
+        assert_eq!(estimate_text(&b), None);
+        b.charge_estimate =
+            akm_core::chemistry::estimate_charge(2460, akm_core::chemistry::Chemistry::Alkaline);
+        assert_eq!(
+            estimate_text(&b).unwrap(),
+            "\u{2248} 30% (20 to 40%), alkaline"
+        );
+        b.new_batteries = true;
+        assert!(estimate_text(&b).unwrap().starts_with("new batteries"));
+        assert_eq!(age_text(None), "—");
+        assert_eq!(age_text(Some(12)), "12 s ago");
+        assert_eq!(age_text(Some(300)), "5 min ago");
+        assert_eq!(age_text(Some(7200)), "2 h ago");
+        assert_eq!(age_text(Some(3 * 86_400)), "3 d ago");
     }
 
     #[test]
@@ -189,8 +247,11 @@ mod tests {
         assert_eq!(voltage_level(2.9), Level::Good);
         assert_eq!(voltage_level(2.5), Level::Warn);
         assert_eq!(voltage_level(2.3), Level::Bad);
-        assert_eq!(rssi_level(Some(-59)), Level::Good);
-        assert_eq!(rssi_level(Some(-85)), Level::Bad);
+        assert_eq!(rssi_level(Some(0)), Level::Good);
+        assert_eq!(rssi_level(Some(-5)), Level::Good);
+        assert_eq!(rssi_level(Some(-9)), Level::Warn);
+        assert_eq!(rssi_level(Some(-40)), Level::Bad);
+        assert_ne!(rssi_bars(Some(0)), rssi_bars(Some(-40)));
     }
 
     #[test]

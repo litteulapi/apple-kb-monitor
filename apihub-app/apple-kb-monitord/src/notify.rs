@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use akm_core::alerts::{Crossing, Urgency};
 use akm_core::batteries::Replacement;
+use akm_core::chemistry::AlertBasis;
 use akm_core::link::{self, LinkEvent};
 use zbus::zvariant::Value;
 
@@ -145,17 +146,23 @@ pub fn low_battery(pct: f64) {
     send(&s, &b, "battery-caution");
 }
 
-/// Text and icon of a threshold alert (#82).
-pub fn crossing_text(c: &Crossing) -> (String, String, &'static str) {
+/// Text and icon of a threshold alert (#82). The wording says what the figure
+/// is (#178): the charge estimated from the voltage and the declared
+/// chemistry, or the keyboard's own indication (not a linear charge).
+pub fn crossing_text(c: &Crossing, basis: AlertBasis) -> (String, String, &'static str) {
     let (summary, _) = low_battery_text(c.pct);
+    let what = match basis {
+        AlertBasis::Estimate => "Estimated charge",
+        AlertBasis::Firmware => "Keyboard indication",
+    };
     let body = if c.urgency == Urgency::Critical {
         format!(
-            "Battery at {:.0}% \u{2014} replace the batteries now",
+            "{what} {:.0}% \u{2014} replace the batteries now",
             c.pct
         )
     } else {
         format!(
-            "Battery at {:.0}% (below {}%) \u{2014} plan to replace the batteries",
+            "{what} {:.0}% (below {}%) \u{2014} plan to replace the batteries",
             c.pct, c.threshold
         )
     };
@@ -167,8 +174,8 @@ pub fn crossing_text(c: &Crossing) -> (String, String, &'static str) {
     (summary, body, icon)
 }
 
-pub fn battery_crossing(c: &Crossing) {
-    let (s, b, icon) = crossing_text(c);
+pub fn battery_crossing(c: &Crossing, basis: AlertBasis) {
+    let (s, b, icon) = crossing_text(c, basis);
     send_with(&s, &b, icon, c.urgency, false);
 }
 
@@ -210,10 +217,14 @@ mod tests {
             pct: 29.6,
             urgency: Urgency::Normal,
         };
-        let (_, b, icon) = crossing_text(&c);
+        let (_, b, icon) = crossing_text(&c, AlertBasis::Firmware);
         assert_eq!(
             b,
-            "Battery at 30% (below 30%) \u{2014} plan to replace the batteries"
+            "Keyboard indication 30% (below 30%) \u{2014} plan to replace the batteries"
+        );
+        assert_eq!(
+            crossing_text(&c, AlertBasis::Estimate).1,
+            "Estimated charge 30% (below 30%) \u{2014} plan to replace the batteries"
         );
         assert_eq!(icon, "battery-caution");
         let c = Crossing {
@@ -221,7 +232,9 @@ mod tests {
             pct: 4.0,
             urgency: Urgency::Critical,
         };
-        assert!(crossing_text(&c).1.contains("replace the batteries now"));
+        assert!(crossing_text(&c, AlertBasis::Estimate)
+            .1
+            .contains("replace the batteries now"));
         let r = Replacement {
             ts: 0,
             pct_before: Some(3.0),

@@ -216,15 +216,23 @@ impl DbusmenuServer {
             if let Some(ref kb) = snap.keyboard {
                 let pct = kb.battery_pct().unwrap_or(0.0);
                 // Measured voltage (reports 0x46/0xFF), rounded to 0.01 V.
-                let label = match kb.battery.voltage {
-                    Some(v) => format!("Battery: {:.0}%  ({})", pct, crate::view::volts_text(v)),
-                    None => format!("Battery: {:.0}%", pct),
+                let mut label = match kb.battery.voltage {
+                    Some(v) => format!(
+                        "Keyboard indication: {:.0}%  ({})",
+                        pct,
+                        crate::view::volts_text(v)
+                    ),
+                    None => format!("Keyboard indication: {:.0}%", pct),
                 };
+                if let Some(e) = crate::view::estimate_text(&kb.battery) {
+                    label += &format!("  \u{b7}  estimate {e}");
+                }
                 root_children.push(info_item(menu_id::INFO_BATTERY, label));
-                if let Some(ref rssi) = kb.radio.rssi_dbm {
+                // Relative BR/EDR value, no unit (#174).
+                if let Some(rssi) = kb.radio.rel_db() {
                     root_children.push(info_item(
                         menu_id::INFO_RSSI,
-                        format!("RSSI: {} dBm", rssi),
+                        format!("Signal: {}", crate::view::rssi_text(Some(rssi))),
                     ));
                 }
                 let caps = if snap.caps_lock { "ON" } else { "off" };

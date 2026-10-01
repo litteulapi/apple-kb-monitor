@@ -89,11 +89,11 @@ impl Detector {
             .reduce(f64::min);
         let voltage_before = base
             .iter()
-            .filter_map(|p| p.voltage)
+            .filter_map(|p| p.reliable_voltage())
             .filter(|v| crate::history::VOLTAGE_RANGE.contains(v))
             .reduce(f64::min);
         let pct_rise = pct_before.is_some_and(|b| e.pct - b >= MIN_PCT_RISE);
-        let mv_rise = matches!((voltage_before, e.voltage), (Some(b), Some(a)) if (a - b) * 1000.0 >= MIN_MV_RISE - 1e-6);
+        let mv_rise = matches!((voltage_before, e.reliable_voltage()), (Some(b), Some(a)) if (a - b) * 1000.0 >= MIN_MV_RISE - 1e-6);
         let marked = e.event == Some(HistoryEvent::BatteryReplaced);
         let cooling = self
             .last_replacement
@@ -103,7 +103,7 @@ impl Detector {
             pct_before,
             pct_after: e.pct,
             voltage_before,
-            voltage_after: e.voltage,
+            voltage_after: e.reliable_voltage(),
         })
     }
 
@@ -173,8 +173,8 @@ pub fn battery_sets(entries: &[HistoryEntry]) -> Vec<BatterySet> {
             Some(cur) if !replaced => {
                 cur.last_ts = e.ts;
                 cur.last_pct = e.pct;
-                if e.voltage.is_some() {
-                    cur.last_voltage = e.voltage;
+                if e.reliable_voltage().is_some() {
+                    cur.last_voltage = e.reliable_voltage();
                 }
                 cur.duration_s = cur.last_ts - cur.start_ts;
             }
@@ -190,8 +190,8 @@ pub fn battery_sets(entries: &[HistoryEntry]) -> Vec<BatterySet> {
                     ended: false,
                     start_pct: e.pct,
                     last_pct: e.pct,
-                    start_voltage: e.voltage,
-                    last_voltage: e.voltage,
+                    start_voltage: e.reliable_voltage(),
+                    last_voltage: e.reliable_voltage(),
                     duration_s: 0,
                 });
             }
@@ -247,12 +247,32 @@ mod tests {
     const T0: u64 = 1_790_000_000;
 
     fn e(ts: u64, pct: f64, v: Option<f64>) -> HistoryEntry {
-        HistoryEntry {
-            ts,
-            pct,
-            voltage: v,
-            event: None,
-        }
+        HistoryEntry::sample(ts, pct, v)
+    }
+
+    #[test]
+    fn legacy_voltage_never_triggers_nor_feeds_a_replacement() {
+        // #180: the legacy `voltage` was a constant (or its jump an artefact of
+        // the ADC byte), never a measurement.
+        let legacy = |ts, pct, v| {
+            let mut x = e(ts, pct, Some(v));
+            x.voltage_valid = Some(false);
+            x
+        };
+        let mut d = Detector::new();
+        assert!(d.observe(&legacy(T0, 50.0, 2.50)).is_none());
+        // +0.6 V on a flat percentage: no replacement from an unreliable voltage.
+        assert!(d.observe(&legacy(T0 + 300, 50.0, 3.10)).is_none());
+        // Reliable lines still detect the jump and report their voltages.
+        let mut d = Detector::new();
+        assert!(d.observe(&e(T0, 50.0, Some(2.50))).is_none());
+        let r = d.observe(&e(T0 + 300, 50.0, Some(3.10))).unwrap();
+        assert_eq!(r.voltage_after, Some(3.10));
+        // A replacement seen from a legacy line carries no voltage.
+        let mut d = Detector::new();
+        d.observe(&legacy(T0, 12.0, 2.50));
+        let r = d.observe(&legacy(T0 + 300, 99.0, 3.0)).unwrap();
+        assert_eq!((r.voltage_before, r.voltage_after), (None, None));
     }
 
     #[test]
