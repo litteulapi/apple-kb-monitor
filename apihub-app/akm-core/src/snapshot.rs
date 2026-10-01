@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::forecast::{format_days, Forecast};
 use crate::report::KbReport;
 
 /// Version of the JSON schema of [`Snapshot`] (D-Bus `Json` property, `--json`).
@@ -35,6 +36,10 @@ pub struct Snapshot {
     pub last_update: u64,
     /// Last internal error (acquisition, BlueZ provider...), if any.
     pub last_error: Option<String>,
+    /// Autonomy forecast from the history (#83); None = unavailable.
+    pub forecast: Option<Forecast>,
+    /// Unix time the current batteries were installed (#85), if detected.
+    pub batteries_installed_at: Option<u64>,
 }
 
 impl Default for Snapshot {
@@ -51,6 +56,8 @@ impl Default for Snapshot {
             rssi_at: None,
             last_update: 0,
             last_error: None,
+            forecast: None,
+            batteries_installed_at: None,
         }
     }
 }
@@ -79,14 +86,30 @@ impl Snapshot {
         self.rssi_at.map(|t| now.saturating_sub(t))
     }
 
+    /// Seconds of autonomy left at unix time `now` (None = unavailable).
+    pub fn remaining_s(&self, now: u64) -> Option<u64> {
+        self.forecast.as_ref().map(|f| f.remaining_s(now))
+    }
+
     /// Tray tooltip; "n/a" instead of an invented 0 when the source is absent.
     pub fn tooltip_text(&self) -> String {
-        format!(
+        let now = crate::history::Clock::now(&crate::history::SystemClock);
+        self.tooltip_text_at(now)
+    }
+
+    /// [`Self::tooltip_text`] at a given unix time (testable).
+    pub fn tooltip_text_at(&self, now: u64) -> String {
+        let mut t = format!(
             "Apple Keyboard \u{2014} Battery: {}",
             self.battery_pct()
                 .map(|p| format!("{:.0}%", p))
                 .unwrap_or_else(|| "n/a".into())
-        )
+        );
+        if let (Some(_), Some(r)) = (self.battery_pct(), self.remaining_s(now)) {
+            t.push_str(" \u{2014} ");
+            t.push_str(&format_days(r));
+        }
+        t
     }
 
     /// Same content, ignoring the publication counter.
@@ -168,6 +191,24 @@ mod tests {
         assert!(t.contains("n/a"));
         assert!(!t.contains("0%"));
         assert!(with_battery(90.0).tooltip_text().contains("90%"));
+    }
+
+    #[test]
+    fn tooltip_shows_the_forecast_when_known() {
+        let mut s = with_battery(41.0);
+        s.forecast = Some(Forecast {
+            rate_pct_per_day: 1.0,
+            empty_at: 1_000 + 41 * 86_400,
+            fitted_pct: 41.0,
+            span_s: 0,
+            buckets: 0,
+        });
+        assert_eq!(s.remaining_s(1_000), Some(41 * 86_400));
+        assert_eq!(
+            s.tooltip_text_at(1_000),
+            "Apple Keyboard \u{2014} Battery: 41% \u{2014} \u{2248} 41 days left"
+        );
+        assert_eq!(Snapshot::default().remaining_s(0), None);
     }
 
     #[test]
