@@ -88,7 +88,7 @@ l'hôte peut aussi l'appeler quand il est éveillé **[source]** `hid_reconnecti
 
 ### 3.5 Effet de nos propres lectures et d'UPower sur la veille du clavier
 
-Capture btmon passive (lecture seule, 11:37 → 12:27) **[mesuré]** :
+Capture btmon passive (lecture seule, 11:37 → 12:27 ; brute supprimée car elle contient les frappes) **[mesuré]** :
 
 | Émetteur | Requêtes radio | Cadence |
 |---|---|---|
@@ -109,7 +109,7 @@ Capture btmon passive (lecture seule, 11:37 → 12:27) **[mesuré]** :
 
 ### 3.6 Perte de lien capturée en direct (2026-10-01 12:13)
 
-Pendant la capture btmon passive, le lien est tombé **[mesuré]** (`btmon1.snoop`, trames #31 516-31 561) :
+Pendant la capture btmon passive, le lien est tombé **[mesuré]** (extrait assaini sans aucune frappe : `docs/captures/2026-10-01-coupure-12h13.txt`) :
 
 | Heure | Trame | Fait |
 |---|---|---|

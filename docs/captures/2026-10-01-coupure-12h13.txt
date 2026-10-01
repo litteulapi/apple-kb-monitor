@@ -1,0 +1,933 @@
+# btmon -T, 2026-10-01 12:12:55-12:16:40, A1314 04:DB:56:CA:42:EE / AX201 hci0.
+# Extrait assaini : les rapports d'entrée du clavier (a1 ..., frappes) sont supprimés (0 blocs).
+# Voir docs/RECONNEXION-PAIRAGE.md §3.6.
+< ACL: Handle 256 flags 0x00 dlen 6    #31354 [hci0] 2026-10-01 12:12:57.251977
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 47                                            CG              
+< HCI Command:.. (0x02|0x0004) plen 2  #31355 [hci0] 2026-10-01 12:12:57.251999
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31356 [hci0] 2026-10-01 12:12:57.252974
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31357 [hci0] 2026-10-01 12:12:57.579954
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 7    #31358 [hci0] 2026-10-01 12:12:58.081541
+      Channel: 65 len 3 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 47 62                                         .Gb             
+< ACL: Handle 256 flags 0x00 dlen 6    #31359 [hci0] 2026-10-01 12:12:58.081729
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 46                                            CF              
+> HCI Event: Number o.. (0x13) plen 5  #31360 [hci0] 2026-10-01 12:12:58.090983
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> HCI Event: Mode Cha.. (0x14) plen 6  #31361 [hci0] 2026-10-01 12:12:58.092980
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> ACL: Handle 256 flags 0x02 dlen 8    #31362 [hci0] 2026-10-01 12:12:58.096506
+      Channel: 65 len 4 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 46 aa 0b                                      .F..            
+> HCI Event: Mode Cha.. (0x14) plen 6  #31363 [hci0] 2026-10-01 12:12:58.122971
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31364 [hci0] 2026-10-01 12:12:58.496792
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 ff                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31365 [hci0] 2026-10-01 12:12:58.496808
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31366 [hci0] 2026-10-01 12:12:58.497957
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31367 [hci0] 2026-10-01 12:12:58.504961
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 9    #31368 [hci0] 2026-10-01 12:12:58.518506
+      Channel: 65 len 5 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 ff 0b aa 01                                   .....           
+> HCI Event: Mode Cha.. (0x14) plen 6  #31369 [hci0] 2026-10-01 12:12:58.532990
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31370 [hci0] 2026-10-01 12:12:58.559988
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31371 [hci0] 2026-10-01 12:12:58.918787
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 49                                            CI              
+< HCI Command:.. (0x02|0x0004) plen 2  #31372 [hci0] 2026-10-01 12:12:58.918807
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31373 [hci0] 2026-10-01 12:12:58.919962
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31374 [hci0] 2026-10-01 12:12:58.929972
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 8    #31375 [hci0] 2026-10-01 12:12:58.943498
+      Channel: 65 len 4 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 49 81 0b                                      .I..            
+> HCI Event: Mode Cha.. (0x14) plen 6  #31376 [hci0] 2026-10-01 12:12:58.957965
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31377 [hci0] 2026-10-01 12:12:58.984966
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31378 [hci0] 2026-10-01 12:12:59.343733
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 47                                            CG              
+< HCI Command:.. (0x02|0x0004) plen 2  #31379 [hci0] 2026-10-01 12:12:59.343751
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31380 [hci0] 2026-10-01 12:12:59.344965
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31381 [hci0] 2026-10-01 12:12:59.354987
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 7    #31382 [hci0] 2026-10-01 12:12:59.370134
+      Channel: 65 len 3 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 47 62                                         .Gb             
+> HCI Event: Mode Cha.. (0x14) plen 6  #31383 [hci0] 2026-10-01 12:12:59.382965
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31384 [hci0] 2026-10-01 12:12:59.409971
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31385 [hci0] 2026-10-01 12:12:59.770432
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 ea                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31386 [hci0] 2026-10-01 12:12:59.770452
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31387 [hci0] 2026-10-01 12:12:59.771000
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31388 [hci0] 2026-10-01 12:12:59.779997
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 7    #31389 [hci0] 2026-10-01 12:12:59.793504
+      Channel: 65 len 3 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 ea 62                                         ..b             
+> HCI Event: Mode Cha.. (0x14) plen 6  #31390 [hci0] 2026-10-01 12:12:59.808001
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31391 [hci0] 2026-10-01 12:12:59.840001
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31392 [hci0] 2026-10-01 12:13:00.193770
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 09                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31393 [hci0] 2026-10-01 12:13:00.193792
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31394 [hci0] 2026-10-01 12:13:00.194964
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31395 [hci0] 2026-10-01 12:13:00.205003
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 9    #31396 [hci0] 2026-10-01 12:13:00.218990
+      Channel: 65 len 5 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 09 01 00 00                                   .....           
+> HCI Event: Mode Cha.. (0x14) plen 6  #31397 [hci0] 2026-10-01 12:13:00.232966
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31398 [hci0] 2026-10-01 12:13:00.259980
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31399 [hci0] 2026-10-01 12:13:00.619332
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 4a                                            CJ              
+< HCI Command:.. (0x02|0x0004) plen 2  #31400 [hci0] 2026-10-01 12:13:00.619352
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31401 [hci0] 2026-10-01 12:13:00.619977
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31402 [hci0] 2026-10-01 12:13:00.629971
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> HCI Event: Mode Cha.. (0x14) plen 6  #31403 [hci0] 2026-10-01 12:13:00.654980
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> ACL: Handle 256 flags 0x02 dlen 7    #31404 [hci0] 2026-10-01 12:13:00.659492
+      Channel: 65 len 3 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 4a 12                                         .J.             
+> HCI Event: Mode Cha.. (0x14) plen 6  #31405 [hci0] 2026-10-01 12:13:00.689982
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31406 [hci0] 2026-10-01 12:13:01.059819
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 4b                                            CK              
+< HCI Command:.. (0x02|0x0004) plen 2  #31407 [hci0] 2026-10-01 12:13:01.059835
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31408 [hci0] 2026-10-01 12:13:01.061013
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31409 [hci0] 2026-10-01 12:13:01.067978
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> HCI Event: Mode Cha.. (0x14) plen 6  #31410 [hci0] 2026-10-01 12:13:01.093015
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> ACL: Handle 256 flags 0x02 dlen 8    #31411 [hci0] 2026-10-01 12:13:01.096499
+      Channel: 65 len 4 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 4b 00 08                                      .K..            
+> HCI Event: Mode Cha.. (0x14) plen 6  #31412 [hci0] 2026-10-01 12:13:01.127994
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31413 [hci0] 2026-10-01 12:13:01.496717
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 4f                                            CO              
+< HCI Command:.. (0x02|0x0004) plen 2  #31414 [hci0] 2026-10-01 12:13:01.496737
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31415 [hci0] 2026-10-01 12:13:01.497980
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31416 [hci0] 2026-10-01 12:13:01.504980
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 8    #31417 [hci0] 2026-10-01 12:13:01.519010
+      Channel: 65 len 4 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 4f 50 00                                      .OP.            
+> HCI Event: Mode Cha.. (0x14) plen 6  #31418 [hci0] 2026-10-01 12:13:01.532996
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31419 [hci0] 2026-10-01 12:13:01.559993
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31420 [hci0] 2026-10-01 12:13:01.919300
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 51                                            CQ              
+< HCI Command:.. (0x02|0x0004) plen 2  #31421 [hci0] 2026-10-01 12:13:01.919319
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31422 [hci0] 2026-10-01 12:13:01.920023
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31423 [hci0] 2026-10-01 12:13:01.929988
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 14   #31424 [hci0] 2026-10-01 12:13:01.943505
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 51 43 6c 61 76 69 65 72 20                    .QClavier       
+> HCI Event: Mode Cha.. (0x14) plen 6  #31425 [hci0] 2026-10-01 12:13:01.958000
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31426 [hci0] 2026-10-01 12:13:01.990999
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31427 [hci0] 2026-10-01 12:13:02.343820
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 52                                            CR              
+< HCI Command:.. (0x02|0x0004) plen 2  #31428 [hci0] 2026-10-01 12:13:02.343839
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31429 [hci0] 2026-10-01 12:13:02.345001
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31430 [hci0] 2026-10-01 12:13:02.368005
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> HCI Event: Mode Cha.. (0x14) plen 6  #31431 [hci0] 2026-10-01 12:13:02.392991
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> ACL: Handle 256 flags 0x02 dlen 14   #31432 [hci0] 2026-10-01 12:13:02.396534
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 52 64 65 20 6d 61 72 69 61                    .Rde maria      
+> HCI Event: Mode Cha.. (0x14) plen 6  #31433 [hci0] 2026-10-01 12:13:02.427993
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31434 [hci0] 2026-10-01 12:13:02.796789
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 53                                            CS              
+< HCI Command:.. (0x02|0x0004) plen 2  #31435 [hci0] 2026-10-01 12:13:02.796809
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31436 [hci0] 2026-10-01 12:13:02.797995
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31437 [hci0] 2026-10-01 12:13:02.805024
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 14   #31438 [hci0] 2026-10-01 12:13:02.818501
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 53 20 23 31 00 00 00 00 00                    .S #1.....      
+> HCI Event: Mode Cha.. (0x14) plen 6  #31439 [hci0] 2026-10-01 12:13:02.833997
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31440 [hci0] 2026-10-01 12:13:02.861995
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31441 [hci0] 2026-10-01 12:13:03.218758
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 54                                            CT              
+< HCI Command:.. (0x02|0x0004) plen 2  #31442 [hci0] 2026-10-01 12:13:03.218777
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31443 [hci0] 2026-10-01 12:13:03.219996
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31444 [hci0] 2026-10-01 12:13:03.230015
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 14   #31445 [hci0] 2026-10-01 12:13:03.243492
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 54 00 00 00 00 00 00 00 00                    .T........      
+> HCI Event: Mode Cha.. (0x14) plen 6  #31446 [hci0] 2026-10-01 12:13:03.258003
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31447 [hci0] 2026-10-01 12:13:03.287016
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31448 [hci0] 2026-10-01 12:13:03.643741
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 5a                                            CZ              
+< HCI Command:.. (0x02|0x0004) plen 2  #31449 [hci0] 2026-10-01 12:13:03.643756
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31450 [hci0] 2026-10-01 12:13:03.645016
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31451 [hci0] 2026-10-01 12:13:03.655024
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> HCI Event: Mode Cha.. (0x14) plen 6  #31452 [hci0] 2026-10-01 12:13:03.683013
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> ACL: Handle 256 flags 0x02 dlen 14   #31453 [hci0] 2026-10-01 12:13:03.684508
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 5a 0b 8a 09 ca 09 64 08 06                    .Z.....d..      
+> HCI Event: Mode Cha.. (0x14) plen 6  #31454 [hci0] 2026-10-01 12:13:03.715004
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31455 [hci0] 2026-10-01 12:13:04.084765
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 5b                                            C[              
+< HCI Command:.. (0x02|0x0004) plen 2  #31456 [hci0] 2026-10-01 12:13:04.084781
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31457 [hci0] 2026-10-01 12:13:04.086011
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31458 [hci0] 2026-10-01 12:13:04.093023
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 14   #31459 [hci0] 2026-10-01 12:13:04.107048
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 5b 06 cc 03 84 00 00 00 00                    .[........      
+> HCI Event: Mode Cha.. (0x14) plen 6  #31460 [hci0] 2026-10-01 12:13:04.120029
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31461 [hci0] 2026-10-01 12:13:04.153013
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31462 [hci0] 2026-10-01 12:13:04.507282
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 5c                                            C\              
+< HCI Command:.. (0x02|0x0004) plen 2  #31463 [hci0] 2026-10-01 12:13:04.507301
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31464 [hci0] 2026-10-01 12:13:04.508012
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31465 [hci0] 2026-10-01 12:13:04.518015
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 14   #31466 [hci0] 2026-10-01 12:13:04.531491
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 5c 00 00 00 00 00 00 00 00                    .\........      
+> HCI Event: Mode Cha.. (0x14) plen 6  #31467 [hci0] 2026-10-01 12:13:04.545028
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31468 [hci0] 2026-10-01 12:13:04.573025
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31469 [hci0] 2026-10-01 12:13:04.931708
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 5d                                            C]              
+< HCI Command:.. (0x02|0x0004) plen 2  #31470 [hci0] 2026-10-01 12:13:04.931738
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31471 [hci0] 2026-10-01 12:13:04.933050
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31472 [hci0] 2026-10-01 12:13:04.943021
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 14   #31473 [hci0] 2026-10-01 12:13:04.956490
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 5d 00 00 00 00 00 00 00 00                    .]........      
+> HCI Event: Mode Cha.. (0x14) plen 6  #31474 [hci0] 2026-10-01 12:13:04.970031
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31475 [hci0] 2026-10-01 12:13:04.998017
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31476 [hci0] 2026-10-01 12:13:05.356770
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 60                                            C`              
+< HCI Command:.. (0x02|0x0004) plen 2  #31477 [hci0] 2026-10-01 12:13:05.356789
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31478 [hci0] 2026-10-01 12:13:05.358027
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31479 [hci0] 2026-10-01 12:13:05.368032
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 14   #31480 [hci0] 2026-10-01 12:13:05.381492
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 60 0b 8a 09 ca 09 64 08 06                    .`.....d..      
+> HCI Event: Mode Cha.. (0x14) plen 6  #31481 [hci0] 2026-10-01 12:13:05.395030
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31482 [hci0] 2026-10-01 12:13:05.423028
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31483 [hci0] 2026-10-01 12:13:05.781734
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 d1                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31484 [hci0] 2026-10-01 12:13:05.781749
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31485 [hci0] 2026-10-01 12:13:05.783032
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31486 [hci0] 2026-10-01 12:13:05.793028
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 7    #31487 [hci0] 2026-10-01 12:13:05.806494
+      Channel: 65 len 3 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 d1 00                                         ...             
+> HCI Event: Mode Cha.. (0x14) plen 6  #31488 [hci0] 2026-10-01 12:13:05.821036
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31489 [hci0] 2026-10-01 12:13:05.848028
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31490 [hci0] 2026-10-01 12:13:06.206740
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 d8                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31491 [hci0] 2026-10-01 12:13:06.206756
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31492 [hci0] 2026-10-01 12:13:06.208069
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31493 [hci0] 2026-10-01 12:13:06.218048
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> HCI Event: Mode Cha.. (0x14) plen 6  #31494 [hci0] 2026-10-01 12:13:06.243049
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> ACL: Handle 256 flags 0x02 dlen 7    #31495 [hci0] 2026-10-01 12:13:06.247500
+      Channel: 65 len 3 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 d8 00                                         ...             
+> HCI Event: Mode Cha.. (0x14) plen 6  #31496 [hci0] 2026-10-01 12:13:06.273035
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31497 [hci0] 2026-10-01 12:13:06.647782
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 eb                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31498 [hci0] 2026-10-01 12:13:06.647807
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31499 [hci0] 2026-10-01 12:13:06.649040
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31500 [hci0] 2026-10-01 12:13:06.655041
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 14   #31501 [hci0] 2026-10-01 12:13:06.668517
+      Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 eb 0b 8a 09 ca 09 64 08 06                    .......d..      
+> HCI Event: Mode Cha.. (0x14) plen 6  #31502 [hci0] 2026-10-01 12:13:06.683057
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31503 [hci0] 2026-10-01 12:13:06.710034
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31504 [hci0] 2026-10-01 12:13:07.068807
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 f4                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31505 [hci0] 2026-10-01 12:13:07.068837
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31506 [hci0] 2026-10-01 12:13:07.070051
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31507 [hci0] 2026-10-01 12:13:07.080057
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 8    #31508 [hci0] 2026-10-01 12:13:07.093501
+      Channel: 65 len 4 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 f4 06 cc                                      ....            
+> HCI Event: Mode Cha.. (0x14) plen 6  #31509 [hci0] 2026-10-01 12:13:07.108053
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31510 [hci0] 2026-10-01 12:13:07.135048
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31511 [hci0] 2026-10-01 12:13:07.493808
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 f5                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31512 [hci0] 2026-10-01 12:13:07.493826
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31513 [hci0] 2026-10-01 12:13:07.495045
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31514 [hci0] 2026-10-01 12:13:07.505051
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> ACL: Handle 256 flags 0x02 dlen 8    #31515 [hci0] 2026-10-01 12:13:07.518492
+      Channel: 65 len 4 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 f5 03 84                                      ....            
+> HCI Event: Mode Cha.. (0x14) plen 6  #31516 [hci0] 2026-10-01 12:13:07.533079
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Mode Cha.. (0x14) plen 6  #31517 [hci0] 2026-10-01 12:13:07.560054
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31518 [hci0] 2026-10-01 12:13:07.918743
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 f6                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31519 [hci0] 2026-10-01 12:13:07.918763
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31520 [hci0] 2026-10-01 12:13:07.920085
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31521 [hci0] 2026-10-01 12:13:07.955054
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> HCI Event: Mode Cha.. (0x14) plen 6  #31522 [hci0] 2026-10-01 12:13:07.956050
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> ACL: Handle 256 flags 0x02 dlen 8    #31523 [hci0] 2026-10-01 12:13:07.958665
+      Channel: 65 len 4 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 f6 00 04                                      ....            
+> HCI Event: Mode Cha.. (0x14) plen 6  #31524 [hci0] 2026-10-01 12:13:07.987052
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31525 [hci0] 2026-10-01 12:13:08.358947
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 f7                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31526 [hci0] 2026-10-01 12:13:08.358975
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31527 [hci0] 2026-10-01 12:13:08.360060
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31528 [hci0] 2026-10-01 12:13:08.368088
+        Num handles: 1
+        Handle: 256
+        Count: 1
+> HCI Event: Mode Cha.. (0x14) plen 6  #31529 [hci0] 2026-10-01 12:13:08.395089
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> ACL: Handle 256 flags 0x02 dlen 8    #31530 [hci0] 2026-10-01 12:13:08.397493
+      Channel: 65 len 4 [PSM 0 mode Basic (0x00)] {chan 65535}
+        a3 f7 00 04                                      ....            
+> HCI Event: Mode Cha.. (0x14) plen 6  #31531 [hci0] 2026-10-01 12:13:08.425069
+        Status: Success (0x00)
+        Handle: 256
+        Mode: Sniff (0x02)
+        Interval: 12.500 msec (0x0014)
+< ACL: Handle 256 flags 0x00 dlen 6    #31532 [hci0] 2026-10-01 12:13:08.797751
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 fe                                            C.              
+< HCI Command:.. (0x02|0x0004) plen 2  #31533 [hci0] 2026-10-01 12:13:08.797771
+        Handle: 256
+> HCI Event: Command... (0x0f) plen 4  #31534 [hci0] 2026-10-01 12:13:08.799062
+      Exit Sniff Mode (0x02|0x0004) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Number o.. (0x13) plen 5  #31535 [hci0] 2026-10-01 12:13:08.805077
+        Num handles: 1
+        Handle: 256
+        Count: 1
+= bluetoothd: profiles/input/device.c:hidp_repor..   2026-10-01 12:13:12.083257
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:13:20.621966
+= bluetoothd: Adv Monitor app :1.704 disc..   [hci0] 2026-10-01 12:13:20.622486
+< ACL: Handle 256 flags 0x00 dlen 6    #31536 [hci0] 2026-10-01 12:13:21.599708
+      Channel: 65 len 2 [PSM 0 mode Basic (0x00)] {chan 65535}
+        43 47                                            CG              
+= bluetoothd: profiles/input/device.c:hidp_repor..   2026-10-01 12:13:25.071589
+> HCI Event: Mode Cha.. (0x14) plen 6  #31537 [hci0] 2026-10-01 12:13:28.822273
+        Status: Connection Timeout (0x08)
+        Handle: 256
+        Mode: Active (0x00)
+        Interval: 0.000 msec (0x0000)
+> HCI Event: Disconne.. (0x05) plen 4  #31538 [hci0] 2026-10-01 12:13:28.823260
+        Status: Success (0x00)
+        Handle: 256
+        Reason: Connection Timeout (0x08)
+@ MGMT Event: Dev.. (0x000c) plen 8  {0x0001} [hci0] 2026-10-01 12:13:28.823278
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Reason: Connection timeout (0x01)
+< HCI Command:.. (0x03|0x001a) plen 1  #31539 [hci0] 2026-10-01 12:13:28.850598
+        Scan enable: Page Scan (0x02)
+> HCI Event: Command... (0x0e) plen 4  #31540 [hci0] 2026-10-01 12:13:28.851266
+      Write Scan Enable (0x03|0x001a) ncmd 2
+        Status: Success (0x00)
+< HCI Command.. (0x01|0x0005) plen 13  #31541 [hci0] 2026-10-01 12:13:30.071573
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Packet type: 0xcc18
+          DM1 may be used
+          DH1 may be used
+          DM3 may be used
+          DH3 may be used
+          DM5 may be used
+          DH5 may be used
+        Page scan repetition mode: R2 (0x02)
+        Page scan mode: Mandatory (0x00)
+        Clock offset: 0x0000
+        Role switch: Allow peripheral (0x01)
+> HCI Event: Command... (0x0f) plen 4  #31542 [hci0] 2026-10-01 12:13:30.072274
+      Create Connection (0x01|0x0005) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Connect.. (0x03) plen 11  #31543 [hci0] 2026-10-01 12:13:35.194340
+        Status: Page Timeout (0x04)
+        Handle: 65535
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Link type: ACL (0x01)
+        Encryption: Disabled (0x00)
+@ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:13:35.194368
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Status: Connect Failed (0x04)
+= bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:13:35.194573
+< HCI Command.. (0x01|0x0005) plen 13  #31544 [hci0] 2026-10-01 12:13:37.072572
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Packet type: 0xcc18
+          DM1 may be used
+          DH1 may be used
+          DM3 may be used
+          DH3 may be used
+          DM5 may be used
+          DH5 may be used
+        Page scan repetition mode: R2 (0x02)
+        Page scan mode: Mandatory (0x00)
+        Clock offset: 0x0000
+        Role switch: Allow peripheral (0x01)
+> HCI Event: Command... (0x0f) plen 4  #31545 [hci0] 2026-10-01 12:13:37.073347
+      Create Connection (0x01|0x0005) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Connect.. (0x03) plen 11  #31546 [hci0] 2026-10-01 12:13:42.194421
+        Status: Page Timeout (0x04)
+        Handle: 65535
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Link type: ACL (0x01)
+        Encryption: Disabled (0x00)
+@ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:13:42.194452
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Status: Connect Failed (0x04)
+= bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:13:42.194583
+< HCI Command.. (0x01|0x0005) plen 13  #31547 [hci0] 2026-10-01 12:13:46.071658
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Packet type: 0xcc18
+          DM1 may be used
+          DH1 may be used
+          DM3 may be used
+          DH3 may be used
+          DM5 may be used
+          DH5 may be used
+        Page scan repetition mode: R2 (0x02)
+        Page scan mode: Mandatory (0x00)
+        Clock offset: 0x0000
+        Role switch: Allow peripheral (0x01)
+> HCI Event: Command... (0x0f) plen 4  #31548 [hci0] 2026-10-01 12:13:46.165475
+      Create Connection (0x01|0x0005) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Connect.. (0x03) plen 11  #31549 [hci0] 2026-10-01 12:13:51.286526
+        Status: Page Timeout (0x04)
+        Handle: 65535
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Link type: ACL (0x01)
+        Encryption: Disabled (0x00)
+@ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:13:51.286547
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Status: Connect Failed (0x04)
+= bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:13:51.286745
+< HCI Command.. (0x01|0x0005) plen 13  #31550 [hci0] 2026-10-01 12:13:59.071626
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Packet type: 0xcc18
+          DM1 may be used
+          DH1 may be used
+          DM3 may be used
+          DH3 may be used
+          DM5 may be used
+          DH5 may be used
+        Page scan repetition mode: R2 (0x02)
+        Page scan mode: Mandatory (0x00)
+        Clock offset: 0x0000
+        Role switch: Allow peripheral (0x01)
+= bluetoothd: src/service.c:btd_service_connect(..   2026-10-01 12:13:59.071785
+= bluetoothd: plugins/policy.c:reconnect_timeout..   2026-10-01 12:13:59.071815
+> HCI Event: Command... (0x0f) plen 4  #31551 [hci0] 2026-10-01 12:13:59.166581
+      Create Connection (0x01|0x0005) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Connect.. (0x03) plen 11  #31552 [hci0] 2026-10-01 12:14:04.287632
+        Status: Page Timeout (0x04)
+        Handle: 65535
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Link type: ACL (0x01)
+        Encryption: Disabled (0x00)
+@ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:14:04.287648
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Status: Connect Failed (0x04)
+= bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:14:04.287874
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:14:18.956908
+= bluetoothd: Adv Monitor app :1.745 disc..   [hci0] 2026-10-01 12:14:18.957576
+< HCI Command.. (0x01|0x0005) plen 13  #31553 [hci0] 2026-10-01 12:14:29.071591
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Packet type: 0xcc18
+          DM1 may be used
+          DH1 may be used
+          DM3 may be used
+          DH3 may be used
+          DM5 may be used
+          DH5 may be used
+        Page scan repetition mode: R2 (0x02)
+        Page scan mode: Mandatory (0x00)
+        Clock offset: 0x0000
+        Role switch: Allow peripheral (0x01)
+> HCI Event: Command... (0x0f) plen 4  #31554 [hci0] 2026-10-01 12:14:29.165906
+      Create Connection (0x01|0x0005) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Connect.. (0x03) plen 11  #31555 [hci0] 2026-10-01 12:14:34.286944
+        Status: Page Timeout (0x04)
+        Handle: 65535
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Link type: ACL (0x01)
+        Encryption: Disabled (0x00)
+@ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:14:34.286982
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Status: Connect Failed (0x04)
+= bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:14:34.287168
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:14:52.434226
+= bluetoothd: Adv Monitor app :1.746 disc..   [hci0] 2026-10-01 12:14:52.434709
+< HCI Command.. (0x01|0x0005) plen 13  #31556 [hci0] 2026-10-01 12:14:59.071599
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Packet type: 0xcc18
+          DM1 may be used
+          DH1 may be used
+          DM3 may be used
+          DH3 may be used
+          DM5 may be used
+          DH5 may be used
+        Page scan repetition mode: R2 (0x02)
+        Page scan mode: Mandatory (0x00)
+        Clock offset: 0x0000
+        Role switch: Allow peripheral (0x01)
+> HCI Event: Command... (0x0f) plen 4  #31557 [hci0] 2026-10-01 12:14:59.165182
+      Create Connection (0x01|0x0005) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Connect.. (0x03) plen 11  #31558 [hci0] 2026-10-01 12:15:04.287236
+        Status: Page Timeout (0x04)
+        Handle: 65535
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Link type: ACL (0x01)
+        Encryption: Disabled (0x00)
+@ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:15:04.287268
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Status: Connect Failed (0x04)
+= bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:15:04.287461
+< HCI Command.. (0x01|0x0005) plen 13  #31559 [hci0] 2026-10-01 12:15:29.071576
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Packet type: 0xcc18
+          DM1 may be used
+          DH1 may be used
+          DM3 may be used
+          DH3 may be used
+          DM5 may be used
+          DH5 may be used
+        Page scan repetition mode: R2 (0x02)
+        Page scan mode: Mandatory (0x00)
+        Clock offset: 0x0000
+        Role switch: Allow peripheral (0x01)
+> HCI Event: Command... (0x0f) plen 4  #31560 [hci0] 2026-10-01 12:15:29.168478
+      Create Connection (0x01|0x0005) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Connect.. (0x03) plen 11  #31561 [hci0] 2026-10-01 12:15:34.289550
+        Status: Page Timeout (0x04)
+        Handle: 65535
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Link type: ACL (0x01)
+        Encryption: Disabled (0x00)
+@ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:15:34.289567
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Status: Connect Failed (0x04)
+= bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:15:34.289757
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:15:53.836992
+= bluetoothd: Adv Monitor app :1.765 disc..   [hci0] 2026-10-01 12:15:53.837366
+< HCI Command.. (0x01|0x0005) plen 13  #31562 [hci0] 2026-10-01 12:15:59.071599
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Packet type: 0xcc18
+          DM1 may be used
+          DH1 may be used
+          DM3 may be used
+          DH3 may be used
+          DM5 may be used
+          DH5 may be used
+        Page scan repetition mode: R2 (0x02)
+        Page scan mode: Mandatory (0x00)
+        Clock offset: 0x0000
+        Role switch: Allow peripheral (0x01)
+> HCI Event: Command... (0x0f) plen 4  #31563 [hci0] 2026-10-01 12:15:59.166762
+      Create Connection (0x01|0x0005) ncmd 1
+        Status: Success (0x00)
+> HCI Event: Connect.. (0x03) plen 11  #31564 [hci0] 2026-10-01 12:16:04.287835
+        Status: Page Timeout (0x04)
+        Handle: 65535
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Link type: ACL (0x01)
+        Encryption: Disabled (0x00)
+@ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:16:04.287871
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Status: Connect Failed (0x04)
+= bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:16:04.288060
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:07.060107
+= bluetoothd: Adv Monitor app :1.772 disc..   [hci0] 2026-10-01 12:16:07.060859
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:09.066668
+= bluetoothd: Adv Monitor app :1.774 disc..   [hci0] 2026-10-01 12:16:09.067094
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:11.072703
+= bluetoothd: Adv Monitor app :1.775 disc..   [hci0] 2026-10-01 12:16:11.073347
+= bluetoothd: Adv Monitor app :1.778 disc..   [hci0] 2026-10-01 12:16:13.079648
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:15.084617
+= bluetoothd: Adv Monitor app :1.779 disc..   [hci0] 2026-10-01 12:16:15.084977
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:17.090738
+= bluetoothd: Adv Monitor app :1.780 disc..   [hci0] 2026-10-01 12:16:17.091165
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:19.096634
+= bluetoothd: Adv Monitor app :1.781 disc..   [hci0] 2026-10-01 12:16:19.097070
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:21.102805
+= bluetoothd: Adv Monitor app :1.782 disc..   [hci0] 2026-10-01 12:16:21.103521
+< HCI Command.. (0x01|0x0005) plen 13  #31565 [hci0] 2026-10-01 12:16:29.071568
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Packet type: 0xcc18
+          DM1 may be used
+          DH1 may be used
+          DM3 may be used
+          DH3 may be used
+          DM5 may be used
+          DH5 may be used
+        Page scan repetition mode: R2 (0x02)
+        Page scan mode: Mandatory (0x00)
+        Clock offset: 0x0000
+        Role switch: Allow peripheral (0x01)
+> HCI Event: Command... (0x0f) plen 4  #31566 [hci0] 2026-10-01 12:16:29.166059
+      Create Connection (0x01|0x0005) ncmd 1
+        Status: Success (0x00)
+= bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:33.198759
+= bluetoothd: Adv Monitor app :1.792 disc..   [hci0] 2026-10-01 12:16:33.199221
+> HCI Event: Connect.. (0x03) plen 11  #31567 [hci0] 2026-10-01 12:16:34.287136
+        Status: Page Timeout (0x04)
+        Handle: 65535
+        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Link type: ACL (0x01)
+        Encryption: Disabled (0x00)
+@ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:16:34.287148
+        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Status: Connect Failed (0x04)
+= bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:16:34.287284
