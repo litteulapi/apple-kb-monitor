@@ -773,7 +773,8 @@ impl ApiHubApp {
 // ── Entrypoint ──────────────────────────────────────────────────────────────
 
 /// Open the window and block until it is closed. Returns false when it
-/// could not be opened (no display / GPU).
+/// could not be opened (no display / GPU). Called **once** per process:
+/// winit does not support a second event loop run reliably (#226).
 fn open_window(state: &State, raise: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBool>, open: &Arc<AtomicBool>) -> bool {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -782,6 +783,8 @@ fn open_window(state: &State, raise: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBoo
             .with_inner_size([720.0, 600.0])
             .with_min_inner_size([500.0, 400.0]),
         vsync: true,
+        // Return to main() on close, which then ends the process (#226).
+        run_and_return: true,
         ..Default::default()
     };
     let (st, sw, qf) = (state.clone(), raise.clone(), quit_flag.clone());
@@ -796,33 +799,31 @@ fn open_window(state: &State, raise: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBoo
 }
 
 fn main() {
-    // On-demand window: `apihub-app` or D-Bus `org.freedesktop.Application`
-    // Activate. A second launch raises the running window and exits. The tray
-    // belongs to the daemon; only when the daemon does not provide one does
-    // this process keep the legacy tray (and stay alive after the window).
+    // One window = one process (#226): `apihub-app` or D-Bus
+    // `org.freedesktop.Application` Activate opens the window; a second launch
+    // raises it and exits; closing the window ends the process, which frees
+    // the D-Bus name and any legacy tray icon. Nothing ever reopens a window
+    // by itself. The tray belongs to the daemon; the legacy tray of this
+    // process only lives while the window is open, when the daemon has none.
     let window_open = Arc::new(AtomicBool::new(false));
     let raise = Arc::new(AtomicBool::new(false));
-    let (ui_tx, ui_rx) = mpsc::channel();
     let activate = {
-        let (open, raise, tx) = (window_open.clone(), raise.clone(), Mutex::new(ui_tx.clone()));
+        let raise = raise.clone();
         move |token: Option<String>| {
-            // winit reads XDG_ACTIVATION_TOKEN when it maps a window: a token
-            // from the caller (tray click) lets a new window take focus on Wayland.
-            if let Some(t) = token {
-                std::env::set_var("XDG_ACTIVATION_TOKEN", t);
-            }
-            if open.load(Ordering::Relaxed) {
-                raise.store(true, Ordering::Relaxed);
-            } else {
-                let _ = tx.lock().map(|t| t.send(tray::UiCmd::ShowWindow));
-            }
+            // The window is (being) opened by this process: just raise it.
+            // The token cannot be used any more (the window is already
+            // mapped) and `set_var` from this D-Bus thread would be
+            // undefined behaviour (#197).
+            let _ = token;
+            raise.store(true, Ordering::Relaxed);
         }
     };
-    let _conn = match instance::claim(activate) {
+    let conn = match instance::claim(activate) {
         instance::Claim::Existing => {
             eprintln!("[apihub] already running: window raised");
             return;
         }
+        instance::Claim::Unreachable => std::process::exit(1),
         instance::Claim::Primary(c) => Some(c),
         instance::Claim::NoBus => None,
     };
@@ -831,39 +832,19 @@ fn main() {
     let quit_flag = Arc::new(AtomicBool::new(false));
     let src = source::spawn(state.clone());
 
-    let legacy_tray = !instance::daemon_tray_present();
-    if legacy_tray {
-        eprintln!("[apihub] no daemon tray: legacy tray kept in this process");
-        tray::spawn(state.clone(), raise.clone(), quit_flag.clone(), ui_tx);
+    if !instance::daemon_tray_present() {
+        eprintln!("[apihub] no daemon tray: legacy tray while the window is open");
+        // Clicks only raise the open window; nothing is queued for later (#226).
+        let (tx, _rx_dropped) = mpsc::channel();
+        tray::spawn(state.clone(), raise.clone(), quit_flag.clone(), tx);
     }
 
     let shown = open_window(&state, &raise, &quit_flag, &window_open);
-    // Legacy mode only: stay as tray after the window, unless the daemon has
-    // taken over the tray in the meantime or the user quit.
-    if legacy_tray && !quit_flag.load(Ordering::Relaxed) && !instance::daemon_tray_present() {
-        eprintln!("[apihub] window closed — back to tray mode");
-        while let Ok(cmd) = ui_rx.recv() {
-            match cmd {
-                tray::UiCmd::Quit => break,
-                tray::UiCmd::ShowWindow => {
-                    open_window(&state, &raise, &quit_flag, &window_open);
-                    if quit_flag.load(Ordering::Relaxed) || instance::daemon_tray_present() {
-                        break;
-                    }
-                    // Clicks received while the window was open: not a reopen request.
-                    if std::iter::from_fn(|| ui_rx.try_recv().ok()).any(|c| c == tray::UiCmd::Quit) {
-                        break;
-                    }
-                    eprintln!("[apihub] window closed — back to tray mode");
-                }
-            }
-        }
-    }
-    eprintln!("[apihub] shutting down");
+    eprintln!("[apihub] window closed: exiting");
+    // Free the name first so that a new launch becomes the window at once.
+    drop(conn);
     src.stop();
-    if !shown {
-        std::process::exit(1);
-    }
+    std::process::exit(if shown { 0 } else { 1 });
 }
 
 #[cfg(test)]
