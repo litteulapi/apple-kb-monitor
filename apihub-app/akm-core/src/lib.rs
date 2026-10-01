@@ -20,6 +20,8 @@
 //! * [`link`]        connection / reconnection notification logic (#84)
 //! * [`config`]      `config.toml` (small TOML subset, no dependency)
 //! * [`hid_params`]  `hid_apple` parameters: read + whitelist
+//! * [`passive`]     passive listening to input reports 0x04/0x05/0x30/0x13/0x11/0x12
+//!   (#130, #187, #129)
 //! * [`alias`]       validation of the user-chosen keyboard name (#141)
 
 pub mod alerts;
@@ -37,6 +39,7 @@ pub mod led;
 pub mod link;
 pub mod machine;
 pub mod model;
+pub mod passive;
 pub mod power;
 pub mod read_policy;
 pub mod recovery;

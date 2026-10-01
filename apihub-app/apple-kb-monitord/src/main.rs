@@ -213,6 +213,12 @@ fn run(opts: actor::Options, bus_name: Option<String>) -> ExitCode {
         opts.notify_connection
     );
     tray::spawn(watch.clone(), mailbox.clone(), conn.clone());
+    // Passive listening to the keyboard's own input reports (never a request).
+    let _passive = conn.as_ref().and_then(|c| {
+        apple_kb_monitord::passive::start_default(c.clone(), watch.clone())
+            .map_err(|e| tracing::warn!("passive listener not started: {e}"))
+            .ok()
+    });
     let (link_mailbox, link_notify) = (mailbox.clone(), opts.notify);
     let handle = actor::spawn(watch, mailbox, opts);
     // Link keeper: reconnection, system sleep, health, reconciliation (#144, #145, #165).

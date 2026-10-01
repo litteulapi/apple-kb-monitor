@@ -10,6 +10,7 @@
 //! * [`notify`]  desktop notifications (zbus, no notify-rust)
 //! * [`devices`] D-Bus API v2: one object per keyboard (#93)
 //! * [`events`]  in-process event hub (alerts, replacements, link changes)
+//! * [`passive`]  passive input-report listening, `...Input` interface (#130, #187, #129)
 //! * [`repair`]  link keeper: health, reconnection, repair launcher (#144)
 //! * [`sleep`]   logind sleep / resume (#145)
 //! * [`settings`] `hid_apple` write path through the privileged helper
@@ -24,6 +25,7 @@ pub mod client;
 pub mod devices;
 pub mod events;
 pub mod notify;
+pub mod passive;
 pub mod repair;
 pub mod service;
 pub mod settings;

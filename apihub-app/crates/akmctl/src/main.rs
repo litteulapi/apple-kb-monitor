@@ -4,6 +4,7 @@ mod bus;
 mod cli;
 mod doctor;
 mod fnmode;
+mod passive;
 mod repair;
 mod status;
 
@@ -92,11 +93,17 @@ fn fail(msg: &str) -> u8 {
 
 fn cmd_status(json: bool) -> u8 {
     let fm = fnmode::read().ok();
-    let snap = bus::connect().and_then(|c| bus::get_state(&c));
+    let conn = bus::connect();
+    let snap = conn.as_ref().map_err(|e| bus::BusError::Absent(e.to_string())).and_then(bus::get_state);
     match snap {
         Ok(s) => {
             if json {
-                println!("{}", status::to_json(&s, fm, None));
+                let mut v = status::to_json(&s, fm, None);
+                // Passive listening state (Fn-lock, sleep, wake, Eject), null if unknown.
+                if let Ok(c) = conn.as_ref() {
+                    v["passive"] = passive::fetch(c, s.mac());
+                }
+                println!("{v}");
             } else {
                 print!("{}", status::to_text(&s, fm));
             }
