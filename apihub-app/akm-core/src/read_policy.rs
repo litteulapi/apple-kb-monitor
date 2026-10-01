@@ -22,11 +22,19 @@
 //! * **short**: at least [`MIN_GAP`] (1 s, like macOS 26.5's IOBluetooth
 //!   driver, #214) between two requests, [`BUDGET`] per read, stop at the first
 //!   failure of any kind (a HIDP timeout costs ~3.5 s);
-//! * **circuit breaker** (#214, same as macOS): after [`TRIP_AFTER`] failed
-//!   requests in a row nothing more is sent until the keyboard gives a sign of
-//!   life: a new connection ([`note_connection`]), or an input report
-//!   ([`note_input`]) which re-arms ONE probe request (success closes the
-//!   breaker, failure keeps it open);
+//! * **Apple's circuit breaker** ([`crate::apple_model::Breaker`], #243,
+//!   #251): every outcome is classified like the macOS driver does
+//!   ([`crate::apple_model::Outcome::classify`]): a HANDSHAKE refusal is an
+//!   answer and resets the count, a silence or an answer of another id counts.
+//!   After [`TRIP_AFTER`] silences in a row nothing more is sent (reads and the
+//!   `WillShutdown` write share it) and ONE disconnection request is raised
+//!   ([`take_disconnect_request`]). Only a new connection
+//!   ([`note_connection`]) or a system sleep ([`note_sleep`]: counter 1, so 2
+//!   silences suffice after a wake) lifts it; key presses no longer do;
+//! * **schedule** (#251): in the daemon the Apple model decides when the
+//!   battery is read ([`set_schedule`]: 60 s after the connection, then 4 h,
+//!   1 h after a failure); without a schedule (CLI, tests) the read happens
+//!   only while the keyboard is in use;
 //! * **private lock** (#208): without `XDG_RUNTIME_DIR` the lock lives in a
 //!   `0700` directory named after the uid, ownership checked, never followed
 //!   through a symlink.
@@ -41,6 +49,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use crate::apple_model::Outcome;
 use crate::decode::{report_from_uevent, HidSource};
 use crate::model::{family_from_uevent, Family};
 use crate::power::BatteryReading;
@@ -53,10 +62,10 @@ pub const ALLOWED: [u8; crate::registry::SAFE_READ_IDS.len()] = crate::registry:
 pub const ONCE_BUDGET: Duration = Duration::from_secs(4);
 /// Reads happen only if a key was pressed this recently.
 pub const ACTIVE_WINDOW: Duration = Duration::from_secs(60);
-/// Minimum spacing between two requests.
-pub const MIN_GAP: Duration = Duration::from_millis(1000);
-/// Consecutive failed requests that open the circuit breaker.
-pub const TRIP_AFTER: u32 = 3;
+/// Minimum spacing between two requests (the model's table).
+pub const MIN_GAP: Duration = crate::apple_model::APPLE.min_gap;
+/// Consecutive silences that open the circuit breaker (the model's table).
+pub const TRIP_AFTER: u32 = crate::apple_model::APPLE.trip_after;
 /// Time budget of one read; no request starts after it.
 pub const BUDGET: Duration = Duration::from_secs(2);
 /// Longest wait for the cross-process lock.
@@ -137,7 +146,8 @@ pub fn note_input() {
 fn note_input_at(t: Instant) {
     let ms = t.saturating_duration_since(epoch()).as_millis() as u64;
     LAST_INPUT.store(ms + 1, Ordering::Relaxed);
-    global_breaker().alive();
+    // #251: no probe any more on a key press (Apple: only a connection or a
+    // sleep lifts the breaker).
 }
 
 /// Age of the last input report, if any.
@@ -168,6 +178,8 @@ pub fn last_hw_access() -> Option<Instant> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Gate {
     Allowed,
+    /// The Apple model says no battery read is due now (#251).
+    NotDue,
     /// No key press within ACTIVE_WINDOW: the keyboard is idle / in sniff.
     Idle,
     /// Another reader holds the lock.
@@ -183,56 +195,50 @@ pub fn gate(age: Option<Duration>) -> Gate {
     }
 }
 
-// ── circuit breaker (#214) ─────────────────────────────────────────────────
+// ── schedule given by the Apple model (#251) ───────────────────────────────
 
-/// Consecutive-failure breaker. Pure state, no clock: a keyboard that stops
-/// answering is left alone until it shows signs of life.
-#[derive(Debug, Default)]
-pub struct Breaker {
-    fails: u32,
-    probe: bool,
+/// 0 = none (CLI, tests: activity gate), 1 = a battery read is due, 2 = not due.
+static SCHEDULE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// The daemon tells, before each acquisition, whether the Apple model has a
+/// battery read due (`Some(true)`), none (`Some(false)`), or leaves the
+/// decision to the activity gate (`None`).
+pub fn set_schedule(due: Option<bool>) {
+    SCHEDULE.store(due.map_or(0, |d| if d { 1 } else { 2 }), Ordering::Relaxed);
 }
 
-impl Breaker {
-    pub const fn new() -> Self {
-        Self {
-            fails: 0,
-            probe: false,
-        }
-    }
-    pub fn is_open(&self) -> bool {
-        self.fails >= TRIP_AFTER
-    }
-    /// May a request be sent? An open breaker lets exactly one probe through
-    /// after a sign of life; asking consumes it.
-    pub fn allow(&mut self) -> bool {
-        if !self.is_open() {
-            return true;
-        }
-        std::mem::take(&mut self.probe)
-    }
-    /// Would a request be allowed (without consuming the probe)?
-    pub fn would_allow(&self) -> bool {
-        !self.is_open() || self.probe
-    }
-    pub fn record(&mut self, ok: bool) {
-        if ok {
-            *self = Self::new();
-        } else {
-            self.fails = self.fails.saturating_add(1);
-        }
-    }
-    /// The keyboard sent an input report: re-arm one probe if tripped.
-    pub fn alive(&mut self) {
-        if self.is_open() {
-            self.probe = true;
-        }
-    }
-    /// New connection: the link was rebuilt, start afresh.
-    pub fn reset(&mut self) {
-        *self = Self::new();
+fn schedule() -> Option<bool> {
+    match SCHEDULE.load(Ordering::Relaxed) {
+        1 => Some(true),
+        2 => Some(false),
+        _ => None,
     }
 }
+
+/// Gate of a read: the model's schedule when there is one (a due read does
+/// not wait for a key press: Apple reads every 4 h, in use or not), else the
+/// activity of the keyboard.
+pub fn gate_for(schedule: Option<bool>, age: Option<Duration>) -> Gate {
+    match schedule {
+        Some(true) => Gate::Allowed,
+        Some(false) => Gate::NotDue,
+        None => gate(age),
+    }
+}
+
+static LAST_OUTCOME: Mutex<Option<SafeRead>> = Mutex::new(None);
+
+/// Outcome of the last [`build_report_safe`], taken once (daemon: was the
+/// battery read of the model a success?).
+pub fn take_last_outcome() -> Option<SafeRead> {
+    LAST_OUTCOME.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
+
+// ── circuit breaker (#214, #243, #251) ─────────────────────────────────────
+
+/// Apple's breaker: counter common to every request, 3rd silence = nothing
+/// more goes out + one disconnection request. Defined by the model.
+pub use crate::apple_model::Breaker;
 
 static BREAKER: Mutex<Breaker> = Mutex::new(Breaker::new());
 
@@ -249,6 +255,17 @@ pub fn breaker() -> &'static Mutex<Breaker> {
 pub fn note_connection() {
     global_breaker().reset();
     global_conn().reset();
+}
+
+/// The system goes to sleep (Apple's `handleSleep`): breaker closed,
+/// counter 1, longer timeouts for the first request after the wake.
+pub fn note_sleep() {
+    global_breaker().after_sleep();
+}
+
+/// The disconnection request raised by the breaker, once per connection.
+pub fn take_disconnect_request() -> bool {
+    global_breaker().take_disconnect_request()
 }
 
 /// Is the global breaker open without a pending probe (reads are suspended)?
@@ -430,12 +447,16 @@ impl HidSource for SafeSource<'_> {
                 format!("report {report_id:#04x} is read once per connection and was already requested"),
             ));
         }
-        if !self.breaker().allow() {
-            return Err(io::Error::new(
-                io::ErrorKind::ConnectionAborted,
-                "circuit breaker open: the keyboard stopped answering",
-            ));
-        }
+        let timeouts = {
+            let mut b = self.breaker();
+            if !b.allow() {
+                return Err(io::Error::new(
+                    io::ErrorKind::ConnectionAborted,
+                    "circuit breaker open: the keyboard stopped answering",
+                ));
+            }
+            b.begin()
+        };
         if once {
             self.conn().claim(report_id);
         }
@@ -444,11 +465,22 @@ impl HidSource for SafeSource<'_> {
             std::thread::sleep(w);
         }
         self.sent.set(self.sent.get() + 1);
+        let t0 = Instant::now();
         let r = self.inner.feature(report_id);
+        let took = t0.elapsed();
         self.last.set(Some(Instant::now()));
         note_hw_access();
-        self.breaker().record(r.is_ok());
-        r
+        // Apple's verdict on this exchange (refusal = answer, other id or
+        // late answer = silence).
+        let outcome = Outcome::classify(&r, report_id, took, timeouts.guard);
+        self.breaker().record_outcome(outcome);
+        match outcome {
+            Outcome::WrongId | Outcome::Timeout if r.is_ok() => Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("report {report_id:#04x}: no answer of this id before the watchdog"),
+            )),
+            _ => r,
+        }
     }
 }
 
@@ -461,6 +493,14 @@ pub enum SafeRead {
     Partial,
     /// Nothing requested (idle keyboard, lock busy).
     Skipped(Gate),
+}
+
+impl SafeRead {
+    /// Did the battery read of the model succeed? A family without vendor
+    /// reports (`Skipped(Allowed)`) has nothing to read: a success.
+    pub fn is_success(self) -> bool {
+        matches!(self, SafeRead::Complete | SafeRead::Skipped(Gate::Allowed))
+    }
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -619,9 +659,10 @@ pub fn build_report_safe(
     report.wake = wake;
     report.bluetooth.connected = true;
     if family_from_uevent(uevent) != Family::Bcm2042 {
+        *LAST_OUTCOME.lock().unwrap_or_else(|e| e.into_inner()) = Some(SafeRead::Skipped(Gate::Allowed));
         return (report, SafeRead::Skipped(Gate::Allowed));
     }
-    let outcome = match gate(last_input_age(now)) {
+    let outcome = match gate_for(schedule(), last_input_age(now)) {
         Gate::Allowed if tripped() => SafeRead::Skipped(Gate::Tripped),
         Gate::Allowed => match try_lock(LOCK_WAIT) {
             Some(_lock) => read_with(SafeSource::new(src), &mut report, true),
@@ -629,6 +670,7 @@ pub fn build_report_safe(
         },
         g => SafeRead::Skipped(g),
     };
+    *LAST_OUTCOME.lock().unwrap_or_else(|e| e.into_inner()) = Some(outcome);
     report.battery.percentage_fine = report.battery.percentage;
     report.breaker_open = tripped();
     // Values read once in this connection survive the following reads.
@@ -1011,5 +1053,78 @@ mod tests {
         assert_eq!(o, SafeRead::Skipped(Gate::Idle));
         assert!(spy.log.borrow().is_empty());
         assert!(r.bluetooth.connected);
+    }
+
+    // ── Apple model (#251) ─────────────────────────────────────────────────
+
+    /// Answers fast with an error (the keyboard's HANDSHAKE refusal under
+    /// Linux: EIO in milliseconds).
+    struct Refuses;
+    impl HidSource for Refuses {
+        fn feature(&self, _: u8) -> io::Result<Vec<u8>> {
+            Err(io::Error::from_raw_os_error(libc::EIO))
+        }
+    }
+
+    /// Answers with the frame of another report.
+    struct OtherId;
+    impl HidSource for OtherId {
+        fn feature(&self, _: u8) -> io::Result<Vec<u8>> {
+            Ok(vec![0x46, 1, 2])
+        }
+    }
+
+    #[test]
+    fn a_refusal_is_an_answer_and_resets_the_count() {
+        // RE-GHIDRA-KEXT §2.5 DecodedHandshake: 2 silences, a refusal, 2
+        // silences: never 3 in a row, the breaker stays closed.
+        let br = Mutex::new(Breaker::new());
+        let dead = Dead(std::cell::Cell::new(0));
+        for src in [&dead as &dyn HidSource, &dead, &Refuses, &dead, &dead] {
+            let _ = SafeSource::with_breaker(src, &br).feature(0x47);
+        }
+        assert!(!br.lock().unwrap().is_open());
+        assert_eq!(br.lock().unwrap().counter(), 2);
+        assert!(!br.lock().unwrap().take_disconnect_request());
+    }
+
+    #[test]
+    fn an_answer_of_another_id_is_ignored_and_counts_as_a_silence() {
+        // processControlData: "Report does not equal the report we asked for".
+        let br = Mutex::new(Breaker::new());
+        for i in 0..TRIP_AFTER {
+            let e = SafeSource::with_breaker(&OtherId, &br).feature(0x47).unwrap_err();
+            assert_eq!(e.kind(), io::ErrorKind::TimedOut);
+            assert_eq!(br.lock().unwrap().counter(), i + 1);
+        }
+        let mut b = br.lock().unwrap();
+        assert!(b.is_open());
+        assert!(b.take_disconnect_request(), "3rd silence: one disconnection request");
+        assert!(!b.take_disconnect_request());
+    }
+
+    #[test]
+    fn the_schedule_of_the_model_overrides_the_activity_gate() {
+        assert_eq!(gate_for(Some(true), None), Gate::Allowed, "due: read even if idle");
+        assert_eq!(gate_for(Some(false), Some(Duration::ZERO)), Gate::NotDue);
+        assert_eq!(gate_for(None, None), Gate::Idle);
+        assert_eq!(gate_for(None, Some(Duration::ZERO)), Gate::Allowed);
+        assert!(SafeRead::Complete.is_success() && SafeRead::Skipped(Gate::Allowed).is_success());
+        for g in [Gate::NotDue, Gate::Idle, Gate::Busy, Gate::Tripped] {
+            assert!(!SafeRead::Skipped(g).is_success());
+        }
+        assert!(!SafeRead::Partial.is_success());
+    }
+
+    #[test]
+    fn a_sleep_lowers_the_threshold_to_two_silences() {
+        let br = Mutex::new(Breaker::new());
+        br.lock().unwrap().after_sleep();
+        let dead = Dead(std::cell::Cell::new(0));
+        for _ in 0..2 {
+            let _ = SafeSource::with_breaker(&dead, &br).feature(0x47);
+        }
+        assert!(br.lock().unwrap().is_open());
+        assert_eq!(dead.0.get(), 2);
     }
 }

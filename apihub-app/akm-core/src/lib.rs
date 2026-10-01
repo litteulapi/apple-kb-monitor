@@ -35,6 +35,7 @@
 //!   backup, guarded write refused until proven (#248)
 
 pub mod alerts;
+pub mod apple_model;
 pub mod alias;
 pub mod batteries;
 pub mod calibration;

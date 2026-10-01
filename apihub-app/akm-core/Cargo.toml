@@ -9,3 +9,6 @@ description = "Apple Bluetooth keyboard: models, HID decoding, kernel battery, h
 libc = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
+[dev-dependencies]
+proptest = { version = "1", default-features = false, features = ["std"] }
