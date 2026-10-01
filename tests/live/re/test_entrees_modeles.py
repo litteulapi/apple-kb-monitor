@@ -51,10 +51,13 @@ def parse_hid_id(hid_id):
     return int(vid, 16), int(pid, 16)
 
 
-def rust_is_apple_modalias(m):
-    """Mirror of model::is_apple_modalias (the watcher's only filter)."""
-    m = m.lower()
-    return m.startswith("usb:v05ac") or m.startswith("bluetooth:v004c")
+def rust_is_keyboard_modalias(table, m):
+    """Mirror of model::is_keyboard_device without Class (the watcher's filter, #124):
+    modalias vendor:product looked up in the model table."""
+    mm = re.match(r"^[a-z]+:v([0-9a-fA-F]{4})p([0-9a-fA-F]{4})", m or "")
+    if not mm:
+        return False
+    return rust_lookup(table, int(mm.group(1), 16), int(mm.group(2), 16)) is not None
 
 
 def kernel_keyboard_pids():
@@ -188,11 +191,16 @@ class TestTableDesModeles(unittest.TestCase):
             has13 = ("input", 0x13) in hid_rdesc.reports(f)
             self.assertEqual(has13, c["expected_family"] == "Bcm2042", c["name"])
 
-    @unittest.expectedFailure  # #124
-    def test_watcher_modalias_filter_rejects_non_keyboards(self):
+    def test_watcher_modalias_filter_rejects_non_keyboards(self):  # #124
+        src = (ROOT / "apihub-app" / "apple-kb-monitord" / "src" / "watcher.rs").read_text()
+        self.assertIn("is_keyboard_device", src)
+        self.assertNotIn("is_apple_modalias", src)
         neg = [c["name"] for c in cases() if c["modalias"] and c["expected_family"] is None
-               and rust_is_apple_modalias(c["modalias"])]
-        self.assertEqual(neg, [])  # today: AirPods, Magic Mouse/Trackpad 1 & 2 accepted
+               and rust_is_keyboard_modalias(self.table, c["modalias"])]
+        self.assertEqual(neg, [])  # AirPods, Magic Mouse/Trackpad 1 & 2 rejected
+        pos = [c["name"] for c in cases() if c["modalias"] and c["expected_family"]
+               and not rust_is_keyboard_modalias(self.table, c["modalias"])]
+        self.assertEqual(pos, [])
 
 
 class TestConfigurationLivree(unittest.TestCase):

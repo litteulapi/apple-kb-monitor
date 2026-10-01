@@ -206,9 +206,40 @@ pub fn name_from_uevent(uevent: &str) -> Option<String> {
 }
 
 /// Is this BlueZ Modalias an Apple device (USB 05AC or Bluetooth SIG 004C)?
+/// Vendor only: AirPods, mice, trackpads and iPhones match too. Use
+/// [`is_keyboard_device`] to select a keyboard.
 pub fn is_apple_modalias(m: &str) -> bool {
     let m = m.to_ascii_lowercase();
     m.starts_with("usb:v05ac") || m.starts_with("bluetooth:v004c")
+}
+
+/// (vendor, product) of a BlueZ / kernel modalias: `usb:v05ACp0256d0050`,
+/// `bluetooth:v004Cp029Cd0001`.
+pub fn parse_modalias(m: &str) -> Option<(u32, u32)> {
+    let (_, rest) = m.split_once(':')?;
+    let rest = rest.strip_prefix(['v', 'V'])?;
+    let vid = u32::from_str_radix(rest.get(..4)?, 16).ok()?;
+    let rest = rest.get(4..)?.strip_prefix(['p', 'P'])?;
+    let pid = u32::from_str_radix(rest.get(..4)?, 16).ok()?;
+    Some((vid, pid))
+}
+
+/// Supported keyboard model behind a modalias (`None`: AirPods, mice, ...).
+pub fn model_from_modalias(m: &str) -> Option<&'static ModelInfo> {
+    parse_modalias(m).and_then(|(v, p)| lookup_model(v, p))
+}
+
+/// Bluetooth Class of Device: major class Peripheral (0x05) with the keyboard
+/// bit (minor bit 6) set — keyboards and keyboard/pointer combos.
+pub fn is_keyboard_class(cod: u32) -> bool {
+    (cod >> 8) & 0x1f == 0x05 && cod & 0x40 != 0
+}
+
+/// Should a BlueZ device be treated as one of our keyboards? Its modalias
+/// must be in the model table, and its Class of Device, when BlueZ knows it,
+/// must say keyboard (#124: an Apple vendor ID alone is not enough).
+pub fn is_keyboard_device(modalias: &str, class: Option<u32>) -> bool {
+    model_from_modalias(modalias).is_some() && class.is_none_or(is_keyboard_class)
 }
 
 /// UPower object paths embed the MAC with underscores or `o`: match a keyboard battery.
@@ -329,11 +360,48 @@ mod tests {
         assert!(is_apple_modalias("usb:v05ACp0256d0050"));
         assert!(is_apple_modalias("bluetooth:v004Cp029Cd0001"));
         assert!(!is_apple_modalias("usb:v046Dp0001d0001"));
+        assert_eq!(
+            parse_modalias("usb:v05ACp0256d0050"),
+            Some((0x05ac, 0x0256))
+        );
+        assert_eq!(
+            parse_modalias("bluetooth:v004Cp029Cd0206"),
+            Some((0x004c, 0x029c))
+        );
+        assert_eq!(parse_modalias("bluetooth:v004C"), None);
+        assert_eq!(parse_modalias("garbage"), None);
+        assert_eq!(parse_modalias(""), None);
         assert!(is_keyboard_upower_path(
             "/org/freedesktop/UPower/devices/keyboard_hid_04o_db"
         ));
         assert!(!is_keyboard_upower_path(
             "/org/freedesktop/UPower/devices/battery_BAT0"
         ));
+    }
+
+    #[test]
+    fn only_keyboards_pass_the_device_filter() {
+        // Keyboards (BCM2042 over the USB vendor, Magic Keyboard over the BT one).
+        assert!(is_keyboard_device("usb:v05ACp0256d0050", Some(0x002540)));
+        assert!(is_keyboard_device("bluetooth:v004Cp029Cd0206", None));
+        assert!(is_keyboard_device("usb:v05ACp0255d0050", Some(0x0005c0))); // combo
+                                                                            // Apple, not keyboards (#124).
+        for m in [
+            "bluetooth:v004Cp200Ed0001", // AirPods
+            "bluetooth:v004Cp0269d0001", // Magic Mouse 2
+            "bluetooth:v004Cp0265d0001", // Magic Trackpad 2
+            "bluetooth:v004Cp0324d0001", // Magic Trackpad 2 USB-C
+            "usb:v05ACp030Dd0001",       // Magic Mouse 1
+            "usb:v05ACp030Ed0001",       // Magic Trackpad 1
+            "bluetooth:v004Cp1234d0001", // phone-ish
+            "usb:v046Dp0256d0001",       // Logitech, same PID
+        ] {
+            assert!(!is_keyboard_device(m, None), "{m}");
+        }
+        // Table PID but a non-keyboard class (headset 0x240404, mouse 0x002580).
+        assert!(!is_keyboard_device("usb:v05ACp0256d0050", Some(0x240404)));
+        assert!(!is_keyboard_device("usb:v05ACp0256d0050", Some(0x002580)));
+        assert!(is_keyboard_class(0x002540));
+        assert!(!is_keyboard_class(0x7a020c)); // phone
     }
 }
