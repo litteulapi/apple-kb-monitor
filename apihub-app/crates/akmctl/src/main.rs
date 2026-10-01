@@ -2,7 +2,9 @@
 
 mod bus;
 mod cli;
+mod doctor;
 mod fnmode;
+mod repair;
 mod status;
 
 use std::io::Write;
@@ -38,6 +40,20 @@ fn run(cmd: Command) -> u8 {
         Command::Set { what: SetCmd::Fnmode { mode, persist } } => cmd_set_fnmode(mode, persist),
         Command::Rename { name, reset: _, mac } => cmd_rename(name.as_deref().unwrap_or(""), mac),
         Command::Watch => cmd_watch(),
+        Command::Doctor { json, mac } => {
+            let r = doctor::gather(mac.as_deref());
+            if json {
+                println!("{}", doctor::to_json(&r));
+            } else {
+                print!("{}", doctor::to_text(&r));
+            }
+            if r.verdict.0 >= doctor::Level::Bad {
+                EXIT_ERROR
+            } else {
+                EXIT_OK
+            }
+        }
+        Command::Repair { mac, force } => repair::run(mac.as_deref(), force),
         Command::Completions { shell } => {
             let mut c = Cli::command();
             clap_complete::generate(clap_complete::Shell::from(shell), &mut c, "akmctl", &mut std::io::stdout());

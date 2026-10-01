@@ -71,6 +71,27 @@ pub enum Command {
     },
     /// Follow StateChanged signals: one JSON line per change, until interrupted
     Watch,
+    /// Diagnose the Bluetooth link in one command (BlueZ, pairing, adapter
+    /// power management, BlueZ/UPower configuration, journal, hidraw, daemon).
+    /// Read-only; run with sudo to also compare the stored and kernel link keys
+    Doctor {
+        /// Machine-readable JSON
+        #[arg(long)]
+        json: bool,
+        /// Keyboard to check (default: the paired one)
+        #[arg(long, value_name = "MAC")]
+        mac: Option<String>,
+    },
+    /// Guided repair of the link: wake + reconnect first; re-pair only after a
+    /// typed confirmation (the pairing is never removed otherwise)
+    Repair {
+        /// Keyboard to repair (default: the paired one)
+        #[arg(long, value_name = "MAC")]
+        mac: Option<String>,
+        /// Offer re-pairing even if the link looks healthy
+        #[arg(long)]
+        force: bool,
+    },
     /// Print a shell completion script on stdout
     Completions { shell: Shell },
     /// Print the manual page (roff) on stdout

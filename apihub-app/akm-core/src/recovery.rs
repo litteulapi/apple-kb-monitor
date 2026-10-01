@@ -565,7 +565,7 @@ impl Recovery {
 // ── bluetoothd journal classification (akmctl doctor) ─────────────────────
 
 /// Category of a bluetoothd journal line about the keyboard.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum JournalKind {
     /// `connect to …: Host is down (112)` — page timeout.
     PageTimeout,
