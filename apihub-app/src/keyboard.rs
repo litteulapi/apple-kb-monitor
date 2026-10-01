@@ -209,6 +209,7 @@ pub struct KbWake {
 
 #[derive(Debug, Clone, Default)]
 pub struct KbReport {
+    #[allow(dead_code)] // read by main.rs (#79)
     pub wake: KbWake,
     pub device: KbDevice,
     pub battery: KbBattery,
@@ -319,6 +320,15 @@ fn get_hid_fd() -> Option<(libc::c_int, String)> {
     Some((raw_fd, path))
 }
 
+/// The kernel power_supply is the source of truth for the percentage (same
+/// node UPower reads). Raw HID values stay available as diagnostics.
+fn apply_kernel_battery(report: &mut KbReport) {
+    let Some(mac) = report.device.mac.as_deref() else { return };
+    if let Some(b) = crate::power::kernel_battery(mac) {
+        report.battery.percentage = Some(b.percent as f64);
+    }
+}
+
 /// Real BT MAC from `HID_UNIQ=` (the 0x4C report holds an internal identity, not the MAC).
 fn mac_from_uevent(uevent: &str) -> Option<String> {
     let mac = uevent.lines().find_map(|l| l.strip_prefix("HID_UNIQ="))?.trim().to_uppercase();
@@ -333,10 +343,12 @@ pub fn read_keyboard() -> Option<KbReport> {
     let wake = ensure_wake_monitor();
     let (fd_val, path) = get_hid_fd()?;
 
-    let mut report = KbReport::default();
-    report.wake = KbWake {
-        last_age_s: wake.last().map(|t| t.elapsed().as_secs_f64()),
-        count: wake.count(),
+    let mut report = KbReport {
+        wake: KbWake {
+            last_age_s: wake.last().map(|t| t.elapsed().as_secs_f64()),
+            count: wake.count(),
+        },
+        ..Default::default()
     };
 
     // Identify the model first: BCM2042 vendor reports (0xEA, 0xF5, ...) are
@@ -354,6 +366,7 @@ pub fn read_keyboard() -> Option<KbReport> {
     }
     report.device.driver = Some("hid-apple".to_string());
     report.device.mac = mac_from_uevent(&uevent);
+    apply_kernel_battery(&mut report);
     if fam != Family::Bcm2042 {
         // Magic Keyboard / unknown: no raw HID telemetry. The connection is
         // implied by the open hidraw node; battery comes from the kernel.
@@ -381,7 +394,7 @@ pub fn read_keyboard() -> Option<KbReport> {
 
     // Battery standard (0x47) — firmware-rounded
     if let Some(buf) = hid_read_feature(fd_val, HID_BATTERY_STANDARD) {
-        if buf.len() >= 2 {
+        if buf.len() >= 2 && report.battery.percentage.is_none() {
             report.battery.percentage = Some(buf[1] as f64);
         }
     }

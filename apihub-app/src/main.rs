@@ -3,6 +3,7 @@ mod brightness;
 mod ddc;
 mod history;
 mod keyboard;
+mod power;
 mod mqtt;
 mod rssi;
 mod tray;
