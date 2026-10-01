@@ -474,6 +474,18 @@ mod tests {
     }
 
     #[test]
+    fn hex_dump_rejects_non_ascii_without_panicking() {
+        // #220: "é" is 2 bytes, so an even length used to slice mid-character.
+        for bad in ["a\u{e9}a", "\u{e9}\u{e9}", "4\u{20ac}", "47 5\u{e9}"] {
+            let e = Fixture::from_hex_dump(bad).unwrap_err();
+            assert!(e.starts_with("line 1: non-hexadecimal character"), "{e}");
+        }
+        let e = Fixture::from_hex_dump("47 50\n46 g0").unwrap_err();
+        assert!(e.contains("line 2") && e.contains("'g'"), "{e}");
+        assert_eq!(Fixture::from_hex_dump("47 50 # \u{e9}t\u{e9}\n").unwrap().len(), 1);
+    }
+
+    #[test]
     fn decodes_the_real_a1314_frames() {
         let f = real();
         assert_eq!(f.len(), 14);
