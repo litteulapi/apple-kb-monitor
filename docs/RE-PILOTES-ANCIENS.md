@@ -109,3 +109,94 @@ Abréviations **[chaîne + désassemblage]** : `MV` MeasuredVoltages, `LT` Latch
   puis toutes les 4 h) **[désassemblage]**. Ces trois lectures font donc partie du trafic de production d'Apple
   pour notre PID : elles sont **sûres au rythme Apple** (aucune ne figeait le clavier). `0xFE`, `0xEA`, `0xF4`-`0xFF`,
   `0x46`, `0x4A`-`0x4C` n'ont été lus par **aucune** version examinée.
+
+## 5. Ce que les pilotes de l'époque envoyaient réellement à notre PID (10.7.5)
+
+Chronologie complète, à comparer avec `RE-PILOTE-MACOS.md` §5 (macOS 26.5). Octets « fil » HIDP.
+
+| # | Quand | Émetteur | Transaction | Octets | Preuve |
+|---|---|---|---|---|---|
+| L1 | connexion | `IOBluetoothHIDDriver` 4.0.8 | SET_PROTOCOL(Report) | `71` | [désassemblage] identique à 26.5 |
+| L2 | 60 s après connexion, puis toutes les 4 h (1 h après échec) | `IOAppleBluetoothHIDDriver` | GET Feature `0x47` | `43 47` | [désassemblage] constantes `60000`, `14400000`, `3600000` ms |
+| L3 | juste après L2 | `AppleBluetoothHIDKeyboard` 160.7 | GET Feature **`0x49`** (`BatteryVoltage`) | `43 49` | [désassemblage] `getLatchedBatteryVoltage` |
+| L4 | juste après L3 | idem | GET Feature **`0x60`** (`CalibratedBatteryThresholds3`) | `43 60` | [désassemblage] `getVoltagesUsed` |
+| L5 | après chaque relevé, et sur `A1 30 xx` | `IOAppleBluetoothHIDDriver` | GET Input `0x30` | `41 30` | [désassemblage] |
+| L6 | veille / réveil | `IOBluetoothHIDDriver` (`SuspendSupported` posé à vrai par la classe Apple) | HID_CONTROL SUSPEND / EXIT_SUSPEND | `13` / `14` | [désassemblage] `handleSleep` → `hidControl(3)`, `handleWake` → `hidControl(4)` |
+| L7 | arrêt / redémarrage | `IOAppleBluetoothHIDDriver` | SET Feature `0x40` (`WillShutdown`) | `53 40` | [désassemblage] identique à 26.5 |
+| L8 | Verr. Maj | idem | DATA Output `0x01` | `A2 01 02` / `A2 01 00` | [désassemblage] |
+| **L9** | **un lien audio SCO (casque) s'ouvre / se ferme** pendant que le clavier est connecté | `blued` (`BluetoothHIDManager`) via `IOBluetooth.framework` | **SET Feature `0x4A`** = `03` (`sendSCOLinkActive`) / `04` (`sendSCOLinkInactive`) | `53 4A 03` / `53 4A 04` | [désassemblage] liste de PID testée **avant** l'envoi : `0x0208-0x020A`, `0x022C-0x022E`, `0x0239-0x023B`, **`0x0255-0x0257`**, `0x0309`, `0x030C` ; [chaîne] `sending sendSCOLinkACTIVE to %s`, `resetSniffParameters - Setting to SCOActive? %d` |
+| **L10** | **« Supprimer » le clavier dans Préférences Système > Bluetooth** (après confirmation `kRemoveDevice`) | `Bluetooth.prefPane` → `-[AppleBluetoothHIDDevice fullFactoryDefault]` | **SET Feature `0x44`** (`FullFactoryDefault`, sans données), **puis** désappairage côté hôte (`remove`) | `53 44` | [désassemblage] séquence `withBluetoothDevice:` → `fullFactoryDefault` → `remove` |
+| **L11** | renommage du clavier (Préférences ou Assistant Bluetooth) | `-[AppleBluetoothHIDDevice setDeviceName:]` | si `LongDeviceName` existe (cas du 598) : **SET Feature `0x55`** (64 o) ; sinon SET `0x51`…`0x54` (8 o chacun) puis SET `0x50` (`DeviceNameChange`) ; ensuite requête de nom distant (HCI) | `53 55 …` | [désassemblage] `getMaxDeviceNameLength` = 64 si `0x55` déclaré, 32 sinon |
+
+**Correspondance avec macOS 26 [déduction forte]** : la liste de PID de L9 est **exactement** celle du « bit 3 »
+reconstruit dans `bluetoothd` 26.5 (`RE-PILOTE-MACOS.md` §7). Le bit 3 désigne donc les **anciens appareils HID Apple
+qui reçoivent la notification de lien SCO** (`0x4A`) et dont `blued` ajuste les paramètres de sniff quand un casque
+est actif. C'est la réponse à l'inconnue n° 6 de `RE-PILOTE-MACOS.md` §9.
+
+Valeurs de `0x4A` définies par `AppleBluetoothHIDDevice` **[désassemblage]** : `1` SCODevicePaired, `2` SCODeviceUnpaired,
+`3` SCOLinkActive, `4` SCOLinkInactive (seules 3 et 4 sont envoyées par `blued`). Notre lecture `4a 12` (= 18) **[mesuré]**
+n'est pas une de ces valeurs : le GET renvoie un état interne dont le codage reste inconnu.
+
+Commandes acceptées par le pilote noyau depuis l'espace utilisateur (propriétés IORegistry) **[chaîne + désassemblage]** :
+`WillShutdown`, `UpdateBatteryLevel`, `ForceBatteryPercent`/`DontForceBatteryPercent`, `BatteryUpdateInterval`,
+`DefaultBatteryUpdateInterval`, `StartBatteryUpdate`/`StopBatteryUpdate`, `BatteryState`, `UpdateBatteryState`, `CapsLock`,
+`ReleaseAllChannelsWithSleepForHIDUpdate` (utilisée par l'updater, §6), et côté classe générique `HIDSuspend`,
+`HIDExitSuspend`, `VirtualCableUnplug`, `SetIdle`/`GetIdle`, `SetBootProtocol`/`SetReportProtocol`, `ReleaseAllChannels`.
+
+API `AppleBluetoothHIDDevice` d'`IOBluetooth.framework` (2009 et 10.7) **[chaîne + désassemblage]** :
+`recantConnection` (pose `SuppressDisconnectNotifications` puis SET `0x41` ; la classe générique non-Apple envoie à la
+place HID_CONTROL `VIRTUAL_CABLE_UNPLUG`), `factoryDefault` (SET `0x45`), `fullFactoryDefault` (SET `0x44`),
+`deleteAllLinkKeys` (2009 : SET Feature `0x44` d'un octet, délai 1000 ms — même registre que `FullFactoryDefault`),
+`userMode`/`setUserMode:` (`0x43`, absent de notre firmware), `deviceNameFromHardware` (GET `0x51-0x54` concaténés),
+`batteryLow`/`batteryDangerouslyLow` (lisent les propriétés `BatteryLow`/`BatteryPanic`), `connectionCounts:`
+(GET Feature `0x4E`, 10 o — réservé au PID `0x0310` par `blued`, sans objet ici), `connectToHost:linkKey:`,
+`removeCurrentHost`, `handoffAndRemoveHost:…` (**vides** en 10.7 : renvoient 0).
+
+**Jamais envoyé à notre PID, quelle que soit l'époque** [désassemblage] : SET `0x09` (réservé `0x022C-0x022E`, fw ≥ `0x0137`),
+SET `0x45` (`FactoryDefault`), SET `0x43` (`UserMode`), tout ID `0xD0-0xDF` ou `0xF0-0xFF` sur le canal HID.
+
+## 6. L'updater 2009 (`bfu` + `config.hex`) : structure publique uniquement
+
+Contenu de `WirelessKybdFirmwareUpdate.pkg` **[chaîne/plist]** : application « 2009 Aluminum Wireless Keyboard Firmware
+Update », `Parameters.plist` (`FWVersion = 80`, `PageTimeout = 32768` slots ≈ 20,5 s, `AckRecords = true`,
+`CopyAddressToPasteboard = true`, `LoggingOn = false`), et `/Library/Application Support/Apple/WLKBFU/2/` :
+`bfu` (Mach-O i386 + ppc7400, 64 196 o) et `config.hex` (35 296 o). `bfu` connaît aussi `WLKBFU/1/` et `WLMMFU/3/`
+(clavier précédent, Mighty Mouse) **[chaîne]**.
+
+### 6.1 `config.hex`
+
+| Propriété | Valeur | Preuve |
+|---|---|---|
+| Taille | 35 296 o = 2 206 × 16 | [mesuré] |
+| Entropie | 7,98 bit/octet, 256 valeurs distinctes, aucun texte | [mesuré] |
+| Traitement | lu par `dataWithContentsOfFile:`, passé à `decryptFWData:` → fonction `FWDecrypt`, puis découpé en enregistrements texte (séparateur `":\n"`, lignes marquées `>` et `#` traitées à part, paires hexadécimales → octets, type d'enregistrement en octet 3 avec `1` = fin) par `convertRecords:` | [désassemblage] |
+| Nature | **chiffré** (taille multiple de 16 → chiffrement par blocs **[déduction]**) ; le clair est un fichier d'enregistrements de type Intel-HEX **[déduction]** | |
+
+**Arrêt volontaire** : la clé et l'algorithme de `FWDecrypt` sont internes à `bfu` et non publiés. Conformément au cadre,
+**ils n'ont pas été examinés ni reconstruits**, et `config.hex` **n'a pas été déchiffré**. Le contenu de l'image n'est
+donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` / `updateConfigData` (+ `fwBank1BaseAddr`,
+`fwFSOffSet`, `firstConfigRecordNum`) suggèrent que la mise à jour 2009 réécrit la **zone de configuration/correctifs**
+(mémoire externe du BCM2042), pas la ROM masquée **[déduction]**.
+
+### 6.2 Protocole de transfert
+
+| Étape | Constat | Preuve |
+|---|---|---|
+| Isolement | `IOBluetoothIgnoreHIDDevice`, puis commande noyau `ReleaseAllChannelsWithSleepForHIDUpdate` : le pilote ferme les canaux HID (contrôle puis interruption, 1,3 s d'attente après chacun) | [désassemblage] des deux côtés |
+| Lien | connexion baseband (`PageTimeout`), politique de lien `0x000B` pendant la mise à jour (sniff interdit), `0x000F` restaurée ensuite ; types de paquets `0x0408` | [désassemblage] |
+| **Canal** | **L2CAP, PSM `0xF30D`** (PSM dynamique vendeur), **pas** les PSM HID `0x11`/`0x13` (ré-autorisés en fin de mise à jour) | [désassemblage] `IOBluetoothDeviceOpenL2CAPChannelSync(…, 0xF30D, …)` |
+| Trame de commande | octets bruts `[commande][longueur][paramètres]`, **sans en-tête HIDP**, accusé attendu sous 10 s | [désassemblage] `sendCommand:withAck:param:pLength:` |
+| Séquence | `D1` (1 o) → acquit `D2` ; `D4` → `D5` ; `D6` (1 o) → `D7` ; puis enregistrements bruts, avec `DA` (1 o) → `DB` pour l'acquit des blocs (attente 20 s) ; `D3` = abandon (acquit `D3`) ; tout acquit inattendu → reprise | [désassemblage] `ackReceived:` (table de sauts sur `0xD2-0xDC`) |
+| Fin | `##100##` sur la sortie standard (progression `##%03d##`), retour des PSM `0x11`/`0x13` | [chaîne + désassemblage] |
+
+**Conséquences [déduction]**
+
+* Le canal de mise à jour du A1314 est un **canal L2CAP vendeur séparé**, ouvert par l'hôte vers le PSM `0xF30D`
+  — **pas** une suite de SET_REPORT HID. Cela **corrige** `RE-COMMANDES-VENDEUR.md` §4.3, qui présentait les registres
+  HID write-only comme « candidats naturels » du canal de flash.
+* Les opcodes du protocole occupent la plage **`0xD1-0xDB`**. Nos IDs Feature HID `0xD0`, `0xD4`, `0xD5` (refus GET `0x03`)
+  et `0xD1`, `0xD8` (lisibles, 0) tombent dans la **même plage** : le micrologiciel range vraisemblablement ses fonctions
+  de maintenance sous un même préfixe `0xDx`. **Aucune** preuve que les IDs HID `0xDx` déclenchent ces commandes ;
+  la coïncidence suffit à les classer **« ne jamais écrire »**.
+* Aucun updater ne vise `0x0255-0x0257` (§2) : il n'y a **aucune** raison légitime d'ouvrir le PSM `0xF30D` vers notre
+  clavier. Aucun outil ne sera écrit pour cela.
