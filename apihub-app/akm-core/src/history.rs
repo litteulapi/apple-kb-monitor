@@ -228,7 +228,8 @@ impl<C: Clock> History<C> {
             .create(true)
             .append(true)
             .open(&self.path)?;
-        writeln!(f, "{line}")?;
+        // One write call: an interruption cannot leave a line without its `\n`.
+        f.write_all(format!("{line}\n").as_bytes())?;
         Ok(true)
     }
 
@@ -254,15 +255,26 @@ impl<C: Clock> History<C> {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
             Err(e) => return Err(e),
         };
-        let cutoff = self.clock.now().saturating_sub(retention_s);
         let total = content.lines().count();
-        let keep: Vec<HistoryEntry> = parse(&content)
+        let entries = parse(&content);
+        // The threshold is anchored on the data as well as on the wall clock:
+        // a clock running ahead (no NTP yet, dead RTC battery) cannot make
+        // the whole file look old (#166).
+        let anchor = entries
+            .iter()
+            .map(|e| e.ts)
+            .max()
+            .map_or(self.clock.now(), |m| m.min(self.clock.now()));
+        let cutoff = anchor.saturating_sub(retention_s);
+        let keep: Vec<HistoryEntry> = entries
             .into_iter()
             .filter(|e| e.ts >= cutoff || e.event.is_some())
             .collect();
         if keep.len() == total {
             return Ok(0);
         }
+        // One generation of safety net before any rewrite.
+        std::fs::copy(&self.path, self.path.with_extension("jsonl.prev"))?;
         let tmp = self.path.with_extension("jsonl.tmp");
         {
             let mut f = std::fs::File::create(&tmp)?;
@@ -321,6 +333,28 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn clock_ahead_does_not_wipe_the_history() {
+        // #166: 100 real samples, clock 5 years ahead.
+        let t = Tmp::new();
+        let real = 1_800_000_000u64;
+        let h = History::new(t.0.join("h.jsonl"), FakeClock::at(real));
+        for i in 0..100 {
+            h.append_entry(&HistoryEntry::sample(real - i * 3600, 50.0, None))
+                .unwrap();
+        }
+        let ahead = History::new(t.0.join("h.jsonl"), FakeClock::at(real + 5 * 365 * 86_400));
+        assert_eq!(ahead.rotate(RETENTION_S).unwrap(), 0);
+        assert_eq!(ahead.read().len(), 100);
+        // Genuinely old lines still go, and a .prev copy is kept.
+        let h2 = History::new(t.0.join("h.jsonl"), FakeClock::at(real));
+        h2.append_entry(&HistoryEntry::sample(real - 200 * 86_400, 50.0, None))
+            .unwrap();
+        assert_eq!(h2.rotate(RETENTION_S).unwrap(), 1);
+        assert_eq!(h2.read().len(), 100);
+        assert!(t.0.join("h.jsonl.prev").exists());
     }
 
     #[test]
