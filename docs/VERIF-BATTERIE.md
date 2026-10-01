@@ -15,9 +15,10 @@ aucune écriture, pas de sudo, aucun service touché. Le rapport d'appairage n'e
 
 | Question | Réponse | Marge |
 |---|---|---|
-| Le 98-99 % actuel est-il faux ? | **Non réfuté.** Par bilan de charge, des piles posées il y a 9 h ont consommé 9 à 45 mAh sur 2 000 à 2 850 mAh, soit **98,2 à 99,6 % réels** [modèle]. Le chiffre est juste sur le fond. | réel 97-100 % |
+| Le 98-99 % du matin était-il trop haut ? | **Non, réfutation échouée.** Par bilan de charge, des piles posées il y a 9 h ont consommé 9 à 45 mAh sur 2 000 à 2 850 mAh, soit **98,2 à 99,6 % réels** [modèle]. Le chiffre était juste sur le fond. | réel 97-100 % |
+| Et le 96 % de 12:29 ? | **Trop bas.** `0x47` ne baisse que par marches, lors des reconnexions (§1.2bis). Il a perdu 3 points entre 11:00 et 12:29 pendant des perturbations de liaison, sans consommation correspondante. `0xEA` reste à 98, et la table appliquée à `0x49` donne 98,9. | −3 points dus à la liaison |
 | Le chiffre vient-il d'une mesure fraîche ? | **Oui.** `power_supply/capacity` n'est pas un cache : chaque lecture provoque un GET_REPORT radio de `0x47` (code noyau + btmon). UPower l'interroge toutes les 30 s. Aucune période noyau de 5 s. | — |
-| Que mesure-t-il vraiment ? | Une **tension** (`0x49` ≈ 2 945 mV, soit 1,473 V par pile) projetée sur la table d'usine `0x5A`. Au-dessus de 2 954 mV le firmware affiche 100 %, donc le haut de l'échelle ne dit presque rien. | 1 point = 17,9 mV par paire |
+| Que mesure-t-il vraiment ? | Une **tension** (`0x49` = 2 935-2 953 mV, soit ~1,47 V par pile), prise semble-t-il à la reconnexion, projetée sur la table d'usine `0x5A`. Au-dessus de 2 954 mV le firmware affiche 100 %, donc le haut de l'échelle ne dit presque rien. | 1 point = 17,9 mV par paire |
 | Restera-t-il juste ? | **Non : il devient optimiste.** La table place 75 % à 1,253 V par pile, ce qui correspond à **~35 % réels** pour une alcaline ; 50 % → ~25 % ; 25 % → ~5 % [modèle]. | ± 10 points |
 | La chimie est-elle compatible ? | 2,97-2,99 V quelques heures après la pose : **alcaline** (ou saline). Des NiMH chargées liraient 2,70-2,80 V ; du lithium neuf lirait 3,3-3,5 V. | — |
 | Autonomie ? | La pente du premier jour n'est **pas** exploitable (relaxation des piles neuves, radio maintenue active par les lectures). Le jeu précédent affichait encore **90 % firmware après ~180 jours**, soit 62-65 % réels environ. | voir §4 |
@@ -61,6 +62,7 @@ Fonction testée : `pct = tronc(interp_linéaire(0x49 ; 0x5A ↔ 100/75/50/25))`
 | 03:57 | 2953 | 99,94 | 99 | 98 | 99 | ✅ 0x47 |
 | 04:15-05:15 | 2950 | 99,78 | 99 | 98 (un 0 à 04:40) | 99 | ✅ 0x47 |
 | 11:37-12:02 | 2945 | **99,50** | **98** (137 lectures btmon) | 98 | 98 | ❌ attendu 99 |
+| 12:30:49 (après reconnexion 12:29) | 2935 | **98,94** | **96** | 98 | 96 (UPower) | ❌ attendu 98 |
 
 * **[mesuré] Réfutation partielle** : l'hypothèse de `HARDWARE-RAPPORTS-HID.md` §4 (« `0x47` = troncature
   de l'interpolation de `0x49` ») donne 99 à 2945 mV, alors que le clavier rend 98 depuis au moins 25 min.
@@ -71,6 +73,33 @@ Fonction testée : `pct = tronc(interp_linéaire(0x49 ; 0x5A ↔ 100/75/50/25))`
 * **Portée pratique : ± 1 point.** La forme de la fonction (plafond à 100 au-dessus de 2954 mV, pente de
   17,9 mV par point jusqu'à 75 %) est solide. Le critère « `floor(pct_fin)` = `0x47` ± 1 » de #139 reste
   satisfait.
+
+### 1.2bis `0x47` ne descend qu'aux reconnexions [mesuré : corrélation ; mécanisme : hypothèse]
+
+Chaque marche de `0x47` suit une déconnexion ou reconnexion du clavier (journal BlueZ et démon) :
+
+| Événement de liaison | `0x47` avant → après | `0x49` à ce moment | % de la table |
+|---|---|---|---|
+| déconnexion 03:25:47, reconnexion avant 03:41 | 100 → **99** (03:41:47) | ~2953 | 99,9 |
+| déconnexion 04:00:33, reconnexion avant 04:15 | 99 → 99 | 2950 | 99,8 |
+| redémarrages de bluetoothd 11:15-11:16, `Host is down` 11:32:29 | 99 → **98** (11:33:02) | 2945 | 99,5 |
+| déconnexion 12:13:28, reconnexion 12:29:31 | 98 → **96** (12:29:31) | 2935 | 98,9 |
+
+Pendant une session continue, `0x47` reste fixe : 99 de 04:15 à 10:52 alors que `0x49` passe de 2950 à
+~2946, puis 98 pendant 137 lectures de 11:37 à 12:02. **[hypothèse]** Le firmware calcule `0x47` au
+moment de la (re)connexion, sur une tension prise sous la charge du *paging* radio, et ne le recalcule pas
+pendant la session. 96 % correspond à ~2882-2900 mV sur la table, soit 35 à 50 mV sous `0x49` : c'est
+l'ordre de grandeur de la chute ohmique d'un pic d'émission.
+
+Conséquences :
+* **le pourcentage du noyau ne baisse pas avec la consommation, mais par marches lors des reconnexions.**
+  La perte de 3 points entre 11:00 et 12:29 vient des perturbations de liaison du jour (redémarrages de
+  BlueZ, lectures massives d'autres agents, décrochage de 12:13). Elle ne vient pas d'une consommation :
+  45 mAh en 1,5 h demanderaient 30 mA en continu ;
+* sur cette journée, `0x47` est donc plutôt **pessimiste** (96) ; `0xEA` reste à 98 et la table appliquée
+  à `0x49` donne 98,9 ;
+* la marge de `0x47` est d'au moins −3 points à cause des événements de liaison, en plus de la
+  non-linéarité de l'échelle (§2).
 
 ### 1.3 Fraîcheur : cache ou mesure ?
 

@@ -77,7 +77,7 @@ def find_hidraw(mac):
     import glob
     for ue in glob.glob("/sys/class/hidraw/hidraw*/device/uevent"):
         try:
-            if ("HID_UNIQ=" + mac.lower()) in open(ue).read().lower():
+            if ("hid_uniq=" + mac.lower()) in open(ue).read().lower():
                 return "/dev/" + ue.split("/")[4]
         except OSError:
             pass
