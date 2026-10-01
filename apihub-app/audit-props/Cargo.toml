@@ -1,0 +1,19 @@
+# Crate d'audit outillé (issue : audit proptest/fuzz). Volontairement HORS du
+# workspace principal (le `[workspace]` ci-dessous en fait sa propre racine) :
+# aucun fichier existant n'est modifié. Lancer :
+#   cd apihub-app/audit-props && cargo test
+[package]
+name = "akm-audit-props"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+akm-core = { path = "../akm-core" }
+libc = "0.2"
+
+[dev-dependencies]
+proptest = { version = "1", default-features = false, features = ["std"] }
+serde_json = "1"
