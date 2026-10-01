@@ -1,7 +1,7 @@
 # Maintainer: Han <han@agenceapi.com>
 pkgname=apple-kb-monitor
 pkgver=3.0.0
-pkgrel=2
+pkgrel=3
 pkgdesc="Telemetry and key mapping for Apple Bluetooth keyboards (BCM2042/BCM20733): battery, voltage, RSSI, BlueZ battery provider, KDE integration"
 arch=('x86_64')
 url="https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
@@ -37,13 +37,17 @@ package() {
     # ── Binaries ────────────────────────────────────────────────────────
     install -Dm755 "$srcdir/apple-kb-monitor"                        "$pkgdir/usr/bin/apple-kb-monitor"
     install -Dm755 "$startdir/apihub-app/target/release/apihub-app" "$pkgdir/usr/bin/apihub-app"
+    install -Dm755 "$startdir/apihub-app/target/release/apple-kb-monitord" "$pkgdir/usr/bin/apple-kb-monitord"
 
     # ── RSSI helper (cap_net_admin set in post_install, not here: setcap is
     #    not possible under fakeroot and xattrs are not reliably kept) ────
     install -Dm755 "$startdir/rssi-helper"                          "$pkgdir/usr/lib/apple-kb-monitor/rssi-helper"
 
-    # ── systemd user service (CLI daemon) ───────────────────────────────
+    # ── systemd user services: apple-kb-monitord (single keyboard owner) and
+    #    the legacy Python daemon (Conflicts= with each other) ────────────
+    install -Dm644 "$startdir/systemd/apple-kb-monitord.service"         "$pkgdir/usr/lib/systemd/user/apple-kb-monitord.service"
     install -Dm644 "$startdir/systemd/apple-kb-monitor.service"          "$pkgdir/usr/lib/systemd/user/apple-kb-monitor.service"
+    install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor1.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor1.service"
 
     # ── udev + keyd + modprobe ──────────────────────────────────────────
     install -Dm644 "$startdir/udev/70-apple-kb-hidraw.rules"          "$pkgdir/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules"
