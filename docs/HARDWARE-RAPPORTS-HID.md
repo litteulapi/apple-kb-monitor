@@ -73,13 +73,13 @@ Les IDs `0x54`, `0x5C`, `0x5D`, `0xD1`, `0xD8` n'étaient pas dans l'inventaire 
 | `0x60` | 9 | = `0x5A` | copie de `0x5A` | [mesuré] |
 | `0xD1` | 2 | `d1 00` | u8 = 0 | inconnu |
 | `0xD8` | 2 | `d8 00` | u8 = 0 | inconnu |
-| `0xEA` | 2 | `ea 62` | u8 = 98 | [hypothèse] pourcentage interne non arrondi/autre filtre |
+| `0xEA` | 2 | `ea 62` (une fois `ea 00`) | u8 = 98, 0 transitoire | [hypothèse] second estimateur de % ; 0 isolé à ignorer [mesuré] |
 | `0xEB` | 9 | = `0x5A` | copie de `0x5A` | [mesuré] |
 | `0xF4` | 3 | `f4 06 cc` | u16 BE = 1740 | constant ; [hypothèse] voir §4 |
 | `0xF5` | 3 | `f5 03 84` | u16 BE = 900 | **constant à travers un changement de piles : ce n'est pas la tension** [mesuré] |
 | `0xF6` | 3 | `f6 00 04` | 4 | inconnu |
 | `0xF7` | 3 | `f7 00 04` | 4 | inconnu |
-| `0xFE` | 9 | 8 × `00` | vide | [mesuré] |
+| `0xFE` | 9 | 8 × `00` | vide | [mesuré] (le `--dump` du CLI a affiché `fe0004` à 03:57:18 : non reproduit en 14 lectures exactes, probable artefact de l'outil) |
 | `0xFF` | 4 | `ff 0b aa 01` / `ff 0b af 01` | **u16 BE = même tension que `0x46`** + octet `0x01` | [mesuré], voir §3 |
 
 Endianness : `0x46`, `0x49`, `0x4F` sont en petit-boutiste ; `0x5A`/`0x5B`/`0xF4`/`0xF5`/`0xFF` en gros-boutiste.
@@ -134,29 +134,84 @@ Le firmware mélange donc deux conventions ; `0x46` (LE) et `0xFF` (BE) donnent 
 
 ## 5. Observation temporelle (lecture seule)
 
-SECTION_SERIE_TEMPORELLE
+Série principale : 13 salves de 27 GET_REPORT, une toutes les 5 min, 2026-10-01 04:15:26 → 05:15:38,
+aucune absence ni erreur d'E/S (`reports_timeseries_20261001.json`). Complétée par la capture de
+l'audit voisin (`tests/live/re/capture-2026-10-01.jsonl`, branche `audit/decodage-hid`, 03:57-04:00).
+
+| Heure | `0x46` mV | `0xFF` mV | `0x49` mV | `0x47` % | `0xEA` | noyau % |
+|---|---|---|---|---|---|---|
+| 03:57:18 (voisin) | 2991 | 2982 | 2953 | 99 | 98 | 99 |
+| 03:57:53 | 2991 | 2991 | 2953 | 99 | 98 | 99 |
+| 04:15:26 | 2986 | 2986 | 2950 | 99 | 98 | 99 |
+| 04:25:27 | 2991 | 2986 | 2950 | 99 | 98 | 99 |
+| 04:40:31 | 2986 | 2986 | 2950 | 99 | **0** | 99 |
+| 05:05:36 | 2991 | 2991 | 2950 | 99 | 98 | 99 |
+| 05:15:38 | 2991 | 2991 | 2950 | 99 | 98 | 99 |
+
+Constats **[mesuré]** :
+
+1. **Constants sur toute la journée** (balayage, série, capture voisine) : `0x09`, `0x4A`, `0x4B`, `0x4C`
+   (empreinte identique), `0x4F`, `0x51-0x54`, `0x5A`/`0x60`/`0xEB`, `0x5B`, `0x5C`/`0x5D`, `0xD1`/`0xD8`,
+   `0xF4`, `0xF5`, `0xF6`/`0xF7`, `0xFE`.
+2. **`0x46` et `0xFF`** oscillent entre 2982, 2986 et 2991 mV : pas de quantification ≈ 4,5 mV (un pas d'ADC),
+   bruit de ± 1 pas. Les deux registres sont lus à ~10 s d'écart dans une salve, d'où des écarts d'un pas.
+3. **`0x49`** passe de 2953 (03:57) à 2950 (dès 04:15) puis reste fixe une heure : grandeur lissée,
+   sans le bruit de `0x46` → appuie « tension filtrée ».
+4. **`0xEA`** vaut 98 sauf **une lecture à 0** (04:40:31, `ea00`, longueur correcte) alors que `0x47` et le
+   noyau restent à 99 : valeur transitoire (recalcul en cours ?). Tout consommateur doit ignorer un 0 isolé.
+   L'historique d'avril 2026 montre aussi des 0 % ponctuels (bug #78, cause différente : lecture en échec).
+5. `0x4C` désigne toujours l'hôte `6c:94:66:52:7c:0d`.
+6. Batterie : 99 % noyau/`0x47` sur toute l'heure ; une heure de piles neuves ne suffit pas à voir
+   bouger le pourcentage, seule la tension renseigne (cf. #83/#96 pour l'historique long).
+
+Veille et déconnexion :
+
+* La capture voisine montre la perte du lien en pleine salve à 04:00:13 (`errno 5` après ~3,5 s par
+  rapport), BlueZ journalise « keyboard disconnected » à 04:00:33 puis `Host is down` : le clavier s'est
+  endormi. Aucun SET_REPORT n'a été émis ; la cause (veille d'inactivité ou effet des lectures) n'est pas
+  tranchée.
+* De 04:15 à 05:15, avec une lecture toutes les 5 min, le lien est resté établi.
+* **[hypothèse]** `0xF5` = 900 s = délai d'inactivité avant veille. Test proposé (passif, sans requête) :
+  `tests/live/re/idle_timeout.py` horodate les rapports d'entrée (contenu jamais conservé) et la
+  disparition du nœud ; un écart dernier appui → déconnexion ≈ 900 s sur plusieurs cycles, sans aucun
+  GET_REPORT pendant ce temps, confirmerait. Non exécuté jusqu'au bout ici (lectures suspendues sur
+  consigne pendant la déconnexion).
 
 ## 6. Synthèse : décodé / décodable / inconnu
 
 | Statut | Rapports |
 |---|---|
-| **Décodé** (preuve mesurée) | `0x46` tension mV LE · `0xFF` tension mV BE + octet `0x01` · `0x47` % · `0x4F` version `0x0050` · `0x51-0x54` nom 32 o · `0x5A`/`0x60`/`0xEB` table de 4 tensions (copies) · `0x5B` = `0xF4`‖`0xF5` · `0x5C`/`0x5D`/`0xFE` vides |
-| **Décodable** (hypothèse testable sans écriture) | `0x49` tension filtrée · `0xEA` second estimateur % · `0xF5` délai de veille · `0xF4` coupure · octet 3 de `0xFF` (drapeau d'état, à corréler avec pile faible) · `0x4C` type `0x03` + 18 o |
-| **Inconnu** (constant, aucune corrélation possible en lecture) | `0x09` (`FF01:0B` = 1) · `0x4A` (18) · `0x4B` (`00 08`) · `0xD1`/`0xD8` (0) · `0xF6`/`0xF7` (4) |
+| **Décodé** (preuve mesurée) | `0x46` tension instantanée mV (LE) · `0xFF` même tension (BE) + octet `0x01` · `0x47` % (= noyau) · `0x4F` version `0x0050` · `0x51-0x53` nom ASCII · `0x4C` octets 2-7 = hôte appairé · `0x5A`/`0x60`/`0xEB` table de 4 tensions (3 copies) · `0x5B` = `0xF4`‖`0xF5` · `0x5C`/`0x5D`/`0xFE` vides · `0xF5` n'est **pas** une tension |
+| **Décodable** (hypothèse testable sans écriture) | `0x49` tension lissée (vivante, sans bruit) · `0x5A` = seuils 100/75/50/25 % (cohérent avec `0x47` via `0x49`) · `0xEA` second estimateur %, 0 transitoire · `0xF5` = 900 s de délai de veille (protocole §5) · `0xF4` = 1740 mV de coupure · `0x54` 4ᵉ fragment de nom (nom ≤ 32 o ; troncature à 24 o du code non démontrée, nom actuel de 19 o) · octet 3 de `0xFF` (drapeau, à surveiller en fin de piles) · `0x4C` octet `0x03` |
+| **Inconnu** (constant, aucune corrélation possible en lecture) | `0x09` (`FF01:0B` = 1, seul Feature déclaré) · `0x4A` (18) · `0x4B` (`00 08`) · `0xD1`/`0xD8` (0) · `0xF6`/`0xF7` (4) · 12 derniers octets de `0x4C` (secrets, non étudiés) |
 
 Les rapports constants ne peuvent être élucidés qu'en écrivant (SET_REPORT), ce qui est exclu, ou en
-comparant plusieurs claviers / firmwares (A1314 d'une autre révision, A1255).
+comparant plusieurs claviers / firmwares (autre A1314, A1255), ou en observant une fin de vie de piles
+(`0xFF` octet 3, `0xEA`, `0x49` sous 2054 mV).
 
-## 7. Fonctions utilisateur rendues possibles
+## 7. Fonctions utilisateur rendues possibles et suivi Gitea
 
 | Fonction | Rapports | Suivi |
 |---|---|---|
-| Tension réelle des piles (mV) au lieu d'une valeur figée | `0x46` / `0xFF` | bug à corriger (CLI + akm-core) |
-| Détection fiable du remplacement de piles : saut de tension ≥ 150 mV à la reconnexion, indépendant du % | `0x46` | complète #85 |
-| Santé / type de piles : tension sous charge (`0x46`) vs filtrée (`0x49`), écart ↔ résistance interne | `0x46`, `0x49` | complète #108 |
-| Pourcentage fin (0,1 %) calculé sur la courbe d'usine de l'unité | `0x46` + `0x5A` | nouvelle issue |
-| Contrôle d'intégrité de la table d'étalonnage (3 copies identiques) et alerte si divergence | `0x5A`, `0x60`, `0xEB` | déjà dans le code (`calib_mirror_*`) |
-| Nom interne complet (32 o) : le code ne lit que `0x51-0x53` (24 o) → nom tronqué au-delà | `0x51-0x54` | nouvelle issue |
-| Inventaire matériel : version firmware `0x4F`, révision | `0x4F` | existant |
-| Prédiction de mise en veille / délai d'inactivité affiché | `0xF5` (si confirmé) | selon §5 |
-| Mode d'alimentation / état de charge | aucun rapport ne varie avec l'alimentation : le A1314 est à piles, pas d'état de charge | sans objet |
+| Corriger la tension affichée (`0xF5` × 3,3/1023 → `0x46` mV) et les décodages faux (`0xFF` « build », `0x46`/`0x49` « paramètres BT », `0xEA` « pré-arrondi ») | `0x46`, `0xFF`, `0x49`, `0xEA` | bugs #131, #132, #136 (preuve du changement de piles ajoutée sur #136 ; #138 fermé en doublon) |
+| Tension réelle + pourcentage fin 0,1 % sur la courbe d'usine de l'unité | `0x46`, `0x49`, `0x5A` | **#139** (F35) |
+| Hôte appairé lu dans le clavier, alerte de ré-appairage ailleurs | `0x4C` octets 2-7 seulement | **#140** (F36) ; décodage #133, exposition #123 |
+| Détection du remplacement de piles par saut de tension | `0x49`/`0x46` | commentaire sur #85 |
+| Santé / type de piles (alcaline vs NiMH), écart instantané − lissé | `0x46`, `0x49`, `0x5A` | commentaire sur #108 |
+| Prévision d'autonomie plus précoce (la tension bouge avant le % entier) | `0x49` | #83, via #139 |
+| Contrôle d'intégrité de la table d'étalonnage (3 copies) | `0x5A`, `0x60`, `0xEB` | déjà dans le code (`calib_mirror_*`) |
+| Délai de veille affiché / prédit | `0xF5` | non ouvert : hypothèse à confirmer (§5) |
+| État de charge, mode d'alimentation | aucun : le A1314 est à piles, aucun rapport ne varie avec une alimentation | sans objet |
+
+## 8. Reproduire
+
+```bash
+python3 tests/live/re/sample_reports.py --scan-once                    # balayage 0x00-0xFF, une fois
+python3 tests/live/re/sample_reports.py --interval 300 --count 13 --out s.jsonl
+python3 tests/live/re/sample_reports.py --analyze s.jsonl              # résumé, sans matériel
+python3 tests/live/re/idle_timeout.py --duration 7200 --out idle.jsonl # passif, horodatage seul
+```
+
+Sources : [hid-input.c](https://github.com/torvalds/linux/blob/master/drivers/hid/hid-input.c) (quirks batterie Apple),
+[hid-apple.c](https://github.com/torvalds/linux/blob/master/drivers/hid/hid-apple.c) (quirks 0x0256),
+[BCM2042 (fiche produit)](https://www.alldatasheet.com/html-pdf/175090/BOARDCOM/BCM2042/384/1/BCM2042.html) (puce HID BT avec interface batterie, sans table de registres publique).
