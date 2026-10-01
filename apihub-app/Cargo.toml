@@ -1,6 +1,6 @@
 [workspace]
-members = [".", "akm-core", "apple-kb-monitord"]
-default-members = [".", "akm-core", "apple-kb-monitord"]
+members = [".", "akm-core", "apple-kb-monitord", "crates/akmctl", "crates/akm-helper"]
+default-members = [".", "akm-core", "apple-kb-monitord", "crates/akmctl", "crates/akm-helper"]
 resolver = "2"
 
 [workspace.package]
