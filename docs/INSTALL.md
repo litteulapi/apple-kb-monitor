@@ -74,20 +74,34 @@ None. See [CONFIGURATION.md](CONFIGURATION.md).
 - KDE application menu: search for **ApiHub**
 - Terminal: `apihub-app`
 
-### 5. Optional: Python CLI daemon
+### 5. Enable the daemon
 
-The Python `apple-kb-monitor` CLI can run as a systemd user service for a headless BlueZ Battery Provider and low-battery notifications:
+`apple-kb-monitord` is the single owner of the keyboard: tray icon, low-battery notifications, history and the data of the Plasma widget and of `apihub-app`. Enable it once per user:
 
 ```bash
-systemctl --user enable --now apple-kb-monitor.service
+systemctl --user enable --now apple-kb-monitord.service
 ```
+
+The package does not enable it. Without this command the daemon only starts by D-Bus activation (`dbus/com.agenceapi.AppleKbMonitor1.service`, `SystemdService=apple-kb-monitord.service`) when a client calls `com.agenceapi.AppleKbMonitor1` on the session bus, i.e. when `apihub-app` or the widget is opened. So after a reboot or a new login there is no tray and no low-battery alert until one of them has been opened.
+
+The window uses a second activatable name, `com.agenceapi.AppleKbMonitor` (`dbus/com.agenceapi.AppleKbMonitor.service`): the tray ("Open") and the widget call `org.freedesktop.Application.Activate` on it, which starts `apihub-app` when it is closed and raises the existing window otherwise (single instance).
 
 Verify:
 
 ```bash
-systemctl --user status apple-kb-monitor.service
+systemctl --user status apple-kb-monitord.service
+busctl --user status com.agenceapi.AppleKbMonitor1
+akmctl status              # battery, voltage, link
+```
+
+### 6. Legacy Python service (alternative, exclusive)
+
+The Python `apple-kb-monitor.service` does the same acquisition (BlueZ Battery Provider, notifications) and **conflicts** with `apple-kb-monitord.service` (`Conflicts=`): starting one stops the other. Do not enable both; use it only instead of the daemon:
+
+```bash
+systemctl --user disable --now apple-kb-monitord.service
+systemctl --user enable --now apple-kb-monitor.service
 apple-kb-monitor --once    # quick battery check
-apple-kb-monitor --status  # full telemetry dump
 ```
 
 ### 6. keyd verification
@@ -162,7 +176,7 @@ sudo keyd list               # verify device detection
 ### BlueZ Battery Provider not showing in KDE
 
 ```bash
-journalctl --user -u apple-kb-monitor.service -f
+journalctl --user -u apple-kb-monitord.service -f    # or apple-kb-monitor.service for the legacy Python service
 busctl tree org.bluez        # verify Battery1 interface is registered
 ```
 
@@ -175,5 +189,6 @@ sudo pacman -R apple-kb-monitor
 The post_remove hook restores the original Bluedevil QML and reloads udev rules. Disable user services manually:
 
 ```bash
-systemctl --user disable apple-kb-monitor.service
+systemctl --user disable --now apple-kb-monitord.service
+systemctl --user disable apple-kb-monitor.service   # only if you had enabled the legacy service
 ```
