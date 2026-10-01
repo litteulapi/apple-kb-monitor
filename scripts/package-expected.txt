@@ -19,6 +19,7 @@ usr/share/bash-completion/completions/akmctl
 usr/share/icons/hicolor/scalable/apps/apihub-scarab.svg
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/metadata.json
 usr/share/doc/apple-kb-monitor/QA-AUTOMATIQUE.md
-etc/keyd/apple-keyboard.conf
+usr/share/doc/apple-kb-monitor/examples/keyd/apple-keyboard.conf
+usr/share/doc/apple-kb-monitor/KEYD.md
 etc/modprobe.d/hid_apple.conf
 usr/lib/systemd/user/timers.target.wants/apple-kb-monitor-selfcheck.timer

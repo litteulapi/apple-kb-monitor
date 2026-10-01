@@ -3,8 +3,8 @@ post_install() {
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
 
-    # keyd: touch it only if the user runs it (never start a disabled unit)
-    _akm_keyd_reload
+    # keyd is optional and never touched by the package (#246): no reload, no
+    # restart. `keyd reload` crashes keyd 2.6.0 (dangling active_kbd, SEGV).
 
     # Initial install only: apply the packaged default (modprobe.d, fnmode=1)
     # right away. post_upgrade never does it: it would overwrite the mode the
@@ -28,9 +28,12 @@ post_upgrade() {
         echo ">>> rssi-helper is now restricted to the group 'akm' (#209). To keep the signal"
         echo "    indicator:  sudo usermod -aG akm \$USER   (then log in again)."
     fi
+    if [ "$(vercmp "$2" 3.1.0-10)" -lt 0 ]; then
+        _akm_keyd_notice
+    fi
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
-    _akm_keyd_reload
+    # keyd: never reloaded nor restarted (#246).
     # fnmode is deliberately left alone (user choice / modprobe.d).
     _akm_setcap
 }
@@ -41,10 +44,18 @@ post_remove() {
     echo "      systemctl --user disable apple-kb-monitord.service"
 }
 
-_akm_keyd_reload() {
-    if systemctl is-active --quiet keyd 2>/dev/null; then
-        keyd reload 2>/dev/null || systemctl try-restart keyd 2>/dev/null || true
-    fi
+# Up to 3.1.0-9 the package shipped /etc/keyd/apple-keyboard.conf and ran
+# `keyd reload`, which crashed keyd 2.6.0 on PC01 (#246). The file is now an
+# example under /usr/share/doc; pacman removed it from /etc/keyd (or kept a
+# .pacsave if it had been edited). A running keyd keeps the old mapping in
+# memory until its next restart: tell the user, do not touch the service.
+_akm_keyd_notice() {
+    echo ">>> keyd is now optional (#246): /etc/keyd/apple-keyboard.conf is no longer installed."
+    echo "    F3-F6 are mapped by the udev hwdb file (akmctl keymap). keyd is left untouched."
+    echo "    - keep keyd off (recommended):  sudo systemctl disable --now keyd"
+    echo "    - or keep the keyd macros:      sudo install -Dm644 /usr/share/doc/apple-kb-monitor/examples/keyd/apple-keyboard.conf /etc/keyd/"
+    echo "                                    sudo systemctl restart keyd   (never 'keyd reload': it crashes keyd 2.6.0)"
+    echo "    Details: /usr/share/doc/apple-kb-monitor/KEYD.md"
 }
 
 # RSSI helper (#209): file capability cap_net_admin, executable by the members
@@ -90,7 +101,6 @@ _akm_message() {
     echo "      apihub-app                     # from terminal"
     echo "      # or search 'ApiHub' in KDE application menu"
     echo ""
-    echo ">>> Special keys (via keyd, device 05ac:0256):"
-    echo "      F3 = Overview, F4 = Grid View, F5 = Lock Screen, F6 = Show Desktop"
-    echo "      F1/F2 and the other keys are passed through to the system"
+    echo ">>> Special keys: mapped by the udev hwdb file (akmctl keymap). keyd is optional:"
+    echo "      example config in /usr/share/doc/apple-kb-monitor/examples/keyd/ (see KEYD.md)"
 }

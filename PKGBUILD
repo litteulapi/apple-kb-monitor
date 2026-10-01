@@ -8,16 +8,17 @@ url="https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
 license=('GPL-2.0-or-later')
 # apihub-app (eframe/winit) loads wayland/xkbcommon/EGL/GL/X11 with dlopen, so
 # ldd does not show them: declared by hand (#156). libcap = setcap in the .install.
-depends=('bluez' 'keyd' 'polkit' 'dbus' 'systemd' 'libcap'
+depends=('bluez' 'polkit' 'dbus' 'systemd' 'libcap'
          'wayland' 'libxkbcommon' 'libxkbcommon-x11' 'libglvnd'
          'libx11' 'libxcursor' 'libxi' 'libxrandr')
 makedepends=('rust' 'gcc')
 optdepends=(
     'bluez-utils: bluetoothctl CLI for BT management'
     'libnotify: desktop notifications on low battery'
+    'keyd: optional F3-F6 macros (example config in /usr/share/doc/apple-kb-monitor/examples/keyd)'
 )
 options=('!lto')   # C-LTO objects from ring break the Rust link (rust-lld)
-backup=('etc/keyd/apple-keyboard.conf' 'etc/modprobe.d/hid_apple.conf')
+backup=('etc/modprobe.d/hid_apple.conf')
 install=apple-kb-monitor.install
 # makepkg only resolves local sources by basename in $startdir, so files in
 # subdirectories (systemd/, udev/, ...) are installed directly from $startdir.
@@ -70,10 +71,11 @@ package() {
     ln -s ../apple-kb-monitor-selfcheck.timer "$pkgdir/usr/lib/systemd/user/timers.target.wants/apple-kb-monitor-selfcheck.timer"
     install -Dm644 "$startdir/docs/QA-AUTOMATIQUE.md" "$pkgdir/usr/share/doc/apple-kb-monitor/QA-AUTOMATIQUE.md"
 
-    # ── udev + keyd + modprobe ──────────────────────────────────────────
+    # ── udev + modprobe (+ keyd example, never active by default: #246) ──
     install -Dm644 "$startdir/udev/70-apple-kb-hidraw.rules"          "$pkgdir/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules"
     install -Dm644 "$startdir/udev/README.md"                         "$pkgdir/usr/share/doc/apple-kb-monitor/udev-README.md"
-    install -Dm644 "$startdir/keyd/apple-keyboard.conf"               "$pkgdir/etc/keyd/apple-keyboard.conf"
+    install -Dm644 "$startdir/keyd/apple-keyboard.conf"               "$pkgdir/usr/share/doc/apple-kb-monitor/examples/keyd/apple-keyboard.conf"
+    install -Dm644 "$startdir/docs/KEYD.md"                           "$pkgdir/usr/share/doc/apple-kb-monitor/KEYD.md"
     install -Dm644 "$startdir/modprobe/hid_apple.conf"                    "$pkgdir/etc/modprobe.d/hid_apple.conf"
 
     # ── Icons ───────────────────────────────────────────────────────────
