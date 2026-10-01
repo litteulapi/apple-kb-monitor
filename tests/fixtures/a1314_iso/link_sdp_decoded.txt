@@ -1,0 +1,35 @@
+== enregistrement 0x00010000
+  0x0000 ServiceRecordHandle = 0x00010000 (65536)
+  0x0001 ServiceClassIDList = [UUID 0x1124 HumanInterfaceDeviceService]
+  0x0004 ProtocolDescriptorList = [[UUID 0x0100 L2CAP, 0x0011 (17)], [UUID 0x0011 HIDP]]
+  0x0005 BrowseGroupList = [UUID 0x1002 PublicBrowseRoot]
+  0x0006 LanguageBaseAttributeIDList = [0x656E (25966), 0x006A (106), 0x0100 (256)]
+  0x0009 BluetoothProfileDescriptorList = [[UUID 0x1124 HumanInterfaceDeviceService, 0x0100 (256)]]
+  0x000D AdditionalProtocolDescriptorLists = [[[UUID 0x0100 L2CAP, 0x0013 (19)], [UUID 0x0011 HIDP]]]
+  0x0100 ServiceName = 'Apple Wireless Keyboard'
+  0x0101 ServiceDescription = 'Keyboard'
+  0x0102 ProviderName = 'Apple Inc.'
+  0x0201 HIDParserVersion = 0x0111 (273)
+  0x0202 HIDDeviceSubclass = 0x40 (64)
+  0x0203 HIDCountryCode = 0x0D (13)
+  0x0204 HIDVirtualCable = false
+  0x0205 HIDReconnectInitiate = true
+  0x0206 HIDDescriptorList = type 0x22, 224 octets, 05010906a1018501050719e029e71500250175019508810275089501810175019505050819012905910275039501910175089506150026ff00050719002aff008100c0050c0901a101854705010906a10205060920150026ff00750895018102c0c0050c0901a10185111500250175019503810175019501050c09b8810206ff0009038102750195038101050c8512150025017501950109cd810209b3810209b4810209b5810209b68102810181018101851315002501750195010601ff090a81020601ff090c81227501950681018509090b75089501b10275089502b101c0
+  0x0207 HIDLANGIDBaseList = [[0x0409 (1033), 0x0100 (256)]]
+  0x0209 HIDBatteryPower = true
+  0x020A HIDRemoteWake = true
+  0x020B HIDProfileVersion (obsolète) = 0x0100 (256)
+  0x020C HIDSupervisionTimeout = 0x1F40 (8000)
+  0x020D HIDNormallyConnectable = true
+  0x020E HIDBootDevice = true
+== enregistrement 0x00010001
+  0x0000 ServiceRecordHandle = 0x00010001 (65537)
+  0x0001 ServiceClassIDList = [UUID 0x1200 PnPInformation]
+  0x0004 ProtocolDescriptorList = [[UUID 0x0100 L2CAP, 0x0001 (1)], [UUID 0x0001 SDP]]
+  0x0009 BluetoothProfileDescriptorList = [[UUID 0x1200 PnPInformation, 0x0100 (256)]]
+  0x0200 SpecificationID = 0x0100 (256)
+  0x0201 VendorID = 0x05AC (1452)
+  0x0202 ProductID = 0x0256 (598)
+  0x0203 Version = 0x0050 (80)
+  0x0204 PrimaryRecord = true
+  0x0205 VendorIDSource = 0x0002 (2)
