@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  Install: /usr/share/polkit-1/actions/com.agenceapi.AppleKbMonitor.policy
+
+  allow_active = auth_admin_keep (not "yes"): hid_apple.fnmode is a kernel module
+  parameter global to EVERY Apple keyboard of the machine, and the persist option edits
+  /etc/modprobe.d. A local active session must therefore prove administrator
+  rights; "keep" caches the authorization for a few minutes so that toggling the
+  Fn lock several times from the tray/CLI does not re-prompt each time.
+  Remote and inactive sessions are denied.
+-->
+<policyconfig>
+  <vendor>agenceapi</vendor>
+  <vendor_url>https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor</vendor_url>
+
+  <action id="com.agenceapi.AppleKbMonitor.set-fnmode">
+    <description>Change the Fn key mode of Apple keyboards</description>
+    <message>Authentication is required to change the Fn key mode of all Apple keyboards</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-helper</annotate>
+  </action>
+</policyconfig>

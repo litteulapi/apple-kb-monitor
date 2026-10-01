@@ -1,0 +1,13 @@
+[package]
+name = "akmctl"
+version.workspace = true
+edition.workspace = true
+description = "Command-line client of the Apple keyboard monitor (status, Fn mode, watch)"
+
+[dependencies]
+akm-core = { path = "../../akm-core" }
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+clap_mangen = "0.2"
+serde_json = "1"
+zbus = "4"
