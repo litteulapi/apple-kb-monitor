@@ -1,8 +1,8 @@
 <p align="center">
   <h1 align="center">apple-kb-monitor</h1>
   <p align="center">
-    Full telemetry monitor for Apple Wireless Keyboards on Linux.<br>
-    Reads the undeclared HID Feature Reports of BCM2042-based keyboards (A1255/A1314).
+    Battery, link and key monitor for Apple Wireless Keyboards on Linux (KDE Plasma 6).<br>
+    A user daemon that reads the keyboard the way Apple's own driver does, and nothing more.
   </p>
 </p>
 
@@ -14,186 +14,172 @@
 
 ---
 
-## Overview
+Package **3.1.0-15** (Arch Linux / Manjaro). Tested on one keyboard: Apple Wireless Keyboard **A1314** aluminium ISO (`05AC:0256`, BCM2042, firmware `0x0050`). French and English.
 
-The kernel exposes the battery percentage of these keyboards through the HID Battery Strength report (`0x47`, read as a Feature report by the `hid-input.c` battery quirk). On the A1314, 27 Feature report IDs answer GET_REPORT while the descriptor declares only `0x09` as Feature (and `0x47` as Input): the 25 others are undeclared. This tool decodes the ones whose meaning has been measured — battery voltage in mV, the firmware discharge table, firmware version, device name, paired host address — and keeps the others as raw bytes. See [docs/HARDWARE-RAPPORTS-HID.md](docs/HARDWARE-RAPPORTS-HID.md) and [docs/CONTRE-AUDIT.md](docs/CONTRE-AUDIT.md) for the evidence level of each claim.
+## What it does
 
-- **`apihub-app`** — Rust/egui desktop app (2 tabs: Keyboard and Diag, plus a tray icon): keyboard telemetry, battery history, BlueZ battery provider
-- **`rssi-helper`** — tiny C helper carrying `cap_net_admin`, the only privileged binary (RSSI / TX power)
-- **`apple-kb-monitord`** — the daemon, single owner of the keyboard; **`akmctl`** — the CLI: `status`, `watch`, `history`, `graph`, `waybar`, `metrics`, `led`, `dump`, `doctor`, `repair`
-- systemd user service, udev rule (`uaccess`), keyd config, Plasma widget, PKGBUILD, Gitea Actions CI
+The Linux kernel already shows the percentage of these keyboards (`power_supply` node, read by UPower). This project adds what the kernel does not give:
 
-Documentation: [docs/](docs/) (FEATURES, CONFIGURATION, INSTALL, ARCHITECTURE, TROUBLESHOOTING, TESTING; reverse engineering: HARDWARE-RAPPORTS-HID, RE-*, CONTRE-AUDIT), [CHANGELOG.md](CHANGELOG.md) and the [wiki](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/wiki). Roadmap: [milestones](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/milestones).
+- the **real battery voltage** (mV) and an **estimate of the remaining charge** by battery chemistry, next to the keyboard's own percentage, which is only a firmware interpolation that steps down at reconnections;
+- the **firmware version**, the **name stored in the keyboard**, the keyboard-driven **low / critical battery alerts** (Input report `0x30`), the **keyboard off** event, the **special keys** table;
+- a **link doctor and a guided repair** for the classic "the keyboard does not reconnect" problem;
+- a complete **KDE Plasma 6 integration**: tray icon, KNotification events, Plasma widget, System Settings module, D-Bus API, CLI, Prometheus / waybar outputs.
 
-## Features
+The hardware is read **as Apple's macOS 26.5 driver reads it** (same reports, same schedule, same circuit breaker: `docs/PARITE-APPLE.md`). Only three named operations can ever write to the keyboard (see [Security](#security)).
 
-| Feature | Source | Details |
+## What works
+
+Status legend: **hardware** = verified on the real A1314 ISO; **code** = covered by tests and a simulated keyboard, not observed on hardware; **not done** = planned or deliberately not implemented.
+
+| Function | Status | Where |
 |---|---|---|
-| Battery % (displayed) | Kernel `power_supply` | `/sys/class/power_supply/hid-<mac>-battery*`, the node UPower reads (= Feature `0x47`); source of truth |
-| Battery voltage | HID `0x46` (u16 LE, mV), cross-checked with `0xFF` bytes 1-2 (u16 BE) | Measured: moves with time and with a battery change. Rust daemon only; the legacy Python CLI still shows `0xF5` × 3.3/1023, which is a constant (see Known limits) |
-| Filtered voltage | HID `0x49` (u16 LE, mV) | Smoothed value, meaning is a hypothesis |
-| Discharge table | HID `0x5A` (= `0x60` = `0xEB`) | 4 × u16 BE in mV; mapping to 100/75/50/25 % is a hypothesis consistent with `0x47` |
-| Firmware version | HID `0x4F` | u16 LE = `0x0050` = SDP/PnP `Version` (bcdDevice) |
-| Device name | HID `0x51`-`0x54` | 4 × 8-byte ASCII chunks (Apple: `DeviceName1..4`) |
-| Paired host | HID `0x4C` bytes 2-7 | Address of the paired host adapter, reversed; the 12 remaining bytes are sensitive and never published |
-| RSSI / TX power | BlueZ MGMT via `rssi-helper` | `GET_CONN_INFO` (opcode `0x0031`), helper has `cap_net_admin+ep` |
-| Connection state | D-Bus | `org.bluez.Device1` properties |
-
-## HID Report Map (A1314 ISO, firmware `0x0050`)
-
-| Report ID | Declared in descriptor | Meaning | Evidence |
-|---|---|---|---|
-| `0x47` | Input (Generic Device Controls `0x06` / Battery Strength `0x20`) | Battery % (read as Feature by the kernel quirk) | descriptor + kernel source + measured |
-| `0x09` | Feature (vendor `FF01:0B`) | constant `01`; Apple name suggests a firmware Caps Lock delay flag | measured value, meaning hypothesis |
-| `0x46` / `0xFF` | no | battery voltage, mV (LE / BE); `0xFF` byte 3 = `0x01` | measured |
-| `0x49` | no | smoothed voltage, mV | measured value, meaning hypothesis |
-| `0x5A` = `0x60` = `0xEB` | no | 4 voltages (mV) of the firmware discharge table | measured values, meaning hypothesis |
-| `0x5B` | no | `0xF4` ‖ `0xF5` + 4 zero bytes | measured |
-| `0xF4` / `0xF5` | no | constants 1740 / 900; `0xF5` is **not** a voltage (unchanged across a battery change) | measured; meaning unknown |
-| `0x4F` | no | firmware version `0x0050` | measured |
-| `0x51`-`0x54` | no | device name (4 × 8 bytes) | measured + Apple driver plist |
-| `0x4C` | no | `0x03`, paired host address, 12 sensitive bytes | measured |
-| `0xEA` | no | percentage-like value (98 when `0x47` = 99) | measured value, meaning unknown |
-| `0x4A`, `0x4B`, `0x54`, `0x5C`, `0x5D`, `0xD1`, `0xD8`, `0xF6`, `0xF7`, `0xFE` | no | constants or zeros, meaning unknown; `0xFE` is never read (it preceded two link losses) | measured |
-
-Reports were found by a read-only GET_REPORT scan of all 256 IDs (`HIDIOCGFEATURE`). Eleven more IDs (`0x40 0x41 0x44 0x45 0x50 0x55 0xD0 0xD4 0xD5 0xFA 0xFB`) exist but refuse GET (HANDSHAKE `ERR_UNSUPPORTED_REQUEST`); six of them are named in Apple's macOS driver (see [docs/RE-PILOTE-MACOS.md](docs/RE-PILOTE-MACOS.md)). Nothing is ever written to the keyboard.
-
-## Hardware Compatibility
-
-| Model | Controller | Status |
-|---|---|---|
-| Apple Wireless Keyboard A1314 (aluminum, ISO) | BCM2042 (identified on the A1255 by iFixit; not checked on an opened A1314) | **Tested** (fixtures in `tests/fixtures/a1314_iso/`) |
-| A1255 (ANSI, ISO, JIS), A1314 2009 and aluminum (ANSI, ISO, JIS) | BCM2042 | In the model table, not tested |
-| Magic Keyboard 2015 (A1644), with numeric keypad (A1843) | not verified | In the model table, not tested |
-| Magic Keyboard 2021 (A2450, A2449, A2520) and 2024 (3 variants) | not verified | In the model table, not tested |
-
-The 17 models come from `APPLE_MODELS` in `apihub-app/akm-core/src/model.rs` (PIDs from the kernel `hid-ids.h`; USB vendor `05AC` and Bluetooth vendor `004C` accepted). The raw undocumented HID reports are only read on the BCM2042 family; other models rely on the kernel battery.
+| Battery % (kernel `power_supply`, = HID `0x47`), voltage `0x46`/`0x49` in mV | hardware | `akm-core/src/power.rs`, `read_policy.rs` |
+| Charge estimate by chemistry (alkaline / NiMH / lithium), battery-change detection, time remaining | code (curves read from public datasheets, hypothesis) | `chemistry.rs`, `forecast.rs`, `batteries.rs` |
+| "Apple display" percentage (IOBluetooth curve) | code (from disassembly) | `apple_model.rs` |
+| Keyboard-driven alerts, GET Input `0x30` | hardware (`30 00` read without incident) | `passive.rs` |
+| Firmware version `0x4F` vs embedded table, thresholds `0x60` | hardware (`0x0050` measured) | `firmware.rs`, `docs/FIRMWARE.md` |
+| Name stored in the keyboard, read (`0x51`-`0x54`) | hardware | `devname.rs` |
+| Name stored in the keyboard, write (`0x55`) | **locked** (three locks, risks not measured) | `docs/RENOMMER-CLAVIER.md` |
+| Alias on this computer (BlueZ `Alias`) | hardware | `akmctl rename` |
+| `WillShutdown` (`0x40`) at shutdown, as macOS | code (effect not observable) | `parity.rs`, `docs/PARITE-APPLE.md` |
+| HID_CONTROL SUSPEND / EXIT_SUSPEND at sleep / wake, as macOS | code (fake `bluetoothd` tests) | `akm-hid-control`, `docs/VEILLE-HID.md` |
+| Clean forget `0x41` then unpair (`akmctl repair`) | code (effect on the keyboard not measured) | `docs/RECONNEXION-PAIRAGE.md` §5.4 |
+| Apple circuit breaker (3 silences: stop everything, BlueZ disconnect) | code (proptest, 512 sequences) | `apple_model.rs`, `read_policy.rs` |
+| RSSI / TX power (BlueZ MGMT, relative dB, **not** a power level) | hardware (needs group `akm`) | `rssi-helper.c`, `signal.rs` |
+| Link doctor (`akmctl doctor`), guided repair (`akmctl repair`) | hardware | `crates/akmctl/src/doctor.rs`, `repair.rs` |
+| Tray icon (SNI + dbusmenu, dynamic battery icons) | hardware | `apple-kb-monitord/src/tray/` |
+| KNotification events (14), PowerDevil dedupe, actions | hardware (`docs/AUDIT-INTEGRATION-KDE.md`) | `notify.rs`, `data/apple-kb-monitor.notifyrc` |
+| Plasma widget (FR/EN) | hardware | `plasma/com.agenceapi.devicehub/` |
+| System Settings module "Apple Keyboard" (5 pages) | hardware (captures in `kcm/captures/`) | `kcm/`, `docs/KCM.md` |
+| Window `apihub-app` (tabs Keyboard, Keys, Diag), single instance | hardware + e2e under Xvfb | `apihub-app/src/` |
+| Special keys table, manual mapping (udev hwdb) without keyd | hardware (`akmctl keys --check`) | `keymap.rs`, `docs/TOUCHES.md` |
+| Fn mode and `hid_apple` parameters through polkit | hardware | `akm-helper` |
+| LED control (evdev `EV_LED`; NumLock never switched on) | code | `led.rs` |
+| BlueZ `BatteryProvider1` (fallback when the kernel has no node) | code | `bluez.rs` |
+| Self-check every 15 min (`akmctl selftest`), local CI, e2e | hardware (runs on this machine) | `docs/QA-AUTOMATIQUE.md` |
+| Other models (A1255, A1314 2009, Magic Keyboard 2015-2024) | **not tested** (in the table, [#23](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/23)) | `model.rs` |
+| Several keyboards at once in the UI, Magic Keyboard battery report `0x90` | not done ([#119](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/119), [#95](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/95)) | — |
 
 ## Installation
 
-The package is not published on the AUR: build it from this repository.
-
-### Manual
+Not on the AUR: build the package from this repository.
 
 ```bash
 git clone https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor.git
 cd apple-kb-monitor
 makepkg -si
+sudo usermod -aG akm "$USER"      # RSSI: rssi-helper is root:akm 0750; log in again
+akmctl doctor                       # link, pairing, hidraw, BlueZ / UPower configuration
+akmctl status
 ```
 
-## Setup
+The package installs and **enables** everything itself (`apple-kb-monitor.install`): the user daemon `apple-kb-monitord.service`, the shutdown notice, the self-check timer, and the two system sleep / wake units. The udev rule `70-apple-kb-hidraw.rules` tags the hidraw node `uaccess`, so the active-seat user needs no group for the keyboard itself. keyd is **optional** and never touched (an example config is in `/usr/share/doc/apple-kb-monitor/examples/keyd/`). Details, upgrade notes and uninstall: [docs/INSTALL.md](docs/INSTALL.md).
 
-No group membership is needed: the udev rule `70-apple-kb-hidraw.rules` tags Apple hidraw devices `uaccess`, so logind grants an ACL to the user of the active seat. Reconnect the keyboard (or `sudo udevadm trigger --subsystem-match=hidraw`) after installing.
-
-Enable the daemon once (tray icon, low-battery notifications, history, Plasma widget data):
+## Daily use
 
 ```bash
-systemctl --user enable --now apple-kb-monitord.service
-```
-
-`apple-kb-monitord` is the single owner of the keyboard. The package does not enable it by itself: without this command it only starts on demand, when a client (`apihub-app`, the Plasma widget) calls `com.agenceapi.AppleKbMonitor1` on the session bus (D-Bus activation), so there is no tray icon nor low-battery alert until one of them has been opened.
-
-The Python CLI (`apple-kb-monitor`, `apihub-settings`, `apple-kb-monitor.service`) was removed: Rust is the only language of the driver. Upgrading from it: see [docs/INSTALL.md](docs/INSTALL.md#upgrading-from-the-python-cli-before-310-6).
-
-## Usage
-
-```bash
-akmctl status                  # battery, voltage, link, Fn mode
-akmctl status --json           # JSON schema 1 (scripts, widgets, Home Assistant)
+akmctl status                  # battery, estimate, voltage, signal, Fn mode, firmware
+akmctl status --json           # JSON schema 1 (scripts, widgets)
 akmctl watch                   # one JSON line per change
-akmctl history --since 7d      # battery history (UTC), --json available
-akmctl history export --csv    # CSV on stdout
-akmctl graph --span 7d         # terminal chart, 24h or 7d
-akmctl waybar                  # JSON for a waybar custom module
-akmctl metrics                 # Prometheus text format
-akmctl led caps on             # LED (NumLock can only be switched off)
-akmctl dump                    # the 3 safe reports only (0x47, 0x46, 0x49)
-akmctl firmware                # firmware version vs the embedded table of latest public versions
-akmctl info                    # register map of all known HID reports + cached values (never reads the keyboard)
-akmctl doctor                  # Bluetooth link diagnosis
+akmctl history --since 7d      # battery history; history export --csv
+akmctl graph --span 7d         # terminal chart
+akmctl keys --check            # what each F-key does right now (kernel -> evdev -> KDE)
+akmctl keymap kde-apply        # bind F4 (Launchpad) in KDE, never replacing a binding
+akmctl set fnmode 2            # F-keys first (polkit dialog, all Apple keyboards)
+akmctl rename "Desk keyboard"  # alias on this computer (nothing written to the keyboard)
+akmctl firmware                # version read once per connection vs the embedded table
+akmctl info                    # register map + cached values, never reads the keyboard
+akmctl doctor                  # read-only link diagnosis; sudo adds the link-key check
+akmctl repair                  # wake + reconnect; re-pair only after a typed confirmation
+akmctl selftest                # the 15-minute health check, by hand
+akmctl waybar | akmctl metrics # waybar JSON, Prometheus text
 ```
 
-Everything but `dump` and `led` reads the daemon over D-Bus: the CLI never talks to the keyboard on its own. `akmctl --help` and `man akmctl` list all options.
+Everything but `dump`, `led` and the two write commands goes through the daemon over D-Bus: the CLI never opens the keyboard on its own. `akmctl --help`, `akmctl <cmd> --help` and `man akmctl` list every option. Exit codes: 0, 1 error, 2 daemon absent, 64 usage.
 
-## Permissions
+## KDE integration
 
-| Feature | Requirement | Setup |
-|---|---|---|
-| Battery, HID reports (hidraw) | `uaccess` ACL (active seat user) | Installed by the package (`70-apple-kb-hidraw.rules`) |
-| RSSI, TX power | `cap_net_admin+ep` on `/usr/lib/apple-kb-monitor/rssi-helper` | Applied by the package `post_install` (`setcap`); retry by hand if it prints a warning |
-| Desktop notifications | `libnotify` | `pacman -S libnotify` |
+- **System Settings → Input Devices → Keyboard → Apple Keyboard** (`kcm_applekeyboard`): pages State, Keys, Notifications, Name, Diagnostics. No write without a click, no write to the keyboard; Fn mode and parameters ask for administrator authentication (polkit). [docs/KCM.md](docs/KCM.md)
+- **Notifications**: the daemon is an application of System Settings → Notifications (`apple-kb-monitor.notifyrc`): popup, sound, history and Do Not Disturb per event; "Open" and "Repair…" buttons; one single reminder when PowerDevil already warns about the same keyboard. [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
+- **Tray**: icon drawn by the daemon (battery steps, charging, disconnected), tooltip with age of the last reading, menu with "Rename keyboard…", "Copy information", "Quit (hide icon)".
+- **Plasma widget** `com.agenceapi.devicehub`: compact and full views, FR/EN, reads the daemon over the session bus and claims the notification area so there is one icon only.
+- **Window** `apihub-app`: D-Bus activatable (`com.agenceapi.AppleKbMonitor`), single instance, launched from the icon, the widget or a notification button; no autostart. [docs/INTEGRATION-KDE.md](docs/INTEGRATION-KDE.md)
+- **Special keys**: F1-F2 brightness, F3 Exposé, F7-F12 media and volume work through `hid_apple fnmode=1`; F4 and Eject are unbound in Plasma until `akmctl keymap kde-apply`. [docs/TOUCHES.md](docs/TOUCHES.md)
 
-The rule matches Bluetooth HID devices connected via uhid (`KERNELS` `0005:05AC:*` and `0005:004C:*`) and wired Apple keyboards (`0003:05AC:*`). It must sort before `73-seat-late.rules`, hence the `70-` prefix.
+## Troubleshooting
 
-## Dependencies
+Start with `akmctl doctor`, then `akmctl selftest`. Full table (symptom → cause → command): [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
-Everything is compiled Rust (`apihub-app`, `apple-kb-monitord`, `akmctl`); no interpreter is needed at runtime (see [docs/INSTALL.md](docs/INSTALL.md)).
+| Symptom | First command |
+|---|---|
+| The keyboard does not reconnect | press a key; if nothing, switch it **off and on** (light at power-on), then `akmctl repair` |
+| `Signal: n/a` | `id -nG \| grep akm` — add yourself to the group `akm`, log in again |
+| Battery stuck or wrong | `akmctl status` shows the age of the reading; the keyboard's % only steps down at reconnections |
+| No tray icon, no alerts | `systemctl --user status apple-kb-monitord.service` |
+| F4 / Eject do nothing | `akmctl keys --check`, then `akmctl keymap kde-apply` |
+| keyd crashed after an upgrade | never `keyd reload` (keyd 2.6.0 segfaults): `sudo systemctl restart keyd`, see [docs/KEYD.md](docs/KEYD.md) |
 
-| Dependency | Type | Purpose |
-|---|---|---|
-| `bluez` | Runtime | Bluetooth stack, Battery Provider API |
-| `keyd` | Runtime | Apple special keys remapping |
-| `bluez-utils` | Optional | `bluetoothctl` for manual pairing |
-| `libnotify` | Optional | `notify-send` for low-battery notifications |
-| `rust`, `gcc` | Build | `apihub-app`, `rssi-helper` |
+## Security
 
-## How It Works
-
-1. Discovers Apple Bluetooth keyboards via `/sys/class/hidraw/*/device/uevent`
-2. Reads the battery percentage from the kernel `power_supply` node of the keyboard (matched by MAC)
-3. The daemon opens the `hidraw` device and sends `HIDIOCGFEATURE` for `0x47`, `0x46` and `0x49` only (BCM2042 family), only when a key was pressed in the last minute, under a cross-process lock (`akm_core::read_policy`)
-4. Runs `rssi-helper` for RSSI (BlueZ MGMT `GET_CONN_INFO`, opcode `0x0031`) and reads connection properties from BlueZ over D-Bus; exports the battery to BlueZ as `org.bluez.Battery1`
-5. The daemon logs readings to `$XDG_STATE_HOME/apple-kb-monitor/history.jsonl` (default `~/.local/state/...`, the single history file) and sends desktop notifications when the battery drops below a threshold
-
-## Reverse Engineering Notes
-
-The BCM2042 is a Broadcom single-chip Bluetooth HID controller. Broadcom product brief `2042-PB03-R`:
-
-- on-board **8051** processor, 108 KB ROM, 22 KB RAM, 20 KB boot ROM, ROM-based design
-- **Bluetooth 2.0** (the brief does not mention EDR; a third-party BM2042 module sheet says "2.0+EDR compatible", and a public `hcitool info` of an Apple Wireless Keyboard shows no EDR feature bit)
-- no public register map; no ADC resolution is published
-
-Firmware: the only known update channel for this generation is Apple's legacy macOS updater over Bluetooth. Whether that image is signed is **not known** (the "no signature" result of K. Chen, Black Hat 2009, concerns the wired USB keyboard with a Cypress MCU). Nothing in this project writes to the keyboard.
-
-The HID report descriptor (224 bytes) declares Reports `0x01` (keyboard, LEDs), `0x47` (battery, Input), `0x11`-`0x13` (Eject/Fn, media, vendor bits) and `0x09` (the only Feature). The undeclared Feature reports are listed above.
-
-### Discharge table
-
-Report `0x5A` (identical copies `0x60` and `0xEB`) holds 4 voltages, big-endian, in mV. Measured on the test unit: 2954 / 2506 / 2404 / 2054 mV. The association with 100/75/50/25 % is a hypothesis (the code default 2900/2450/2350/2000 has no source).
-
-### RSSI
-
-RSSI is read via BlueZ MGMT `GET_CONN_INFO` (opcode `0x0031`) by the `rssi-helper` binary, which triggers `HCI Read_RSSI` and `HCI Read_TX_Power`. On a BR/EDR link, Read_RSSI is **not** a power in dBm: it is the gap in dB to the controller's Golden Receive Power Range (Core Spec Vol 4 Part E §7.5.4); 0 means "inside the ideal range". The Rust daemon exposes it as a relative value (#174); the legacy Python CLI still labels it dBm.
-
-## Project Structure
-
-```
-apihub-app/                 # Rust workspace: akm-core, apple-kb-monitord, crates/akmctl (CLI), crates/akm-helper, egui GUI (src/)
-rssi-helper.c               # C helper with cap_net_admin (RSSI / TX power)
-udev/ systemd/ keyd/ modprobe/ dbus/             # system integration
-plasma/ kde/                # Plasma widget, Bluedevil panel patch
-tests/                      # fixtures/ (real A1314 capture), live/ (reverse-engineering tools + check_keyboard.sh)
-.gitea/workflows/ci.yml     # CI
-docs/                       # documentation
-PKGBUILD, .SRCINFO, apple-kb-monitor.install   # Arch Linux package
-```
+- **Daemon and clients are unprivileged.** The daemon is a user service hardened by systemd (`UMask=0077`, `MemoryMax`, `KeyringMode=private`…); it reaches the keyboard through the `uaccess` ACL of the active seat.
+- **Four privileged helpers, each doing one thing** (`/usr/lib/apple-kb-monitor/`): `rssi-helper` (file capability `cap_net_admin`, `root:akm 0750`, RSSI only); `akm-helper` (`pkexec`, `hid_apple` parameters and `/etc/modprobe.d`); `akm-keymap-helper` (`pkexec`, validated udev hwdb file); `akm-hid-control` (root at sleep / wake through the system units, `pkexec` for the manual test; emits the byte `0x13` or `0x14` only, on the control socket of `bluetoothd`). Polkit actions are `auth_admin` without `_keep`, local active sessions only (`polkit/com.agenceapi.AppleKbMonitor.policy`).
+- **What is written to the keyboard**: only the **named operations of the register map** (`akm-core/src/registry.rs`, class `WriteApple`): `Shutdown` = Feature `0x40` (id alone, once at shutdown, default on, `[apple] will_shutdown`); `Forget` = Feature `0x41` (id alone, `akmctl repair` only, after a typed `OUBLIER`); `DeviceName` = Feature `0x55` (65 bytes, behind three locks, default refused). One function issues the write ioctl, with two fixed sizes (1 and 65 bytes), every byte logged, never retried; a test sweeps the 256 ids in the three directions and a source scan fails if a second write path appears. Reads are limited to `0x47`, `0x46`, `0x49`, GET Input `0x30`, and once per connection `0x4F`, `0x60`, `0x51`-`0x54`; `0x4C` (pairing record) and `0xFE` (froze the firmware twice) are never requested.
+- **Data**: history and backups live under `~/.local/state/apple-kb-monitor/` (`0600`); nothing goes to the network (the firmware table is embedded); the sensitive bytes of `0x4C` are never published. Audits: [docs/AUDIT-SECURITE-2.md](docs/AUDIT-SECURITE-2.md), accepted keylogger trade-off of `uaccess`: [udev/README.md](udev/README.md).
 
 ## Known limits
 
-- The legacy Python CLI was removed (3.1.0-6): `akmctl` replaces it and no longer publishes the sensitive bytes of `0x4C` ([#200](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/200), [#201](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/201)).
-- Only the A1314 ISO has been tested on hardware.
+- Only the A1314 ISO was tested on hardware; the 16 other models of the table rely on the kernel battery and are unverified ([#23](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/23)).
+- The register map still carries **13 entries of unknown meaning** (11 Feature ids `0x45 0x4B 0xD0 0xD1 0xD4 0xD5 0xD8 0xF6 0xF7 0xFA 0xFB`, 2 Input ids `0x04 0x05`; `akmctl info --json`). Eleven ids refuse GET (`ERR_UNSUPPORTED_REQUEST`); their meaning comes from Apple's driver names only.
+- The name stored in the keyboard is **not written by default**: the frame is established by disassembly, but the firmware's answer and the persistence across a battery change are not measured ([#248](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/248)).
+- The effect on the keyboard of `WillShutdown`, of `RecantConnection` and of the sleep / wake bytes is not observable from the host.
+- BR/EDR RSSI is relative to the controller's golden receive range (0 = ideal), not a power level: the UI shows words, the JSON keeps `rssi_dbm` only as a deprecated mirror of `rssi_rel_db` ([#174](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/174)).
+- The BCM2042 is an 8051-based Bluetooth 2.0 controller (Broadcom brief `2042-PB03-R`); whether its firmware images are signed is unknown; nothing here flashes anything.
+- Two KNotification events (`FirmwareUpdate`, `BatteryReminder`) exist in Plasma but no daemon trigger calls them yet.
+- The udev `uaccess` rule covers the 17 Bluetooth product ids only; wired Apple keyboards are no longer matched ([#155](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/155)).
 
-## Acknowledgments
+## Architecture
 
-- BCM2042 HID Feature Report reverse engineering (read-only)
-- Linux HID subsystem (`hidraw`, `HIDIOCGFEATURE`)
-- BlueZ MGMT interface
-- Arch Linux packaging ecosystem
+```
+            session bus (D-Bus)                           system bus
+ ┌────────────────────────────────────────────┐    ┌──────────────────────────┐
+ │ apple-kb-monitord  (user service, Rust)    │    │ bluetoothd (BlueZ)       │
+ │  com.agenceapi.AppleKbMonitor1             │◄──►│  Device1, Adapter1,      │
+ │   .Device  .Input  .Link  .Keymap  .Tray   │    │  BatteryProviderManager1 │
+ │  tray SNI + dbusmenu, KNotification        │    └──────────────────────────┘
+ │  akm-core: registry, read_policy, breaker, │              ▲
+ │  apple_model, history, chemistry, keymap   │              │ pidfd_getfd, 1 byte
+ └───────┬───────────────┬────────────────────┘    ┌─────────┴────────────────┐
+         │ hidraw GET     │ child, cap_net_admin    │ akm-hid-control (root)   │
+         ▼               ▼                          │ sleep / wake units       │
+ /dev/hidrawN      rssi-helper (MGMT)              └──────────────────────────┘
+ /sys/class/power_supply/hid-<mac>-battery*
+         ▲
+ clients ├─ akmctl (CLI)        ├─ apihub-app (egui window, D-Bus activatable)
+         ├─ Plasma widget       ├─ kcm_applekeyboard (System Settings)
+         └─ pkexec akm-helper (hid_apple params), akm-keymap-helper (udev hwdb)
+```
+
+Repository layout and the full description: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+```
+apihub-app/           Rust workspace: akm-core, apple-kb-monitord, crates/akmctl, crates/akm-helper
+                      (akm-helper, akm-keymap-helper, akm-hid-control), src/ (egui window), i18n/
+rssi-helper.c         C helper with cap_net_admin (RSSI / TX power)
+kcm/ plasma/ data/    System Settings module, Plasma widget, KNotification events
+systemd/ dbus/ polkit/ udev/ sysusers/ modprobe/ keyd/ bluetooth/   system integration
+scripts/ tests/       ci-local.sh, qa_checks.py; e2e (Xvfb + bubblewrap), fixtures, live (read-only)
+docs/                 user docs, reverse-engineering notes, audits (index: docs/INDEX.md)
+PKGBUILD, apple-kb-monitor.install   Arch Linux package
+```
+
+## Documentation
+
+- Index of every document: [docs/INDEX.md](docs/INDEX.md)
+- User: [INSTALL](docs/INSTALL.md), [CONFIGURATION](docs/CONFIGURATION.md), [FEATURES](docs/FEATURES.md), [TROUBLESHOOTING](docs/TROUBLESHOOTING.md), [TOUCHES](docs/TOUCHES.md) (keys, FR), [KCM](docs/KCM.md), [NOTIFICATIONS](docs/NOTIFICATIONS.md), [RECONNEXION-PAIRAGE](docs/RECONNEXION-PAIRAGE.md)
+- Developer: [ARCHITECTURE](docs/ARCHITECTURE.md), [TESTING](docs/TESTING.md), [QA-AUTOMATIQUE](docs/QA-AUTOMATIQUE.md), [PARITE-APPLE](docs/PARITE-APPLE.md), [FIRMWARE](docs/FIRMWARE.md), [VEILLE-HID](docs/VEILLE-HID.md)
+- Evidence: [HARDWARE-RAPPORTS-HID](docs/HARDWARE-RAPPORTS-HID.md), [CONTRE-AUDIT](docs/CONTRE-AUDIT.md), `docs/RE-*.md`, `docs/AUDIT-*.md`
+- [CHANGELOG.md](CHANGELOG.md), [wiki (French)](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/wiki), [issues](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues), [milestones](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/milestones)
 
 ## License
 
-[GPL-2.0-or-later](LICENSE)
-
-## Author
-
-Han — [AgenceAPI](https://gitea.pika.agenceapi.fr/adminapi)
+[GPL-2.0-or-later](LICENSE). Author: Han — [AgenceAPI](https://gitea.pika.agenceapi.fr/adminapi).
