@@ -49,15 +49,25 @@ impl Source {
         }
         if client::daemon_present(conn) {
             match client::fetch_snapshot(conn) {
-                Ok(s) => {
-                    self.go_daemon(s);
-                    return;
+                Ok(s) => self.go_daemon(s),
+                // The daemon owns the keyboard: never open hidraw next to it
+                // (#199). Show why, keep waiting for its next StateChanged.
+                Err(e) => {
+                    eprintln!("[source] daemon unreadable: {e}");
+                    self.go_daemon(unreadable_snapshot(&self.watch.get(), &e.to_string()));
                 }
-                Err(e) => eprintln!("[source] daemon unreadable: {e}"),
             }
+            return;
         }
         self.go_local();
     }
+}
+
+/// Last known state with the reason the daemon could not be read.
+fn unreadable_snapshot(last: &Snapshot, err: &str) -> Snapshot {
+    let mut s = last.clone();
+    s.kb_error = Some(format!("daemon unreadable: {err}"));
+    s
 }
 
 fn subscribe(conn: &Connection) -> zbus::Result<MessageIterator> {
@@ -166,4 +176,17 @@ pub fn load_history() -> Vec<HistoryEntry> {
         }
     }
     History::open_default().read()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unreadable_daemon_keeps_last_state_and_says_why() {
+        let last = Snapshot { caps_lock: true, ..Default::default() };
+        let s = unreadable_snapshot(&last, "bad Json property");
+        assert!(s.caps_lock);
+        assert_eq!(s.kb_error.as_deref(), Some("daemon unreadable: bad Json property"));
+    }
 }

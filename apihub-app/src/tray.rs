@@ -115,7 +115,7 @@ impl SniItem {
     }
     #[zbus(property)]
     fn menu(&self) -> zbus::zvariant::OwnedObjectPath {
-        zbus::zvariant::OwnedObjectPath::try_from("/MenuBar").unwrap()
+        zbus::zvariant::OwnedObjectPath::from(zbus::zvariant::ObjectPath::from_static_str_unchecked("/MenuBar"))
     }
 
     fn activate(&self, _x: i32, _y: i32) {
@@ -214,15 +214,17 @@ impl DbusmenuServer {
         // ── Info section ──────────────────────────────────────────
         if let Some(ref snap) = snap {
             if let Some(ref kb) = snap.keyboard {
-                let pct = kb.battery_pct().unwrap_or(0.0);
+                // Unknown is a dash, never "0%" (#198); an estimate says so.
+                let src = crate::view::pct_source(&kb.battery);
+                let what = match src {
+                    crate::view::PctSource::Estimate(_) => "Estimated charge",
+                    _ => "Keyboard indication",
+                };
+                let pct = crate::view::pct_text(src.value(), 0);
                 // Measured voltage (reports 0x46/0xFF), rounded to 0.01 V.
-                let mut label = match kb.battery.voltage {
-                    Some(v) => format!(
-                        "Keyboard indication: {:.0}%  ({})",
-                        pct,
-                        crate::view::volts_text(v)
-                    ),
-                    None => format!("Keyboard indication: {:.0}%", pct),
+                let mut label = match kb.battery.voltage.filter(|v| v.is_finite() && *v > 0.0) {
+                    Some(v) => format!("{what}: {pct}  ({})", crate::view::volts_text(v)),
+                    None => format!("{what}: {pct}"),
                 };
                 if let Some(e) = crate::view::estimate_text(&kb.battery) {
                     label += &format!("  \u{b7}  estimate {e}");
@@ -242,7 +244,8 @@ impl DbusmenuServer {
                     format!("CapsLock: {}  NumLock: {}", caps, num),
                 ));
             }
-            if let Some(ref rem) = snap.remaining_display {
+            let now = akm_core::history::Clock::now(&akm_core::history::SystemClock);
+            if let Some(rem) = crate::view::remaining_text(snap, now) {
                 root_children.push(info_item(
                     menu_id::INFO_REMAINING,
                     format!("Remaining: {}", rem),
@@ -407,7 +410,7 @@ fn sep(id: i32) -> MenuItem {
 /// near-zero CPU when idle. Clicks are forwarded to main() through `tx`.
 pub fn spawn(state: State, show_window: Arc<AtomicBool>, quit_flag: Arc<AtomicBool>, tx: Sender<UiCmd>) {
     let ui = Ui { show_window, quit_flag, tx: Arc::new(Mutex::new(tx)) };
-    std::thread::Builder::new()
+    let spawned = std::thread::Builder::new()
         .name("tray-sni".into())
         .spawn(move || {
             // Retry: the session bus may not be ready yet at login. `run` only
@@ -421,8 +424,10 @@ pub fn spawn(state: State, show_window: Arc<AtomicBool>, quit_flag: Arc<AtomicBo
                 }
                 std::thread::sleep(std::time::Duration::from_secs(10));
             }
-        })
-        .expect("failed to spawn tray thread");
+        });
+    if let Err(e) = spawned {
+        eprintln!("[tray] cannot start the tray thread: {e}");
+    }
 }
 
 const WATCHER: &str = "org.kde.StatusNotifierWatcher";
@@ -473,8 +478,9 @@ fn run(state: State, ui: Ui) -> zbus::Result<()> {
 
     // Initial registration, with backoff, if a watcher is already on the bus.
     // If the panel starts later, the NameOwnerChanged loop below registers us.
-    if dbus
-        .name_has_owner(WATCHER.try_into().expect("valid bus name"))
+    if zbus::names::BusName::try_from(WATCHER)
+        .ok()
+        .and_then(|n| dbus.name_has_owner(n).ok())
         .unwrap_or(false)
     {
         register_with_backoff(&conn, &bus_name);
