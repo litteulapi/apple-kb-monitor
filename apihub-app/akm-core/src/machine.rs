@@ -4,14 +4,25 @@
 //! UPower watcher of the daemon) and the clock, it says what to do
 //! ([`Action`]). While the keyboard is disconnected it returns no action at
 //! all, so nothing is read and the radio is left alone.
+//!
+//! When the keyboard's vendor reports are read is decided by Apple's model
+//! ([`crate::apple_model::LinkModel`], #251): the first acquisition after a
+//! connection only opens the hidraw node and takes the kernel battery (the
+//! equivalent of `deviceReady`; a keyboard never acquired is never read),
+//! the first battery read comes [`crate::apple_model::Timing::first_battery_read`]
+//! later, then every [`SLOW_READ_PERIOD`], or after
+//! [`crate::apple_model::Timing::battery_retry`] when it failed. A system
+//! sleep stops the timer, the wake restarts it (60 s).
 
 use std::time::{Duration, Instant};
 
-/// Raw HID diagnostic reads (battery voltage, ...) are slow: piles last months.
-/// 4 h = the cadence macOS itself uses for its battery read (0x47 + 0x30,
-/// docs/RE-PILOTE-MACOS.md). The keyboard froze under bursts of reads three
-/// times (docs/RECONNEXION-PAIRAGE.md), so we never read more often than Apple.
-pub const SLOW_READ_PERIOD: Duration = Duration::from_secs(4 * 60 * 60);
+use crate::apple_model::{LinkModel, APPLE};
+
+/// Period of the battery read when it succeeds: Apple's 4 h (0x47 + 0x30,
+/// `IOAppleBluetoothHIDDriver::deviceReady`, from the model's table). The
+/// keyboard froze under bursts of reads three times
+/// (docs/RECONNEXION-PAIRAGE.md): never more often than Apple.
+pub const SLOW_READ_PERIOD: Duration = APPLE.battery_period;
 /// RSSI refresh while connected (the tracker expires a value after ~2 periods).
 /// Plancher entre deux lectures HID provoquees par `Refresh()` (D-Bus, tray,
 /// fenetre) et apres toute lecture reussie : un appel plus proche est ignore
@@ -79,7 +90,12 @@ pub struct Machine {
     acquired: bool,
     attempt: u32,
     next_acquire: Option<Instant>,
-    next_slow: Option<Instant>,
+    /// Apple's connection model: readiness and battery timer (#251).
+    link: LinkModel,
+    /// A `Refresh()` asked for a battery read at this instant.
+    forced: Option<Instant>,
+    /// The `Acquire` handed out carries a battery read (vendor reports).
+    battery_cycle: bool,
     next_rssi: Option<Instant>,
     next_kernel: Option<Instant>,
     last_kernel: Option<Instant>,
@@ -110,7 +126,9 @@ impl Machine {
             acquired: false,
             attempt: 0,
             next_acquire: None,
-            next_slow: None,
+            link: LinkModel::new(),
+            forced: None,
+            battery_cycle: false,
             next_rssi: None,
             next_kernel: None,
             last_kernel: None,
@@ -145,7 +163,8 @@ impl Machine {
         }
         self.last_forced = Some(now);
         if self.acquired {
-            self.next_slow = Some(now);
+            // Apple's `UpdateBatteryLevel` command: a read now, timer unchanged.
+            self.forced = Some(now);
         } else {
             self.attempt = 0;
             self.next_acquire = Some(now);
@@ -162,11 +181,41 @@ impl Machine {
         &self.standby
     }
 
+    /// Apple's connection model (readiness, battery timer).
+    pub fn link(&self) -> &LinkModel {
+        &self.link
+    }
+
+    /// Does the `Acquire` just handed out by [`Machine::due`] carry the battery
+    /// read of the model (vendor reports may be requested)?
+    pub fn vendor_reads_due(&self) -> bool {
+        self.battery_cycle
+    }
+
+    /// System sleep (Apple's `handleSleep`: battery timer stopped).
+    pub fn on_sleep(&mut self) {
+        self.link.sleep();
+        self.battery_cycle = false;
+    }
+
+    /// Wake (Apple's `handleWake`: battery read 60 s later if ready).
+    pub fn on_wake(&mut self, now: Instant) {
+        self.link.wake(now);
+    }
+
+    /// A new keyboard is followed: a new driver in Apple's terms.
+    fn follow(&mut self, now: Instant) {
+        self.link.connected();
+        self.next_acquire = Some(now);
+    }
+
     fn reset_timers(&mut self) {
         self.acquired = false;
         self.attempt = 0;
         self.next_acquire = None;
-        self.next_slow = None;
+        self.link.disconnected();
+        self.forced = None;
+        self.battery_cycle = false;
         self.next_rssi = None;
         self.next_kernel = None;
     }
@@ -190,7 +239,7 @@ impl Machine {
                 self.connected = true;
                 self.mac = Some(mac.clone());
                 self.connected_at = Some(now);
-                self.next_acquire = Some(now);
+                self.follow(now);
                 None
             }
             Event::Disconnected(mac) => {
@@ -206,7 +255,7 @@ impl Machine {
                     } else {
                         // Hand over to the next connected keyboard.
                         self.mac = Some(self.standby.remove(0));
-                        self.next_acquire = Some(now);
+                        self.follow(now);
                     }
                     Some(Action::Clear)
                 } else {
@@ -217,7 +266,7 @@ impl Machine {
                 if !self.connected {
                     self.reset_timers();
                     self.connected = true;
-                    self.next_acquire = Some(now);
+                    self.follow(now);
                 }
                 None
             }
@@ -265,7 +314,7 @@ impl Machine {
                 self.connected = true;
                 self.mac = Some(n);
                 self.connected_at = Some(now);
-                self.next_acquire = Some(now);
+                self.follow(now);
             }
             None => {
                 self.connected = false;
@@ -289,7 +338,10 @@ impl Machine {
             }
             return out;
         }
-        if self.next_slow.is_some_and(|t| t <= now) {
+        let scheduled = self.link.begin_cycle(now);
+        if scheduled || self.forced.is_some_and(|t| t <= now) {
+            self.forced = None;
+            self.battery_cycle = true;
             out.push(Action::Acquire);
         }
         if self.next_kernel.is_some_and(|t| t <= now) {
@@ -304,17 +356,34 @@ impl Machine {
         out
     }
 
-    /// Report the outcome of an `Acquire`.
+    /// Report the outcome of an `Acquire` (battery read, if any, failed).
     pub fn acquire_done(&mut self, ok: bool, now: Instant) {
+        self.acquire_done_with(ok, None, now);
+    }
+
+    /// Report the outcome of an `Acquire`: `ok` = a report was obtained,
+    /// `vendor_ok` = outcome of the battery read it carried (`None`: unknown,
+    /// counted as a failure). Apple: next read 4 h after a success, 1 h after
+    /// a failure (`batteryLevelTimerFired`). The first success makes the
+    /// device ready (R1): its first battery read comes 60 s later.
+    pub fn acquire_done_with(&mut self, ok: bool, vendor_ok: Option<bool>, now: Instant) {
         if !self.connected {
             return;
+        }
+        if std::mem::take(&mut self.battery_cycle) {
+            let read_ok = ok && vendor_ok == Some(true);
+            // GET Input 0x30 is not emitted (the state is pushed, #189): it
+            // cannot fail.
+            self.link.end_cycle(read_ok, true, now);
         }
         if ok {
             let first = !self.acquired;
             self.acquired = true;
             self.attempt = 0;
             self.next_acquire = None;
-            self.next_slow = Some(now + SLOW_READ_PERIOD);
+            if !self.link.is_ready() {
+                self.link.protocol_result(true, now);
+            }
             self.last_read = Some(now);
             self.last_kernel = Some(now);
             if first {
@@ -322,7 +391,7 @@ impl Machine {
             }
         } else {
             self.acquired = false;
-            self.next_slow = None;
+            self.forced = None;
             self.next_rssi = None;
             self.next_acquire = Some(now + backoff(self.attempt));
             self.attempt = self.attempt.saturating_add(1);
@@ -343,7 +412,7 @@ impl Machine {
         if !self.acquired {
             return self.next_acquire;
         }
-        [self.next_slow, self.next_kernel, self.next_rssi]
+        [self.link.next_deadline(), self.forced, self.next_kernel, self.next_rssi]
             .into_iter()
             .flatten()
             .min()
@@ -378,19 +447,130 @@ mod tests {
         let mut m = Machine::new();
         m.on_event(&Event::Connected(MAC.into()), t0);
         assert_eq!(m.due(t0), vec![Action::Acquire]);
+        assert!(!m.vendor_reads_due(), "readiness only, no vendor report");
         m.acquire_done(true, t0);
         // RSSI immediately, then nothing for RSSI_PERIOD.
         assert_eq!(m.due(t0), vec![Action::Rssi]);
         assert!(m.due(t0 + s(10)).is_empty());
         assert_eq!(m.due(t0 + RSSI_PERIOD), vec![Action::Rssi]);
-        // Raw HID diagnostics only every SLOW_READ_PERIOD.
+        // Apple: first battery read 60 s after the device is ready.
+        let first = (1..)
+            .map(|i| t0 + s(i))
+            .find(|&t| m.due(t).contains(&Action::Acquire))
+            .unwrap();
+        assert_eq!(first, t0 + s(60));
+        assert!(m.vendor_reads_due());
+        m.acquire_done_with(true, Some(true), first);
+        assert!(!m.vendor_reads_due());
+        // then every SLOW_READ_PERIOD
         let acq = (1..)
-            .map(|i| t0 + RSSI_PERIOD * i)
+            .map(|i| first + RSSI_PERIOD * i)
             .map(|t| (t, m.due(t)))
             .find(|(_, a)| a.contains(&Action::Acquire))
             .unwrap();
-        assert!(acq.0 >= t0 + SLOW_READ_PERIOD);
-        assert!(acq.0 < t0 + SLOW_READ_PERIOD + RSSI_PERIOD);
+        assert!(acq.0 >= first + SLOW_READ_PERIOD);
+        assert!(acq.0 < first + SLOW_READ_PERIOD + RSSI_PERIOD);
+    }
+
+    // ── #251: the Apple model drives the battery reads ─────────────────────
+
+    /// R1 (`deviceReady`, `startBatteryUpdate`, `batteryLevelTimerFired`):
+    /// 60 s, then 4 h after a success, 1 h after a failure.
+    #[test]
+    fn battery_reads_follow_apples_schedule() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        m.due(t0);
+        m.acquire_done(true, t0);
+        m.due(t0);
+        assert!(m.link().is_ready());
+        assert_eq!(m.next_deadline(), Some(t0 + s(45)), "RSSI first");
+        m.due(t0 + s(45));
+        assert_eq!(m.next_deadline(), Some(t0 + s(60)));
+        assert_eq!(m.due(t0 + s(60)), vec![Action::Acquire]);
+        // failed read (breaker, busy lock, no answer): 1 h
+        m.acquire_done_with(true, Some(false), t0 + s(61));
+        assert_eq!(m.link().next_battery(), Some(t0 + s(61 + 3600)));
+        assert!(m.due(t0 + s(61 + 3599)).iter().all(|a| *a != Action::Acquire));
+        assert!(m.due(t0 + s(61 + 3600)).contains(&Action::Acquire));
+        // unknown outcome counts as a failure
+        m.acquire_done(true, t0 + s(61 + 3600));
+        assert_eq!(m.link().next_battery(), Some(t0 + s(61 + 7200)));
+        assert!(m.due(t0 + s(61 + 7200)).contains(&Action::Acquire));
+        m.acquire_done_with(true, Some(true), t0 + s(61 + 7200));
+        assert_eq!(m.link().next_battery(), Some(t0 + s(61 + 7200) + SLOW_READ_PERIOD));
+        // a failed acquisition is not a successful read either
+        let t = t0 + s(61 + 7200) + SLOW_READ_PERIOD;
+        assert!(m.due(t).contains(&Action::Acquire));
+        m.acquire_done_with(false, Some(true), t);
+        assert_eq!(m.link().next_battery(), Some(t + s(3600)));
+    }
+
+    /// R1: a keyboard never acquired (the `deviceReady` equivalent failed) is
+    /// never read.
+    #[test]
+    fn a_keyboard_never_ready_is_never_read() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        let mut t = t0;
+        for _ in 0..200 {
+            for a in m.due(t) {
+                assert_eq!(a, Action::Acquire);
+                assert!(!m.vendor_reads_due());
+                m.acquire_done(false, t);
+            }
+            t += s(30);
+        }
+        assert!(!m.link().is_ready());
+        assert_eq!(m.link().next_battery(), None);
+    }
+
+    /// R4: a sleep stops the timer, the wake restarts it (60 s).
+    #[test]
+    fn sleep_stops_the_timer_and_the_wake_restarts_it() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        m.due(t0);
+        m.acquire_done(true, t0);
+        m.due(t0);
+        assert!(m.due(t0 + s(60)).contains(&Action::Acquire));
+        m.on_sleep();
+        assert!(!m.vendor_reads_due(), "the read in flight is dropped");
+        assert_eq!(m.link().next_battery(), None);
+        assert!(!m.due(t0 + s(5000)).contains(&Action::Acquire));
+        m.on_wake(t0 + s(6000));
+        assert_eq!(m.link().next_battery(), Some(t0 + s(6060)));
+        assert!(m.due(t0 + s(6060)).contains(&Action::Acquire));
+    }
+
+    /// A `Refresh()` (Apple's `UpdateBatteryLevel` command) reads now, the
+    /// 4 h timer is unchanged; a disconnection forgets everything.
+    #[test]
+    fn refresh_reads_now_without_moving_the_timer() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        m.due(t0);
+        m.acquire_done(true, t0);
+        m.due(t0);
+        let t1 = t0 + s(60) + FORCE_REFRESH_FLOOR + s(1);
+        m.due(t0 + s(60));
+        m.acquire_done_with(true, Some(true), t0 + s(60));
+        assert!(m.force_refresh(t1));
+        assert!(m.next_deadline().is_some_and(|d| d <= t1));
+        assert!(m.due(t1).contains(&Action::Acquire));
+        assert!(m.vendor_reads_due());
+        m.acquire_done_with(true, Some(true), t1);
+        assert_eq!(m.link().next_battery(), Some(t0 + s(60) + SLOW_READ_PERIOD));
+        m.on_event(&Event::Disconnected(MAC.into()), t1 + s(1));
+        assert_eq!(m.link().state(), crate::apple_model::LinkState::Disconnected);
+        assert!(!m.vendor_reads_due());
+        // reconnection: a new driver, readiness again before any read
+        m.on_event(&Event::Connected(MAC.into()), t1 + s(2));
+        assert_eq!(m.link().state(), crate::apple_model::LinkState::AwaitingProtocol);
     }
 
     #[test]

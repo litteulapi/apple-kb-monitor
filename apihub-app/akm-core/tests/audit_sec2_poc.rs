@@ -16,7 +16,9 @@ fn refresh_cannot_defeat_slow_read_period() {
     m.acquire_done(true, t0);
     let _ = m.due(t0); // RSSI
     let mut reads = 0;
-    for i in 1..=60u64 {
+    // #251 : la 1re lecture planifiee par le modele Apple tombe a 60 s ; la
+    // fenetre de Refresh s'arrete juste avant.
+    for i in 1..60u64 {
         let t = t0 + Duration::from_secs(i);
         m.force_refresh(t);
         if m.due(t).contains(&Action::Acquire) {
