@@ -18,6 +18,9 @@ Marquage : **[mesuré]** = observé sur le clavier réel ou dans le code exécut
 **[source]** = documenté dans une référence externe citée ; **[hypothèse]** = non
 démontré.
 
+> **État au contre-audit (c54c502)** : les défauts #131-#134 et #136 sont corrigés dans `akm-core` (02fad76) ; le CLI
+> Python les conserve (#200). Les numéros de ligne ci-dessous datent de l'audit.
+
 ## 1. Données de référence
 
 ### 1.1 Descripteur de rapport (sysfs `report_descriptor`, 224 octets, lecture statique)
@@ -30,9 +33,11 @@ démontré.
 | **0x47** | **Input** | Generic Device Controls 0x06 / **Battery Strength 0x20**, plage logique 0..255 | 8 bits |
 | **0x09** | **Feature** | page vendeur 0xFF01 usage 0x0B, plage logique 0..1 + 16 bits de bourrage | 24 bits |
 
-**[mesuré]** Le seul rapport *Feature* déclaré est **0x09**. Les 21 autres ID
-qui répondent (0x46, 0x49, 0x4A, 0x4B, 0x4C, 0x4F, 0x51-0x53, 0x5A, 0x5B, 0x60,
-0xEA, 0xEB, 0xF4-0xF7, 0xFE, 0xFF) ne sont **pas déclarés**. Le descripteur ne
+**[mesuré]** Le seul rapport *Feature* déclaré est **0x09**. Les 20 autres ID
+de cet inventaire (0x46, 0x49, 0x4A, 0x4B, 0x4C, 0x4F, 0x51-0x53, 0x5A, 0x5B, 0x60,
+0xEA, 0xEB, 0xF4-0xF7, 0xFE, 0xFF) ne sont **pas déclarés** (0x47 est déclaré en Input).
+*Contre-audit* : le balayage complet ultérieur trouve 27 ID qui répondent, soit 25 non déclarés
+(s'ajoutent 0x54, 0x5C, 0x5D, 0xD1, 0xD8 : HARDWARE-RAPPORTS-HID §2). Le descripteur ne
 documente donc ni leur sens ni leurs unités : tout leur décodage relève de la
 rétro-ingénierie du projet. Aucune référence publique ne décrit ces ID
 (recherche du 2026-10-01 ; le seul travail public sur le microgiciel des claviers
@@ -56,7 +61,7 @@ max=100. `drivers/hid/hid-ids.h` : 0x022c/d/e = ALU_WIRELESS ANSI/ISO/JIS,
 BlueZ relaie les GET_REPORT, et `profiles/input/device.c` impose son propre
 délai d'expiration (`hidp_report_req_timeout`).
 
-### 1.4 Les 22 rapports réels
+### 1.4 Les 22 rapports de l'inventaire initial (27 au balayage complet)
 
 Captures du 2026-10-01 entre 03:57 et 04:00, conservées dans
 `tests/live/re/capture-2026-10-01.jsonl` (0x4C caviardé) et
@@ -89,8 +94,9 @@ requête 0xFE (10ᵉ du tour) a expiré, puis 0xFF, 0x5B et 0x09 aussi : `errno=
 (EIO) après 3,39 à 3,60 s chacune, avec `hidp_report_req_timeout` dans
 `bluetoothd`. Le clavier a ensuite quitté le lien (`Host is down`, BlueZ ne
 parvenait plus à se reconnecter). Le journal montre que le même clavier était
-déjà « Host is down » à 02:55, avant tout accès de l'audit. La mise en veille du
-clavier est donc la cause la plus probable [hypothèse]. Le lien de cause à effet
+déjà « Host is down » à 02:55, avant tout accès de l'audit. *Contre-audit* : 02:55-03:06 est la fenêtre du
+**changement de piles** (HARDWARE-RAPPORTS-HID en-tête, VERIF-BATTERIE) ; cet argument ne plaide donc **pas** pour
+une mise en veille. La cause reste ouverte (#175 : la dernière requête était `0xFE`). Le lien de cause à effet
 avec les lectures n'est pas établi, et l'échantillonnage a été arrêté.
 
 ## 2. Tableau champ par champ
