@@ -220,16 +220,17 @@ impl ApiHubApp {
                         ui.add_space(4.0);
                         egui::Grid::new("bat_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(v) = kb.battery.voltage {
-                                // [hypothèse] adc * 3.3 / 1023: an estimate, not a measurement.
-                                ui.label(egui::RichText::new("Voltage (est.)").weak().size(16.0));
+                                // Measured: reports 0x46 / 0xFF, in mV (#139).
+                                ui.label(egui::RichText::new("Voltage").weak().size(16.0));
                                 ui.label(self.tint(
-                                    egui::RichText::new(format!("≈ {:.2} V", v)).strong().size(18.0),
+                                    egui::RichText::new(view::volts_text(v)).strong().size(18.0),
                                     view::voltage_level(v)));
                                 ui.end_row();
                             }
-                            if let Some(adc) = kb.battery.adc_raw {
-                                ui.label(egui::RichText::new("0xF5 (raw)").weak().size(16.0));
-                                ui.label(egui::RichText::new(format!("{}", adc)).size(16.0));
+                            if let Some(p) = kb.battery.percentage_interpolated {
+                                // Interpolated on the unit's curve: an estimate.
+                                ui.label(egui::RichText::new("Curve").weak().size(16.0));
+                                ui.label(egui::RichText::new(view::curve_text(p)).size(16.0));
                                 ui.end_row();
                             }
                             if let Some(ref rem) = snap.remaining_display {

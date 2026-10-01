@@ -40,7 +40,7 @@ pub fn configured_in(dir: &Path) -> Option<i32> {
         .iter()
         .filter_map(|p| std::fs::read_to_string(p).ok())
         .filter_map(|c| parse_modprobe(&c))
-        .last()
+        .next_back()
 }
 
 /// `(ok, detail)` of the Diag row from the live value and the configured one.

@@ -215,9 +215,9 @@ impl DbusmenuServer {
         if let Some(ref snap) = snap {
             if let Some(ref kb) = snap.keyboard {
                 let pct = kb.battery_pct().unwrap_or(0.0);
-                // Voltage is an estimate [hypothèse], shown as such.
+                // Measured voltage (reports 0x46/0xFF), rounded to 0.01 V.
                 let label = match kb.battery.voltage {
-                    Some(v) => format!("Battery: {:.0}%  (≈{:.2} V est.)", pct, v),
+                    Some(v) => format!("Battery: {:.0}%  ({})", pct, crate::view::volts_text(v)),
                     None => format!("Battery: {:.0}%", pct),
                 };
                 root_children.push(info_item(menu_id::INFO_BATTERY, label));
