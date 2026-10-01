@@ -52,7 +52,7 @@ impl std::fmt::Display for RssiError {
     }
 }
 
-type Cache = HashMap<String, (Instant, Result<(i8, i8), RssiError>)>;
+type Cache = HashMap<String, (Instant, Result<(i8, Option<i8>), RssiError>)>;
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
 static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
 
@@ -64,7 +64,7 @@ pub fn last_error() -> Option<String> {
 
 /// Read RSSI and TX power (dBm) for `mac` (`"AA:BB:CC:DD:EE:FF"`).
 /// Returns `None` on any failure; see `last_error()` for the reason.
-pub fn read_rssi(mac: &str) -> Option<(i8, i8)> {
+pub fn read_rssi(mac: &str) -> Option<(i8, Option<i8>)> {
     let res = read_rssi_cached(mac);
     let mut last = LAST_ERROR.lock().unwrap_or_else(|e| e.into_inner());
     match &res {
@@ -80,7 +80,7 @@ pub fn read_rssi(mac: &str) -> Option<(i8, i8)> {
     res.ok()
 }
 
-fn read_rssi_cached(mac: &str) -> Result<(i8, i8), RssiError> {
+fn read_rssi_cached(mac: &str) -> Result<(i8, Option<i8>), RssiError> {
     let key = mac.to_ascii_uppercase();
     let now = Instant::now();
     {
@@ -102,7 +102,7 @@ fn read_rssi_cached(mac: &str) -> Result<(i8, i8), RssiError> {
 }
 
 /// Run the helper once (no cache) and interpret its result.
-fn run_helper(path: &str, mac: &str, timeout: Duration) -> Result<(i8, i8), RssiError> {
+fn run_helper(path: &str, mac: &str, timeout: Duration) -> Result<(i8, Option<i8>), RssiError> {
     parse_mac(mac).ok_or(RssiError::BadMac)?;
     if !std::path::Path::new(path).exists() {
         return Err(RssiError::HelperMissing(path.to_string()));
@@ -143,15 +143,62 @@ fn run_helper(path: &str, mac: &str, timeout: Duration) -> Result<(i8, i8), Rssi
 }
 
 /// Parse `{"rssi":-5,"tx_power":4,"max_tx_power":4}`; 127 means unavailable.
-fn parse_helper_output(out: &str) -> Result<(i8, i8), RssiError> {
+fn parse_helper_output(out: &str) -> Result<(i8, Option<i8>), RssiError> {
     let bad = || RssiError::BadOutput(out.trim().chars().take(80).collect());
     let v: serde_json::Value = serde_json::from_str(out.trim()).map_err(|_| bad())?;
     let get = |k: &str| -> Option<i8> { i8::try_from(v.get(k)?.as_i64()?).ok() };
-    let (rssi, tx) = (get("rssi").ok_or_else(bad)?, get("tx_power").ok_or_else(bad)?);
-    if rssi == MGMT_VALUE_INVALID || tx == MGMT_VALUE_INVALID {
+    let rssi = get("rssi").ok_or_else(bad)?;
+    if rssi == MGMT_VALUE_INVALID {
         return Err(RssiError::Unavailable);
     }
+    let tx = get("tx_power").filter(|t| *t != MGMT_VALUE_INVALID);
     Ok((rssi, tx))
+}
+
+/// A timestamped RSSI measurement bound to the MAC it was taken from.
+#[derive(Debug, Clone, PartialEq)]
+struct Sample {
+    mac: String,
+    rssi: i32,
+    tx: Option<i32>,
+    at: Instant,
+}
+
+/// Holds the last RSSI measurement and expires it: a value older than
+/// `max_age`, taken from another MAC, or superseded by a failed read is
+/// reported as absent (never a frozen stale number).
+#[derive(Debug, Clone)]
+pub struct RssiTracker {
+    max_age: Duration,
+    sample: Option<Sample>,
+}
+
+impl RssiTracker {
+    pub fn new(max_age: Duration) -> Self {
+        Self { max_age, sample: None }
+    }
+
+    /// Record the outcome of a read for `mac`. `None` (failure) drops any value.
+    pub fn record(&mut self, mac: &str, res: Option<(i8, Option<i8>)>, now: Instant) {
+        self.sample = res.map(|(r, t)| Sample {
+            mac: mac.to_ascii_uppercase(),
+            rssi: i32::from(r),
+            tx: t.map(i32::from),
+            at: now,
+        });
+    }
+
+    /// Forget everything (device disconnected).
+    pub fn clear(&mut self) {
+        self.sample = None;
+    }
+
+    /// `(rssi_dbm, tx_power_dbm, age)` if a sample for `mac` is still fresh.
+    pub fn current(&self, mac: &str, now: Instant) -> Option<(i32, Option<i32>, Duration)> {
+        let s = self.sample.as_ref()?;
+        let age = now.checked_duration_since(s.at).unwrap_or_default();
+        (s.mac.eq_ignore_ascii_case(mac) && age <= self.max_age).then_some((s.rssi, s.tx, age))
+    }
 }
 
 /// Parse a colon-separated MAC string into 6 bytes.
@@ -190,17 +237,42 @@ mod tests {
     #[test]
     fn parses_valid_output() {
         let o = r#"{"rssi":-42,"tx_power":4,"max_tx_power":4}"#;
-        assert_eq!(parse_helper_output(o), Ok((-42, 4)));
+        assert_eq!(parse_helper_output(o), Ok((-42, Some(4))));
     }
 
     #[test]
     fn rejects_invalid_values_and_garbage() {
         assert_eq!(parse_helper_output(r#"{"rssi":127,"tx_power":4}"#), Err(RssiError::Unavailable));
-        assert_eq!(parse_helper_output(r#"{"rssi":-40,"tx_power":127}"#), Err(RssiError::Unavailable));
         assert!(matches!(parse_helper_output(""), Err(RssiError::BadOutput(_))));
         assert!(matches!(parse_helper_output("nope"), Err(RssiError::BadOutput(_))));
         assert!(matches!(parse_helper_output(r#"{"rssi":null,"tx_power":null}"#), Err(RssiError::BadOutput(_))));
         assert!(matches!(parse_helper_output(r#"{"rssi":-300,"tx_power":1}"#), Err(RssiError::BadOutput(_))));
+    }
+
+    #[test]
+    fn tx_power_127_does_not_invalidate_rssi() {
+        assert_eq!(parse_helper_output(r#"{"rssi":-40,"tx_power":127}"#), Ok((-40, None)));
+        assert_eq!(parse_helper_output(r#"{"rssi":-40,"tx_power":null}"#), Ok((-40, None)));
+        assert_eq!(parse_helper_output(r#"{"rssi":-40}"#), Ok((-40, None)));
+    }
+
+    #[test]
+    fn tracker_expires_and_checks_mac() {
+        let t0 = Instant::now();
+        let mut tr = RssiTracker::new(Duration::from_secs(100));
+        assert_eq!(tr.current(MAC, t0), None);
+        tr.record(MAC, Some((-50, Some(4))), t0);
+        let (r, tx, age) = tr.current(&MAC.to_lowercase(), t0 + Duration::from_secs(30)).unwrap();
+        assert_eq!((r, tx, age), (-50, Some(4), Duration::from_secs(30)));
+        assert_eq!(tr.current(MAC, t0 + Duration::from_secs(101)), None);
+        assert_eq!(tr.current("AA:BB:CC:DD:EE:FF", t0), None);
+        // A failed read drops the value immediately.
+        tr.record(MAC, Some((-50, None)), t0);
+        tr.record(MAC, None, t0 + Duration::from_secs(1));
+        assert_eq!(tr.current(MAC, t0 + Duration::from_secs(2)), None);
+        tr.record(MAC, Some((-60, None)), t0);
+        tr.clear();
+        assert_eq!(tr.current(MAC, t0), None);
     }
 
     #[test]
@@ -213,7 +285,7 @@ mod tests {
     #[test]
     fn helper_success() {
         let h = fake_helper("ok", r#"echo '{"rssi":-55,"tx_power":4,"max_tx_power":4}'"#);
-        assert_eq!(run_helper(&h, MAC, Duration::from_secs(2)), Ok((-55, 4)));
+        assert_eq!(run_helper(&h, MAC, Duration::from_secs(2)), Ok((-55, Some(4))));
     }
 
     #[test]
