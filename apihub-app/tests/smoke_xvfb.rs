@@ -139,6 +139,8 @@ fn run_sandboxed(tag: &str, script: &str) -> Option<impl Fn(&str) -> String> {
         .env("XDG_CONFIG_HOME", dir.join("config"))
         .env("XDG_STATE_HOME", dir.join("state"))
         .env("RUST_BACKTRACE", "1")
+        // The scripts find the window by its English title (#114).
+        .env("LC_ALL", "C")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
