@@ -1,0 +1,58 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main, "audit/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  rust:
+    name: Rust build, clippy, test
+    runs-on: ubuntu-latest
+    container: rust:1-bookworm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install components
+        run: rustup component add clippy
+      - name: Build, clippy (warnings = errors), test for every crate
+        run: |
+          set -eu
+          for manifest in $(find . -name Cargo.toml -not -path '*/target/*'); do
+            dir=$(dirname "$manifest")
+            echo "::group::$dir"
+            (cd "$dir" && cargo build --locked && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked)
+            echo "::endgroup::"
+          done
+
+  python-shell-c:
+    name: Python, shell, C, udev (no hardware)
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    steps:
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates nodejs \
+            python3 python3-pytest python3-dbus-fast shellcheck gcc libc6-dev udev
+      - uses: actions/checkout@v4
+      - name: py_compile
+        run: |
+          for f in apple-kb-monitor apihub-settings mqtt-bridge.py; do
+            [ -f "$f" ] && python3 -m py_compile "$f"
+          done
+          find . -name '*.py' -not -path './.git/*' -print0 | xargs -0 -r python3 -m py_compile
+      - name: pytest (fixtures, no keyboard needed)
+        run: python3 -m pytest tests/ -q
+      - name: shellcheck
+        run: |
+          files="tests/live/check_keyboard.sh"
+          for f in $(find kde systemd -type f 2>/dev/null); do
+            head -1 "$f" | grep -Eq '^#!.*(ba)?sh' && files="$files $f"
+          done
+          shellcheck -S warning $files
+      - name: rssi-helper (gcc -Wall -Wextra -Werror)
+        run: gcc -Wall -Wextra -Werror -o /tmp/rssi-helper rssi-helper.c
+      - name: udevadm verify
+        run: udevadm verify udev/70-apple-kb-hidraw.rules

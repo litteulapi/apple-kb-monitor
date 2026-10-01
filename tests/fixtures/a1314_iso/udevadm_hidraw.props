@@ -1,0 +1,8 @@
+DEVPATH=/devices/virtual/misc/uhid/0005:05AC:0256.0014/hidraw/hidraw7
+DEVNAME=/dev/hidraw7
+MAJOR=243
+MINOR=7
+SUBSYSTEM=hidraw
+USEC_INITIALIZED=181343451275
+TAGS=:seat:
+CURRENT_TAGS=:seat:

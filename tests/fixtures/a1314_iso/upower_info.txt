@@ -1,0 +1,15 @@
+  native-path:          hid-04:db:56:ca:42:ee-battery-71
+  model:                Clavier de maria #1
+  serial:               04:db:56:ca:42:ee
+  power supply:         no
+  updated:              jeu. 01 oct. 2026 02:14:25 (19 seconds ago)
+  has history:          yes
+  has statistics:       yes
+  keyboard
+    present:             yes
+    rechargeable:        yes
+    state:               discharging
+    warning-level:       none
+    percentage:          90%
+    icon-name:          'battery-full-symbolic'
+
