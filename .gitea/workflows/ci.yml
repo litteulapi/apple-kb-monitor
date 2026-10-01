@@ -94,3 +94,53 @@ jobs:
           find . -name '*.py' -not -path './.git/*' -print0 | xargs -0 -r python3 -m py_compile
       - name: Fixture tests of the tools (no keyboard needed)
         run: python3 -m pytest tests/live/re -q
+
+  # Same checks as `scripts/ci-local.sh` (the reference pipeline, run locally
+  # and by .githooks/pre-push). No runner was registered on the instance on
+  # 2026-10-01: see docs/QA-AUTOMATIQUE.md §5 before enabling Actions.
+  qa-static:
+    name: QA static (secrets, registry claims, redaction, versions, units)
+    runs-on: ubuntu-latest
+    container: debian:bookworm
+    steps:
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates nodejs python3 systemd udev
+      - uses: actions/checkout@v4
+      - name: scripts/ci-local.sh (static steps)
+        run: |
+          git config --global --add safe.directory "$PWD"
+          git fetch --no-tags origin main:refs/remotes/origin/main 2>/dev/null || true
+          git branch -f main origin/main 2>/dev/null || true
+          scripts/ci-local.sh --only versions,secrets,claims,redaction,shell,udev
+      - name: Keep the report
+        if: always()
+        run: cat scripts/out/latest/report.txt || true
+
+  e2e:
+    name: End-to-end window tests (Xvfb, simulated keyboard)
+    runs-on: ubuntu-latest
+    container:
+      image: rust:1-bookworm
+      # bubblewrap needs unprivileged user namespaces inside the container.
+      options: --security-opt seccomp=unconfined --security-opt apparmor=unconfined
+    steps:
+      - name: Install tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs git ca-certificates xvfb xdotool imagemagick \
+            bubblewrap dbus strace python3 python3-gi python3-pil libgl1-mesa-dri libegl1 libxkbcommon-x11-0 \
+            libxcursor1 libxi6 libxrandr2 fonts-dejavu-core
+      - uses: actions/checkout@v4
+      - name: tests/e2e/run.sh (exit 77 = environment without user namespaces = skipped)
+        run: |
+          set +e
+          tests/e2e/run.sh --out e2e-out; rc=$?
+          [ $rc = 77 ] && { echo "::warning::e2e skipped (no user namespaces in this runner)"; exit 0; }
+          exit $rc
+      - uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: e2e-captures
+          path: e2e-out

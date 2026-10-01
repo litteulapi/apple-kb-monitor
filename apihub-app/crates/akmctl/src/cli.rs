@@ -136,6 +136,8 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// Health self-check (daemon, link, journal, crashes, window, disk), run by apple-kb-monitor-selfcheck.timer
+    Selftest(crate::selftest::SelftestArgs),
     /// Print a shell completion script on stdout
     Completions { shell: Shell },
     /// Print the manual page (roff) on stdout

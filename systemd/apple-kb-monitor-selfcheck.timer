@@ -1,0 +1,12 @@
+[Unit]
+Description=Apple keyboard monitor self-check every 15 minutes
+Documentation=file:///usr/share/doc/apple-kb-monitor/QA-AUTOMATIQUE.md
+
+[Timer]
+OnStartupSec=5min
+OnUnitActiveSec=15min
+RandomizedDelaySec=30s
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

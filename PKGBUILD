@@ -62,6 +62,13 @@ package() {
     # ── systemd user service: apple-kb-monitord (single keyboard owner) ──
     install -Dm644 "$startdir/systemd/apple-kb-monitord.service"         "$pkgdir/usr/lib/systemd/user/apple-kb-monitord.service"
     install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor1.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor1.service"
+    # ── self-check every 15 min (akmctl selftest), enabled for every user;
+    #    opt out: systemctl --user mask apple-kb-monitor-selfcheck.timer ──
+    install -Dm644 "$startdir/systemd/apple-kb-monitor-selfcheck.service" "$pkgdir/usr/lib/systemd/user/apple-kb-monitor-selfcheck.service"
+    install -Dm644 "$startdir/systemd/apple-kb-monitor-selfcheck.timer"   "$pkgdir/usr/lib/systemd/user/apple-kb-monitor-selfcheck.timer"
+    install -dm755 "$pkgdir/usr/lib/systemd/user/timers.target.wants"
+    ln -s ../apple-kb-monitor-selfcheck.timer "$pkgdir/usr/lib/systemd/user/timers.target.wants/apple-kb-monitor-selfcheck.timer"
+    install -Dm644 "$startdir/docs/QA-AUTOMATIQUE.md" "$pkgdir/usr/share/doc/apple-kb-monitor/QA-AUTOMATIQUE.md"
 
     # ── udev + keyd + modprobe ──────────────────────────────────────────
     install -Dm644 "$startdir/udev/70-apple-kb-hidraw.rules"          "$pkgdir/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules"
