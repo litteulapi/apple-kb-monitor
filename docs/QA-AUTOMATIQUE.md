@@ -105,9 +105,10 @@ du §3.2, `frame_max_ms` est joint au résultat.
 
 **Échecs connus.** `tests/e2e/known-failures.tsv` (`scénario<TAB>#issue<TAB>raison`) : le
 scénario tourne toujours et s'affiche `KNOWN-FAIL #233`, sans faire échouer le pipeline ; s'il
-repasse, le rapport demande de retirer la ligne (dans le commit du correctif). Au 01/10/2026 :
-`desktop_slow` → #233 (aucune fenêtre en 90 s sur `main` 8f73964 quand le portail et l'hôte du
-tray répondent en 40 s ; voir aussi #232).
+repasse, le rapport demande de retirer la ligne (dans le commit du correctif). Exemple réel :
+`desktop_slow` échouait sur `main` 8f73964 (aucune fenêtre en 90 s quand le portail et l'hôte
+du tray répondent en 40 s, #232/#233) ; il passe sur `main` b570c1d (paquet 3.1.0-8, « D-Bus
+borné ») et la ligne a été retirée. Liste vide au 01/10/2026.
 
 Chaque échec donne un message en clair et le chemin d'une capture prise **au moment du gel**
 (`stall-t13s.png`), ou de l'écran entier si la fenêtre n'apparaît pas.
@@ -235,7 +236,7 @@ Enregistrer un runner (administrateur de l'instance) :
 | 1 | `PKGBUILD` installe `docs/QA-AUTOMATIQUE.md` avant que le fichier n'existe | `versions` **KO** « PKGBUILD installs a missing file », `package` **KO** dans `package()` |
 | 1 | 3 lignes de docs (« `0xF5` ADC », « RSSI < -80 dBm », « RSSI −48 dBm ») | `claims` **KO** → issue #228, mises en liste connue |
 | 1/4 | faux jeton `ghp_…` dans un fichier non suivi | `secrets` **KO**, `pre-push` **REFUSED** (voir §6.1) |
-| 2 | binaire de la branche `main` (01/10) avec un portail et un hôte de tray lents | `desktop_slow` **KO** : aucune fenêtre en 90 s (appels D-Bus synchrones avant la première trame, cf. #232/#233) |
+| 2 | binaire de `main` 8f73964 (avant correctif) avec un portail et un hôte de tray lents | `desktop_slow` **KO** : aucune fenêtre en 90 s (appels D-Bus synchrones avant la première trame, #232/#233) ; **passe** sur `main` b570c1d (3.1.0-8) : le test distingue l'avant et l'après correctif |
 | 2 | enveloppe qui laisse un processus `apihub-app` après fermeture | `open_close` **KO** « cycle 1/10: process leak after close: apihub-app pid(s) [18] still alive » |
 | 2 | enveloppe qui fige la fenêtre 7 s (`SIGSTOP`) | `responsive` **KO** « window NOT RESPONDING (1 ping without answer within 5 s) », capture `stall-t13s.png` |
 | 3 | faux démon qui répond en 10 s (bus privé) | `daemon` **bad** « no answer within 5 s (daemon stuck?) », code 1 |
