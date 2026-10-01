@@ -2,8 +2,8 @@
     "KPlugin": {
         "Id": "com.agenceapi.devicehub",
         "Name": "ApiHub",
-        "Description": "Apple Bluetooth keyboard telemetry",
-        "Icon": "preferences-desktop-peripherals",
+        "Description": "Apple Bluetooth keyboard: battery, voltage and signal",
+        "Icon": "apihub-scarab",
         "Category": "System Information",
         "Authors": [
             {
@@ -17,5 +17,8 @@
     },
     "X-Plasma-API": "declarativeappletscript",
     "X-Plasma-API-Minimum-Version": "6.1",
-    "KPackageStructure": "Plasma/Applet"
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-NotificationArea": "true",
+    "X-Plasma-NotificationAreaCategory": "Hardware",
+    "X-Plasma-DBusActivationService": "com.agenceapi.AppleKbMonitor1"
 }
