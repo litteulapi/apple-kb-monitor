@@ -596,7 +596,10 @@ fn journal_lines() -> Option<Vec<String>> {
         .args([
             "-u",
             "bluetooth",
-            "-b",
+            // A recent window, not the whole boot: an old incident must not keep the
+            // verdict (and the self-check) orange until the next reboot.
+            "--since",
+            "-6 hours",
             "--no-pager",
             "-o",
             "short-iso",
