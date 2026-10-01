@@ -17,7 +17,7 @@ for d in NoNewPrivileges ProtectSystem ProtectHome PrivateTmp PrivateUsers \
     fail "$d= in the user unit breaks pkexec / rssi-helper (see the comment in the unit)"
   fi
 done
-for d in UMask=0077 LimitCORE=0 KeyringMode=private IPAddressDeny=any; do
+for d in UMask=0077 LimitCORE=0 KeyringMode=private; do
   grep -qx "$d" "$unit" || fail "$d missing from the unit"
 done
 

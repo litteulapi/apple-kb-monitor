@@ -28,12 +28,13 @@ StateDirectory=apple-kb-monitor
 #   * ProtectSystem=, ProtectHome=, PrivateTmp= make a USER manager create a
 #     user namespace (uid_map "1000 1000 1"): root is unmapped, setuid and file
 #     capabilities are void as well.
+# IPAddressDeny= is deliberately absent: under a user manager systemd ignores it
+# ("unit configures an IP firewall, but not running as root") and warns at each start.
 # Only options that need neither are used here. They are checked by
 # tests/check-security-files.sh.
 UMask=0077
 LimitCORE=0
 KeyringMode=private
-IPAddressDeny=any
 TasksMax=128
 MemoryMax=512M
 
