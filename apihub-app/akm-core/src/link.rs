@@ -121,6 +121,26 @@ pub fn clear_keyboard_off() {
     off().clear();
 }
 
+// ── "a forget is in progress": Apple's SuppressDisconnectNotifications ─────
+
+static EXPECTED: Mutex<OffMark> = Mutex::new(OffMark::new());
+
+fn expected() -> std::sync::MutexGuard<'static, OffMark> {
+    EXPECTED.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// `akmctl repair` just sent `RecantConnection` (`0x41`): the disconnection
+/// that follows within [`OFF_WINDOW`] is expected and not notified (macOS
+/// `recantConnection` sets `SuppressDisconnectNotifications`, #217).
+pub fn mark_expected_disconnect() {
+    expected().mark(Instant::now());
+}
+
+/// Called when the link drops: is this the expected disconnection?
+pub fn take_expected_disconnect() -> bool {
+    expected().take(Instant::now())
+}
+
 /// Notification text `(summary, body)`.
 pub fn text(ev: &LinkEvent) -> (String, String) {
     match ev {
@@ -144,6 +164,15 @@ pub fn text(ev: &LinkEvent) -> (String, String) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn expected_disconnect_is_consumed_once() {
+        assert!(!take_expected_disconnect());
+        mark_expected_disconnect();
+        assert!(take_expected_disconnect());
+        assert!(!take_expected_disconnect(), "one disconnection only");
+    }
+
     use super::*;
 
     #[test]

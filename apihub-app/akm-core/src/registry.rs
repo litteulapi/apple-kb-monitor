@@ -25,7 +25,9 @@
 //! named Apple operation ([`WriteOp`]): `Shutdown` = `0x40` `WillShutdown`
 //! (no data, wire `53 40`, sent by macOS at every shutdown), `DeviceName` =
 //! `0x55` `LongDeviceName` (64 data bytes, Lion's `setDeviceName:`; its real
-//! write stays refused until proven, [`crate::devname`]). [`WriteSession`]
+//! write stays refused until proven, [`crate::devname`]), `Forget` = `0x41`
+//! `RecantConnection` (no data, wire `53 41`, sent by macOS 26.5 when a
+//! connected keyboard is forgotten; only `akmctl repair`). [`WriteSession`]
 //! allows each id once per session; the only function that writes
 //! ([`crate::hidraw::hid_write_feature`]) calls both. Proof levels: `[mesuré]` observed on the A1314 ISO,
 //! `[plist]` Apple driver property list, `[désassemblage]` Apple binaries,
@@ -297,13 +299,14 @@ pub const TABLE: &[Entry] = &[
       "Long name, 64 bytes, write-only on this keyboard (GET refused 0x03); written by Lion's setDeviceName: (operation DeviceName, real write refused until proven)",
       "text", E::None, D::Raw, P::Disassembly, S::WriteApple,
       "RE-PILOTE-MACOS §3, RE-PILOTES-ANCIENS §5 L11, RENOMMER-CLAVIER, #192, #248"),
+    r(0x41, F, None, Some("RecantConnection"), "recant_connection",
+      "Command: give up the connection (Apple's virtual cable unplug), id only (wire `53 41`); sent by macOS 26.5 bluetoothd when the user forgets a connected keyboard (operation Forget, akmctl repair only); effect on the keyboard not measured",
+      "-", E::None, D::Raw, P::Disassembly, S::WriteApple,
+      "RE-GHIDRA-IOBLUETOOTH §5.2, RE-PILOTES-ANCIENS §7, RECONNEXION-PAIRAGE, #217"),
     // ── NeverWrite: command / write-only registers ────────────────────────
     r(0x01, O, Some(2), None, "led_output",
       "Keyboard LEDs (Caps Lock...): handled by the kernel through evdev, never by us", "bits",
       E::None, D::Raw, P::Disassembly, S::NeverWrite, "RE-PILOTES-ANCIENS §7"),
-    r(0x41, F, None, Some("RecantConnection"), "recant_connection",
-      "Command: give up the connection (Apple's virtual cable unplug); high risk", "-", E::None,
-      D::Raw, P::Disassembly, S::NeverWrite, "RE-PILOTES-ANCIENS §7"),
     r(0x43, F, Some(2), Some("UserMode"), "user_mode",
       "Declared by Apple (1-3); absent from the 0x0050 firmware (ERR_INVALID_REPORT_ID)", "enum",
       E::None, D::Raw, P::Measured, S::NeverWrite, "RE-PILOTE-MACOS §3"),
@@ -519,16 +522,22 @@ pub enum WriteOp {
     /// of the name field are not proven: [`crate::devname`] refuses the real
     /// write (`NotProven`), and the hardware door has no 65-byte ioctl.
     DeviceName,
+    /// `RecantConnection` (`0x41`, id only): macOS 26.5 `bluetoothd`
+    /// (`FUN_1005a3f64` -> `FUN_1005a41e4`) when the user forgets a connected
+    /// classic Apple HID, then 2000 ms for the link to drop, then the unpair
+    /// [décompilé + listing]. Only `akmctl repair`, after the typed confirmation.
+    Forget,
 }
 
 impl WriteOp {
     /// Every named operation (the sweep tests iterate this list).
-    pub const ALL: [WriteOp; 2] = [Self::Shutdown, Self::DeviceName];
+    pub const ALL: [WriteOp; 3] = [Self::Shutdown, Self::DeviceName, Self::Forget];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Shutdown => "Shutdown",
             Self::DeviceName => "DeviceName",
+            Self::Forget => "Forget",
         }
     }
 
@@ -537,6 +546,7 @@ impl WriteOp {
         match self {
             Self::Shutdown => &[0x40],
             Self::DeviceName => &[0x55],
+            Self::Forget => &[0x41],
         }
     }
 
@@ -546,6 +556,7 @@ impl WriteOp {
         match self {
             Self::Shutdown => 0,
             Self::DeviceName => 64,
+            Self::Forget => 0,
         }
     }
 
@@ -568,8 +579,8 @@ pub fn writable_feature_ids() -> Vec<u8> {
 
 /// May this report be written by *some* named Apple operation? Only a
 /// Feature id of class [`Safety::WriteApple`] that a [`WriteOp`] lists:
-/// `0x40` (`Shutdown`) and `0x55` (`DeviceName`). Every other id and
-/// direction is refused, among them `0x44`, `0x45`, `0x41`, `0x4A`, `0x4C`,
+/// `0x40` (`Shutdown`), `0x55` (`DeviceName`) and `0x41` (`Forget`). Every
+/// other id and direction is refused, among them `0x44`, `0x45`, `0x4A`, `0x4C`,
 /// `0x50`-`0x54`, `0xD0`-`0xFB`, `0x09` and `0xD5`. Stateless:
 /// [`check_write_op`] binds the id to its operation, [`WriteSession`] adds
 /// the length and "once" rules.
@@ -957,11 +968,12 @@ mod tests {
         for id in [0xFE, 0x4C] {
             assert_eq!(class(id), Safety::NeverRead);
         }
-        for id in [0x44, 0x45, 0x41, 0x50, 0xD0, 0xD4, 0xD5, 0xFA, 0xFB] {
+        for id in [0x44, 0x45, 0x50, 0xD0, 0xD4, 0xD5, 0xFA, 0xFB] {
             assert_eq!(class(id), Safety::NeverWrite, "{id:#04x}");
         }
         assert_eq!(class(0x40), Safety::WriteApple);
         assert_eq!(class(0x55), Safety::WriteApple);
+        assert_eq!(class(0x41), Safety::WriteApple);
         for id in [0x04, 0x05, 0x30, 0x13, 0x11, 0x12] {
             assert_eq!(lookup(id, Direction::Input).unwrap().safety, Safety::PassiveInput);
         }
@@ -994,9 +1006,9 @@ mod tests {
     }
 
     /// Ids that must never be written, whatever the operation (manager's list).
-    const NEVER: [u8; 19] = [
-        0x44, 0x45, 0x41, 0x4A, 0x4C, 0x09, 0xD5, 0x50, 0x51, 0x52, 0x53, 0x54, 0xD0, 0xD4, 0xFB,
-        0xFA, 0x43, 0xC6, 0xDC,
+    const NEVER: [u8; 18] = [
+        0x44, 0x45, 0x4A, 0x4C, 0x09, 0xD5, 0x50, 0x51, 0x52, 0x53, 0x54, 0xD0, 0xD4, 0xFB, 0xFA,
+        0x43, 0xC6, 0xDC,
     ];
 
     #[test]
@@ -1022,7 +1034,11 @@ mod tests {
             .map(|id| (id, Direction::Feature))
             .collect();
         assert_eq!(ok, expected);
-        assert_eq!(writable_feature_ids(), vec![0x40, 0x55]);
+        assert_eq!(writable_feature_ids(), vec![0x40, 0x41, 0x55]);
+        // 0x41 only by Forget, 0x40 only by Shutdown, 0x55 only by DeviceName.
+        assert_eq!(WriteOp::of_id(0x41), Some(WriteOp::Forget));
+        assert_eq!(WriteOp::of_id(0x40), Some(WriteOp::Shutdown));
+        assert_eq!(WriteOp::of_id(0x55), Some(WriteOp::DeviceName));
         // The forbidden list of the manager, one by one, and for every operation.
         for id in NEVER.into_iter().chain(0xD0..=0xFB) {
             assert!(check_write(id, Direction::Feature).is_err(), "{id:#04x}");

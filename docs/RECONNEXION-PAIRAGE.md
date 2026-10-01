@@ -226,6 +226,33 @@ btusb et demande un rechargement du module) ; `Experimental = false` (sans lien 
   clavier** + appels ; ré-appairage seulement ensuite, et seulement après la saisie de `OUBLIER` sur un
   terminal ; refuse si la liaison est saine. Menu tray : « Réparer la liaison… ».
 
+### 5.4 Oubli propre d'un clavier connecté, comme macOS (#217)
+
+Quand `akmctl repair` doit supprimer le pairage alors que le clavier est **encore connecté** (`--force` sur une liaison
+vivante, ou refus de clé constaté pendant une connexion), il reproduit ce que fait macOS 26.5 en « Oublier » :
+
+| Étape | Ce qui est fait | Preuve |
+|---|---|---|
+| 1 | pré-vol : clavier connecté, santé `connected` dans `akmctl doctor` et aucun KO, disjoncteur fermé, stdin et stdout sont un terminal | — |
+| 2 | **sauvegarde** côté poste : `~/.local/state/apple-kb-monitor/forget-backup-<AAAAMMJJTHHMMSSZ>.json` (0600, jamais écrasé) : MAC, nom, alias, `Paired`/`Bonded`/`Trusted`, chemin et adresse de l'adaptateur, chemin de l'appareil. **Aucune clé de lien** (jamais lue) | — |
+| 3 | explication (ce qui va se passer, effet de `0x41` non mesuré, marche à suivre pour ré-appairer) puis saisie de `OUBLIER` ; jamais en non interactif | — |
+| 4 | **un** SET Feature `0x41` `RecantConnection`, id seul, fil `53 41` (opération `Forget` du registre, une fois par session, porte d'un octet, octets journalisés) | [décompilé + listing] `bluetoothd` `FUN_1005a41e4` (RE-GHIDRA-IOBLUETOOTH.md §5.2) |
+| 5 | le démon coupe la notification de déconnexion (`ExpectDisconnect()`, 15 s ; équivalent de `SuppressDisconnectNotifications`) | [désassemblage] `-[AppleBluetoothHIDDevice recantConnection]` |
+| 6 | attente **2000 ms** de la chute de la liaison ; si elle ne tombe pas, on continue comme Apple (« timed out waiting to recant ») | [décompilé] `FUN_1005a3f64` |
+| 7 | **seulement alors** `org.bluez.Adapter1.RemoveDevice` | [décompilé] `FUN_1005a3f64` (« will unpair ») |
+| 8 | assistant d'appairage existant, attente du clavier appairé + connecté, `Trusted`, puis vérification finale `akmctl doctor` | — |
+
+* Si `0x41` n'est pas envoyé (porte hidraw indisponible, verrou pris) ou n'est pas accepté (erreur, clavier muet) : **rien
+  n'est supprimé**, retour à l'étape « réveil + reconnexion », aucune nouvelle tentative.
+* Arrêt au premier échec ; chaque octet (`[hid-write] Forget …`) et chaque décision (`[forget] …`) sont journalisés sur stderr.
+* Un clavier **non connecté** est désappairé comme avant, sans `0x41` : macOS n'envoie `RecantConnection` qu'à un appareil
+  connecté.
+* `0x41` n'est atteignable que par `akmctl repair` (un test refuse toute autre référence à l'opération `Forget` ou à
+  `forget::run`) : ni D-Bus, ni fenêtre, ni tray (qui ne fait qu'ouvrir `akmctl repair` dans un terminal, où `OUBLIER`
+  doit être tapé). Aucun test n'écrit sur le clavier ni n'appelle `RemoveDevice` : simulateur et espion uniquement.
+* **Effet réel sur le clavier : non mesuré** (simple coupure ou oubli de cet hôte, RE-GHIDRA-IOBLUETOOTH.md §9 n° 3).
+  `0x44` `FullFactoryDefault` (Lion, efface toutes les clés) reste interdit.
+
 ## 6. Veille du clavier et du PC : comportement attendu après correctifs
 
 | Situation | Avant | Après |

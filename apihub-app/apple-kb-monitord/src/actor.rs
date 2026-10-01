@@ -320,6 +320,16 @@ impl Actor {
 
     /// BlueZ reported the keyboard gone.
     fn disconnected(&mut self) {
+        // `akmctl repair` forgets the keyboard (RecantConnection 0x41, #217):
+        // the disconnection is expected and not notified, like macOS.
+        if akm_core::link::take_expected_disconnect() {
+            tracing::info!(
+                "expected disconnection (akmctl repair, RecantConnection): not notified"
+            );
+            let _ = self.link.disconnected_as(false);
+            self.clear();
+            return;
+        }
         // The keyboard announced its switch-off just before (`0x13` bit 1 = 0):
         // an Off, not a lost link (#190).
         self.disconnected_with(akm_core::link::take_keyboard_off());

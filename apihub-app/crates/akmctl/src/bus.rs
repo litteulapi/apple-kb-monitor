@@ -70,6 +70,19 @@ pub fn set_alias(conn: &Connection, mac: &str, name: &str) -> Result<String, Bus
         .map_err(|e| BusError::Failed(format!("SetAlias: {e}")))
 }
 
+/// `ExpectDisconnect()`: the daemon mutes the next disconnection notification
+/// (15 s) while `akmctl repair` forgets the keyboard. Writes nothing to it.
+pub fn expect_disconnect(conn: &Connection) -> Result<bool, BusError> {
+    if !daemon_present(conn) {
+        return Err(BusError::Absent(format!(
+            "daemon not running ({BUS_NAME} absent on the session bus)"
+        )));
+    }
+    proxy(conn)?
+        .call("ExpectDisconnect", &())
+        .map_err(|e| BusError::Failed(format!("ExpectDisconnect: {e}")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

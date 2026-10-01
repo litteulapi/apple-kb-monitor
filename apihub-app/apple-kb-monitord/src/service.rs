@@ -29,7 +29,9 @@
 //! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `SetAlias(s mac, s name) -> s`
 //! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (JSON array of
 //! `{ts,pct,voltage?,event?,schema?,mv_0x46?,mv_0x49?,voltage_valid?}`, `voltage_valid=false` = legacy value, #180); since API 2 `GetDevices() -> ao`,
-//! `BatterySets() -> s`, `NotifyShutdown() -> (b, s)` (the one write macOS does: `WillShutdown`, #191). Signal: `StateChanged(t revision, s json)`.
+//! `BatterySets() -> s`, `NotifyShutdown() -> (b, s)` (the one write macOS does: `WillShutdown`, #191),
+//! `ExpectDisconnect() -> b` (mute the next disconnection notification for 15 s while `akmctl repair`
+//! forgets the keyboard; writes nothing to it, #217). Signal: `StateChanged(t revision, s json)`.
 //!
 //! Since #247 the same object also carries `com.agenceapi.AppleKbMonitor1.Keymap`
 //! (special keys, manual key mapping): see [`crate::keymap`].
@@ -210,6 +212,15 @@ impl Monitor {
     /// convenient for QML / shell clients).
     fn get_state(&self) -> String {
         serde_json::to_string(&self.shared.watch.get()).unwrap_or_default()
+    }
+
+    /// `akmctl repair` is forgetting the keyboard (it just sent
+    /// `RecantConnection`, #217): the disconnection that follows within 15 s
+    /// is not notified (Apple's `SuppressDisconnectNotifications`). Writes
+    /// nothing to the keyboard; returns true.
+    fn expect_disconnect(&self) -> bool {
+        akm_core::link::mark_expected_disconnect();
+        true
     }
 
     /// Ask for a full read now (no effect while the keyboard is disconnected).

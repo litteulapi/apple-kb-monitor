@@ -8,6 +8,7 @@ mod dump;
 mod fnmode;
 mod hid_control;
 mod firmware;
+mod forget;
 mod histcmd;
 mod info;
 mod kde;

@@ -161,6 +161,7 @@ dependencies = [
  "clap_complete",
  "clap_mangen",
  "libc",
+ "serde",
  "serde_json",
  "zbus",
 ]

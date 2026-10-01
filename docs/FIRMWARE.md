@@ -51,11 +51,11 @@ lit d'ailleurs aucun rapport vendeur sur les familles hors BCM2042.
 `akmctl info` liste la table complète. Classes de sécurité : `SafeRead` (`0x47`, `0x46`, `0x49`), `OncePerConnection`
 (`0x4F`, `0x60`, `0x51`-`0x54` ; le démon lit `0x4F` et `0x60`, puis `0x51`-`0x54` en priorité basse pour le nom propre, #248), `PassiveInput` (`0x04` `0x05` `0x30` `0x13` `0x11`
 `0x12`), `ManualOnly` (lisibles mais jamais demandés par le démon : `0xFF`, `0x5A`, `0xEB`, `0x5B`, `0xF4`, `0xF5`, `0xEA`,
-`0x09`, `0x5C`, `0x5D`), `NeverRead` (`0xFE`, `0x4C`, Input `0x01`, `0x34`, `0x35`), `WriteApple` (écrits seulement par une opération Apple nommée : `Shutdown` = `0x40`, `DeviceName` = `0x55`, écriture réelle refusée tant que non prouvée), `NeverWrite` (`0x41` `0x43`
+`0x09`, `0x5C`, `0x5D`), `NeverRead` (`0xFE`, `0x4C`, Input `0x01`, `0x34`, `0x35`), `WriteApple` (écrits seulement par une opération Apple nommée : `Shutdown` = `0x40`, `Forget` = `0x41` (`akmctl repair` seul), `DeviceName` = `0x55`, écriture réelle refusée tant que non prouvée), `NeverWrite` (`0x43`
 `0x44` `0x45` `0x4A` `0x50`, `0xD0` `0xD4` `0xD5` `0xFA` `0xFB`, et tout `0xDx`/`0xFx` inconnu), `Unknown`. La liste blanche
 de lecture est **générée** de la table ; `hid_read_feature` (seul appel `ioctl` vers le clavier) refuse tout id dont la classe
 ne permet pas la lecture, avant l'ioctl. Une seule écriture HID est effective : `0x40` `WillShutdown` (id seul, une fois à l'arrêt, ce que macOS envoie, #191,
-`docs/PARITE-APPLE.md`) ; `0x55` (nom propre, #248, `docs/RENOMMER-CLAVIER.md`) est préparé mais refusé (`NotProven`) et ne passe pas la porte d'un octet ; `hid_write_feature` est le seul appel `HIDIOCSFEATURE`. `0x44` (oubli de tous les hôtes, #217) et
+`docs/PARITE-APPLE.md`) ; `0x55` (nom propre, #248, `docs/RENOMMER-CLAVIER.md`) est préparé mais refusé (`NotProven`) et ne passe pas la porte d'un octet ; `hid_write_feature` est le seul appel `HIDIOCSFEATURE`. `0x41` `RecantConnection` n'est envoyé que par `akmctl repair` (oubli propre d'un clavier connecté, #217) ; `0x44` (oubli de tous les hôtes) et
 `0x4A` (notification SCO, #216) restent refusés et ne sont pas implémentés.
 
 Seuils `0x60` (Full / Low / Critical / Empty, mV, 4 × u16 BE, lus une fois par connexion) : exposés en JSON

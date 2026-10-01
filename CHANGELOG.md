@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [3.1.0] - Unreleased
 
+### Added (clean forget like macOS, #217)
+- `akmctl repair`, keyboard still connected: pre-flight (connected, doctor link healthy, breaker closed, terminal), host-side backup `forget-backup-<UTC>.json` (0600, no link key), explanation + typed `OUBLIER`, then ONE SET Feature `0x41` `RecantConnection` (wire `53 41`, macOS 26.5 `bluetoothd`), the daemon mutes the disconnection (`ExpectDisconnect()`), 2000 ms, then only `RemoveDevice`; if `0x41` fails nothing is removed and the repair goes back to wake + reconnect. Registry operation `Forget` (`0x41` only, once per session), reachable from `repair` only. Effect on the keyboard not measured.
+
 ### Added (name stored in the keyboard, #248)
 - `akmctl rename --device-name <name> [--dry-run] [--write-device-name]`, `--show`, `--restore <backup>`: the keyboard's own name (`0x51`-`0x54` read, `0x55` `LongDeviceName` written by Lion 10.7), distinct from the alias of this computer (`akmctl rename <name>`, unchanged, still the default). Dry run by default: validation (printable ASCII, 1-32 characters, no edge space, no `\`), pre-flight, backup of the current name (`~/.local/state/apple-kb-monitor/devname-backup-<UTC>.json`, 0600, never overwritten), every byte with its level of proof. The real write is **refused** (`NotProven`): the bytes of the 64-byte name field are not established (docs/RENOMMER-CLAVIER.md §5). The daemon reads `0x51`-`0x54` once per connection (low priority); read-only D-Bus property `DeviceNameOnKeyboard`, `akmctl status` line `On kb:` and JSON `name_on_keyboard`. No D-Bus method, window or tray button writes it.
 - Register map: class `WriteAppleParity` becomes `WriteApple` with named operations (`registry::WriteOp`: `Shutdown` = `0x40`, `DeviceName` = `0x55`), each id once per session with the operation's exact length; the 1-byte hardware door now takes the operation.

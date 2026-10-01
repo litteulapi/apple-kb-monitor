@@ -15,6 +15,14 @@
 //!
 //! Nothing is ever removed without that typed confirmation; a non-interactive
 //! stdin refuses step 3.
+//!
+//! When the keyboard is still CONNECTED at step 3 (`--force` on a live link),
+//! the removal is Apple's clean forget ([`crate::forget`], #217): pre-flight,
+//! backup of the host-side facts, explanation + OUBLIER, ONE SET Feature
+//! `0x41` `RecantConnection`, 2000 ms, then only `RemoveDevice`; if `0x41` is
+//! not accepted nothing is removed and the repair goes back to wake +
+//! reconnect. A keyboard that is not connected is unpaired as before (macOS
+//! also sends `0x41` only to a connected device).
 
 use std::io::{BufRead, IsTerminal, Write};
 use std::time::{Duration, Instant};
@@ -240,31 +248,43 @@ fn find_kb(conn: &Connection, mac: &str) -> Option<KbFacts> {
         .find(|k| k.mac.eq_ignore_ascii_case(mac))
 }
 
+/// `Adapter1.RemoveDevice` of the keyboard.
+fn remove_device(conn: &Connection, k: &KbFacts) -> Result<(), String> {
+    let adapter = adapter_of(k);
+    let obj = zbus::zvariant::ObjectPath::try_from(k.path.as_str()).map_err(|e| e.to_string())?;
+    conn.call_method(
+        Some("org.bluez"),
+        adapter,
+        Some("org.bluez.Adapter1"),
+        "RemoveDevice",
+        &(obj,),
+    )
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
+fn adapter_of(k: &KbFacts) -> &str {
+    k.path
+        .rsplit_once('/')
+        .map_or("/org/bluez/hci0", |(a, _)| a)
+}
+
 fn re_pair(conn: &Connection, k: Option<&KbFacts>) -> bool {
     if let Some(k) = k {
-        let adapter = k
-            .path
-            .rsplit_once('/')
-            .map_or("/org/bluez/hci0", |(a, _)| a);
-        let obj = zbus::zvariant::ObjectPath::try_from(k.path.as_str()).ok();
-        let r = obj.map(|o| {
-            conn.call_method(
-                Some("org.bluez"),
-                adapter,
-                Some("org.bluez.Adapter1"),
-                "RemoveDevice",
-                &(o,),
-            )
-        });
-        match r {
-            Some(Ok(_)) => say("  pairage supprimé.", "  pairing removed."),
-            Some(Err(e)) => {
+        match remove_device(conn, k) {
+            Ok(()) => say("  pairage supprimé.", "  pairing removed."),
+            Err(e) => {
                 println!("  RemoveDevice: {e}");
                 return false;
             }
-            None => return false,
         }
     }
+    assist_and_wait(conn, k)
+}
+
+/// After the removal: pairing assistant, wait for the keyboard paired +
+/// connected, mark it trusted.
+fn assist_and_wait(conn: &Connection, k: Option<&KbFacts>) -> bool {
     say(
         "\u{2192} Éteignez le clavier (bouton d'alimentation, 3 s), rallumez-le : le voyant clignote (mode appairage).\n\
          \u{2192} Dans l'assistant, choisissez le clavier, tapez sur le CLAVIER le code affiché puis Entrée.",
@@ -316,6 +336,193 @@ fn re_pair(conn: &Connection, k: Option<&KbFacts>) -> bool {
         "\u{2717} No paired + connected keyboard after 4 min. Run `akmctl repair` again.",
     );
     false
+}
+
+// ── clean forget of a connected keyboard (#217) ──────────────────────────
+
+fn bluez_prop(conn: &Connection, path: &str, iface: &str, name: &str) -> Option<String> {
+    conn.call_method(
+        Some("org.bluez"),
+        path,
+        Some("org.freedesktop.DBus.Properties"),
+        "Get",
+        &(iface, name),
+    )
+    .ok()
+    .and_then(|r| r.body().deserialize::<zbus::zvariant::OwnedValue>().ok())
+    .and_then(|v| <&str>::try_from(&v).ok().map(str::to_string))
+}
+
+struct RealForget<'a> {
+    conn: &'a Connection,
+    k: &'a KbFacts,
+    why: &'a str,
+    link_healthy: bool,
+    door: Option<akm_core::hidraw::WriteDoor>,
+}
+
+impl crate::forget::ForgetEnv for RealForget<'_> {
+    fn preflight(&mut self) -> crate::forget::Preflight {
+        let breaker_open = crate::bus::connect()
+            .ok()
+            .and_then(|c| crate::bus::get_state(&c).ok())
+            .and_then(|s| s.keyboard.map(|k| k.breaker_open))
+            .unwrap_or(false);
+        crate::forget::Preflight {
+            connected: connected(self.conn, &self.k.path),
+            link_healthy: self.link_healthy,
+            breaker_open,
+            interactive: std::io::stdin().is_terminal() && std::io::stdout().is_terminal(),
+        }
+    }
+    fn save_backup(&mut self) -> Result<std::path::PathBuf, String> {
+        let adapter = adapter_of(self.k);
+        let b = crate::forget::ForgetBackup {
+            schema: crate::forget::ForgetBackup::SCHEMA,
+            created_unix: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
+            mac: self.k.mac.clone(),
+            name: self.k.name.clone(),
+            alias: bluez_prop(self.conn, &self.k.path, "org.bluez.Device1", "Alias"),
+            paired: self.k.paired,
+            bonded: self.k.bonded,
+            trusted: self.k.trusted,
+            adapter_path: adapter.to_string(),
+            adapter_address: bluez_prop(self.conn, adapter, "org.bluez.Adapter1", "Address"),
+            device_path: self.k.path.clone(),
+        };
+        crate::forget::write_backup(&akm_core::devname::state_dir(), &b).map_err(|e| e.to_string())
+    }
+    fn explain_and_confirm(&mut self) -> bool {
+        say(
+            "\nOUBLI PROPRE, comme macOS : le clavier est connecté, l'ordinateur lui envoie d'abord « RecantConnection »\n\
+             (SET Feature 0x41, un octet, fil 53 41), attend 2 s que la liaison tombe, puis SEULEMENT supprime le pairage.\n\
+             L'effet exact de 0x41 sur le clavier n'a jamais été mesuré (simple coupure ou oubli de cet ordinateur).\n\
+             Ensuite, pour ré-appairer : éteignez le clavier (3 s), rallumez-le (le voyant clignote = mode appairage),\n\
+             choisissez-le dans l'assistant et tapez le code affiché SUR LE CLAVIER puis Entrée.",
+            "\nCLEAN FORGET, like macOS: the keyboard is connected, the computer first sends it \u{201c}RecantConnection\u{201d}\n\
+             (SET Feature 0x41, one byte, wire 53 41), waits 2 s for the link to drop, then ONLY removes the pairing.\n\
+             The exact effect of 0x41 on the keyboard was never measured (simple drop or forgetting this computer).\n\
+             Then, to re-pair: switch the keyboard off (3 s) and on (blinking light = pairing mode),\n\
+             pick it in the assistant and type the displayed code ON THE KEYBOARD, then Enter.",
+        );
+        ask_confirmation(self.why, Some(self.k))
+    }
+    fn open_door(&mut self) -> Result<(), String> {
+        let d = akm_core::hidraw::WriteDoor::open()?;
+        eprintln!("[forget] write door: {}", d.path());
+        self.door = Some(d);
+        Ok(())
+    }
+    fn sink(&self) -> &dyn akm_core::parity::FeatureSink {
+        match &self.door {
+            Some(d) => d,
+            None => &NO_DOOR,
+        }
+    }
+    fn expect_disconnect(&mut self) {
+        let r = crate::bus::connect()
+            .map_err(|e| e.to_string())
+            .and_then(|c| crate::bus::expect_disconnect(&c).map_err(|e| e.to_string()));
+        if let Err(e) = r {
+            eprintln!("[forget] daemon not told (a disconnection notification may appear): {e}");
+        }
+    }
+    fn sleep(&mut self, d: Duration) {
+        // The HID lock is released first: nothing else is written.
+        self.door = None;
+        std::thread::sleep(d);
+    }
+    fn connected(&mut self) -> bool {
+        connected(self.conn, &self.k.path)
+    }
+    fn remove_device(&mut self) -> Result<(), String> {
+        remove_device(self.conn, self.k)
+    }
+    fn log(&mut self, line: &str) {
+        eprintln!("{line}");
+    }
+}
+
+struct NoDoor;
+static NO_DOOR: NoDoor = NoDoor;
+
+impl akm_core::parity::FeatureSink for NoDoor {
+    fn set_feature(&self, _op: akm_core::registry::WriteOp, _report: &[u8]) -> std::io::Result<()> {
+        Err(std::io::Error::other(
+            "no hidraw write door: nothing written",
+        ))
+    }
+}
+
+/// Is the link healthy enough for the forget (doctor: health `connected`, no KO)?
+pub fn link_healthy(health: Option<&str>, verdict: doctor::Level) -> bool {
+    health == Some("connected") && verdict < doctor::Level::Bad
+}
+
+/// Plan::Repair on a CONNECTED keyboard: Apple's clean forget, then the
+/// pairing assistant and a final `akmctl doctor`.
+fn forget_connected(conn: &Connection, k: &KbFacts, why: &str, report: &doctor::Report) -> u8 {
+    let mut env = RealForget {
+        conn,
+        k,
+        why,
+        link_healthy: link_healthy(report.health.as_deref(), report.verdict.0),
+        door: None,
+    };
+    let mut session = akm_core::registry::WriteSession::new();
+    match crate::forget::run(&mut session, &mut env) {
+        crate::forget::Outcome::Removed {
+            link_dropped,
+            backup,
+        } => {
+            say(
+                &format!(
+                    "  pairage supprimé (liaison tombée : {}), sauvegarde : {}",
+                    if link_dropped { "oui" } else { "non" },
+                    backup.display()
+                ),
+                &format!(
+                    "  pairing removed (link dropped: {}), backup: {}",
+                    if link_dropped { "yes" } else { "no" },
+                    backup.display()
+                ),
+            );
+            let ok = assist_and_wait(conn, Some(k));
+            let r = doctor::gather(Some(&k.mac));
+            println!("akmctl doctor: {:?} - {}", r.verdict.0, r.verdict.1);
+            if ok && r.verdict.0 < doctor::Level::Bad {
+                crate::cli::EXIT_OK
+            } else {
+                crate::cli::EXIT_ERROR
+            }
+        }
+        crate::forget::Outcome::RecantFailed(e) | crate::forget::Outcome::NotSent(e) => {
+            say(
+                &format!("\u{2717} RecantConnection non envoyé ou refusé ({e}) : RIEN n'a été supprimé. Retour à l'étape réveil + reconnexion."),
+                &format!("\u{2717} RecantConnection not sent or refused ({e}): NOTHING was removed. Back to wake + reconnect."),
+            );
+            if wake_and_page(conn, k) {
+                say(
+                    "\u{2713} Clavier connecté, pairage intact.",
+                    "\u{2713} Keyboard connected, pairing intact.",
+                );
+            }
+            crate::cli::EXIT_ERROR
+        }
+        crate::forget::Outcome::RemoveFailed(e) => {
+            println!("  RemoveDevice: {e}");
+            crate::cli::EXIT_ERROR
+        }
+        other => {
+            say(
+                &format!("Annulé : rien n'a été modifié ({other:?})."),
+                &format!("Cancelled: nothing was changed ({other:?})."),
+            );
+            crate::cli::EXIT_ERROR
+        }
+    }
 }
 
 /// Run the guided repair. Returns the exit code.
@@ -377,6 +584,9 @@ pub fn run(mac: Option<&str>, force: bool) -> u8 {
             }
         }
         Plan::Repair(why) => {
+            if let Some(k) = kb.as_ref().filter(|k| connected(&conn, &k.path)) {
+                return forget_connected(&conn, k, &why, &report);
+            }
             if ask_confirmation(&why, kb.as_ref()) && re_pair(&conn, kb.as_ref()) {
                 crate::cli::EXIT_OK
             } else {
@@ -463,6 +673,20 @@ mod tests {
             plan(Some(&kb(true, false)), None, None, false),
             Plan::BluezDown
         );
+    }
+
+    #[test]
+    fn link_health_for_the_forget() {
+        assert!(link_healthy(Some("connected"), doctor::Level::Warn));
+        assert!(!link_healthy(Some("connected"), doctor::Level::Bad));
+        for h in [
+            None,
+            Some("dormant"),
+            Some("unreachable"),
+            Some("auth-failed"),
+        ] {
+            assert!(!link_healthy(h, doctor::Level::Ok), "{h:?}");
+        }
     }
 
     #[test]
