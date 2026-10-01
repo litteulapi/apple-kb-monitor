@@ -276,26 +276,42 @@ impl Actor {
         let Some(k) = self.kb.as_ref() else { return };
         let Some(pct) = k.battery_pct() else { return };
         let mac = k.device.mac.clone();
-        let voltage = k.battery.voltage;
+        // A voltage outside the plausible range is a misread ADC, not a sample.
+        let voltage = k
+            .battery
+            .voltage
+            .filter(|v| akm_core::history::VOLTAGE_RANGE.contains(v));
         let now = Instant::now();
 
         let due = self
             .last_history
             .is_none_or(|t| now.duration_since(t) >= HISTORY_SPACING);
-        if due || (full_read && voltage.is_some()) {
+        if (due || (full_read && voltage.is_some()))
+            && akm_core::history::valid_sample(pct, voltage)
+        {
+            // Validate BEFORE the detector (#163); the detector state moves only
+            // once the sample is stored.
             let ts = self.history.as_ref().map_or_else(unix_now, History::now);
             let mut entry = HistoryEntry::sample(ts, pct, voltage);
-            if let Some(r) = self.detector.observe(&entry) {
+            if self.detector.check(&entry).is_some() {
                 entry.event = Some(HistoryEvent::BatteryReplaced);
-                self.on_replaced(mac.as_deref(), r);
             }
-            match self.history.as_ref().map(|h| h.append_entry(&entry)) {
+            let stored = match self.history.as_ref().map(|h| h.append_entry(&entry)) {
                 Some(Ok(true)) | None => {
                     self.last_history = Some(now);
                     self.remaining_at = None; // new data: recompute the forecast
+                    true
                 }
-                Some(Ok(false)) => {}
-                Some(Err(e)) => tracing::warn!("history append failed: {e}"),
+                Some(Ok(false)) => false,
+                Some(Err(e)) => {
+                    tracing::warn!("history append failed: {e}");
+                    false
+                }
+            };
+            if stored {
+                if let Some(r) = self.detector.observe(&entry) {
+                    self.on_replaced(mac.as_deref(), r);
+                }
             }
         }
         let Some(k) = self.kb.as_ref() else { return };
@@ -580,6 +596,38 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn quiet_actor() -> Actor {
+        Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            ..Options::default()
+        })
+    }
+
+    fn report(pct: f64, voltage: Option<f64>) -> KbReport {
+        let mut k = KbReport::default();
+        k.battery.percentage = Some(pct);
+        k.battery.voltage = voltage;
+        k.device.mac = Some("04:DB:56:CA:42:EE".into());
+        k.device.model = Some("Apple Wireless Keyboard (A1314)".into());
+        k
+    }
+
+    #[test]
+    fn invalid_sample_never_reaches_the_detector() {
+        // #163: raw byte 255 and 211 V are not samples.
+        let mut a = quiet_actor();
+        a.kb = Some(report(40.0, Some(2.8)));
+        a.after_battery_update(true);
+        a.kb = Some(report(255.0, None));
+        a.after_battery_update(true);
+        a.kb = Some(report(41.0, Some(211.0)));
+        a.after_battery_update(true);
+        assert_eq!(a.detector.last_replacement(), None);
+        assert_eq!(a.installed_at, None);
+    }
 
     #[test]
     fn options_follow_the_config() {

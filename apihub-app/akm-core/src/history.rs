@@ -86,11 +86,15 @@ pub fn format_utc(ts: u64) -> String {
     )
 }
 
+/// Plausible battery voltage range (V) for one or two cells: a raw ADC read
+/// can decode to hundreds of volts, and 0 V is an invented value.
+pub const VOLTAGE_RANGE: std::ops::RangeInclusive<f64> = 0.5..=4.5;
+
 /// Is this sample worth storing? (no invented 0 V / NaN / out-of-range %).
 pub fn valid_sample(pct: f64, voltage: Option<f64>) -> bool {
     pct.is_finite()
         && (0.0..=100.0).contains(&pct)
-        && voltage.is_none_or(|v| v.is_finite() && v > 0.0)
+        && voltage.is_none_or(|v| v.is_finite() && VOLTAGE_RANGE.contains(&v))
 }
 
 /// `$XDG_STATE_HOME/apple-kb-monitor/history.jsonl` (fallback `~/.local/state`).

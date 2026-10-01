@@ -62,9 +62,15 @@ impl Detector {
         d
     }
 
+    /// Timestamp of the last replacement this detector has seen.
+    pub fn last_replacement(&self) -> Option<u64> {
+        self.last_replacement
+    }
+
     /// Would `e` be a replacement? Pure check, the state is not changed.
     pub fn check(&self, e: &HistoryEntry) -> Option<Replacement> {
-        if !e.pct.is_finite() {
+        // Out-of-range samples (raw byte 255 %, 211 V) are never a replacement.
+        if !crate::history::valid_sample(e.pct, e.voltage) {
             return None;
         }
         let since = e.ts.saturating_sub(WINDOW_S);
@@ -84,7 +90,7 @@ impl Detector {
         let voltage_before = base
             .iter()
             .filter_map(|p| p.voltage)
-            .filter(|v| v.is_finite() && *v > 0.0)
+            .filter(|v| crate::history::VOLTAGE_RANGE.contains(v))
             .reduce(f64::min);
         let pct_rise = pct_before.is_some_and(|b| e.pct - b >= MIN_PCT_RISE);
         let mv_rise = matches!((voltage_before, e.voltage), (Some(b), Some(a)) if (a - b) * 1000.0 >= MIN_MV_RISE - 1e-6);
@@ -103,6 +109,9 @@ impl Detector {
 
     /// Feed a sample; returns the replacement it reveals, if any.
     pub fn observe(&mut self, e: &HistoryEntry) -> Option<Replacement> {
+        if !crate::history::valid_sample(e.pct, e.voltage) {
+            return None; // not a sample: neither baseline nor trigger
+        }
         let r = self.check(e);
         if r.is_some() {
             self.last_replacement = Some(e.ts);
@@ -221,6 +230,18 @@ pub fn format_sets(sets: &[BatterySet]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn out_of_range_sample_is_ignored_by_detector() {
+        // #163
+        let mut d = Detector::new();
+        d.observe(&HistoryEntry::sample(1_000, 40.0, None));
+        assert_eq!(d.observe(&HistoryEntry::sample(1_300, 255.0, None)), None);
+        assert_eq!(d.observe(&HistoryEntry::sample(1_400, 41.0, Some(211.0))), None);
+        assert_eq!(d.last_replacement, None);
+        // baseline not polluted: a real jump is still seen
+        assert!(d.observe(&HistoryEntry::sample(1_500, 100.0, None)).is_some());
+    }
+
     use super::*;
 
     const T0: u64 = 1_790_000_000;
