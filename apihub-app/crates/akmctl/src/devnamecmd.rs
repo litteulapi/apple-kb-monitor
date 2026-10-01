@@ -9,10 +9,14 @@
 //! `--show` reads the daemon's cache (no hardware request). `--dry-run` (the
 //! default without `--write-device-name`) validates the name, shows the
 //! pre-flight, saves the current name (backup 0600) and prints every byte
-//! that would be sent with its level of proof. `--write-device-name` runs the
-//! guarded sequence of [`akm_core::devname::run`], which today REFUSES the real
-//! write (`NotProven`) before touching anything. No D-Bus method, no window
-//! nor tray button can reach this: only this interactive command.
+//! that would be sent with its level of proof (established by disassembly,
+//! E1). `--write-device-name` runs the guarded sequence of
+//! [`akm_core::devname::run`], which writes only once THREE locks are lifted:
+//! `[apple] allow_device_name_write = true` in `config.toml`; the outgoing
+//! MTU of the L2CAP control channel, read here through
+//! `pkexec akm-hid-control inspect --mac <MAC>` (read-only), ≥ 66; the name
+//! typed again in the terminal. No D-Bus method, no window nor tray button can
+//! reach this: only this interactive command.
 
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -55,8 +59,13 @@ pub fn cached_raw(s: &Snapshot) -> Option<Vec<u8>> {
         .filter(|r| r.len() == devname::MAX_NAME_LEN)
 }
 
-/// Pre-flight facts from a snapshot (+ doctor verdict, terminal).
-pub fn preflight_from(s: &Snapshot, doctor_green: bool, interactive: bool) -> Preflight {
+/// Pre-flight facts from a snapshot (+ doctor verdict, terminal, MTU probe).
+pub fn preflight_from(
+    s: &Snapshot,
+    doctor_green: bool,
+    interactive: bool,
+    control_mtu: Option<u16>,
+) -> Preflight {
     let k = s.keyboard.as_ref();
     Preflight {
         connected: s.connected,
@@ -68,6 +77,7 @@ pub fn preflight_from(s: &Snapshot, doctor_green: bool, interactive: bool) -> Pr
         recent_read_failure: k.is_some_and(|k| k.incomplete) || s.kb_error.is_some(),
         doctor_green,
         interactive,
+        control_mtu,
     }
 }
 
@@ -80,6 +90,13 @@ fn doctor_green(mac: Option<&str>) -> bool {
 
 fn interactive() -> bool {
     std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
+}
+
+/// Lock 1, as read from `config.toml` (default false).
+fn config_allows_write() -> bool {
+    akm_core::config::load(&akm_core::config::default_path())
+        .0
+        .allow_device_name_write
 }
 
 pub fn run(action: Action, mac: Option<String>) -> u8 {
@@ -120,27 +137,53 @@ fn show() -> u8 {
 }
 
 fn print_proof_state() {
-    println!(
-        "Proof of the sequence: {:?}. Unknowns (docs/RENOMMER-CLAVIER.md §5.3):",
-        devname::SEQUENCE_PROOF
-    );
+    println!("Proof of the sequence: {}.", devname::SEQUENCE_PROOF.describe());
+    println!("Settled by disassembly (docs/RE-NOM-PROPRE-E1.md):");
+    for u in devname::RESOLVED_BY_DISASSEMBLY {
+        println!("  - {u}");
+    }
+    println!("RISKS NOT MEASURED (no disassembly can give them; docs/RENOMMER-CLAVIER.md §5.3):");
     for u in devname::UNKNOWNS {
         println!("  - {u}");
     }
-    println!("Passive experiments that would lift them:");
+    println!("Experiments:");
     for e in devname::VALIDATION_EXPERIMENTS {
         println!("  - {e}");
     }
 }
 
-fn print_preflight(p: &Preflight) {
-    let fails = devname::preflight(p);
+fn print_locks(allow: bool) {
+    println!("Three locks, all required for a real write:");
+    println!(
+        "  1. configuration: [apple] allow_device_name_write = {} {}",
+        allow,
+        if allow {
+            "(lifted)"
+        } else {
+            "(CLOSED, the default). To lift it, add to $XDG_CONFIG_HOME/apple-kb-monitor/config.toml (~/.config/...):\n       [apple]\n       allow_device_name_write = true"
+        }
+    );
+    println!(
+        "  2. outgoing MTU of the L2CAP control channel >= {}: read on the live socket at --write-device-name only (`pkexec akm-hid-control inspect --mac <MAC>`, administrator authentication, getsockopt read-only, nothing sent); unknown or smaller = refused",
+        devname::MIN_CONTROL_MTU
+    );
+    println!("  3. the name typed again, exactly, in an interactive terminal");
+}
+
+fn print_preflight(p: &Preflight, dry_run: bool) {
+    let fails: Vec<_> = devname::preflight(p)
+        .into_iter()
+        .filter(|f| !(dry_run && f.is_mtu()))
+        .collect();
     if fails.is_empty() {
         println!("Pre-flight: ok");
     } else {
         for f in fails {
             println!("Pre-flight: FAILED - {}", f.describe());
         }
+    }
+    if dry_run {
+        println!("Pre-flight: control-channel MTU not probed in a dry run (needs pkexec); probed and required >= {} at --write-device-name", devname::MIN_CONTROL_MTU);
     }
 }
 
@@ -153,7 +196,7 @@ fn rename(name: &str, write: bool, mac: Option<String>) -> u8 {
             return EXIT_ERROR;
         }
     };
-    println!("\nNew name stored in the keyboard: {name:?}\nFrames Apple's rename would send (Lion 10.7 setDeviceName:):");
+    println!("\nNew name stored in the keyboard: {name:?}\nFrames Apple's rename sends (Lion 10.7.5 setDeviceName:, established by disassembly):");
     print!("{}", devname::render_frames(&frames));
     if write {
         return guarded(&Request::Rename(name.to_string()), mac);
@@ -162,11 +205,10 @@ fn rename(name: &str, write: bool, mac: Option<String>) -> u8 {
     println!("\nDRY RUN: nothing is written to the keyboard.");
     match snapshot() {
         Ok(s) => {
-            print_preflight(&preflight_from(
-                &s,
-                doctor_green(mac.as_deref()),
-                interactive(),
-            ));
+            print_preflight(
+                &preflight_from(&s, doctor_green(mac.as_deref()), interactive(), None),
+                true,
+            );
             match cached_raw(&s) {
                 Some(raw) => {
                     let m = s.mac().unwrap_or("unknown").to_string();
@@ -184,7 +226,8 @@ fn rename(name: &str, write: bool, mac: Option<String>) -> u8 {
         Err((_, m)) => println!("Pre-flight: daemon unavailable ({m})"),
     }
     print_proof_state();
-    println!("\nThe real write would need --write-device-name, an interactive terminal and the name typed again; it is REFUSED while the proof is {:?}.", devname::SEQUENCE_PROOF);
+    print_locks(config_allows_write());
+    println!("\nThe real write needs --write-device-name and the three locks above.");
     EXIT_OK
 }
 
@@ -211,8 +254,9 @@ fn restore(file: &Path, write: bool, mac: Option<String>) -> u8 {
         }
     }
     if !write {
-        println!("DRY RUN: nothing written. Add --write-device-name to restore (same protocol, new confirmation).");
+        println!("DRY RUN: nothing written. Add --write-device-name to restore (same protocol, same three locks, new confirmation).");
         print_proof_state();
+        print_locks(config_allows_write());
         return EXIT_OK;
     }
     guarded(&Request::Restore(b), mac)
@@ -224,11 +268,14 @@ fn now_unix() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// The real environment: daemon snapshot, doctor, terminal, backup dir, the
-/// hidraw write door. Today never reaches the door (`NotProven`).
+/// The real environment: daemon snapshot, doctor, terminal, MTU probe
+/// (`pkexec akm-hid-control inspect`, once per command), backup dir, the
+/// hidraw write door.
 struct RealEnv {
     mac: Option<String>,
     door: Option<akm_core::hidraw::WriteDoor>,
+    /// Result of the single MTU probe of this command (`None` = not run yet).
+    mtu: Option<Result<u16, String>>,
 }
 
 /// A sink that refuses: used when the door cannot be opened.
@@ -240,10 +287,45 @@ impl FeatureSink for Closed {
     }
 }
 
+impl RealEnv {
+    /// Lock 2: the outgoing MTU of the control channel, probed once (the
+    /// second pre-flight call, just before the write, reuses the value).
+    fn control_mtu(&mut self, snapshot_mac: Option<&str>) -> Option<u16> {
+        if self.mtu.is_none() {
+            let Some(mac) = self.mac.clone().or_else(|| snapshot_mac.map(str::to_string)) else {
+                eprintln!("[devname] MTU probe skipped: the keyboard's MAC is unknown");
+                self.mtu = Some(Err("MAC unknown".into()));
+                return None;
+            };
+            eprintln!(
+                "[devname] lock 2: reading the outgoing MTU of the L2CAP control channel to {mac} (pkexec akm-hid-control inspect --mac {mac}: read-only, nothing sent)"
+            );
+            let r = match crate::hid_control::inspect_control_mtu(&mac) {
+                Ok((m, text)) => {
+                    for l in text.lines().filter(|l| l.contains(" fd ") || l.contains("inspected")) {
+                        eprintln!("[devname]   {}", l.trim());
+                    }
+                    eprintln!("[devname] control-channel outgoing MTU = {m} (required >= {})", devname::MIN_CONTROL_MTU);
+                    Ok(m)
+                }
+                Err(e) => {
+                    eprintln!("[devname] control-channel MTU unknown: {e}");
+                    Err(e)
+                }
+            };
+            self.mtu = Some(r);
+        }
+        self.mtu.as_ref().and_then(|r| r.as_ref().ok().copied())
+    }
+}
+
 impl RenameEnv for RealEnv {
     fn preflight(&mut self) -> Preflight {
         match snapshot() {
-            Ok(s) => preflight_from(&s, doctor_green(self.mac.as_deref()), interactive()),
+            Ok(s) => {
+                let mtu = self.control_mtu(s.mac());
+                preflight_from(&s, doctor_green(self.mac.as_deref()), interactive(), mtu)
+            }
             Err(_) => Preflight::default(),
         }
     }
@@ -305,8 +387,14 @@ impl RenameEnv for RealEnv {
                 if !s.connected {
                     seen_down = true;
                 } else if seen_down {
-                    if let Some(r) = cached_raw(&s) {
-                        return Reconnect::Back(r);
+                    if let Some(raw) = cached_raw(&s) {
+                        // BlueZ's Device1.Name (what Apple would check through
+                        // the HCI remote name), informative only.
+                        let bluez_name = s
+                            .keyboard
+                            .as_ref()
+                            .and_then(|k| k.device.name.clone());
+                        return Reconnect::Back { raw, bluez_name };
                     }
                 }
             }
@@ -320,9 +408,19 @@ impl RenameEnv for RealEnv {
 }
 
 fn guarded(req: &Request, mac: Option<String>) -> u8 {
-    let mut env = RealEnv { mac, door: None };
+    let mut env = RealEnv {
+        mac,
+        door: None,
+        mtu: None,
+    };
     let mut session = WriteSession::new();
-    let o = devname::run(req, devname::SEQUENCE_PROOF, &mut session, &mut env);
+    let o = devname::run(
+        req,
+        devname::SEQUENCE_PROOF,
+        config_allows_write(),
+        &mut session,
+        &mut env,
+    );
     report(&o)
 }
 
@@ -334,21 +432,44 @@ pub fn report(o: &Outcome) -> u8 {
             print_proof_state();
             EXIT_ERROR
         }
-        Outcome::Verified { backup } => {
-            println!("\u{2713} Name written and read back identical.");
+        Outcome::ConfigDisabled => {
+            println!(
+                "\nREFUSED (lock 1, configuration): [apple] allow_device_name_write is not true; nothing was touched (no pre-flight, no MTU probe, no backup, no confirmation, no write).\n\
+                 To lift this lock, add to $XDG_CONFIG_HOME/apple-kb-monitor/config.toml (~/.config/apple-kb-monitor/config.toml):\n\n{}\n\n\
+                 Read docs/RENOMMER-CLAVIER.md §5.3 and §6 first: the firmware's HANDSHAKE to SET 0x55 (U5) and persistence across a battery change (U3) are NOT measured.",
+                devname::CONFIG_HOWTO
+            );
+            EXIT_ERROR
+        }
+        Outcome::Preflight(fails) if fails.iter().any(|f| f.is_mtu()) => {
+            println!("\nREFUSED (lock 2, control-channel MTU): nothing was written (no backup, no confirmation).");
+            for f in fails {
+                println!("  - {}", f.describe());
+            }
+            println!("  The MTU is read on the live L2CAP socket by `pkexec akm-hid-control inspect --mac <MAC>` (read-only). If the helper did not report it, reinstall the package; if it is below {}, this keyboard cannot take the 66-byte frame in one piece from Linux.", devname::MIN_CONTROL_MTU);
+            EXIT_ERROR
+        }
+        Outcome::Verified { backup, bluez_name } => {
+            println!("\u{2713} Name written and read back identical (0x51-0x54).");
+            if let Some(n) = bluez_name {
+                println!("  BlueZ Device1.Name now: {n:?} (informative; BlueZ may still show its cached name until its next remote name request)");
+            }
             if let Some(b) = backup {
                 println!("  backup kept: {}", b.display());
             }
             EXIT_OK
         }
-        Outcome::Mismatch { read, backup } => {
+        Outcome::Mismatch { read, backup, bluez_name } => {
             println!(
                 "\u{2717} The name read back differs: {}",
                 devname::hex(read)
             );
+            if let Some(n) = bluez_name {
+                println!("  BlueZ Device1.Name now: {n:?}");
+            }
             if let Some(b) = backup {
                 println!(
-                    "  Guided restore (same protocol, new confirmation, new session):\n  akmctl rename --device-name --restore {} --write-device-name",
+                    "  Guided restore (same protocol, same three locks, new confirmation, new session):\n  akmctl rename --device-name --restore {} --write-device-name",
                     b.display()
                 );
             }
@@ -392,42 +513,72 @@ mod tests {
             keyboard: Some(k),
             ..Default::default()
         };
-        let p = preflight_from(&s, true, true);
+        let p = preflight_from(&s, true, true, Some(672));
         assert!(devname::preflight(&p).is_empty(), "{p:?}");
         assert_eq!(
             devname::name_from_raw(&cached_raw(&s).unwrap()).unwrap(),
             "Clavier de maria #1"
         );
+        // MTU unknown or too small is a pre-flight failure of its own.
+        let p = preflight_from(&s, true, true, None);
+        assert_eq!(
+            devname::preflight(&p),
+            vec![devname::PreflightFail::ControlMtuUnknown]
+        );
+        let p = preflight_from(&s, true, true, Some(48));
+        assert_eq!(
+            devname::preflight(&p),
+            vec![devname::PreflightFail::ControlMtuTooSmall(48)]
+        );
         let mut s2 = s.clone();
         s2.keyboard.as_mut().unwrap().breaker_open = true;
         s2.keyboard.as_mut().unwrap().incomplete = true;
-        let f = devname::preflight(&preflight_from(&s2, false, false));
+        let f = devname::preflight(&preflight_from(&s2, false, false, Some(672)));
         assert_eq!(f.len(), 4);
         assert!(cached_raw(&Snapshot::default()).is_none());
     }
 
     #[test]
     fn every_outcome_is_an_error_except_verified() {
-        assert_eq!(report(&Outcome::Verified { backup: None }), EXIT_OK);
+        assert_eq!(
+            report(&Outcome::Verified {
+                backup: None,
+                bluez_name: None
+            }),
+            EXIT_OK
+        );
         for o in [
             Outcome::NotProven,
+            Outcome::ConfigDisabled,
+            Outcome::Preflight(vec![devname::PreflightFail::ControlMtuUnknown]),
+            Outcome::Preflight(vec![devname::PreflightFail::ControlMtuTooSmall(48)]),
+            Outcome::Preflight(vec![devname::PreflightFail::NotConnected]),
             Outcome::Cancelled,
             Outcome::NoReconnect,
             Outcome::NoCachedName,
             Outcome::Mismatch {
                 read: vec![0; 32],
                 backup: Some("/x".into()),
+                bluez_name: Some("alex".into()),
             },
         ] {
-            assert_eq!(report(&o), EXIT_ERROR);
+            assert_eq!(report(&o), EXIT_ERROR, "{o:?}");
         }
     }
 
     #[test]
-    fn this_command_uses_the_production_proof_only() {
+    fn this_command_uses_the_production_proof_and_the_configuration_lock_only() {
         let src = include_str!("devnamecmd.rs");
         let prod = src.split("#[cfg(test)]").next().unwrap();
-        assert!(prod.contains("devname::SEQUENCE_PROOF, &mut session"));
-        assert!(!prod.contains(&["SequenceProof", "::Proven"].concat()));
+        assert!(prod.contains("devname::SEQUENCE_PROOF,"));
+        assert!(prod.contains("config_allows_write(),\n        &mut session"));
+        assert!(!prod.contains(&["SequenceProof", "::"].concat()));
+        // The MTU comes from the read-only `inspect` verb, never from a dry run
+        // of a HID_CONTROL byte; and the only pkexec call is in hid_control.rs.
+        assert!(prod.contains("inspect_control_mtu("));
+        assert!(!prod.contains("HidControlOp"));
+        assert!(!prod.contains("pkexec\""));
+        // No fixed MTU is assumed anywhere in this command.
+        assert!(!prod.contains("Some(672)") && !prod.contains("Some(66)"));
     }
 }

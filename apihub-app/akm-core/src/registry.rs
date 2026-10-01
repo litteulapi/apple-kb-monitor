@@ -24,8 +24,9 @@
 //! class [`Safety::WriteApple`], and [`check_write_op`] only the ids of one
 //! named Apple operation ([`WriteOp`]): `Shutdown` = `0x40` `WillShutdown`
 //! (no data, wire `53 40`, sent by macOS at every shutdown), `DeviceName` =
-//! `0x55` `LongDeviceName` (64 data bytes, Lion's `setDeviceName:`; its real
-//! write stays refused until proven, [`crate::devname`]), `Forget` = `0x41`
+//! `0x55` `LongDeviceName` (64 data bytes, the one frame of Lion's
+//! `setDeviceName:`, established by disassembly; written only behind the
+//! three locks of [`crate::devname::run`]), `Forget` = `0x41`
 //! `RecantConnection` (no data, wire `53 41`, sent by macOS 26.5 when a
 //! connected keyboard is forgotten; only `akmctl repair`). [`WriteSession`]
 //! allows each id once per session; the only function that writes
@@ -296,9 +297,9 @@ pub const TABLE: &[Entry] = &[
       "-", E::None, D::Raw, P::Disassembly, S::WriteApple,
       "RE-PILOTE-MACOS §3 §5, RE-GHIDRA-KEXT, RE-GHIDRA-IOBLUETOOTH, #191"),
     r(0x55, F, Some(65), Some("LongDeviceName"), "long_device_name",
-      "Long name, 64 bytes, write-only on this keyboard (GET refused 0x03); written by Lion's setDeviceName: (operation DeviceName, real write refused until proven)",
+      "Long name, 64 bytes (report of 65: id + UTF-8 name + 0x00 padding), write-only on this keyboard (GET refused 0x03); the one frame Lion's setDeviceName: sends (operation DeviceName; write behind three locks: config, control MTU >= 66, typed confirmation)",
       "text", E::None, D::Raw, P::Disassembly, S::WriteApple,
-      "RE-PILOTE-MACOS §3, RE-PILOTES-ANCIENS §5 L11, RENOMMER-CLAVIER, #192, #248"),
+      "RE-NOM-PROPRE-E1, RE-PILOTE-MACOS §3, RENOMMER-CLAVIER, #192, #248"),
     r(0x41, F, None, Some("RecantConnection"), "recant_connection",
       "Command: give up the connection (Apple's virtual cable unplug), id only (wire `53 41`); sent by macOS 26.5 bluetoothd when the user forgets a connected keyboard (operation Forget, akmctl repair only); effect on the keyboard not measured",
       "-", E::None, D::Raw, P::Disassembly, S::WriteApple,
@@ -516,11 +517,14 @@ pub enum WriteOp {
     /// `WillShutdown` (`0x40`, id only): macOS 26.5 kernel driver, at every
     /// shutdown or restart (`handleShutdown` -> `willShutdown`) [désassemblage].
     Shutdown,
-    /// `LongDeviceName` (`0x55`, 64 data bytes): Lion 10.7
-    /// `-[AppleBluetoothHIDDevice setDeviceName:]` for a PID with
-    /// `LongDeviceName` (RE-PILOTES-ANCIENS §5 L11) [désassemblage]. The bytes
-    /// of the name field are not proven: [`crate::devname`] refuses the real
-    /// write (`NotProven`), and the hardware door has no 65-byte ioctl.
+    /// `LongDeviceName` (`0x55`, 64 data bytes, report of 65): Lion 10.7.5
+    /// `-[AppleBluetoothHIDDevice setDeviceName:]` `0x4d2fe` for a PID with
+    /// `LongDeviceName` (docs/RE-NOM-PROPRE-E1.md) [désassemblage]; the bytes
+    /// are established byte for byte (fixture
+    /// `tests/fixtures/devname/lion_setdevicename_frames.json`). The real
+    /// write stays behind the three locks of [`crate::devname::run`]
+    /// (configuration, control-channel MTU ≥ 66, typed confirmation) and the
+    /// 65-byte door of [`crate::hidraw::hid_write_feature`] reserved to it.
     DeviceName,
     /// `RecantConnection` (`0x41`, id only): macOS 26.5 `bluetoothd`
     /// (`FUN_1005a3f64` -> `FUN_1005a41e4`) when the user forgets a connected
@@ -1305,11 +1309,15 @@ mod tests {
                     f.display()
                 );
             }
-            let uses = text.lines().filter(code).filter(|l| l.contains("HIDIOCSFEATURE")).count();
+            // Production code only: the tests of hidraw.rs check the request numbers.
+            let prod = text.split("#[cfg(test)]").next().unwrap();
+            let uses = prod.lines().filter(code).filter(|l| l.contains("HIDIOCSFEATURE")).count();
             if uses > 0 {
                 assert!(f.ends_with("akm-core/src/hidraw.rs"), "{} names HIDIOCSFEATURE", f.display());
-                // one definition + one ioctl call
-                assert_eq!(uses, 2, "{}", f.display());
+                // two fixed-size doors (1 byte, 65 bytes): two definitions + two ioctl calls
+                assert_eq!(uses, 4, "{}", f.display());
+                assert_eq!(prod.lines().filter(code).filter(|l| l.contains("HIDIOCSFEATURE_1")).count(), 2);
+                assert_eq!(prod.lines().filter(code).filter(|l| l.contains("HIDIOCSFEATURE_65")).count(), 2);
                 writers += 1;
             }
         }

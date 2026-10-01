@@ -66,6 +66,8 @@ impl ControlSocket for FakeL2cap {
                 peer_psm: Some(psm),
                 peer_cid: Some(0x40),
                 hci_handle: Some(0x0b),
+                omtu: Some(if psm == 0x0011 { 672 } else { 48 }),
+                imtu: Some(672),
             },
             None => SockInfo {
                 domain: libc::AF_UNIX,
@@ -78,6 +80,11 @@ impl ControlSocket for FakeL2cap {
     }
 }
 
+/// The remote socketpair ends are deliberately inheritable (no CLOEXEC), so a
+/// child spawned by another test running at the same time would inherit
+/// them: the fakes are built and torn down one at a time.
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 struct Fake {
     child: Child,
     ctrl_local: OwnedFd,
@@ -85,6 +92,7 @@ struct Fake {
     cs: FakeL2cap,
     exe: String,
     hid_root: PathBuf,
+    _serial: std::sync::MutexGuard<'static, ()>,
 }
 
 impl Drop for Fake {
@@ -96,6 +104,7 @@ impl Drop for Fake {
 }
 
 fn spawn(tag: &str) -> Fake {
+    let serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (ctrl_local, ctrl_remote) = socketpair();
     let (intr_local, intr_remote) = socketpair();
     cloexec(&ctrl_local, true);
@@ -135,6 +144,7 @@ fn spawn(tag: &str) -> Fake {
         cs: FakeL2cap { by_ino },
         exe,
         hid_root,
+        _serial: serial,
     }
 }
 
@@ -215,6 +225,45 @@ fn pidfd_getfd_duplicates_and_peer_receives_exactly_one_byte() {
             "the interrupt channel (PSM 0x13) gets nothing"
         );
     }
+}
+
+#[test]
+fn inspect_reports_the_control_channel_mtu_and_sends_nothing() {
+    let f = spawn("inspect");
+    let exe = f.exe.clone();
+    let pid = f.child.id() as i32;
+    let pidf = move || Ok(pid);
+    let env = Env {
+        proc_root: PathBuf::from("/proc"),
+        hid_root: f.hid_root.clone(),
+        allowed_exes: &[&exe],
+        // SAFETY: getuid never fails.
+        required_uid: unsafe { libc::getuid() },
+        daemon_pid: &pidf,
+    };
+    let mut ev = Vec::new();
+    let rep = akm_helper::hidctl::inspect(
+        Some(Mac::parse(KB).unwrap()),
+        &env,
+        &f.cs,
+        &mut |e| ev.push(e),
+    );
+    assert!(rep.ok(), "{ev:?}");
+    assert_eq!(rep.per_keyboard, vec![(Mac::parse(KB).unwrap(), KbOutcome::Inspected)]);
+    // The per-socket line akmctl parses: control channel, connected, mtu out 672.
+    let line = ev
+        .iter()
+        .find_map(|e| match e {
+            Event::Info(m) if m.contains("peer 0x0011") && m.contains("fd ") => Some(m.clone()),
+            _ => None,
+        })
+        .expect("control socket line");
+    assert!(line.contains("state connected") && line.contains("mtu out 672 in 672"), "{line}");
+    assert!(ev.iter().any(|e| matches!(e, Event::Info(m) if m.contains("inspected, nothing sent"))), "{ev:?}");
+    // The interrupt channel is described too (its own MTU), but never selected.
+    assert!(ev.iter().any(|e| matches!(e, Event::Info(m) if m.contains("peer 0x0013") && m.contains("mtu out 48"))), "{ev:?}");
+    assert!(recv_all(&f.ctrl_local).is_empty(), "nothing on the control channel");
+    assert!(recv_all(&f.intr_local).is_empty());
 }
 
 #[test]

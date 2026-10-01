@@ -21,6 +21,7 @@
 //! [apple]
 //! will_shutdown = true       # tell the keyboard once, at shutdown / restart, what macOS tells it (#191)
 //! disconnect_on_breaker = true  # after 3 unanswered requests, have BlueZ disconnect it, as macOS (#251)
+//! allow_device_name_write = false  # lock 1 of `akmctl rename --device-name --write-device-name` (#248); default false
 //! ```
 //!
 //! Only this small TOML subset is read (sections, integers, floats, booleans,
@@ -59,6 +60,12 @@ pub struct Config {
     /// once to disconnect the keyboard (`Device1.Disconnect`), as macOS asks
     /// bluetoothd (#251). Default **on**; `false` only stops the requests.
     pub disconnect_on_breaker: bool,
+    /// First of the three locks of the write of the name stored IN the
+    /// keyboard (`akmctl rename --device-name <nom> --write-device-name`,
+    /// SET Feature `0x55`, #248): nothing is written, probed or confirmed
+    /// unless this is explicitly `true`. Default **false**. The two other
+    /// locks (control-channel MTU read ≥ 66, name typed again) stay.
+    pub allow_device_name_write: bool,
 }
 
 impl Default for Config {
@@ -73,6 +80,7 @@ impl Default for Config {
             apple_percent: true,
             will_shutdown: true,
             disconnect_on_breaker: true,
+            allow_device_name_write: false,
         }
     }
 }
@@ -219,6 +227,7 @@ pub fn parse(content: &str) -> (Config, Vec<String>) {
             ("display", "apple_percent", Val::Bool(b)) => cfg.apple_percent = b,
             ("apple", "will_shutdown", Val::Bool(b)) => cfg.will_shutdown = b,
             ("apple", "disconnect_on_breaker", Val::Bool(b)) => cfg.disconnect_on_breaker = b,
+            ("apple", "allow_device_name_write", Val::Bool(b)) => cfg.allow_device_name_write = b,
             ("notifications", "connection", Val::Bool(b)) => cfg.notify_connection = b,
             ("notifications", "battery_replaced", Val::Bool(b)) => cfg.notify_battery_replaced = b,
             ("notifications", "defer_to_powerdevil", Val::Bool(b)) => cfg.defer_to_powerdevil = b,
@@ -308,6 +317,31 @@ mod tests {
         let (c, w) = parse("[apple]\ndisconnect_on_breaker = 0\n");
         assert_eq!(w.len(), 1);
         assert!(c.disconnect_on_breaker, "a mistyped value keeps the default");
+    }
+
+    #[test]
+    fn allow_device_name_write_defaults_to_off_and_needs_an_explicit_true() {
+        // #248, lock 1 of the write of the name stored in the keyboard.
+        assert!(!Config::default().allow_device_name_write);
+        assert!(!parse("").0.allow_device_name_write);
+        assert!(!parse("[apple]\nwill_shutdown = true\n").0.allow_device_name_write);
+        let (c, w) = parse("[apple]\nallow_device_name_write = true  # I accept the unmeasured risks\n");
+        assert!(w.is_empty(), "{w:?}");
+        assert!(c.allow_device_name_write);
+        let (c, w) = parse("[apple]\nallow_device_name_write = false\n");
+        assert!(w.is_empty() && !c.allow_device_name_write);
+        // A mistyped value, a string, 1, "yes", or the key in another section: still off.
+        for bad in [
+            "[apple]\nallow_device_name_write = 1\n",
+            "[apple]\nallow_device_name_write = \"true\"\n",
+            "[apple]\nallow_device_name_write = yes\n",
+            "[display]\nallow_device_name_write = true\n",
+            "allow_device_name_write = true\n",
+        ] {
+            let (c, w) = parse(bad);
+            assert!(!c.allow_device_name_write, "{bad:?}");
+            assert_eq!(w.len(), 1, "{bad:?}: {w:?}");
+        }
     }
 
     #[test]

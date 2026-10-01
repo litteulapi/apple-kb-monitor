@@ -5,14 +5,19 @@
 //! ```text
 //! akm-hid-control suspend      [--mac XX:XX:XX:XX:XX:XX] [--dry-run]
 //! akm-hid-control exit-suspend [--mac XX:XX:XX:XX:XX:XX] [--dry-run]
+//! akm-hid-control inspect      [--mac XX:XX:XX:XX:XX:XX]
 //! ```
 //!
 //! Runs as root: from the system units `apple-kb-monitor-suspend.service` /
 //! `apple-kb-monitor-resume.service`, or through `pkexec` (polkit action
 //! `com.agenceapi.AppleKbMonitor.hid-control`, `akmctl hid-control`).
 //! One byte per keyboard at most, never retried; `--dry-run` shows the socket
-//! it would use (pid, fd, MAC, PSM, state) and writes nothing.
-//! `/etc/apple-kb-monitor/hid-suspend.conf` `enabled = false` turns it off.
+//! it would use (pid, fd, MAC, PSM, state) and writes nothing. `inspect`
+//! only describes the control channel, with its negotiated L2CAP MTUs
+//! (`getsockopt(L2CAP_OPTIONS)`, read-only): the pre-flight of
+//! `akmctl rename --device-name --write-device-name` reads the outgoing MTU
+//! there (#248). `/etc/apple-kb-monitor/hid-suspend.conf` `enabled = false`
+//! turns the sending off (`inspect` and `--dry-run` still run).
 //!
 //! Exit: 0 = done or nothing to do (no keyboard connected, disabled),
 //! 1 = refused or failed for at least one keyboard, 64 = usage.
@@ -21,15 +26,15 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use akm_helper::fsutil;
-use akm_helper::hidctl::{self, Event, HidControl, L2capControlSocket, Mac};
+use akm_helper::hidctl::{self, Action, Event, HidControl, L2capControlSocket, Mac};
 
 const EX_USAGE: u8 = 64;
 const USAGE: &str =
-    "usage: akm-hid-control suspend|exit-suspend [--mac XX:XX:XX:XX:XX:XX] [--dry-run]";
+    "usage: akm-hid-control suspend|exit-suspend [--mac XX:XX:XX:XX:XX:XX] [--dry-run]\n       akm-hid-control inspect [--mac XX:XX:XX:XX:XX:XX]";
 
 #[derive(Debug, PartialEq, Eq)]
 struct Args {
-    cmd: HidControl,
+    action: Action,
     mac: Option<Mac>,
     dry_run: bool,
 }
@@ -37,15 +42,17 @@ struct Args {
 fn parse_args<S: AsRef<str>>(args: &[S]) -> Result<Args, String> {
     let a: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
     let (verb, mut rest) = a.split_first().ok_or(USAGE)?;
-    let cmd = match *verb {
-        "suspend" => HidControl::Suspend,
-        "exit-suspend" => HidControl::ExitSuspend,
+    let action = match *verb {
+        "suspend" => Action::Send(HidControl::Suspend),
+        "exit-suspend" => Action::Send(HidControl::ExitSuspend),
+        "inspect" => Action::Inspect,
         v => return Err(format!("unknown command {v:?}\n{USAGE}")),
     };
     let mut out = Args {
-        cmd,
+        action,
         mac: None,
-        dry_run: false,
+        // `inspect` never sends: it is a dry run by construction.
+        dry_run: action == Action::Inspect,
     };
     while let Some((t, r)) = rest.split_first() {
         match *t {
@@ -105,7 +112,7 @@ fn main() -> ExitCode {
     if !enabled && !args.dry_run {
         log(Event::Info(format!(
             "{} not sent: disabled ({})",
-            args.cmd.name(),
+            args.action.name(),
             hidctl::CONFIG_PATH
         )));
         return ExitCode::SUCCESS;
@@ -116,21 +123,32 @@ fn main() -> ExitCode {
             hidctl::CONFIG_PATH
         )));
     }
-    log(Event::Info(format!(
-        "{} (0x{:02x}){}{}",
-        args.cmd.name(),
-        args.cmd.byte(),
-        args.mac.map_or(String::new(), |m| format!(" for {m}")),
-        if args.dry_run { " --dry-run" } else { "" }
-    )));
-    let rep = hidctl::run(
-        args.cmd,
-        args.mac,
-        args.dry_run,
-        &hidctl::Env::system(),
-        &L2capControlSocket,
-        &mut log,
-    );
+    let rep = match args.action {
+        Action::Inspect => {
+            log(Event::Info(format!(
+                "inspect (read-only){}",
+                args.mac.map_or(String::new(), |m| format!(" for {m}"))
+            )));
+            hidctl::inspect(args.mac, &hidctl::Env::system(), &L2capControlSocket, &mut log)
+        }
+        Action::Send(cmd) => {
+            log(Event::Info(format!(
+                "{} (0x{:02x}){}{}",
+                cmd.name(),
+                cmd.byte(),
+                args.mac.map_or(String::new(), |m| format!(" for {m}")),
+                if args.dry_run { " --dry-run" } else { "" }
+            )));
+            hidctl::run(
+                cmd,
+                args.mac,
+                args.dry_run,
+                &hidctl::Env::system(),
+                &L2capControlSocket,
+                &mut log,
+            )
+        }
+    };
     if rep.ok() {
         ExitCode::SUCCESS
     } else {
@@ -147,16 +165,22 @@ mod tests {
         assert_eq!(
             parse_args(&["suspend"]),
             Ok(Args {
-                cmd: HidControl::Suspend,
+                action: Action::Send(HidControl::Suspend),
                 mac: None,
                 dry_run: false
             })
         );
         let a = parse_args(&["exit-suspend", "--mac", "04:db:56:ca:42:ee", "--dry-run"]).unwrap();
-        assert_eq!(a.cmd, HidControl::ExitSuspend);
+        assert_eq!(a.action, Action::Send(HidControl::ExitSuspend));
         assert!(a.dry_run);
         assert_eq!(a.mac.unwrap().to_string(), "04:DB:56:CA:42:EE");
         assert!(parse_args(&["suspend", "--dry-run", "--mac", "04:DB:56:CA:42:EE"]).is_ok());
+        // inspect: read-only by construction (dry run), with or without --mac.
+        let a = parse_args(&["inspect", "--mac", "04:DB:56:CA:42:EE"]).unwrap();
+        assert_eq!(a.action, Action::Inspect);
+        assert!(a.dry_run);
+        assert_eq!(parse_args(&["inspect"]).unwrap().action, Action::Inspect);
+        assert!(parse_args(&["inspect", "--dry-run"]).is_err(), "already implied");
         for bad in [
             &[][..],
             &["0x13"],

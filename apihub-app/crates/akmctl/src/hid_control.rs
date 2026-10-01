@@ -58,6 +58,77 @@ pub fn helper_args(
     Ok(a)
 }
 
+/// Arguments of the read-only `inspect` verb (lock 2 of #248).
+pub fn inspect_args(mac: &str) -> Result<Vec<String>, String> {
+    Ok(vec!["inspect".into(), "--mac".into(), check_mac(mac)?])
+}
+
+/// The negotiated **outgoing** L2CAP MTU of the HIDP control channel to `mac`,
+/// from the lines `akm-hid-control inspect` prints (`describe_socket`): the
+/// line of a socket whose peer PSM is `0x0011`, `state connected`, `mtu out N`.
+/// `Err` explains why it is unknown (older helper without `mtu`, no socket,
+/// several sockets, unreadable value): unknown = the write is refused.
+pub fn parse_control_mtu(text: &str, mac: &str) -> Result<u16, String> {
+    let mac = mac.to_ascii_uppercase();
+    let lines: Vec<&str> = text
+        .lines()
+        .filter(|l| l.contains(&mac) && l.contains(" fd ") && l.contains("peer 0x0011"))
+        .collect();
+    if lines.is_empty() {
+        return Err(format!(
+            "no L2CAP control socket (PSM 0x0011) to {mac} reported by akm-hid-control inspect"
+        ));
+    }
+    let connected: Vec<&str> = lines
+        .iter()
+        .copied()
+        .filter(|l| l.contains("state connected"))
+        .collect();
+    let line = match connected.as_slice() {
+        [one] => *one,
+        [] => return Err(format!("the control socket to {mac} is not connected")),
+        many => return Err(format!("{} connected control sockets to {mac}, exactly one expected", many.len())),
+    };
+    let Some(rest) = line.split("mtu out ").nth(1) else {
+        return Err(
+            "akm-hid-control inspect did not report the MTU: the installed helper is older than this akmctl, reinstall the package".into(),
+        );
+    };
+    let v = rest.split_whitespace().next().unwrap_or("");
+    v.parse::<u16>()
+        .map_err(|_| format!("unreadable outgoing MTU {v:?} in akm-hid-control inspect output"))
+}
+
+/// Read the outgoing MTU of the control channel to `mac` on the live socket
+/// (`pkexec akm-hid-control inspect --mac MAC`: administrator authentication,
+/// read-only `getsockopt`, nothing sent). The combined output is returned
+/// with the value so the caller can journal it.
+pub fn inspect_control_mtu(mac: &str) -> Result<(u16, String), String> {
+    let args = inspect_args(mac)?;
+    let out = Proc::new(PKEXEC)
+        .arg(HID_CONTROL_HELPER)
+        .args(&args)
+        .output()
+        .map_err(|e| format!("cannot run pkexec: {e}"))?;
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    match out.status.code() {
+        Some(0) => {}
+        Some(126) => return Err("authentication dismissed or not authorized (pkexec 126)".into()),
+        Some(127) => {
+            return Err(format!(
+                "authentication failed or {HID_CONTROL_HELPER} not found (pkexec 127)"
+            ))
+        }
+        Some(c) => return Err(format!("{HID_CONTROL_HELPER} inspect refused or failed (exit {c}): {}", text.trim())),
+        None => return Err(format!("{HID_CONTROL_HELPER} killed by a signal")),
+    }
+    parse_control_mtu(&text, mac).map(|m| (m, text))
+}
+
 pub fn run(op: HidControlOp, mac: Option<&str>, dry_run: bool) -> u8 {
     let args = match helper_args(op, mac, dry_run) {
         Ok(a) => a,
@@ -122,6 +193,40 @@ mod tests {
                 helper_args(HidControlOp::Suspend, Some(bad), false).is_err(),
                 "{bad:?}"
             );
+            assert!(inspect_args(bad).is_err(), "{bad:?}");
         }
+        assert_eq!(
+            inspect_args("04:db:56:ca:42:ee").unwrap(),
+            ["inspect", "--mac", "04:DB:56:CA:42:EE"]
+        );
+    }
+
+    const KB: &str = "04:DB:56:CA:42:EE";
+    const CTRL: &str = "akm-hid-control:   04:DB:56:CA:42:EE fd 23: psm local 0x0000 peer 0x0011 cid 0x0041 state connected (hci handle 0x000b) mtu out 672 in 672";
+    const INTR: &str = "akm-hid-control:   04:DB:56:CA:42:EE fd 24: psm local 0x0000 peer 0x0013 cid 0x0042 state connected (hci handle 0x000b) mtu out 48 in 672";
+
+    #[test]
+    fn control_mtu_is_read_from_the_connected_control_socket_line_only() {
+        let text = format!(
+            "akm-hid-control: inspect (read-only) for {KB}\nakm-hid-control: bluetoothd pid 1144 (/usr/lib/bluetooth/bluetoothd): 2 L2CAP socket(s)\n{CTRL}\n{INTR}\nakm-hid-control: {KB} (A1314 0x0256): control channel pid 1144 fd 23 psm 0x0011 hci 0x000b mtu out 672 in 672: inspected, nothing sent\n"
+        );
+        assert_eq!(parse_control_mtu(&text, KB), Ok(672));
+        assert_eq!(parse_control_mtu(&text, "04:db:56:ca:42:ee"), Ok(672));
+        // A small MTU is reported as is (the pre-flight decides).
+        assert_eq!(parse_control_mtu(&CTRL.replace("out 672", "out 48"), KB), Ok(48));
+        // The interrupt channel's MTU is never taken.
+        assert!(parse_control_mtu(INTR, KB).is_err());
+        // Another keyboard's line is never taken.
+        assert!(parse_control_mtu(&CTRL.replace(KB, "11:22:33:44:55:66"), KB).is_err());
+        // Not connected, two connected, older helper without mtu, garbage.
+        assert!(parse_control_mtu(&CTRL.replace("state connected (hci handle 0x000b)", "state not connected"), KB)
+            .unwrap_err()
+            .contains("not connected"));
+        assert!(parse_control_mtu(&format!("{CTRL}\n{CTRL}"), KB).unwrap_err().contains("exactly one"));
+        let old = CTRL.split(" mtu out").next().unwrap();
+        assert!(parse_control_mtu(old, KB).unwrap_err().contains("reinstall"));
+        assert!(parse_control_mtu(&CTRL.replace("out 672", "out -"), KB).unwrap_err().contains("unreadable"));
+        assert!(parse_control_mtu(&CTRL.replace("out 672", "out 70000"), KB).is_err());
+        assert!(parse_control_mtu("", KB).unwrap_err().contains("no L2CAP control socket"));
     }
 }

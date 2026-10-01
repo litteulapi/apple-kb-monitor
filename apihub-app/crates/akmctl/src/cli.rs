@@ -66,7 +66,7 @@ pub enum Command {
     /// Rename the keyboard on this computer (BlueZ alias; nothing is written
     /// into the keyboard). With --device-name: the name stored IN the keyboard
     #[command(
-        after_help = "TWO NAMES:\n  akmctl rename <name>                 alias of THIS computer (BlueZ Alias): default, no risk\n  akmctl rename --device-name <name>   name stored IN the keyboard (0x51-0x55): dry run by default;\n                                       --write-device-name writes after pre-flight, backup and typed\n                                       confirmation (REFUSED while the sequence is not proven)\n  akmctl rename --device-name --show   name stored in the keyboard, from the daemon's cache\n  akmctl rename --device-name --restore <backup.json> [--write-device-name]"
+        after_help = "TWO NAMES:\n  akmctl rename <name>                 alias of THIS computer (BlueZ Alias): default, no risk\n  akmctl rename --device-name <name>   name stored IN the keyboard (0x51-0x55): dry run by default;\n                                       --write-device-name sends the ONE frame Lion sends (SET Feature 0x55,\n                                       65 bytes, established by disassembly) after pre-flight and backup,\n                                       only if THREE locks are lifted:\n                                         1. [apple] allow_device_name_write = true in config.toml (default false)\n                                         2. outgoing MTU of the L2CAP control channel >= 66, read on the live\n                                            socket (pkexec akm-hid-control inspect --mac MAC, read-only)\n                                         3. the name typed again in the terminal\n                                       RISKS NOT MEASURED: firmware HANDSHAKE to SET 0x55, persistence across\n                                       a battery change (docs/RENOMMER-CLAVIER.md §5.3, §6)\n  akmctl rename --device-name --show   name stored in the keyboard, from the daemon's cache\n  akmctl rename --device-name --restore <backup.json> [--write-device-name]"
     )]
     Rename {
         /// New alias (max 64 characters, no control characters)
@@ -85,7 +85,9 @@ pub enum Command {
         /// Show the bytes that would be sent, write nothing (the default)
         #[arg(long, requires = "device_name", conflicts_with_all = ["write_device_name", "name", "reset"])]
         dry_run: bool,
-        /// Really write (interactive, after pre-flight, backup and the name typed again)
+        /// Really write: three locks (config allow_device_name_write = true,
+        /// control-channel MTU >= 66 read via pkexec, name typed again), after
+        /// pre-flight and backup
         #[arg(long, requires = "device_name", conflicts_with_all = ["name", "reset"])]
         write_device_name: bool,
         /// Show the name stored in the keyboard (daemon cache, no hardware read)

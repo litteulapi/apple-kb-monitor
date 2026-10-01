@@ -23,6 +23,15 @@ const HIDIOCGFEATURE: libc::c_ulong = 0xC1004807;
 /// than the single report id (`WillShutdown`, wire `53 40`).
 const HIDIOCSFEATURE_1: libc::c_ulong = 0xC001_4806;
 
+/// The second and last write ioctl, sized for exactly 65 bytes:
+/// _IOWR('H', 0x06, 65) = id + the 64 data bytes of `LongDeviceName`, the
+/// report Lion's `setDeviceName:` hands to `setReport` (docs/RE-NOM-PROPRE-E1.md
+/// §3.2 h). Reserved to the operation `DeviceName` (wire `53 55` + 64 bytes).
+const HIDIOCSFEATURE_65: libc::c_ulong = 0xC041_4806;
+
+/// Data bytes of the one operation that carries data through the 65-byte door.
+const LONG_NAME_DATA: usize = crate::devname::LONG_DEVICE_NAME_LEN;
+
 /// Retries of an ioctl interrupted by a signal (EINTR) before giving up.
 const EINTR_RETRIES: u32 = 3;
 
@@ -55,13 +64,15 @@ pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> io::Result<Vec<u8>> {
     }
 }
 
-/// THE write to the hardware: one Feature report made of the id alone, only
-/// if the register map lets the named operation `op` write it (class
-/// `WriteApple`, id of `op`, exact length of `op`). This door is sized for one
-/// byte: an operation that carries data (`DeviceName`, 64 bytes) can never
-/// pass it, whatever the caller. Every byte handed to the kernel is logged
-/// first. Never retried (not even on EINTR): a command must not be sent
-/// twice. The "once per session" rule is in [`crate::registry::WriteSession`].
+/// THE write to the hardware: one Feature report, only if the register map
+/// lets the named operation `op` write it (class `WriteApple`, id of `op`,
+/// exact length of `op`). Two fixed-size doors and nothing else: the id alone
+/// (`Shutdown`, `Forget`; ioctl sized for 1 byte) and id + 64 data bytes
+/// (`DeviceName` only; ioctl sized for 65 bytes). The size is part of the
+/// request number and the buffer is a fixed array, so the kernel never gets
+/// another length. Every byte handed to the kernel is logged first. Never
+/// retried (not even on EINTR): a command must not be sent twice. The "once
+/// per session" rule is in [`crate::registry::WriteSession`].
 pub fn hid_write_feature(
     fd: libc::c_int,
     op: crate::registry::WriteOp,
@@ -74,26 +85,43 @@ pub fn hid_write_feature(
         ));
     };
     crate::registry::check_write_op(op, id, crate::registry::Direction::Feature)?;
-    if data.len() != op.payload_len() || !data.is_empty() {
+    if data.len() != op.payload_len() {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             format!(
-                "write refused: {} byte(s); this door sends one report id alone (operation {})",
-                report.len(),
-                op.as_str()
+                "write refused: {} data byte(s), operation {} sends exactly {}",
+                data.len(),
+                op.as_str(),
+                op.payload_len()
             ),
         ));
     }
-    let mut buf = [id];
-    eprintln!(
-        "[hid-write] {} Feature report, {} byte(s) handed to the kernel: {} (Bluetooth wire: 53 {})",
-        op.as_str(),
-        buf.len(),
-        buf.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "),
-        buf.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "),
-    );
-    // SAFETY: buf is 1 byte, the size encoded in the request number.
-    let ret = unsafe { libc::ioctl(fd, HIDIOCSFEATURE_1, buf.as_mut_ptr()) };
+    let ret = match (op.payload_len(), op) {
+        (0, _) => {
+            let mut buf = [id];
+            log_write(op, &buf);
+            // SAFETY: buf is 1 byte, the size encoded in the request number.
+            unsafe { libc::ioctl(fd, HIDIOCSFEATURE_1, buf.as_mut_ptr()) }
+        }
+        (LONG_NAME_DATA, crate::registry::WriteOp::DeviceName) => {
+            let mut buf = [0u8; 1 + LONG_NAME_DATA];
+            buf[0] = id;
+            buf[1..].copy_from_slice(data);
+            log_write(op, &buf);
+            // SAFETY: buf is 65 bytes, the size encoded in the request number.
+            unsafe { libc::ioctl(fd, HIDIOCSFEATURE_65, buf.as_mut_ptr()) }
+        }
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "write refused: no door for operation {} with {} data byte(s)",
+                    op.as_str(),
+                    data.len()
+                ),
+            ));
+        }
+    };
     if ret < 0 {
         let err = io::Error::last_os_error();
         eprintln!("[hid-write] failed: {err}");
@@ -101,6 +129,20 @@ pub fn hid_write_feature(
     }
     note_write_done();
     Ok(())
+}
+
+/// Journal of every byte handed to the kernel, with its form on the Bluetooth wire.
+fn log_write(op: crate::registry::WriteOp, buf: &[u8]) {
+    let hex = buf
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    eprintln!(
+        "[hid-write] {} Feature report, {} byte(s) handed to the kernel: {hex} (Bluetooth wire: 53 {hex})",
+        op.as_str(),
+        buf.len(),
+    );
 }
 
 fn note_write_done() {
@@ -156,7 +198,7 @@ pub fn send_will_shutdown(enabled: bool, connected: bool) -> crate::parity::Outc
 /// The keyboard's hidraw node opened by a short-lived command (`akmctl`)
 /// for ONE guarded write, under the cross-process lock shared with the
 /// daemon (released on drop). Every write still goes through
-/// [`hid_write_feature`] (register map, operation, length, one-byte door),
+/// [`hid_write_feature`] (register map, operation, length, fixed-size doors),
 /// after the 1 s spacing that follows the last hardware access, and is
 /// recorded by the circuit breaker. Opening it writes nothing.
 pub struct WriteDoor {
@@ -537,21 +579,67 @@ mod tests {
                 }
             }
         }
-        // Never a report with data, nor an empty one; the 65-byte name frame
-        // of DeviceName can never pass this one-byte door.
+        // Never an id-only report with data, nor an empty one; the 65-byte
+        // name frame passes only as DeviceName with id 0x55.
         let mut name = vec![0x55u8];
         name.extend_from_slice(&[b'A'; 64]);
         for (op, r) in [
             (WriteOp::Shutdown, &[][..]),
             (WriteOp::Shutdown, &[0x40, 0x03][..]),
             (WriteOp::Shutdown, &[0x40, 0, 0][..]),
-            (WriteOp::DeviceName, &name[..]),
+            (WriteOp::Shutdown, &name[..]),
+            (WriteOp::Forget, &name[..]),
             (WriteOp::DeviceName, &[0x55][..]),
+            (WriteOp::DeviceName, &name[..64]),
+            (WriteOp::DeviceName, &[&name[..], &[0][..]].concat()),
         ] {
             let e = hid_write_feature(-1, op, r).unwrap_err();
-            assert_eq!(e.kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{op:?} {r:?}");
             assert_eq!(e.raw_os_error(), None);
         }
+    }
+
+    #[test]
+    fn the_65_byte_door_takes_device_name_0x55_and_nothing_else() {
+        use crate::registry::WriteOp;
+        // Request numbers: _IOWR('H', 0x06, n) = dir 3 << 30 | n << 16 | 'H' << 8 | 6.
+        let iowr = |n: libc::c_ulong| (3 << 30) | (n << 16) | (0x48 << 8) | 6;
+        assert_eq!(HIDIOCSFEATURE_1, iowr(1));
+        assert_eq!(HIDIOCSFEATURE_65, iowr(65));
+        assert_eq!(1 + LONG_NAME_DATA, 65);
+        // The 256 ids with 64 data bytes, for every operation: only
+        // (DeviceName, 0x55) reaches the ioctl (EBADF on fd -1).
+        for op in WriteOp::ALL {
+            for id in 0..=255u8 {
+                let mut r = vec![id];
+                r.extend_from_slice(&[0x41; 64]);
+                let e = hid_write_feature(-1, op, &r).unwrap_err();
+                if op == WriteOp::DeviceName && id == 0x55 {
+                    assert_eq!(e.raw_os_error(), Some(libc::EBADF), "{id:#04x}");
+                } else {
+                    assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{op:?} {id:#04x}");
+                    assert_eq!(e.raw_os_error(), None, "{op:?} {id:#04x} must not reach the ioctl");
+                }
+            }
+        }
+        // Every other data length is refused before the ioctl, 0..=70 and 255.
+        for n in (0..=70usize).chain([255]) {
+            if n == 64 {
+                continue;
+            }
+            let mut r = vec![0x55u8];
+            r.extend_from_slice(&vec![0u8; n]);
+            let e = hid_write_feature(-1, WriteOp::DeviceName, &r).unwrap_err();
+            assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{n} data bytes");
+            assert_eq!(e.raw_os_error(), None, "{n} data bytes");
+        }
+        // The reference frame of the fixture is exactly what the door takes.
+        let f = &crate::devname::frames_for("alex").unwrap()[0];
+        assert_eq!(f.report.len(), 65);
+        assert_eq!(
+            hid_write_feature(-1, f.op, &f.report).unwrap_err().raw_os_error(),
+            Some(libc::EBADF)
+        );
     }
 
     #[test]

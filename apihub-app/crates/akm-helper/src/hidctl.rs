@@ -24,6 +24,12 @@
 //!    `0x14`); then a wait of at most [`DRAIN_WAIT`] for the byte to leave the
 //!    socket queue (Apple waits up to 1 s too); every duplicate is closed.
 //!
+//! `akm-hid-control inspect` ([`Action::Inspect`]) stops after step 4 and
+//! reports the channel, among others its negotiated L2CAP MTUs read with
+//! `getsockopt(SOL_L2CAP, L2CAP_OPTIONS)` (read-only): the pre-flight of
+//! `akmctl rename --device-name --write-device-name` needs the **outgoing**
+//! MTU of the control channel (#248, lock 2). No byte is ever sent on that path.
+//!
 //! This file holds the only `send` of the crate (checked by a source scan).
 
 use std::ffi::CString;
@@ -48,6 +54,9 @@ pub const PSM_HID_INTERRUPT: u16 = 0x0013;
 pub const AF_BLUETOOTH: i32 = 31;
 pub const BTPROTO_L2CAP: i32 = 0;
 const SOL_L2CAP: i32 = 6;
+/// `struct l2cap_options { __u16 omtu; __u16 imtu; __u16 flush_to; __u8 mode;
+/// __u8 fcs; __u8 max_tx; __u16 txwin_size; }` (12 bytes), read-only here.
+const L2CAP_OPTIONS: i32 = 0x01;
 const L2CAP_CONNINFO: i32 = 0x02;
 
 /// Executables accepted as `bluetoothd` (Arch/Manjaro, Debian/Fedora, old).
@@ -157,6 +166,11 @@ pub struct SockInfo {
     pub peer_cid: Option<u16>,
     /// `L2CAP_CONNINFO` answered (state `BT_CONNECTED`); the HCI handle.
     pub hci_handle: Option<u16>,
+    /// Negotiated **outgoing** MTU (`l2cap_options.omtu`: the largest frame
+    /// the remote accepts from us), from `L2CAP_OPTIONS`.
+    pub omtu: Option<u16>,
+    /// Negotiated incoming MTU (`l2cap_options.imtu`).
+    pub imtu: Option<u16>,
 }
 
 impl SockInfo {
@@ -258,6 +272,24 @@ impl ControlSocket for L2capControlSocket {
         };
         if rc == 0 && len >= 2 {
             si.hci_handle = Some(u16::from_ne_bytes([ci[0], ci[1]]));
+        }
+        // struct l2cap_options (12 bytes): omtu, imtu first. A getsockopt
+        // changes nothing on the socket bluetoothd keeps using.
+        let mut lo = [0u8; 16];
+        let mut len: libc::socklen_t = 12;
+        // SAFETY: 16-byte buffer, kernel writes at most `len` (12) bytes.
+        let rc = unsafe {
+            libc::getsockopt(
+                raw,
+                SOL_L2CAP,
+                L2CAP_OPTIONS,
+                lo.as_mut_ptr().cast(),
+                &mut len,
+            )
+        };
+        if rc == 0 && len >= 4 {
+            si.omtu = Some(u16::from_ne_bytes([lo[0], lo[1]]));
+            si.imtu = Some(u16::from_ne_bytes([lo[2], lo[3]]));
         }
         Ok(si)
     }
@@ -518,8 +550,28 @@ pub enum Event {
 pub enum KbOutcome {
     Sent,
     DryRun,
+    /// `inspect`: the control channel was found and described, nothing sent.
+    Inspected,
     Refused(Refusal),
     SendFailed(String),
+}
+
+/// What the program is asked to do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    /// Send one HID_CONTROL byte (or show what would be sent with `dry_run`).
+    Send(HidControl),
+    /// Describe the control channel (PSM, CID, state, MTUs); never sends.
+    Inspect,
+}
+
+impl Action {
+    pub fn name(self) -> &'static str {
+        match self {
+            Action::Send(c) => c.name(),
+            Action::Inspect => "inspect",
+        }
+    }
 }
 
 /// Global result.
@@ -534,10 +586,12 @@ impl Report {
     /// Exit status: 0 if every keyboard was handled (or none connected), 1 otherwise.
     pub fn ok(&self) -> bool {
         self.global.is_none()
-            && self
-                .per_keyboard
-                .iter()
-                .all(|(_, o)| matches!(o, KbOutcome::Sent | KbOutcome::DryRun))
+            && self.per_keyboard.iter().all(|(_, o)| {
+                matches!(
+                    o,
+                    KbOutcome::Sent | KbOutcome::DryRun | KbOutcome::Inspected
+                )
+            })
     }
 }
 
@@ -566,6 +620,43 @@ pub fn run(
     cs: &dyn ControlSocket,
     log: &mut dyn FnMut(Event),
 ) -> Report {
+    run_action(Action::Send(cmd), only, dry_run, env, cs, log)
+}
+
+/// Read-only description of the control channel of each keyboard (MTUs
+/// included); the `send` path is not reachable from here.
+pub fn inspect(
+    only: Option<Mac>,
+    env: &Env<'_>,
+    cs: &dyn ControlSocket,
+    log: &mut dyn FnMut(Event),
+) -> Report {
+    run_action(Action::Inspect, only, true, env, cs, log)
+}
+
+/// One line per L2CAP socket of a keyboard: what `akmctl` parses for the MTU.
+pub fn describe_socket(mac: Mac, fd: i32, si: &SockInfo) -> String {
+    format!(
+        "  {mac} fd {fd}: psm local {} peer {} cid {} state {} mtu out {} in {}",
+        fmt_psm(si.local_psm),
+        fmt_psm(si.peer_psm),
+        si.peer_cid.map_or("-".into(), |c| format!("0x{c:04x}")),
+        si.hci_handle.map_or("not connected".into(), |h| format!(
+            "connected (hci handle 0x{h:04x})"
+        )),
+        si.omtu.map_or("-".into(), |m| m.to_string()),
+        si.imtu.map_or("-".into(), |m| m.to_string()),
+    )
+}
+
+fn run_action(
+    action: Action,
+    only: Option<Mac>,
+    dry_run: bool,
+    env: &Env<'_>,
+    cs: &dyn ControlSocket,
+    log: &mut dyn FnMut(Event),
+) -> Report {
     let mut rep = Report {
         pid: None,
         per_keyboard: Vec::new(),
@@ -582,8 +673,9 @@ pub fn run(
     };
     if kbs.is_empty() {
         log(Event::Info(format!(
-            "no Apple keyboard connected: {} not sent",
-            cmd.name()
+            "no Apple keyboard connected: {} not {}",
+            action.name(),
+            if action == Action::Inspect { "done" } else { "sent" }
         )));
         return rep;
     }
@@ -675,16 +767,7 @@ pub fn run(
     let mut sent: Vec<usize> = Vec::new();
     for kb in &kbs {
         for (n, si) in socks.iter().filter(|(_, si)| si.peer == Some(kb.mac)) {
-            log(Event::Info(format!(
-                "  {} fd {n}: psm local {} peer {} cid {} state {}",
-                kb.mac,
-                fmt_psm(si.local_psm),
-                fmt_psm(si.peer_psm),
-                si.peer_cid.map_or("-".into(), |c| format!("0x{c:04x}")),
-                si.hci_handle.map_or("not connected".into(), |h| format!(
-                    "connected (hci handle 0x{h:04x})"
-                )),
-            )));
+            log(Event::Info(describe_socket(kb.mac, *n, si)));
         }
         let outcome = match select_control(kb.mac, &socks) {
             Err(r) => {
@@ -696,6 +779,24 @@ pub fn run(
             }
             Ok(i) => {
                 let (n, si) = &socks[i];
+                let cmd = match action {
+                    Action::Inspect => {
+                        log(Event::Info(format!(
+                            "{} ({} 0x{:04x}): control channel pid {pid} fd {n} psm 0x{:04x} {} mtu out {} in {}: inspected, nothing sent",
+                            kb.mac,
+                            kb.model,
+                            kb.pid,
+                            si.peer_psm.unwrap_or(0),
+                            si.hci_handle
+                                .map_or("-".into(), |h| format!("hci 0x{h:04x}")),
+                            si.omtu.map_or("-".into(), |m| m.to_string()),
+                            si.imtu.map_or("-".into(), |m| m.to_string()),
+                        )));
+                        rep.per_keyboard.push((kb.mac, KbOutcome::Inspected));
+                        continue;
+                    }
+                    Action::Send(c) => c,
+                };
                 let what = format!(
                     "{} ({} 0x{:04x}): pid {pid} fd {n} psm 0x{:04x} {} byte 0x{:02x} {}",
                     kb.mac,
@@ -858,7 +959,30 @@ mod tests {
             peer_psm: Some(peer),
             peer_cid: Some(0x40),
             hci_handle: connected.then_some(0x0b),
+            omtu: Some(672),
+            imtu: Some(672),
         }
+    }
+
+    #[test]
+    fn socket_description_carries_the_mtus_for_akmctl() {
+        let s = describe_socket(KB, 7, &l2(KB, 0, PSM_HID_CONTROL, true));
+        assert_eq!(
+            s,
+            "  04:DB:56:CA:42:EE fd 7: psm local 0x0000 peer 0x0011 cid 0x0040 state connected (hci handle 0x000b) mtu out 672 in 672"
+        );
+        let mut si = l2(KB, 0, PSM_HID_CONTROL, false);
+        si.omtu = None;
+        si.imtu = None;
+        assert!(describe_socket(KB, 7, &si).ends_with("state not connected mtu out - in -"));
+        assert_eq!(Action::Inspect.name(), "inspect");
+        assert_eq!(Action::Send(HidControl::Suspend).name(), "SUSPEND");
+        let rep = Report {
+            pid: Some(1),
+            per_keyboard: vec![(KB, KbOutcome::Inspected)],
+            global: None,
+        };
+        assert!(rep.ok());
     }
 
     #[test]

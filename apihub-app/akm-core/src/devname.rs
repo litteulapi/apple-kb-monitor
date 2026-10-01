@@ -2,26 +2,39 @@
 //! opposed to the alias of this computer (`akmctl rename <nom>`, BlueZ
 //! `Alias`, [`crate::alias`]), which stays the default way to rename.
 //!
-//! What Apple does (docs/RENOMMER-CLAVIER.md §5, RE-PILOTES-ANCIENS.md §5 L11):
-//! Lion 10.7 `-[AppleBluetoothHIDDevice setDeviceName:]`, for a PID whose
-//! personality declares `LongDeviceName` (the 598 = `0x0256` does), sends
-//! **one** SET Feature `0x55` of 64 data bytes, then an HCI remote name
-//! request; the 4-fragment path (`0x51`-`0x54` then `0x50` `DeviceNameChange`)
-//! is only for PIDs without `LongDeviceName`. macOS 26.5 no longer writes the
-//! name at all (RE-MACOS-SILICON.md §3.4). The name is read back with
-//! `deviceNameFromHardware` = GET `0x51`-`0x54` (4 × 8 ASCII bytes).
+//! What Apple does, established by disassembly (E1, docs/RE-NOM-PROPRE-E1.md,
+//! reference frames `tests/fixtures/devname/lion_setdevicename_frames.json`):
+//! Lion 10.7.5 `-[AppleBluetoothHIDDevice setDeviceName:]` (`0x4d2fe`), for a
+//! PID whose personality declares `LongDeviceName` (the 598 = `0x0256` does),
+//! refuses an empty name or one of more than 64 UTF-16 units before any frame,
+//! converts it to UTF-8 and drops trailing characters until it fits in 64
+//! bytes, then sends **one** SET Feature `0x55` of 65 bytes: `0x55`, the UTF-8
+//! name, `0x00` padding (`calloc`). Then an HCI Remote Name Request, no HID
+//! read, no `0x50`, no `0x51`-`0x54`. Identical in 10.5.8. On the wire:
+//! `53 55` + 64 bytes, one frame of 66 bytes if the outgoing MTU of the HIDP
+//! control channel is at least 66.
 //!
-//! What is **not** proven: the bytes of the 64-byte name field (encoding,
-//! terminator, padding), whether the write persists, whether `0x51`-`0x54`
-//! reflect it, the HIDP MTU of this keyboard ([`UNKNOWNS`]). Hence
-//! [`SEQUENCE_PROOF`] is [`SequenceProof::NotProven`] and [`run`] refuses the
-//! real write before anything is touched; `--dry-run` prepares everything
-//! (validation, pre-flight, backup, frames with the proof level of every
-//! byte). The hardware door ([`crate::hidraw::hid_write_feature`]) has no
-//! 65-byte ioctl either: a second, independent barrier.
+//! What no disassembly can establish (hardware, [`UNKNOWNS`]): the HANDSHAKE of
+//! firmware `0x0050` to a SET `0x55` (U5), persistence across a battery change
+//! (U3), whether `0x51`-`0x54` reflect `0x55` (U4). Hence [`run`] still refuses
+//! the real write unless three locks are all lifted, in this order, before
+//! anything is touched:
 //!
-//! Everything here is pure or goes through [`RenameEnv`]: the tests use a
-//! simulated environment and a spy [`FeatureSink`], never the hardware.
+//! 1. `[apple] allow_device_name_write = true` in `config.toml` (default
+//!    **false**, [`crate::config::Config::allow_device_name_write`]);
+//! 2. the negotiated outgoing MTU of the L2CAP control channel, read at
+//!    pre-flight (read-only `getsockopt(L2CAP_OPTIONS)` on a duplicate of the
+//!    socket `bluetoothd` holds, `akm-hid-control inspect`), is known and
+//!    ≥ [`MIN_CONTROL_MTU`] (66): Linux `hidp` does not fragment, and an
+//!    oversized frame ends the HID session;
+//! 3. the interactive confirmation: the exact name typed again.
+//!
+//! Around the single frame, the guarded envelope is unchanged: pre-flight,
+//! backup of `0x51`-`0x54`, one write through the register map and the
+//! 65-byte door ([`crate::hidraw::hid_write_feature`]), wait for the
+//! reconnection, read back, guided restore. Everything here is pure or goes
+//! through [`RenameEnv`]: the tests use a simulated environment and a spy
+//! [`FeatureSink`], never the hardware.
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -32,10 +45,14 @@ use serde::{Deserialize, Serialize};
 use crate::parity::FeatureSink;
 use crate::registry::{Direction, Proof, WriteOp, WriteSession};
 
-/// `LongDeviceName` report id [plist] [désassemblage].
+/// `LongDeviceName` report id [plist] [désassemblage `0x4d444`].
 pub const LONG_DEVICE_NAME_ID: u8 = 0x55;
-/// Data bytes of `LongDeviceName` [plist] (`size` = 64; `getMaxDeviceNameLength` = 64).
+/// Data bytes of `LongDeviceName` [plist] (`size` = 64; `getMaxDeviceNameLength`
+/// = 64 [désassemblage `0x4c6e4`]); the report handed to the kernel is 65 bytes.
 pub const LONG_DEVICE_NAME_LEN: usize = 64;
+/// Longest name Apple's UI and `setDeviceName:` accept, in UTF-16 units
+/// (`[nom length] > 64` → `kIOReturnBadArgument`, nothing sent) [désassemblage `0x4d3d3`].
+pub const APPLE_MAX_NAME_UTF16: usize = 64;
 /// `DeviceName1..4`, read back after a reconnection [plist] [mesuré].
 pub const FRAGMENT_IDS: [u8; 4] = [0x51, 0x52, 0x53, 0x54];
 /// Data bytes of each fragment [plist] [mesuré].
@@ -44,8 +61,16 @@ pub const FRAGMENT_LEN: usize = 8;
 /// that every write can be verified. Apple's UI allows 64.
 pub const MAX_NAME_LEN: usize = FRAGMENT_IDS.len() * FRAGMENT_LEN;
 /// Timeout Apple passes to `IOHIDDeviceInterface::setReport` (1000 ms)
-/// [désassemblage]: a bound on the HANDSHAKE wait, not a delay between frames.
+/// [désassemblage `0x4d4ba`]: a bound on the HANDSHAKE wait, not a delay between frames.
 pub const APPLE_HANDSHAKE_TIMEOUT: Duration = Duration::from_millis(1000);
+/// Smallest outgoing L2CAP MTU of the HIDP control channel that carries the
+/// 65-byte report in one frame: `0x53` + 65 [désassemblage `setReportWL`
+/// `0x5ad6`: chunk = MTU − 1]. Linux `hidp` sends the whole report in one
+/// `l2cap` message and the kernel refuses a message longer than the channel's
+/// `omtu` (`EMSGSIZE`), which `hidp` treats as a fatal transmit error [source
+/// `net/bluetooth/hidp/core.c`, `l2cap_chan_send`]. Measured at pre-flight,
+/// never assumed.
+pub const MIN_CONTROL_MTU: u16 = 66;
 /// How long `akmctl` waits for the keyboard to come back after the write.
 pub const RECONNECT_WAIT: Duration = Duration::from_secs(180);
 /// Minimum battery for a write (else the keyboard must report state `normal`).
@@ -57,34 +82,59 @@ pub const STATE_SUBDIR: &str = "apple-kb-monitor";
 /// back as other characters. Every other printable ASCII character is legal
 /// for BlueZ (UTF-8, ≤ 248 bytes) and for SDP.
 pub const FORBIDDEN: &[char] = &['\\'];
+/// The configuration lines that lift the first lock.
+pub const CONFIG_HOWTO: &str =
+    "[apple]\nallow_device_name_write = true   # $XDG_CONFIG_HOME/apple-kb-monitor/config.toml (~/.config/...)";
 
-/// Is the exact byte sequence Apple sends established, byte for byte, by a
-/// reference frame of the documentation? Only [`SequenceProof::Proven`] lets
-/// [`run`] write; production code passes [`SEQUENCE_PROOF`].
+/// Is the exact byte sequence Apple sends established, byte for byte? Only
+/// [`SequenceProof::EstablishedByDisassembly`] lets [`run`] go past the first
+/// check; production code passes [`SEQUENCE_PROOF`], the only place that
+/// constructs that variant (enforced by a source scan in the tests).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SequenceProof {
     NotProven,
-    Proven,
+    /// The construction of the frame (id, encoding, padding, length, order,
+    /// absence of any other frame) is read in Apple's own code, with
+    /// addresses, on two systems (10.5.8, 10.7.5), and the reference frames
+    /// of the fixture match [`frames_for`] byte for byte. It says nothing
+    /// about the firmware's reaction: see [`UNKNOWNS`].
+    EstablishedByDisassembly,
 }
 
-/// State of the proof today: see [`UNKNOWNS`] and docs/RENOMMER-CLAVIER.md §5.
-pub const SEQUENCE_PROOF: SequenceProof = SequenceProof::NotProven;
+impl SequenceProof {
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::NotProven => "NotProven: the bytes Apple sends are not established",
+            Self::EstablishedByDisassembly => {
+                "established by disassembly (E1): IOBluetooth 10.7.5 x86_64 -[AppleBluetoothHIDDevice setDeviceName:] 0x4d2fe, identical in 10.5.8 i386 0x4fc10; reference frames tests/fixtures/devname/lion_setdevicename_frames.json"
+            }
+        }
+    }
+}
 
-/// What the documents do not establish (docs/RENOMMER-CLAVIER.md §5.3).
-pub const UNKNOWNS: &[&str] = &[
-    "U1 content of the 64 name bytes of 0x55: encoding (ASCII / UTF-8 / MacRoman), NUL terminator, padding (NUL? space?), length prefix: L11 gives the id and the size only, no listing nor address",
-    "U2 RE-MACOS-SILICON §3.4 calls the write order a deduction ('non observé chez Apple') while RE-PILOTES-ANCIENS L11 cites a Lion disassembly: the Lion listing of setDeviceName: is not in the repository",
-    "U3 persistence: NVRAM or volatile (the Magic Keyboard descriptor declares its 0x55 Feature 'volatile', RE-COMMANDES-VENDEUR §1.1); lost at a battery change?",
-    "U4 do 0x51-0x54 reflect a 0x55 write (first 32 bytes?), and when (at once, after a reset, after a reconnection)?",
-    "U5 does the firmware 0x0050 answer HANDSHAKE SUCCESSFUL to SET 0x55 (the GET is refused 0x03, which says nothing about SET)?",
-    "U6 Linux path: hidraw set-feature ioctl of 65 bytes -> hidp -> 66 bytes on the HIDP control channel: negotiated L2CAP MTU of this keyboard unknown (Apple fragments with DATC, RE-GHIDRA-KEXT §2.5)",
-    "U7 role of 0x50 DeviceNameChange: only on the 4-fragment path per L11 (never sent here); never written by any macOS examined",
+/// State of the proof: construction established by E1 (docs/RE-NOM-PROPRE-E1.md).
+pub const SEQUENCE_PROOF: SequenceProof = SequenceProof::EstablishedByDisassembly;
+
+/// Settled by E1 (docs/RENOMMER-CLAVIER.md §5.3, docs/RE-NOM-PROPRE-E1.md §5).
+pub const RESOLVED_BY_DISASSEMBLY: &[&str] = &[
+    "U1 content of the 64 bytes: UTF-8 name (trailing characters dropped until <= 64 bytes), 0x00 padding (calloc), no length prefix, no explicit terminator (a 64-byte name has no NUL) [désassemblage 0x4d3fe-0x4d444]",
+    "U2 order: ONE SET Feature 0x55 of 65 bytes, then an HCI Remote Name Request; no GET before or after, no 0x50, no 0x51-0x54, no 0x44, no 0x41; empty or > 64 UTF-16 units refused before any frame (kIOReturnBadArgument) [désassemblage 0x4d3d3-0x4d4c8]",
+    "U7 0x50 DeviceNameChange validates the 4-fragment path only (PIDs without LongDeviceName); never sent to this keyboard [désassemblage 0x4d525-0x4d6cb]",
+    "U6 (Apple side) one frame of 66 bytes when the control channel's outgoing MTU >= 66, else DATC fragments; Linux side: the MTU is READ at pre-flight (akm-hid-control inspect, getsockopt L2CAP_OPTIONS, read-only) and the write is refused below 66 or when unknown",
 ];
 
-/// Passive experiments that would lift the unknowns (no write to the keyboard).
+/// What remains unmeasured: hardware facts no disassembly can give. These are
+/// RISKS of the real write, told as such to the user.
+pub const UNKNOWNS: &[&str] = &[
+    "U5 RISK NOT MEASURED: the HANDSHAKE of firmware 0x0050 to a SET 0x55 (the GET is refused 0x03, which says nothing about SET); Apple waits 1000 ms and treats anything but SUCCESSFUL as a failure without retry",
+    "U3 RISK NOT MEASURED: persistence across a battery change (the Magic Keyboard descriptor declares its 0x55 Feature 'volatile'); Apple never rewrites the name at reconnection, so the keyboard is expected to store it (deduction, E3)",
+    "U4 PARTIAL: Apple does not read 0x51-0x54 back; it asks the HCI remote name at once. Whether the fragments reflect 0x55, and when, is measured here by the read-back after the reconnection (the BlueZ Device1.Name is reported as information only)",
+];
+
+/// Passive experiments that would lift the remaining unknowns (no write to the keyboard).
 pub const VALIDATION_EXPERIMENTS: &[&str] = &[
-    "E1 (U1, U2, U7) Ghidra on Lion 10.7.5 IOBluetooth.framework: -[AppleBluetoothHIDDevice setDeviceName:] address, string conversion (getCString:maxLength:encoding: and its encoding constant), buffer size handed to setReport, memset / padding, timeout, 0x50 or not; commit the reference frame of 'Clavier de maria #1' in docs/RENOMMER-CLAVIER.md §5.2",
-    "E2 (U6) btmon capture of an ordinary reconnection of the keyboard: L2CAP Configure Request / Response MTU of PSM 17 (control); passive",
+    "E1 DONE (U1, U2, U7, U6 Apple side): docs/RE-NOM-PROPRE-E1.md, fixture tests/fixtures/devname/lion_setdevicename_frames.json",
+    "E2 (U6 Linux side) is now a pre-flight: `akm-hid-control inspect --mac <MAC>` reads the negotiated L2CAP MTU of the control channel (read-only) and the write is refused below 66",
     "E3 (U3) compare the cached 0x51-0x54, HID_NAME and BlueZ Name before and after a battery change (daemon cache, no new read)",
     "E4 (U3, U5) public HID descriptors of Apple keyboards of the same generation declaring 0x55: Feature flags (volatile / non-volatile) and size",
 ];
@@ -96,6 +146,9 @@ pub const VALIDATION_EXPERIMENTS: &[&str] = &[
 pub enum NameError {
     Empty,
     TooLong(usize),
+    /// More than [`APPLE_MAX_NAME_UTF16`] UTF-16 units: what Apple refuses
+    /// (`kIOReturnBadArgument`) before building any frame.
+    TooLongForApple(usize),
     /// Leading or trailing space: invisible in every UI, refused.
     EdgeSpace,
     Control(u32),
@@ -110,6 +163,10 @@ impl std::fmt::Display for NameError {
             Self::TooLong(n) => write!(
                 f,
                 "{n} characters, at most {MAX_NAME_LEN} (what 0x51-0x54 can show back)"
+            ),
+            Self::TooLongForApple(n) => write!(
+                f,
+                "{n} UTF-16 units, Apple refuses above {APPLE_MAX_NAME_UTF16} before any frame (kIOReturnBadArgument)"
             ),
             Self::EdgeSpace => write!(f, "leading or trailing space"),
             Self::Control(c) => write!(f, "control character U+{c:04X}"),
@@ -127,6 +184,8 @@ impl std::error::Error for NameError {}
 /// Validate a new name: printable ASCII (`0x20`-`0x7E`), 1 to
 /// [`MAX_NAME_LEN`] characters, no space at either end, none of [`FORBIDDEN`].
 /// Nothing is trimmed: what is validated is exactly what would be written.
+/// Stricter than Apple ([`apple_name_bytes`]): a subset on which the
+/// read-back of `0x51`-`0x54` verifies the whole name.
 pub fn validate(name: &str) -> Result<String, NameError> {
     if name.is_empty() {
         return Err(NameError::Empty);
@@ -149,6 +208,26 @@ pub fn validate(name: &str) -> Result<String, NameError> {
         return Err(NameError::EdgeSpace);
     }
     Ok(name.to_string())
+}
+
+/// The name bytes exactly as Apple builds them [désassemblage `0x4d3b9`-`0x4d43f`]:
+/// `[nom length]` (UTF-16 units) must be 1..=64, else `kIOReturnBadArgument`
+/// before any frame; then `_UTF8StringFromString(nom, 64)`: UTF-8, trailing
+/// characters removed one by one while `strlen > 64`, so a character is never
+/// cut in the middle. No terminator: the padding comes from the `calloc`.
+pub fn apple_name_bytes(name: &str) -> Result<Vec<u8>, NameError> {
+    let units = name.encode_utf16().count();
+    if units == 0 {
+        return Err(NameError::Empty);
+    }
+    if units > APPLE_MAX_NAME_UTF16 {
+        return Err(NameError::TooLongForApple(units));
+    }
+    let mut s = name.to_string();
+    while s.len() > LONG_DEVICE_NAME_LEN {
+        s.pop();
+    }
+    Ok(s.into_bytes())
 }
 
 // ── frames ─────────────────────────────────────────────────────────────────
@@ -179,7 +258,8 @@ impl Frame {
         &self.report[1..]
     }
     /// Bytes on the HIDP control channel: `53` (SET_REPORT | Feature),
-    /// added by the Bluetooth stack, then the report [désassemblage] (setReportWL).
+    /// added by the Bluetooth stack, then the report [désassemblage]
+    /// (`IOBluetoothHIDDriver::setReportWL` `0x5ad6`; `hidp` does the same).
     pub fn wire(&self) -> Vec<u8> {
         let mut w = vec![0x53];
         w.extend_from_slice(&self.report);
@@ -187,8 +267,8 @@ impl Frame {
     }
 }
 
-/// The 64 data bytes of `0x55` for the 32 bytes `raw` of a name: `raw`, then
-/// NUL up to 64 (hypothesis U1).
+/// The 64 data bytes of `0x55` for the UTF-8 bytes `raw` of a name
+/// (≤ 64): `raw`, then `0x00` up to 64 (`calloc(65, 1)` + `strncpy`).
 fn long_name_payload(raw: &[u8]) -> Vec<u8> {
     let mut p = vec![0u8; LONG_DEVICE_NAME_LEN];
     p[..raw.len()].copy_from_slice(raw);
@@ -204,30 +284,31 @@ fn long_name_frame(raw: &[u8]) -> Frame {
             start: 0,
             end: 1,
             proof: Proof::Disassembly,
-            what: "report id 0x55 LongDeviceName: the only report Lion's setDeviceName: writes for a PID that declares it (L11) [plist + désassemblage]",
+            what: "report id 0x55 LongDeviceName, the only report Lion's setDeviceName: writes for a PID that declares it [plist + désassemblage 0x4d444 `movb %bl,(%r13)`]",
         },
         Field {
             start: 1,
             end: 1 + LONG_DEVICE_NAME_LEN,
-            proof: Proof::Plist,
-            what: "64 data bytes: size of LongDeviceName in the 598 personality, getMaxDeviceNameLength = 64 [plist + désassemblage]",
+            proof: Proof::Disassembly,
+            what: "64 data bytes (report of 65): size of LongDeviceName in the 598 personality, getMaxDeviceNameLength = 64, setReport length 65 [plist + désassemblage 0x4d4b1]",
         },
     ];
     if n > 0 {
         fields.push(Field {
             start: 1,
             end: 1 + n,
-            proof: Proof::Hypothesis,
-            what:
-                "name as ASCII bytes, from byte 1 (U1; the read-back fragments are ASCII [mesuré])",
+            proof: Proof::Disassembly,
+            what: "name as UTF-8 bytes from byte 1, whole characters, no terminator [désassemblage 0x4d416 _UTF8StringFromString, 0x4d43f strncpy(buf+1, utf8, strlen)]",
         });
     }
-    fields.push(Field {
-        start: 1 + n,
-        end: 1 + LONG_DEVICE_NAME_LEN,
-        proof: Proof::Hypothesis,
-        what: "NUL padding to 64 bytes (U1; 0x53 / 0x54 read back NUL-padded [mesuré])",
-    });
+    if n < LONG_DEVICE_NAME_LEN {
+        fields.push(Field {
+            start: 1 + n,
+            end: 1 + LONG_DEVICE_NAME_LEN,
+            proof: Proof::Disassembly,
+            what: "0x00 padding to 64 bytes: calloc(65, 1), nothing else written [désassemblage 0x4d407]",
+        });
+    }
     Frame {
         op: WriteOp::DeviceName,
         report,
@@ -236,11 +317,13 @@ fn long_name_frame(raw: &[u8]) -> Frame {
 }
 
 /// The frames of Apple's rename for a validated `name`: exactly one SET
-/// Feature `0x55` (no `0x50`, no `0x51`-`0x54`: L11 for a PID with
-/// `LongDeviceName`).
+/// Feature `0x55` of 65 bytes (no `0x50`, no `0x51`-`0x54`), the name encoded
+/// as Apple does ([`apple_name_bytes`]). Matches the reference frames of
+/// `tests/fixtures/devname/lion_setdevicename_frames.json` byte for byte.
 pub fn frames_for(name: &str) -> Result<Vec<Frame>, NameError> {
     let name = validate(name)?;
-    Ok(vec![long_name_frame(name.as_bytes())])
+    let raw = apple_name_bytes(&name)?;
+    Ok(vec![long_name_frame(&raw)])
 }
 
 /// The frames that rewrite a backup: the 32 saved bytes exactly, then NUL.
@@ -308,8 +391,8 @@ pub fn render_frames(frames: &[Frame]) -> String {
         }
     }
     s.push_str(&format!(
-        "then: no other frame (no 0x50, no 0x51-0x54); HANDSHAKE awaited at most {} ms [désassemblage]; \
-         the name is read back (0x51-0x54) only after a reconnection\n",
+        "then: no other frame (no 0x50, no 0x51-0x54, no read) [désassemblage]; HANDSHAKE awaited at most {} ms [désassemblage]; \
+         Apple then asks the HCI remote name; here the name is read back (0x51-0x54) after a reconnection\n",
         APPLE_HANDSHAKE_TIMEOUT.as_millis()
     ));
     s
@@ -486,7 +569,8 @@ pub fn read_backup(path: &Path) -> Result<Backup, String> {
 
 // ── pre-flight ─────────────────────────────────────────────────────────────
 
-/// Facts gathered before a write (from the daemon and `akmctl doctor`).
+/// Facts gathered before a write (from the daemon, `akmctl doctor` and the
+/// read-only MTU probe).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Preflight {
     pub connected: bool,
@@ -500,6 +584,10 @@ pub struct Preflight {
     pub doctor_green: bool,
     /// stdin and stdout are a terminal.
     pub interactive: bool,
+    /// Negotiated **outgoing** MTU of the L2CAP control channel (PSM `0x0011`)
+    /// to this keyboard, read on the live socket (`getsockopt(L2CAP_OPTIONS)`,
+    /// read-only); `None` = unknown = refused (second lock).
+    pub control_mtu: Option<u16>,
 }
 
 /// One failed pre-flight condition.
@@ -511,22 +599,37 @@ pub enum PreflightFail {
     RecentReadFailure,
     DoctorNotGreen,
     NotInteractive,
+    /// The MTU of the control channel could not be read.
+    ControlMtuUnknown,
+    /// The MTU is known and below [`MIN_CONTROL_MTU`].
+    ControlMtuTooSmall(u16),
 }
 
 impl PreflightFail {
-    pub fn describe(&self) -> &'static str {
+    pub fn describe(&self) -> String {
         match self {
-            Self::NotConnected => "keyboard not connected",
-            Self::Battery => "battery below 20 % and state not 'normal' (or unknown)",
-            Self::BreakerOpen => "circuit breaker open: the keyboard stopped answering",
-            Self::RecentReadFailure => "the last hardware read failed or was incomplete",
+            Self::NotConnected => "keyboard not connected".into(),
+            Self::Battery => "battery below 20 % and state not 'normal' (or unknown)".into(),
+            Self::BreakerOpen => "circuit breaker open: the keyboard stopped answering".into(),
+            Self::RecentReadFailure => "the last hardware read failed or was incomplete".into(),
             Self::DoctorNotGreen => {
-                "`akmctl doctor` is not green (link health, pairing, configuration)"
+                "`akmctl doctor` is not green (link health, pairing, configuration)".into()
             }
             Self::NotInteractive => {
-                "not an interactive terminal (stdin and stdout must be a terminal)"
+                "not an interactive terminal (stdin and stdout must be a terminal)".into()
             }
+            Self::ControlMtuUnknown => format!(
+                "outgoing MTU of the L2CAP control channel unknown: it must be read (akm-hid-control inspect, read-only) and be >= {MIN_CONTROL_MTU} before a 66-byte frame is sent"
+            ),
+            Self::ControlMtuTooSmall(m) => format!(
+                "outgoing MTU of the L2CAP control channel is {m}, below {MIN_CONTROL_MTU}: a 66-byte frame cannot be sent in one piece (Linux hidp does not fragment; the HID session would be terminated)"
+            ),
         }
+    }
+
+    /// Is this the MTU lock (as opposed to the daemon / terminal facts)?
+    pub fn is_mtu(&self) -> bool {
+        matches!(self, Self::ControlMtuUnknown | Self::ControlMtuTooSmall(_))
     }
 }
 
@@ -554,6 +657,11 @@ pub fn preflight(p: &Preflight) -> Vec<PreflightFail> {
     if !p.interactive {
         v.push(PreflightFail::NotInteractive);
     }
+    match p.control_mtu {
+        None => v.push(PreflightFail::ControlMtuUnknown),
+        Some(m) if m < MIN_CONTROL_MTU => v.push(PreflightFail::ControlMtuTooSmall(m)),
+        Some(_) => {}
+    }
     v
 }
 
@@ -562,8 +670,13 @@ pub fn preflight(p: &Preflight) -> Vec<PreflightFail> {
 /// Outcome of waiting for the keyboard after the write.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reconnect {
-    /// A new connection, with the 32 bytes `0x51`-`0x54` read in it.
-    Back(Vec<u8>),
+    /// A new connection, with the 32 bytes `0x51`-`0x54` read in it and the
+    /// name BlueZ shows for the device (`Device1.Name`, informative: Apple's
+    /// own check is the HCI remote name; BlueZ may still serve its cache).
+    Back {
+        raw: Vec<u8>,
+        bluez_name: Option<String>,
+    },
     /// No new connection with a fresh read before the deadline.
     Timeout,
 }
@@ -602,13 +715,17 @@ pub enum Outcome {
     InvalidName(String),
     /// The exact sequence is not proven: nothing was touched.
     NotProven,
-    /// Pre-flight failed: nothing was touched.
+    /// First lock: `[apple] allow_device_name_write` is not `true`; nothing
+    /// was touched (no pre-flight, no probe, no backup).
+    ConfigDisabled,
+    /// Pre-flight failed (second lock included: MTU unknown or too small):
+    /// nothing was touched.
     Preflight(Vec<PreflightFail>),
     /// The daemon has no complete `0x51`-`0x54` for this connection.
     NoCachedName,
     /// The backup could not be written: nothing was written to the keyboard.
     BackupFailed(String),
-    /// The typed confirmation did not match: nothing was written.
+    /// Third lock: the typed confirmation did not match; nothing was written.
     Cancelled,
     /// The keyboard disconnected before the write: nothing was written.
     Disconnected,
@@ -619,11 +736,15 @@ pub enum Outcome {
     /// Written, but the keyboard did not come back in time.
     NoReconnect,
     /// Written and read back identical.
-    Verified { backup: Option<PathBuf> },
+    Verified {
+        backup: Option<PathBuf>,
+        bluez_name: Option<String>,
+    },
     /// Written, read back different: offer the guided restore.
     Mismatch {
         read: Vec<u8>,
         backup: Option<PathBuf>,
+        bluez_name: Option<String>,
     },
 }
 
@@ -640,14 +761,17 @@ impl Outcome {
     }
 }
 
-/// The guarded rename (or restore). Order: name, proof, pre-flight, cached
-/// bytes, BACKUP (rename only), typed confirmation, connection re-checked,
+/// The guarded rename (or restore). Order: name, proof, LOCK 1 (configuration),
+/// pre-flight with LOCK 2 (control-channel MTU read, ≥ 66), cached bytes,
+/// BACKUP (rename only), LOCK 3 (typed confirmation), connection re-checked,
 /// ONE write per frame through `session` (each id once), wait for the
 /// reconnection, read back, compare. Stops at the first failure, never
-/// retries, logs every byte and every decision.
+/// retries, logs every byte and every decision. `allow_write` is
+/// `[apple] allow_device_name_write` as read from `config.toml`.
 pub fn run(
     req: &Request,
     proof: SequenceProof,
+    allow_write: bool,
     session: &mut WriteSession,
     env: &mut dyn RenameEnv,
 ) -> Outcome {
@@ -667,18 +791,30 @@ pub fn run(
             }
         },
     };
-    if proof != SequenceProof::Proven {
+    if proof != SequenceProof::EstablishedByDisassembly {
         env.log("[devname] decision: real write REFUSED (NotProven): the bytes Apple sends are not established byte for byte (docs/RENOMMER-CLAVIER.md §5.3); nothing was touched");
         return Outcome::NotProven;
     }
-    let fails = preflight(&env.preflight());
+    env.log(&format!("[devname] proof: {}", proof.describe()));
+    if !allow_write {
+        env.log(&format!(
+            "[devname] decision: real write REFUSED (lock 1, configuration): [apple] allow_device_name_write is not true; nothing was touched. To lift it:\n{CONFIG_HOWTO}"
+        ));
+        return Outcome::ConfigDisabled;
+    }
+    env.log("[devname] lock 1 lifted: [apple] allow_device_name_write = true");
+    let pre = env.preflight();
+    let fails = preflight(&pre);
     if !fails.is_empty() {
         for f in &fails {
             env.log(&format!("[devname] pre-flight failed: {}", f.describe()));
         }
         return Outcome::Preflight(fails);
     }
-    env.log("[devname] pre-flight ok");
+    env.log(&format!(
+        "[devname] pre-flight ok; lock 2 lifted: control-channel outgoing MTU {} >= {MIN_CONTROL_MTU} (read on the live L2CAP socket)",
+        pre.control_mtu.unwrap_or_default()
+    ));
     let Some(before) = env.cached_raw().filter(|r| r.len() == MAX_NAME_LEN) else {
         env.log(
             "[devname] decision: stop, the daemon has no complete 0x51-0x54 for this connection",
@@ -715,16 +851,17 @@ pub fn run(
         None
     };
     let prompt = format!(
-        "This writes {} frame(s) into the keyboard's firmware ({}). Type the name exactly ({target:?}) then Enter, anything else cancels: ",
+        "This writes {} frame(s) into the keyboard's firmware ({}). RISKS NOT MEASURED: the firmware's HANDSHAKE to SET 0x55 (U5) and persistence across a battery change (U3). Type the name exactly ({target:?}) then Enter, anything else cancels: ",
         frames.len(),
         frames.iter().map(|f| format!("{:#04x}", f.id())).collect::<Vec<_>>().join(", ")
     );
     if !env.confirm(&prompt, &target) {
         env.log(
-            "[devname] decision: cancelled (typed confirmation does not match); nothing written",
+            "[devname] decision: cancelled (lock 3, typed confirmation does not match); nothing written",
         );
         return Outcome::Cancelled;
     }
+    env.log("[devname] lock 3 lifted: name typed again");
     if !env.preflight().connected {
         env.log(
             "[devname] decision: stop, the keyboard disconnected before the write; nothing written",
@@ -752,8 +889,8 @@ pub fn run(
         }
     }
     env.log("[devname] written; waiting for the reconnection (switch the keyboard off and on)");
-    let read = match env.wait_reconnect(RECONNECT_WAIT) {
-        Reconnect::Back(r) => r,
+    let (read, bluez_name) = match env.wait_reconnect(RECONNECT_WAIT) {
+        Reconnect::Back { raw, bluez_name } => (raw, bluez_name),
         Reconnect::Timeout => {
             env.log(
                 "[devname] decision: stop, the keyboard did not come back in time; no new attempt",
@@ -763,16 +900,22 @@ pub fn run(
     };
     let expected = expected_readback(&frames);
     env.log(&format!("[devname] read back 0x51-0x54: {}", hex(&read)));
+    env.log(&format!(
+        "[devname] BlueZ Device1.Name after the reconnection: {} (informative only: Apple checks the HCI remote name, BlueZ may still serve its cache)",
+        bluez_name.as_deref().unwrap_or("(unknown)")
+    ));
     if read == expected {
         env.log("[devname] verified: the name read back is the one written");
         Outcome::Verified {
             backup: backup_path,
+            bluez_name,
         }
     } else {
         env.log("[devname] decision: MISMATCH, offer the guided restore of the backup");
         Outcome::Mismatch {
             read,
             backup: backup_path,
+            bluez_name,
         }
     }
 }
@@ -788,8 +931,8 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    /// Reference of docs/RENOMMER-CLAVIER.md §5.2 (hypothesis U1): the report
-    /// for the measured name "Clavier de maria #1".
+    /// Reference of docs/RENOMMER-CLAVIER.md §5.2 for the measured name
+    /// "Clavier de maria #1" (construction confirmed by E1).
     const REF_CLAVIER: [u8; 65] = {
         let mut r = [0u8; 65];
         r[0] = 0x55;
@@ -810,6 +953,13 @@ mod tests {
             [&[0x53u8][..], b" #1\0\0\0\0\0"].concat(),
             [&[0x54u8][..], &[0u8; 8]].concat(),
         ]
+    }
+
+    fn fixture() -> serde_json::Value {
+        let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/devname/lion_setdevicename_frames.json");
+        serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display())))
+            .unwrap()
     }
 
     #[test]
@@ -838,6 +988,7 @@ mod tests {
         for e in [
             NameError::Empty,
             NameError::TooLong(40),
+            NameError::TooLongForApple(65),
             NameError::EdgeSpace,
             NameError::Control(1),
             NameError::NotAscii('é'),
@@ -851,6 +1002,108 @@ mod tests {
             let ok = (0x21..=0x7E).contains(&b) && b != b'\\';
             assert_eq!(validate(&s).is_ok(), ok, "{b:#04x}");
         }
+    }
+
+    #[test]
+    fn apple_encoding_utf8_truncation_by_whole_characters_and_refusals() {
+        // ASCII: identity.
+        assert_eq!(apple_name_bytes("alex").unwrap(), b"alex");
+        assert_eq!(apple_name_bytes(&"a".repeat(64)).unwrap().len(), 64);
+        // Refused BEFORE any frame, as Apple: empty, > 64 UTF-16 units.
+        assert_eq!(apple_name_bytes(""), Err(NameError::Empty));
+        assert_eq!(
+            apple_name_bytes(&"a".repeat(65)),
+            Err(NameError::TooLongForApple(65))
+        );
+        // 33 emoji = 66 UTF-16 units (surrogate pairs): refused.
+        assert_eq!(
+            apple_name_bytes(&"\u{1F600}".repeat(33)),
+            Err(NameError::TooLongForApple(66))
+        );
+        // 40 × "é": 40 units (accepted), 80 UTF-8 bytes → trailing characters
+        // dropped to 32 × "é" = 64 bytes, never a split character.
+        let e40 = "é".repeat(40);
+        let b = apple_name_bytes(&e40).unwrap();
+        assert_eq!(b.len(), 64);
+        assert_eq!(std::str::from_utf8(&b).unwrap(), "é".repeat(32));
+        // 32 emoji: 64 units (accepted), 128 bytes → 16 emoji = 64 bytes.
+        let b = apple_name_bytes(&"\u{1F600}".repeat(32)).unwrap();
+        assert_eq!(b.len(), 64);
+        assert_eq!(std::str::from_utf8(&b).unwrap(), "\u{1F600}".repeat(16));
+        // 63 ASCII + "é" = 65 bytes → the "é" is dropped whole: 63 bytes.
+        let b = apple_name_bytes(&("a".repeat(63) + "é")).unwrap();
+        assert_eq!(b, "a".repeat(63).into_bytes());
+        // Every result is valid UTF-8 and ≤ 64 bytes.
+        for n in ["a".repeat(64) + "", "日本語".repeat(21), "ü".repeat(64)] {
+            let b = apple_name_bytes(&n).unwrap();
+            assert!(b.len() <= 64 && std::str::from_utf8(&b).is_ok(), "{n}");
+        }
+        // The frame of an accepted-but-long name still has 65 bytes, and the
+        // tool's own validation (ASCII, ≤ 32) refuses it anyway.
+        let f = long_name_frame(&apple_name_bytes(&e40).unwrap());
+        assert_eq!(f.report.len(), 65);
+        assert!(f.fields.iter().all(|x| x.end <= 65));
+        assert_eq!(frames_for(&e40), Err(NameError::NotAscii('é')));
+        assert_eq!(frames_for(&"a".repeat(33)), Err(NameError::TooLong(33)));
+    }
+
+    #[test]
+    fn frames_match_the_lion_fixture_byte_for_byte() {
+        let fx = fixture();
+        assert_eq!(fx["schema"], 1);
+        let r = &fx["report"];
+        assert_eq!(r["id"], i64::from(LONG_DEVICE_NAME_ID));
+        assert_eq!(r["data_len"], LONG_DEVICE_NAME_LEN as i64);
+        assert_eq!(r["userland_len"], 65);
+        assert_eq!(r["wire_len"], 66);
+        assert_eq!(r["wire_prefix_hex"], "0x53");
+        assert_eq!(r["max_name_len_utf16"], APPLE_MAX_NAME_UTF16 as i64);
+        assert_eq!(r["max_name_bytes_utf8"], LONG_DEVICE_NAME_LEN as i64);
+        assert_eq!(r["length_prefix"], false);
+        assert_eq!(fx["sequence"].as_array().unwrap()[0]["wire"], "53 55 <64 octets>");
+        let never = fx["never_sent_on_this_path"].as_array().unwrap();
+        assert!(never.iter().any(|v| v.as_str().unwrap().starts_with("0x50")));
+        assert!(never.iter().any(|v| v.as_str().unwrap().starts_with("0x51-0x54")));
+        let examples = fx["examples"].as_array().unwrap();
+        assert_eq!(examples.len(), 2);
+        for ex in examples {
+            let name = ex["name"].as_str().unwrap();
+            let frames = frames_for(name).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(frames.len(), 1, "{name}: one frame, nothing else");
+            let f = &frames[0];
+            assert_eq!(f.op, WriteOp::DeviceName);
+            assert_eq!(
+                f.report,
+                unhex(ex["report_hex"].as_str().unwrap()).unwrap(),
+                "{name}: report"
+            );
+            assert_eq!(f.report.len(), 65);
+            assert_eq!(
+                f.wire(),
+                unhex(ex["wire_hex"].as_str().unwrap()).unwrap(),
+                "{name}: wire"
+            );
+            assert_eq!(f.wire().len(), 66);
+            assert_eq!(
+                expected_readback(&frames),
+                unhex(ex["readback_0x51_0x54_expected_hex"].as_str().unwrap()).unwrap(),
+                "{name}: read-back"
+            );
+            assert_eq!(ex["utf8_len"], name.len() as i64);
+            // Every byte is covered by a field proven by disassembly.
+            let mut covered = [false; 65];
+            for fd in &f.fields {
+                assert_eq!(fd.proof, Proof::Disassembly, "{name}: {}", fd.what);
+                for c in &mut covered[fd.start..fd.end] {
+                    *c = true;
+                }
+            }
+            assert!(covered.iter().all(|&c| c), "{name}");
+        }
+        // The 32-byte example has no padding field left to describe... but
+        // still 32 zero bytes after the name (64 data bytes).
+        let f = &frames_for("Clavier Apple A1314 du gerant 01").unwrap()[0];
+        assert_eq!(&f.report[33..], &[0u8; 32]);
     }
 
     #[test]
@@ -870,8 +1123,8 @@ mod tests {
         }
         assert!(covered.iter().all(|&c| c));
         assert!(
-            f[0].fields.iter().any(|x| x.proof == Proof::Hypothesis),
-            "the name bytes are a hypothesis"
+            f[0].fields.iter().all(|x| x.proof == Proof::Disassembly),
+            "no hypothesis is left in the frame"
         );
         // The read-back of the reference is the measured fragments.
         assert_eq!(
@@ -880,11 +1133,7 @@ mod tests {
         );
         let text = render_frames(&f);
         assert!(text.contains("53 55 43 6c 61 76 69 65 72"));
-        assert!(
-            text.contains("[hypothèse]")
-                && text.contains("[plist]")
-                && text.contains("[désassemblage]")
-        );
+        assert!(text.contains("[désassemblage]") && !text.contains("[hypothèse]"));
         // Full-length names: no padding field beyond 32, still 65 bytes.
         let f = frames_for(&"Z".repeat(32)).unwrap();
         assert_eq!(f[0].report.len(), 65);
@@ -903,16 +1152,22 @@ mod tests {
     }
 
     #[test]
-    fn production_state_is_not_proven() {
-        assert_eq!(SEQUENCE_PROOF, SequenceProof::NotProven);
-        assert!(UNKNOWNS.len() >= 5 && VALIDATION_EXPERIMENTS.len() >= 3);
-        // No production source constructs `SequenceProof::Proven`: only the
-        // tests of this module may (the flag flips with a reviewed commit).
+    fn production_proof_is_established_here_and_nowhere_else() {
+        assert_eq!(SEQUENCE_PROOF, SequenceProof::EstablishedByDisassembly);
+        assert!(SEQUENCE_PROOF.describe().contains("0x4d2fe"));
+        assert!(!SequenceProof::NotProven.describe().is_empty());
+        assert!(UNKNOWNS.len() >= 3 && RESOLVED_BY_DISASSEMBLY.len() >= 3);
+        assert!(UNKNOWNS.iter().filter(|u| u.contains("RISK NOT MEASURED")).count() >= 2);
+        assert!(VALIDATION_EXPERIMENTS.iter().any(|e| e.starts_with("E1 DONE")));
+        // No production source constructs `SequenceProof::EstablishedByDisassembly`
+        // except this module (the constant and the comparison in `run`).
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut seen_self = false;
         for d in [
             "akm-core/src",
             "apple-kb-monitord/src",
             "crates/akmctl/src",
+            "crates/akm-helper/src",
             "src",
         ] {
             let mut stack = vec![root.join(d)];
@@ -930,21 +1185,28 @@ mod tests {
                         continue;
                     }
                     let text = std::fs::read_to_string(&p).unwrap();
-                    let prod = if p.ends_with("akm-core/src/devname.rs") {
+                    let is_self = p.ends_with("akm-core/src/devname.rs");
+                    let prod = if is_self {
                         text.split("#[cfg(test)]").next().unwrap().to_string()
                     } else {
                         text
                     };
-                    let hits = prod.matches("SequenceProof::Proven").count();
-                    let allowed = usize::from(p.ends_with("akm-core/src/devname.rs")) * 2;
-                    assert!(
-                        hits <= allowed,
-                        "{} names SequenceProof::Proven",
-                        p.display()
-                    );
+                    // Code lines only (doc comments may name the variant).
+                    let hits = prod
+                        .lines()
+                        .filter(|l| !l.trim_start().starts_with("//"))
+                        .filter(|l| l.contains("SequenceProof::EstablishedByDisassembly"))
+                        .count();
+                    if is_self {
+                        seen_self = true;
+                        assert_eq!(hits, 2, "the constant and the comparison in run()");
+                    } else {
+                        assert_eq!(hits, 0, "{} constructs the proof", p.display());
+                    }
                 }
             }
         }
+        assert!(seen_self);
     }
 
     #[test]
@@ -1027,6 +1289,7 @@ mod tests {
             recent_read_failure: false,
             doctor_green: true,
             interactive: true,
+            control_mtu: Some(672),
         }
     }
 
@@ -1046,6 +1309,15 @@ mod tests {
         );
         one(|p| p.doctor_green = false, PreflightFail::DoctorNotGreen);
         one(|p| p.interactive = false, PreflightFail::NotInteractive);
+        one(|p| p.control_mtu = None, PreflightFail::ControlMtuUnknown);
+        one(
+            |p| p.control_mtu = Some(65),
+            PreflightFail::ControlMtuTooSmall(65),
+        );
+        one(
+            |p| p.control_mtu = Some(48),
+            PreflightFail::ControlMtuTooSmall(48),
+        );
         one(
             |p| {
                 p.battery_pct = Some(19.9);
@@ -1067,14 +1339,25 @@ mod tests {
             },
             PreflightFail::Battery,
         );
-        // Either condition is enough.
+        // The MTU lock: exactly 66 passes, every value below fails.
+        let mut p = green();
+        p.control_mtu = Some(MIN_CONTROL_MTU);
+        assert!(preflight(&p).is_empty());
+        for m in 0..MIN_CONTROL_MTU {
+            p.control_mtu = Some(m);
+            assert_eq!(preflight(&p), vec![PreflightFail::ControlMtuTooSmall(m)]);
+        }
+        assert!(PreflightFail::ControlMtuUnknown.is_mtu());
+        assert!(PreflightFail::ControlMtuTooSmall(1).is_mtu());
+        assert!(!PreflightFail::Battery.is_mtu());
+        // Either battery condition is enough.
         let mut p = green();
         p.battery_pct = Some(5.0);
         assert!(preflight(&p).is_empty(), "state normal");
         p.battery_pct = Some(20.0);
         p.battery_state_normal = None;
         assert!(preflight(&p).is_empty(), ">= 20 %");
-        assert_eq!(preflight(&Preflight::default()).len(), 4);
+        assert_eq!(preflight(&Preflight::default()).len(), 5);
         for f in preflight(&Preflight::default()) {
             assert!(!f.describe().is_empty());
         }
@@ -1134,6 +1417,13 @@ mod tests {
         }
     }
 
+    fn back(raw: Vec<u8>) -> Reconnect {
+        Reconnect::Back {
+            raw,
+            bluez_name: Some("sim".into()),
+        }
+    }
+
     impl RenameEnv for Sim {
         fn preflight(&mut self) -> Preflight {
             self.calls += 1;
@@ -1176,19 +1466,21 @@ mod tests {
         }
     }
 
+    /// All three locks lifted: configuration on, MTU 672 (green), name typed.
     fn rename(sim: &mut Sim, name: &str, proof: SequenceProof) -> Outcome {
         run(
             &Request::Rename(name.into()),
             proof,
+            true,
             &mut WriteSession::new(),
             sim,
         )
     }
 
     #[test]
-    fn production_proof_refuses_before_touching_anything() {
+    fn not_proven_refuses_before_touching_anything() {
         let mut sim = Sim::new("Bureau");
-        let o = rename(&mut sim, "Bureau", SEQUENCE_PROOF);
+        let o = rename(&mut sim, "Bureau", SequenceProof::NotProven);
         assert_eq!(o, Outcome::NotProven);
         assert!(!o.wrote());
         assert!(sim.spy.writes.borrow().is_empty());
@@ -1201,37 +1493,117 @@ mod tests {
     }
 
     #[test]
-    fn full_sequence_on_a_spy_backup_first_then_one_write_then_verify() {
+    fn lock_1_configuration_off_refuses_before_any_pre_flight_or_probe() {
         let mut sim = Sim::new("Bureau");
-        let expected = expected_readback(&frames_for("Bureau").unwrap());
-        sim.back = Reconnect::Back(expected);
-        let o = rename(&mut sim, "Bureau", SequenceProof::Proven);
-        assert_eq!(
-            o,
-            Outcome::Verified {
-                backup: Some("/sim/devname-backup.json".into())
-            }
+        let o = run(
+            &Request::Rename("Bureau".into()),
+            SEQUENCE_PROOF,
+            false,
+            &mut WriteSession::new(),
+            &mut sim,
         );
-        // Order: backup, confirmation, then the single write.
+        assert_eq!(o, Outcome::ConfigDisabled);
+        assert!(!o.wrote());
+        assert_eq!(sim.calls, 0, "no pre-flight, so no MTU probe either");
+        assert!(sim.spy.events.borrow().is_empty() && sim.spy.writes.borrow().is_empty());
+        let l = sim.log.join("\n");
+        assert!(l.contains("lock 1") && l.contains("allow_device_name_write = true"), "{l}");
+        // The default of the configuration is the lock closed.
+        assert!(!crate::config::Config::default().allow_device_name_write);
+        // Restore is behind the same lock.
+        let raw = raw_from_frames(&measured_frames()).unwrap();
+        let b = Backup::new("m", &raw, 1, "daemon-cache").unwrap();
+        let mut sim = Sim::new("Clavier de maria #1");
         assert_eq!(
-            *sim.spy.events.borrow(),
-            vec!["backup", "confirm", "write 0x55"]
+            run(&Request::Restore(b), SEQUENCE_PROOF, false, &mut WriteSession::new(), &mut sim),
+            Outcome::ConfigDisabled
         );
-        let w = sim.spy.writes.borrow();
-        assert_eq!(w.len(), 1);
-        assert_eq!(w[0].0, WriteOp::DeviceName);
-        assert_eq!(w[0].1, frames_for("Bureau").unwrap()[0].report);
-        assert_eq!(sim.backups[0].name, "Clavier de maria #1");
-        // Every byte sent is in the journal.
-        assert!(sim.log.iter().any(|l| l.contains(&hex(&w[0].1))));
+        assert!(sim.spy.writes.borrow().is_empty());
+    }
+
+    #[test]
+    fn lock_2_mtu_unknown_or_too_small_refuses_before_backup_and_confirmation() {
+        for (mtu, want) in [
+            (None, PreflightFail::ControlMtuUnknown),
+            (Some(48), PreflightFail::ControlMtuTooSmall(48)),
+            (Some(65), PreflightFail::ControlMtuTooSmall(65)),
+        ] {
+            let mut sim = Sim::new("Bureau");
+            sim.pre.control_mtu = mtu;
+            let o = rename(&mut sim, "Bureau", SEQUENCE_PROOF);
+            assert_eq!(o, Outcome::Preflight(vec![want.clone()]), "{mtu:?}");
+            assert!(!o.wrote());
+            assert_eq!(sim.calls, 1);
+            assert!(
+                sim.spy.events.borrow().is_empty(),
+                "{mtu:?}: no backup, no confirmation, no write"
+            );
+            assert!(sim.log.iter().any(|l| l.contains("MTU")), "{mtu:?}");
+        }
+        // Exactly 66 lifts the lock.
+        let mut sim = Sim::new("Bureau");
+        sim.pre.control_mtu = Some(MIN_CONTROL_MTU);
+        sim.back = back(expected_readback(&frames_for("Bureau").unwrap()));
+        assert!(matches!(
+            rename(&mut sim, "Bureau", SEQUENCE_PROOF),
+            Outcome::Verified { .. }
+        ));
+        assert!(sim.log.iter().any(|l| l.contains("lock 2 lifted") && l.contains("66")));
+    }
+
+    #[test]
+    fn lock_3_wrong_confirmation_writes_nothing_after_the_backup() {
+        let mut sim = Sim::new("wrong");
+        let o = rename(&mut sim, "Bureau", SEQUENCE_PROOF);
+        assert_eq!(o, Outcome::Cancelled);
+        assert!(!o.wrote());
+        assert_eq!(*sim.spy.events.borrow(), vec!["backup", "confirm"]);
+        assert!(sim.spy.writes.borrow().is_empty());
+        assert!(sim.log.iter().any(|l| l.contains("lock 3")));
+    }
+
+    #[test]
+    fn three_locks_lifted_the_fixture_frame_is_sent_once_after_the_backup() {
+        let fx = fixture();
+        for ex in fx["examples"].as_array().unwrap() {
+            let name = ex["name"].as_str().unwrap();
+            let want = unhex(ex["report_hex"].as_str().unwrap()).unwrap();
+            let mut sim = Sim::new(name);
+            sim.back = back(unhex(ex["readback_0x51_0x54_expected_hex"].as_str().unwrap()).unwrap());
+            let o = rename(&mut sim, name, SEQUENCE_PROOF);
+            assert_eq!(
+                o,
+                Outcome::Verified {
+                    backup: Some("/sim/devname-backup.json".into()),
+                    bluez_name: Some("sim".into()),
+                },
+                "{name}"
+            );
+            // Order: backup, confirmation, then the single write.
+            assert_eq!(
+                *sim.spy.events.borrow(),
+                vec!["backup", "confirm", "write 0x55"],
+                "{name}"
+            );
+            let w = sim.spy.writes.borrow();
+            assert_eq!(w.len(), 1, "{name}: exactly one frame");
+            assert_eq!(w[0].0, WriteOp::DeviceName);
+            assert_eq!(w[0].1, want, "{name}: the fixture bytes, exactly");
+            assert_eq!(w[0].1.len(), 65);
+            assert_eq!(sim.backups[0].name, "Clavier de maria #1");
+            // Every byte sent is in the journal, with the wire form.
+            assert!(sim.log.iter().any(|l| l.contains(&hex(&w[0].1))));
+            assert!(sim.log.iter().any(|l| l.contains(&format!("wire 53 {}", hex(&w[0].1)))));
+            assert_eq!(sim.calls, 2, "pre-flight, then the connection re-check");
+        }
     }
 
     #[test]
     fn reference_frame_reaches_the_spy_byte_for_byte() {
         let mut sim = Sim::new("Clavier de maria #1");
-        sim.back = Reconnect::Back(raw_from_frames(&measured_frames()).unwrap());
+        sim.back = back(raw_from_frames(&measured_frames()).unwrap());
         assert!(matches!(
-            rename(&mut sim, "Clavier de maria #1", SequenceProof::Proven),
+            rename(&mut sim, "Clavier de maria #1", SEQUENCE_PROOF),
             Outcome::Verified { .. }
         ));
         assert_eq!(sim.spy.writes.borrow()[0].1, REF_CLAVIER.to_vec());
@@ -1260,6 +1632,12 @@ mod tests {
             (Box::new(|s| s.pre.interactive = false), "x", |o| {
                 matches!(o, Outcome::Preflight(_))
             }),
+            (Box::new(|s| s.pre.control_mtu = None), "x", |o| {
+                matches!(o, Outcome::Preflight(_))
+            }),
+            (Box::new(|s| s.pre.control_mtu = Some(60)), "x", |o| {
+                matches!(o, Outcome::Preflight(_))
+            }),
             (
                 Box::new(|s| {
                     s.pre.battery_pct = Some(3.0);
@@ -1281,7 +1659,7 @@ mod tests {
         for (i, (setup, name, want)) in cases.into_iter().enumerate() {
             let mut sim = Sim::new(if i == 1 { "wrong" } else { "x" });
             setup(&mut sim);
-            let o = rename(&mut sim, name, SequenceProof::Proven);
+            let o = rename(&mut sim, name, SEQUENCE_PROOF);
             assert!(want(&o), "case {i}: {o:?}");
             assert!(!o.wrote(), "case {i}");
             assert!(
@@ -1292,7 +1670,7 @@ mod tests {
         // A backup failure stops before the confirmation.
         let mut sim = Sim::new("x");
         sim.backup_fails = true;
-        rename(&mut sim, "x", SequenceProof::Proven);
+        rename(&mut sim, "x", SEQUENCE_PROOF);
         assert_eq!(*sim.spy.events.borrow(), vec!["backup"]);
     }
 
@@ -1300,11 +1678,12 @@ mod tests {
     fn a_used_session_refuses_a_second_write() {
         let mut s = WriteSession::new();
         let mut sim = Sim::new("x");
-        sim.back = Reconnect::Back(expected_readback(&frames_for("x").unwrap()));
+        sim.back = back(expected_readback(&frames_for("x").unwrap()));
         assert!(matches!(
             run(
                 &Request::Rename("x".into()),
-                SequenceProof::Proven,
+                SEQUENCE_PROOF,
+                true,
                 &mut s,
                 &mut sim
             ),
@@ -1313,7 +1692,8 @@ mod tests {
         let mut sim2 = Sim::new("y");
         let o = run(
             &Request::Rename("y".into()),
-            SequenceProof::Proven,
+            SEQUENCE_PROOF,
+            true,
             &mut s,
             &mut sim2,
         );
@@ -1328,20 +1708,21 @@ mod tests {
     fn failure_mismatch_and_timeout_stop_without_retry() {
         let mut sim = Sim::new("x");
         sim.spy.fail = true;
-        let o = rename(&mut sim, "x", SequenceProof::Proven);
+        let o = rename(&mut sim, "x", SEQUENCE_PROOF);
         assert!(matches!(o, Outcome::WriteFailed(_)) && o.wrote());
         assert_eq!(sim.spy.writes.borrow().len(), 1, "one attempt only");
 
         let mut sim = Sim::new("x");
-        let o = rename(&mut sim, "x", SequenceProof::Proven);
+        let o = rename(&mut sim, "x", SEQUENCE_PROOF);
         assert_eq!(o, Outcome::NoReconnect);
         assert_eq!(sim.spy.writes.borrow().len(), 1);
 
         let mut sim = Sim::new("x");
-        sim.back = Reconnect::Back(vec![0; 32]);
-        let o = rename(&mut sim, "x", SequenceProof::Proven);
+        sim.back = back(vec![0; 32]);
+        let o = rename(&mut sim, "x", SEQUENCE_PROOF);
         assert!(matches!(o, Outcome::Mismatch { ref backup, .. } if backup.is_some()));
         assert_eq!(sim.spy.writes.borrow().len(), 1);
+        assert!(sim.log.iter().any(|l| l.contains("Device1.Name") && l.contains("informative")));
     }
 
     #[test]
@@ -1350,14 +1731,21 @@ mod tests {
         let b = Backup::new("04:DB:56:CA:42:EE", &raw, 1, "daemon-cache").unwrap();
         let mut sim = Sim::new("Clavier de maria #1");
         sim.cached = Some(expected_readback(&frames_for("x").unwrap()));
-        sim.back = Reconnect::Back(raw.clone());
+        sim.back = back(raw.clone());
         let o = run(
             &Request::Restore(b.clone()),
-            SequenceProof::Proven,
+            SEQUENCE_PROOF,
+            true,
             &mut WriteSession::new(),
             &mut sim,
         );
-        assert_eq!(o, Outcome::Verified { backup: None });
+        assert_eq!(
+            o,
+            Outcome::Verified {
+                backup: None,
+                bluez_name: Some("sim".into())
+            }
+        );
         assert_eq!(*sim.spy.events.borrow(), vec!["confirm", "write 0x55"]);
         let w = sim.spy.writes.borrow();
         assert_eq!(&w[0].1[1..33], &raw[..]);
@@ -1366,8 +1754,9 @@ mod tests {
         let mut sim = Sim::new("no");
         assert_eq!(
             run(
-                &Request::Restore(b),
-                SequenceProof::Proven,
+                &Request::Restore(b.clone()),
+                SEQUENCE_PROOF,
+                true,
                 &mut WriteSession::new(),
                 &mut sim
             ),
@@ -1376,11 +1765,11 @@ mod tests {
         assert!(sim.spy.writes.borrow().is_empty());
         // Restore is refused as well while the sequence is not proven.
         let mut sim = Sim::new("x");
-        let b = Backup::new("m", &raw, 1, "daemon-cache").unwrap();
         assert_eq!(
             run(
                 &Request::Restore(b),
-                SEQUENCE_PROOF,
+                SequenceProof::NotProven,
+                true,
                 &mut WriteSession::new(),
                 &mut sim
             ),
