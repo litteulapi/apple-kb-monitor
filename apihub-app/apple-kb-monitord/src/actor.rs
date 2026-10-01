@@ -22,7 +22,7 @@ use akm_core::history::{
 use akm_core::link::LinkTracker;
 use akm_core::machine::{Action, Event, Machine, RSSI_MAX_AGE};
 use akm_core::rssi::{self, RssiTracker};
-use akm_core::{hidraw, led, power, KbReport, Snapshot, Watch};
+use akm_core::{discover, hidraw, led, power, KbReport, Snapshot, Watch};
 
 use crate::events::{DeviceEvent, EventHub};
 use crate::{bluez, notify, watcher};
@@ -197,6 +197,7 @@ impl Actor {
             }
         };
         self.last_error = err;
+        gate_wake_monitor(report.as_ref(), mac);
         match report {
             Some(k) => {
                 let mac = k.device.mac.clone();
@@ -245,6 +246,7 @@ impl Actor {
 
     fn clear(&mut self) {
         self.kb = None;
+        hidraw::set_wake_monitor_enabled(false);
         self.rssi.clear();
         self.rssi_at = None;
         hidraw::close_hid_fd();
@@ -321,7 +323,7 @@ impl Actor {
                 if self.opts.notify {
                     notify::battery_crossing(&c);
                     if c.urgency == Urgency::Critical {
-                        led::flash_capslock(5);
+                        led::flash_capslock_for(mac.clone(), 5);
                     }
                 }
                 if let Some(mac) = mac {
@@ -423,6 +425,15 @@ impl Actor {
     }
 }
 
+/// The wake monitor reads report 0x13: run it only for an acquired keyboard
+/// whose descriptor declares it (BCM2042), never for a Magic Keyboard (#129).
+fn gate_wake_monitor(report: Option<&KbReport>, mac: Option<&str>) {
+    let mac = report.and_then(|k| k.device.mac.as_deref()).or(mac);
+    hidraw::set_wake_monitor_enabled(
+        report.is_some() && discover::wake_supported_in(std::path::Path::new("/sys"), mac),
+    );
+}
+
 /// Handle on a running supervised actor.
 pub struct ActorHandle {
     quit: Arc<AtomicBool>,
@@ -499,7 +510,6 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
     let (tx, rx) = mpsc::channel::<Msg>();
     mailbox.install(tx.clone());
     watcher::spawn_signal_watcher(tx);
-    hidraw::ensure_wake_monitor();
     let mut machine = Machine::new();
     let mut actor = Actor::new(opts);
     watch.publish(actor.snapshot());
