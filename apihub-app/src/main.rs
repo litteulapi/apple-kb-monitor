@@ -1,10 +1,14 @@
+mod instance;
 mod keyboard;
+mod portal;
 mod source;
 mod tray;
+mod view;
 
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
+use view::{Level, Palette};
 use std::thread;
 use std::time::Duration;
 
@@ -40,8 +44,11 @@ struct ApiHubApp {
     diag_results: Arc<Mutex<Vec<DiagResult>>>,
     diag_running: Arc<AtomicBool>,
     quit_flag: Arc<AtomicBool>,
-    // Tray "Show Window" flag
+    // Set by a second launch / D-Bus Activate / tray: bring the window to front
     tray_show_window: Arc<AtomicBool>,
+    appearance: portal::Shared,
+    applied: Option<portal::Appearance>,
+    palette: Palette,
     // Battery history graph
     battery_history: Vec<(f64, f64)>,    // (timestamp, percentage)
     voltage_history: Vec<(f64, f64)>,    // (timestamp, voltage)
@@ -51,7 +58,7 @@ impl ApiHubApp {
     /// Create the GUI app. Does NOT spawn the acquisition — it is owned by
     /// main() and shared through the `Watch`.
     fn new(
-        _cc: &eframe::CreationContext<'_>,
+        cc: &eframe::CreationContext<'_>,
         state: State,
         tray_show_window: Arc<AtomicBool>,
         quit_flag: Arc<AtomicBool>,
@@ -75,6 +82,9 @@ impl ApiHubApp {
             diag_running: Arc::new(AtomicBool::new(false)),
             quit_flag,
             tray_show_window,
+            appearance: portal::spawn(cc.egui_ctx.clone()),
+            applied: None,
+            palette: Palette::new(cc.egui_ctx.style().visuals.dark_mode),
             battery_history,
             voltage_history,
         }
@@ -88,27 +98,30 @@ impl eframe::App for ApiHubApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
 
-        // Dark theme + enforce 16px minimum — once only
+        // 16px minimum text size — once only
         if !self.style_initialized {
-            ctx.set_visuals(egui::Visuals::dark());
             let mut style = (*ctx.style()).clone();
             for (_text_style, font_id) in style.text_styles.iter_mut() {
                 if font_id.size < 16.0 {
                     font_id.size = 16.0;
                 }
             }
-            style.visuals.window_rounding = egui::Rounding::same(8.0);
-            style.visuals.widgets.noninteractive.rounding = egui::Rounding::same(4.0);
-            style.visuals.widgets.inactive.rounding = egui::Rounding::same(4.0);
-            style.visuals.widgets.hovered.rounding = egui::Rounding::same(4.0);
-            style.visuals.widgets.active.rounding = egui::Rounding::same(4.0);
             style.spacing.item_spacing = egui::Vec2::new(8.0, 6.0);
             ctx.set_style(style);
             self.style_initialized = true;
         }
 
+        // Follow the system (portal) light/dark scheme and accent, live.
+        let wanted = *self.appearance.lock().unwrap_or_else(|e| e.into_inner());
+        if self.applied != Some(wanted) {
+            apply_appearance(ctx, &wanted);
+            self.palette = Palette::new(ctx.style().visuals.dark_mode);
+            self.applied = Some(wanted);
+        }
+
         // Check if tray requested window show
         if self.tray_show_window.swap(false, Ordering::Relaxed) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
@@ -134,12 +147,40 @@ impl eframe::App for ApiHubApp {
     }
 }
 
+/// Light/dark + accent from the portal; no portal answer = toolkit default.
+fn apply_appearance(ctx: &egui::Context, a: &portal::Appearance) {
+    let mut visuals = match a.scheme {
+        Some(portal::Scheme::Dark) => egui::Visuals::dark(),
+        Some(portal::Scheme::Light) => egui::Visuals::light(),
+        None => ctx.style().visuals.clone(),
+    };
+    if let Some([r, g, b]) = a.accent {
+        let accent = view::accent_color([r, g, b]);
+        visuals.selection.bg_fill = accent;
+        visuals.selection.stroke.color = if visuals.dark_mode { egui::Color32::WHITE } else { egui::Color32::BLACK };
+        visuals.hyperlink_color = accent;
+    }
+    visuals.window_rounding = egui::Rounding::same(8.0);
+    visuals.widgets.noninteractive.rounding = egui::Rounding::same(4.0);
+    visuals.widgets.inactive.rounding = egui::Rounding::same(4.0);
+    visuals.widgets.hovered.rounding = egui::Rounding::same(4.0);
+    visuals.widgets.active.rounding = egui::Rounding::same(4.0);
+    ctx.set_visuals(visuals);
+}
+
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
 impl ApiHubApp {
+    fn tint(&self, t: egui::RichText, l: Level) -> egui::RichText {
+        match self.palette.color(l) {
+            Some(c) => t.color(c),
+            None => t,
+        }
+    }
+
     fn tab_keyboard(&mut self, ui: &mut egui::Ui, snap: &Snapshot) {
         if let Some(ref err) = snap.kb_error {
-            ui.label(egui::RichText::new(err.as_str()).size(16.0).color(egui::Color32::from_rgb(255, 100, 100)));
+            ui.label(egui::RichText::new(err.as_str()).size(16.0).color(self.palette.bad));
         }
 
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -148,46 +189,33 @@ impl ApiHubApp {
                 ui.label(egui::RichText::new("Waiting for keyboard data...").size(16.0));
             }
             Some(kb) => {
-                let pct = kb.battery.percentage_fine
+                let pct: Option<f64> = kb.battery.percentage_fine
                     .or(kb.battery.percentage_interpolated)
-                    .or(kb.battery.percentage)
-                    .unwrap_or(0.0);
+                    .or(kb.battery.percentage);
 
                 // Top row: battery tile + radio tile side by side
                 ui.columns(2, |cols| {
                     // LEFT: Battery tile
                     cols[0].group(|ui| {
                         ui.vertical_centered(|ui| {
-                            let color = if pct > 50.0 {
-                                egui::Color32::from_rgb(80, 220, 100)
-                            } else if pct > 20.0 {
-                                egui::Color32::from_rgb(255, 200, 50)
-                            } else {
-                                egui::Color32::from_rgb(255, 70, 70)
-                            };
-                            ui.colored_label(color,
-                                egui::RichText::new(format!("{:.0}%", pct)).size(28.0).strong());
+                            ui.label(self.tint(
+                                egui::RichText::new(view::pct_text(pct, 0)).size(28.0).strong(),
+                                view::battery_level(pct)));
                             // Battery type subtitle under hero percentage
                             if let Some(v) = kb.battery.voltage {
                                 ui.label(egui::RichText::new(keyboard::detect_battery_type(v))
                                     .weak().size(16.0));
                             }
-                            ui.add(egui::ProgressBar::new((pct / 100.0).clamp(0.0, 1.0) as f32)
-                                .text(format!("{:.1}%", pct)));
+                            ui.add(egui::ProgressBar::new(view::pct_fraction(pct))
+                                .text(view::pct_text(pct, 1)));
                         });
                         ui.add_space(4.0);
                         egui::Grid::new("bat_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(v) = kb.battery.voltage {
                                 ui.label(egui::RichText::new("Voltage").weak().size(16.0));
-                                // Colored voltage indicator
-                                let v_color = if v > 2.8 {
-                                    egui::Color32::from_rgb(80, 220, 100)
-                                } else if v > 2.4 {
-                                    egui::Color32::from_rgb(255, 200, 50)
-                                } else {
-                                    egui::Color32::from_rgb(255, 70, 70)
-                                };
-                                ui.label(egui::RichText::new(format!("{:.3} V", v)).strong().size(18.0).color(v_color));
+                                ui.label(self.tint(
+                                    egui::RichText::new(format!("{:.3} V", v)).strong().size(18.0),
+                                    view::voltage_level(v)));
                                 ui.end_row();
                             }
                             if let Some(adc) = kb.battery.adc_raw {
@@ -203,10 +231,10 @@ impl ApiHubApp {
                             // LED state
                             ui.label(egui::RichText::new("LEDs").weak().size(16.0));
                             ui.horizontal(|ui| {
-                                let caps_color = if snap.caps_lock { egui::Color32::from_rgb(80, 220, 100) } else { egui::Color32::GRAY };
-                                let num_color = if snap.num_lock { egui::Color32::from_rgb(80, 220, 100) } else { egui::Color32::GRAY };
-                                ui.label(egui::RichText::new("CAPS").size(16.0).color(caps_color).strong());
-                                ui.label(egui::RichText::new("NUM").size(16.0).color(num_color).strong());
+                                let on = |b: bool| if b { Level::Good } else { Level::Unknown };
+                                let weak = |b: bool, t: egui::RichText| if b { t } else { t.weak() };
+                                ui.label(weak(snap.caps_lock, self.tint(egui::RichText::new("CAPS").size(16.0).strong(), on(snap.caps_lock))));
+                                ui.label(weak(snap.num_lock, self.tint(egui::RichText::new("NUM").size(16.0).strong(), on(snap.num_lock))));
                             });
                             ui.end_row();
                         });
@@ -218,48 +246,24 @@ impl ApiHubApp {
                         ui.add_space(4.0);
                         egui::Grid::new("radio_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             let rssi = kb.radio.rssi_dbm;
-                            if let Some(r) = rssi {
-                                ui.label(egui::RichText::new("RSSI").weak().size(16.0));
-                                let color = if r > -60 {
-                                    egui::Color32::from_rgb(80, 220, 100)
-                                } else if r > -80 {
-                                    egui::Color32::from_rgb(255, 200, 50)
-                                } else {
-                                    egui::Color32::from_rgb(255, 70, 70)
-                                };
-                                // Signal bars based on RSSI strength
-                                let bars = if r > -50 {
-                                    "\u{2582}\u{2584}\u{2586}\u{2588}"
-                                } else if r > -60 {
-                                    "\u{2582}\u{2584}\u{2586}\u{2581}"
-                                } else if r > -70 {
-                                    "\u{2582}\u{2584}\u{2581}\u{2581}"
-                                } else if r > -80 {
-                                    "\u{2582}\u{2581}\u{2581}\u{2581}"
-                                } else {
-                                    "\u{2581}\u{2581}\u{2581}\u{2581}"
-                                };
-                                ui.horizontal(|ui| {
-                                    ui.colored_label(color, egui::RichText::new(format!("{} dBm", r)).strong().size(18.0));
-                                    ui.colored_label(color, egui::RichText::new(bars).size(18.0));
+                            ui.label(egui::RichText::new("RSSI").weak().size(16.0));
+                            let lvl = view::rssi_level(rssi);
+                            ui.horizontal(|ui| {
+                                ui.label(self.tint(egui::RichText::new(view::rssi_text(rssi)).strong().size(18.0), lvl));
+                                ui.label(self.tint(egui::RichText::new(view::rssi_bars(rssi)).size(18.0), lvl));
+                                if view::rssi_valid(rssi).is_some() {
                                     if let Some(age) = snap.rssi_age_s(unix_now()) {
                                         ui.label(egui::RichText::new(format!("({:.0}s ago)", age)).weak().size(12.0));
                                     }
-                                });
-                                ui.end_row();
-                            }
-                            if let Some(tx) = kb.radio.tx_power_dbm {
-                                ui.label(egui::RichText::new("TX Power").weak().size(16.0));
-                                ui.label(egui::RichText::new(format!("{} dBm", tx)).size(16.0));
-                                ui.end_row();
-                            }
+                                }
+                            });
+                            ui.end_row();
+                            ui.label(egui::RichText::new("TX Power").weak().size(16.0));
+                            ui.label(egui::RichText::new(view::tx_power_text(kb.radio.tx_power_dbm)).size(16.0));
+                            ui.end_row();
                             ui.label(egui::RichText::new("Connected").weak().size(16.0));
-                            let (txt, col) = if kb.bluetooth.connected {
-                                ("Yes", egui::Color32::from_rgb(80, 220, 100))
-                            } else {
-                                ("No", egui::Color32::from_rgb(255, 70, 70))
-                            };
-                            ui.label(egui::RichText::new(txt).strong().size(16.0).color(col));
+                            let (txt, lvl) = if kb.bluetooth.connected { ("Yes", Level::Good) } else { ("No", Level::Bad) };
+                            ui.label(self.tint(egui::RichText::new(txt).strong().size(16.0), lvl));
                             ui.end_row();
 
                             ui.label(egui::RichText::new("Paired").weak().size(16.0));
@@ -398,7 +402,8 @@ impl ApiHubApp {
             let rect = response.rect;
 
             // Background
-            painter.rect_filled(rect, 4.0, egui::Color32::from_rgb(20, 22, 28));
+            let vis = ui.visuals().clone();
+            painter.rect_filled(rect, 4.0, vis.extreme_bg_color);
 
             // Margins inside the chart
             let margin = 8.0;
@@ -429,7 +434,7 @@ impl ApiHubApp {
                     egui::Align2::CENTER_CENTER,
                     "Not enough data points",
                     egui::FontId::proportional(14.0),
-                    egui::Color32::GRAY,
+                    vis.weak_text_color(),
                 );
                 return;
             }
@@ -467,19 +472,19 @@ impl ApiHubApp {
                 let y = map_batt(t_min, level).y;
                 painter.line_segment(
                     [egui::Pos2::new(plot_rect.min.x, y), egui::Pos2::new(plot_rect.max.x, y)],
-                    egui::Stroke::new(0.5, egui::Color32::from_rgb(50, 52, 58)),
+                    egui::Stroke::new(0.5, vis.widgets.noninteractive.bg_stroke.color),
                 );
                 painter.text(
                     egui::Pos2::new(plot_rect.min.x + 2.0, y - 10.0),
                     egui::Align2::LEFT_BOTTOM,
                     format!("{:.0}%", level),
                     egui::FontId::proportional(10.0),
-                    egui::Color32::from_rgb(100, 100, 110),
+                    vis.weak_text_color(),
                 );
             }
 
             // Draw battery % line (green)
-            let batt_color = egui::Color32::from_rgb(80, 220, 100);
+            let batt_color = self.palette.good;
             for pair in batt_data.windows(2) {
                 let p0 = map_batt(pair[0].0, pair[0].1);
                 let p1 = map_batt(pair[1].0, pair[1].1);
@@ -487,7 +492,7 @@ impl ApiHubApp {
             }
 
             // Draw voltage line (cyan)
-            let volt_color = egui::Color32::from_rgb(100, 180, 255);
+            let volt_color = self.palette.info;
             for pair in volt_data.windows(2) {
                 let p0 = map_volt(pair[0].0, pair[0].1);
                 let p1 = map_volt(pair[1].0, pair[1].1);
@@ -501,7 +506,7 @@ impl ApiHubApp {
                 egui::Align2::RIGHT_TOP,
                 format!("Battery %  |  Voltage ({:.2}-{:.2} V)", v_min, v_max),
                 egui::FontId::proportional(11.0),
-                egui::Color32::from_rgb(140, 140, 150),
+                vis.weak_text_color(),
             );
             // Color swatches for legend
             let swatch_y = legend_y + 2.0;
@@ -662,8 +667,7 @@ impl ApiHubApp {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("System Diagnostics").strong().size(18.0));
             if is_running {
-                ui.label(egui::RichText::new("Running...").size(16.0)
-                    .color(egui::Color32::from_rgb(255, 200, 50)));
+                ui.label(egui::RichText::new("Running...").size(16.0).color(self.palette.warn));
             } else if ui.button(egui::RichText::new("Run Full Check").size(16.0).strong()).clicked() {
                 self.run_diagnostics();
             }
@@ -687,11 +691,10 @@ impl ApiHubApp {
 
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new(format!("{}/{} passed", ok_count, total)).strong().size(18.0)
-                .color(if fail_count == 0 { egui::Color32::from_rgb(80, 220, 100) }
-                       else { egui::Color32::from_rgb(255, 200, 50) }));
+                .color(if fail_count == 0 { self.palette.good } else { self.palette.warn }));
             if fail_count > 0 {
                 ui.label(egui::RichText::new(format!("  {} issues", fail_count)).size(16.0)
-                    .color(egui::Color32::from_rgb(255, 70, 70)));
+                    .color(self.palette.bad));
             }
         });
 
@@ -700,8 +703,8 @@ impl ApiHubApp {
         egui::ScrollArea::vertical().show(ui, |ui| {
             for r in &results {
                 ui.horizontal(|ui| {
-                    let icon = if r.ok { "\u{2705}" } else { "\u{274C}" };
-                    ui.label(egui::RichText::new(icon).size(16.0));
+                    let (icon, c) = if r.ok { ("OK", self.palette.good) } else { ("FAIL", self.palette.bad) };
+                    ui.label(egui::RichText::new(icon).size(16.0).strong().color(c));
                     ui.label(egui::RichText::new(&r.label).strong().size(16.0));
                     ui.label(egui::RichText::new(&r.detail).weak().size(16.0));
                 });
@@ -712,58 +715,93 @@ impl ApiHubApp {
 
 // ── Entrypoint ──────────────────────────────────────────────────────────────
 
-fn open_window(state: &State, show_window: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBool>) {
+/// Open the window and block until it is closed. Returns false when it
+/// could not be opened (no display / GPU).
+fn open_window(state: &State, raise: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBool>, open: &Arc<AtomicBool>) -> bool {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Apple Keyboard Monitor")
+            .with_app_id(instance::APP_ID)
             .with_inner_size([720.0, 600.0])
             .with_min_inner_size([500.0, 400.0]),
         vsync: true,
         ..Default::default()
     };
-    let (st, sw, qf) = (state.clone(), show_window.clone(), quit_flag.clone());
-    // Blocks until the window is closed.
-    if let Err(e) = eframe::run_native("apihub", options, Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, st, sw, qf))))) {
-        // No display / GPU init failure: stay in tray mode instead of dying silently.
+    let (st, sw, qf) = (state.clone(), raise.clone(), quit_flag.clone());
+    raise.store(false, Ordering::Relaxed);
+    open.store(true, Ordering::Relaxed);
+    let r = eframe::run_native(instance::APP_ID, options, Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, st, sw, qf)))));
+    open.store(false, Ordering::Relaxed);
+    if let Err(ref e) = r {
         eprintln!("[apihub] cannot open window: {}", e);
     }
+    r.is_ok()
 }
 
-fn main() -> eframe::Result<()> {
-    // The keyboard belongs to apple-kb-monitord; this process is a D-Bus
-    // client (tray + window). It acquires locally only while no daemon can
-    // be reached (source.rs). main() sleeps on the tray channel: no polling.
+fn main() {
+    // On-demand window: `apihub-app` or D-Bus `org.freedesktop.Application`
+    // Activate. A second launch raises the running window and exits. The tray
+    // belongs to the daemon; only when the daemon does not provide one does
+    // this process keep the legacy tray (and stay alive after the window).
+    let window_open = Arc::new(AtomicBool::new(false));
+    let raise = Arc::new(AtomicBool::new(false));
+    let (ui_tx, ui_rx) = mpsc::channel();
+    let activate = {
+        let (open, raise, tx) = (window_open.clone(), raise.clone(), Mutex::new(ui_tx.clone()));
+        move || {
+            if open.load(Ordering::Relaxed) {
+                raise.store(true, Ordering::Relaxed);
+            } else {
+                let _ = tx.lock().map(|t| t.send(tray::UiCmd::ShowWindow));
+            }
+        }
+    };
+    let _conn = match instance::claim(activate) {
+        instance::Claim::Existing => {
+            eprintln!("[apihub] already running: window raised");
+            return;
+        }
+        instance::Claim::Primary(c) => Some(c),
+        instance::Claim::NoBus => None,
+    };
+
     let state: State = Arc::new(Watch::new());
     let quit_flag = Arc::new(AtomicBool::new(false));
-    let show_window = Arc::new(AtomicBool::new(false));
-    let (ui_tx, ui_rx) = mpsc::channel();
-    tray::spawn(state.clone(), show_window.clone(), quit_flag.clone(), ui_tx);
     let src = source::spawn(state.clone());
 
-    if std::env::args().any(|a| a == "--show") {
-        open_window(&state, &show_window, &quit_flag);
+    let legacy_tray = !instance::daemon_tray_present();
+    if legacy_tray {
+        eprintln!("[apihub] no daemon tray: legacy tray kept in this process");
+        tray::spawn(state.clone(), raise.clone(), quit_flag.clone(), ui_tx);
     }
-    eprintln!("[apihub] tray mode — click the scarab icon to open the window");
-    while let Ok(cmd) = ui_rx.recv() {
-        match cmd {
-            tray::UiCmd::Quit => break,
-            tray::UiCmd::ShowWindow => {
-                show_window.store(false, Ordering::Relaxed);
-                open_window(&state, &show_window, &quit_flag);
-                if quit_flag.load(Ordering::Relaxed) {
-                    break;
+
+    let shown = open_window(&state, &raise, &quit_flag, &window_open);
+    // Legacy mode only: stay as tray after the window, unless the daemon has
+    // taken over the tray in the meantime or the user quit.
+    if legacy_tray && !quit_flag.load(Ordering::Relaxed) && !instance::daemon_tray_present() {
+        eprintln!("[apihub] window closed — back to tray mode");
+        while let Ok(cmd) = ui_rx.recv() {
+            match cmd {
+                tray::UiCmd::Quit => break,
+                tray::UiCmd::ShowWindow => {
+                    open_window(&state, &raise, &quit_flag, &window_open);
+                    if quit_flag.load(Ordering::Relaxed) || instance::daemon_tray_present() {
+                        break;
+                    }
+                    // Clicks received while the window was open: not a reopen request.
+                    if std::iter::from_fn(|| ui_rx.try_recv().ok()).any(|c| c == tray::UiCmd::Quit) {
+                        break;
+                    }
+                    eprintln!("[apihub] window closed — back to tray mode");
                 }
-                // Clicks on the tray while the window was open only focused it.
-                if std::iter::from_fn(|| ui_rx.try_recv().ok()).any(|c| c == tray::UiCmd::Quit) {
-                    break;
-                }
-                eprintln!("[apihub] window closed — back to tray mode");
             }
         }
     }
     eprintln!("[apihub] shutting down");
     src.stop();
-    Ok(())
+    if !shown {
+        std::process::exit(1);
+    }
 }
 
 #[cfg(test)]
