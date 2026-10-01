@@ -798,5 +798,270 @@ class TestAuditFixes(unittest.TestCase):
         self.assertFalse(r["calib_valid"])
 
 
+# ---------------------------------------------------------------------------
+# #127 / #135: model table = akm-core model.rs
+# ---------------------------------------------------------------------------
+
+_FIX = _ROOT / "tests" / "fixtures"
+
+
+def _hexfile(rel):
+    return bytes.fromhex("".join((_FIX / rel).read_text().split()))
+
+
+def _rust_models():
+    import re as _re
+    src = (_ROOT / "apihub-app" / "akm-core" / "src" / "model.rs").read_text()
+    table = src.split("pub const APPLE_MODELS", 1)[1].split("];", 1)[0]
+    return {int(pid, 16): (name, chip, fam) for pid, name, chip, fam in _re.findall(
+        r'm\(\s*0x([0-9a-fA-F]{4}),\s*"([^"]+)",\s*"([^"]+)",\s*Family::(\w+)', table)}
+
+
+class TestModelTableParity(unittest.TestCase):
+    def test_python_table_is_a_copy_of_model_rs(self):
+        rust = _rust_models()
+        self.assertEqual(len(rust), 17)
+        self.assertEqual(kb.MODELS, rust)
+        self.assertEqual(set(kb.APPLE_PRODUCTS), set(rust))
+
+    def test_wrong_legacy_pids_are_gone(self):
+        for pid in (0x0205, 0x020B, 0x020C, 0x0220, 0x0229, 0x024F, 0x0250):
+            self.assertNotIn(pid, kb.MODELS)
+        self.assertIn("ANSI", kb.MODELS[0x022C][0])
+        self.assertIn("2015", kb.MODELS[0x0267][0])
+
+    def test_chip_and_vendor(self):
+        self.assertIn("BCM2042", kb.identify_chip(0x0239))
+        self.assertIn("BCM20733", kb.identify_chip(0x026C))
+        self.assertIn("unknown", kb.identify_chip(0x024F))
+        self.assertEqual(kb.lookup_model(0x004C, 0x029C)[2], "MagicKeyboard")
+        self.assertIsNone(kb.lookup_model(0x046D, 0x0256))
+        self.assertIsNone(kb.lookup_model(0x05AC, 0x030D))  # Magic Mouse 1
+
+
+class TestRdesc(unittest.TestCase):
+    def test_a1314_keyboard_with_wake(self):
+        is_kb, inputs = kb.parse_rdesc(_hexfile("a1314_iso/report_descriptor.hex"))
+        self.assertTrue(is_kb)
+        self.assertTrue({0x01, 0x11, 0x12, 0x13, 0x47} <= inputs)
+
+    def test_mk2021_without_wake(self):
+        is_kb, inputs = kb.parse_rdesc(_hexfile("models/mk2021_0005_004c_029c_bt.hex"))
+        self.assertTrue(is_kb)
+        self.assertNotIn(0x13, inputs)
+
+    def test_mouse_and_garbage(self):
+        self.assertEqual(kb.parse_rdesc(bytes([0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0x81, 0x02, 0xC0])),
+                         (False, {0}))
+        self.assertEqual(kb.parse_rdesc(b""), (False, set()))
+        self.assertEqual(kb.parse_rdesc(b"\x05"), (False, set()))
+
+
+def _fake_hidraw(tmp, entries):
+    paths = []
+    for node, hid, mac, rdesc in entries:
+        d = Path(tmp) / node / "device"
+        d.mkdir(parents=True)
+        (d / "uevent").write_text(f"HID_ID={hid}\nHID_UNIQ={mac}\n")
+        if rdesc is not None:
+            (d / "report_descriptor").write_bytes(rdesc)
+        paths.append(str(Path(tmp) / node))
+    return sorted(paths)
+
+
+class TestFindDevicesModels(unittest.TestCase):
+    def _find(self, entries):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _fake_hidraw(tmp, entries)
+            real_glob = kb.glob.glob
+            with mock.patch.object(
+                kb.glob, "glob",
+                side_effect=lambda pat: paths if "hidraw*" in pat else real_glob(pat),
+            ):
+                return kb.find_devices()
+
+    def test_selection_by_table_and_descriptor(self):
+        a1314 = _hexfile("a1314_iso/report_descriptor.hex")
+        mk = _hexfile("models/mk2021_0005_004c_029c_bt.hex")
+        mouse = bytes([0x05, 0x01, 0x09, 0x02, 0xA1, 0x01, 0x81, 0x02, 0xC0])
+        devs = self._find([
+            ("hidraw0", "0005:000005AC:0000030D", "aa:bb:cc:dd:ee:01", None),   # Magic Mouse 1
+            ("hidraw1", "0005:0000004C:00000265", "aa:bb:cc:dd:ee:02", None),   # Trackpad 2
+            ("hidraw2", "0005:000005AC:00000256", "aa:bb:cc:dd:ee:03", mouse),  # table PID, not a keyboard
+            ("hidraw3", "0005:000005AC:00000256", "04:db:56:ca:42:ee", a1314),
+            ("hidraw4", "0005:0000004C:0000029C", "aa:bb:cc:dd:ee:05", mk),
+            ("hidraw5", "0005:0000004C:00000267", "aa:bb:cc:dd:ee:06", None),
+        ])
+        by_pid = {d["pid"]: d for d in devs}
+        self.assertEqual([d["path"] for d in devs], ["/dev/hidraw3", "/dev/hidraw4", "/dev/hidraw5"])
+        self.assertTrue(by_pid[0x0256]["wake_report"])
+        self.assertEqual(by_pid[0x0256]["family"], "Bcm2042")
+        self.assertFalse(by_pid[0x029C]["wake_report"])
+        self.assertFalse(by_pid[0x0267]["wake_report"])  # no descriptor: family decides
+        self.assertEqual(by_pid[0x029C]["vid"], 0x004C)
+
+    def test_magic_keyboard_never_polled_for_vendor_reports(self):
+        with mock.patch.object(kb, "read_all_reports", side_effect=AssertionError("polled")):
+            self.assertEqual(kb.read_device_reports({"family": "MagicKeyboard", "path": "/dev/x"}), {})
+        with mock.patch.object(kb, "read_all_reports", return_value={"battery_pct": 50}):
+            self.assertEqual(kb.read_device_reports({"family": "Bcm2042", "path": "/dev/x"}),
+                             {"battery_pct": 50})
+
+
+# ---------------------------------------------------------------------------
+# #129: report 0x13
+# ---------------------------------------------------------------------------
+
+class TestWakeDecode(unittest.TestCase):
+    def test_bits(self):
+        e = kb.decode_input_report(bytes([0x13, 0x01]))
+        self.assertEqual((e["device_ready"], e["connection_request"]), (True, False))
+        e = kb.decode_input_report(bytes([0x13, 0x02]))
+        self.assertEqual((e["device_ready"], e["connection_request"]), (False, True))
+        e = kb.decode_input_report(bytes([0x13, 0x03]))
+        self.assertEqual((e["device_ready"], e["connection_request"]), (True, True))
+
+    def test_zero_and_padding_ignored(self):
+        self.assertIsNone(kb.decode_input_report(bytes([0x13, 0x00])))
+        self.assertIsNone(kb.decode_input_report(bytes([0x13, 0xFC])))
+        self.assertIsNone(kb.decode_input_report(bytes([0x13])))
+
+
+# ---------------------------------------------------------------------------
+# #137: real lengths of Feature Reports, --dump keeps all-zero reports
+# ---------------------------------------------------------------------------
+
+def _fake_ioctl(frames):
+    """ioctl stand-in: fills buf with the frame of buf[0], returns its length."""
+    def ioctl(fd, req, buf, mutate=True):
+        f = frames.get(buf[0])
+        if f is None:
+            raise OSError(5, "EIO")
+        buf[:len(f)] = f
+        return len(f)
+    return ioctl
+
+
+class TestFeatureLengths(unittest.TestCase):
+    def test_short_report_rejected_not_zero_filled(self):
+        frames = {0xF5: bytes([0xF5, 0x03]), 0x47: bytes([0x47, 0x63])}
+        with mock.patch.object(kb.fcntl, "ioctl", side_effect=_fake_ioctl(frames)):
+            self.assertIsNone(kb.hid_get_feature(3, 0xF5))       # 2 < 3 bytes
+            self.assertEqual(kb.hid_get_feature(3, 0x47), bytes([0x47, 0x63]))
+            self.assertIsNone(kb.hid_get_feature(3, 0x99))
+
+    def test_read_all_reports_opens_the_node_once(self):
+        frames = {0x47: bytes([0x47, 0x63]), 0xF5: bytes([0xF5, 0x03, 0x10]),
+                  0x09: bytes([0x09, 0x00, 0x00, 0x00])}
+        with mock.patch.object(kb.os, "open", return_value=99) as op, \
+                mock.patch.object(kb.os, "close"), \
+                mock.patch.object(kb.fcntl, "ioctl", side_effect=_fake_ioctl(frames)):
+            r = kb.read_all_reports("/dev/hidraw7")
+        self.assertEqual(op.call_count, 1)
+        self.assertEqual(r["battery_pct"], 0x63)
+        self.assertEqual(r["adc_raw"], 0x0310)
+        self.assertEqual(r["state_flag"], 0)
+
+    def test_dump_keeps_exact_frames_including_zeros(self):
+        frames = {0x09: bytes([0x09, 0x00, 0x00, 0x00]), 0x4F: bytes([0x4F, 0x50, 0x00]),
+                  0xFE: bytes([0xFE]) + bytes(9)}
+        with mock.patch.object(kb.os, "open", return_value=99), \
+                mock.patch.object(kb.os, "close"), \
+                mock.patch.object(kb.fcntl, "ioctl", side_effect=_fake_ioctl(frames)):
+            res = dict(kb.dump_all_reports("/dev/hidraw7"))
+        self.assertEqual(res[0x09], bytes([0x09, 0, 0, 0]))
+        self.assertEqual(res[0x4F], bytes([0x4F, 0x50, 0x00]))
+        self.assertEqual(len(res[0xFE]), 10)
+        out = io.StringIO()
+        with mock.patch.object(kb, "dump_all_reports", return_value=[(0x09, bytes([9, 0, 0, 0]))]), \
+                contextlib.redirect_stdout(out):
+            kb.print_dump("/dev/hidraw7")
+        self.assertIn("len=4  09000000", out.getvalue())
+
+
+# ---------------------------------------------------------------------------
+# #128: --led through the input layer, this keyboard's state only
+# ---------------------------------------------------------------------------
+
+class TestLed(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.sys = self.root / "sys"
+        self.dev = self.root / "dev"
+        (self.dev / "input").mkdir(parents=True)
+        self.conf = self.root / "keyd"
+        self.conf.mkdir()
+        # Apple keyboard input51/event28, capslock off; another keyboard with capslock ON.
+        for inp, ev, caps in (("input51", "event28", "0"), ("input36", "event5", "1")):
+            (self.sys / "class/input" / inp / ev).mkdir(parents=True)
+            for led, val in (("capslock", caps), ("numlock", "0")):
+                d = self.sys / "class/leds" / f"{inp}::{led}"
+                d.mkdir(parents=True)
+                (d / "brightness").write_text(val + "\n")
+            (self.dev / "input" / ev).write_bytes(b"")
+        self.kbd = {"evdev": str(self.dev / "input/event28"), "vid": 0x05AC, "pid": 0x0256,
+                    "path": "/dev/hidraw3"}
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _keyd(self):
+        d = self.sys / "class/input/event99/device"
+        d.mkdir(parents=True)
+        (d / "name").write_text("keyd virtual keyboard\n")
+        (self.dev / "input/event99").write_bytes(b"")
+
+    def _set(self, name, state):
+        return kb.set_led(self.kbd, name, state, str(self.sys), str(self.dev), str(self.conf))
+
+    def test_state_is_this_keyboards_only(self):
+        self.assertEqual(kb.read_leds(self.kbd["evdev"], str(self.sys)),
+                         {"capslock": False, "numlock": False})
+
+    def test_direct_write_without_keyd(self):
+        ok, msg = self._set("capslock", True)
+        self.assertTrue(ok, msg)
+        self.assertEqual((self.dev / "input/event28").read_bytes(), kb.led_event(1, True))
+        self.assertEqual(len(kb.led_event(1, True)), 24)
+
+    def test_keyd_only_when_it_grabs_this_keyboard(self):
+        self._keyd()
+        (self.conf / "apple-keyboard.conf").write_text("[ids]\n05ac:0255\n")
+        ok, msg = self._set("capslock", True)
+        self.assertIn("direct", msg)
+        (self.dev / "input/event28").write_bytes(b"")
+        (self.conf / "apple-keyboard.conf").write_text("[ids]\n05ac:0256\n")
+        ok, msg = self._set("capslock", True)
+        self.assertTrue(ok, msg)
+        self.assertIn("keyd", msg)
+        # primed with the real state (off), then on
+        self.assertEqual((self.dev / "input/event99").read_bytes(),
+                         kb.led_event(1, False) + kb.led_event(1, True))
+        self.assertEqual((self.dev / "input/event28").read_bytes(), b"")
+
+    def test_numlock_never_switched_on_and_no_raw_hidraw(self):
+        with mock.patch.object(kb.os, "open", side_effect=AssertionError("opened")):
+            ok, msg = self._set("numlock", True)
+        self.assertFalse(ok)
+        self.assertIn("NumLock", msg)
+        ok, msg = self._set("bogus", True)
+        self.assertFalse(ok)
+        ok, msg = self._set("capslock", False)  # already off: nothing written
+        self.assertTrue(ok)
+        self.assertEqual((self.dev / "input/event28").read_bytes(), b"")
+
+    def test_keyd_rules(self):
+        self.assertTrue(kb.keyd_conf_matches("[ids]\n*\n", 0x004C, 0x0267))
+        self.assertFalse(kb.keyd_conf_matches("[ids]\n*\n-004c:0267\n", 0x004C, 0x0267))
+        self.assertTrue(kb.keyd_conf_matches("[ids]\nk:05ac:0256:abcd\n", 0x05AC, 0x0256))
+        self.assertFalse(kb.keyd_conf_matches("[ids]\nm:05ac:0256\n", 0x05AC, 0x0256))
+        shipped = (_ROOT / "keyd" / "apple-keyboard.conf").read_text()
+        for pid, (_m, _c, fam) in kb.MODELS.items():
+            vid = 0x05AC if fam == "Bcm2042" else 0x004C
+            self.assertTrue(kb.keyd_conf_matches(shipped, vid, pid), hex(pid))
+        self.assertIsNone(kb.keyd_grabs(0x05AC, 0x0256, str(self.root / "missing")))
+
+
 if __name__ == "__main__":
     unittest.main()

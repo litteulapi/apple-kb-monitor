@@ -7,8 +7,7 @@ Vérifie à partir de fixtures (docs/HARDWARE-ENTREES-MODELES.md) :
   modifiée) correspond à hid-ids.h et classe chaque cas comme attendu ;
 - la couverture de la configuration livrée (udev, keyd) et du code Python hérité.
 
-Les défauts connus sont marqués expectedFailure avec le numéro d'issue Gitea :
-le test passera (XPASS) quand le défaut sera corrigé.
+Les tests liés à un défaut corrigé portent le numéro d'issue Gitea (#124-#127).
 Lancement : python3 -m pytest tests/live/re -q   (ou python3 <ce fichier>)
 """
 import fnmatch
@@ -252,13 +251,11 @@ def load_python_legacy():
 
 
 class TestPythonHerite(unittest.TestCase):
-    @unittest.expectedFailure  # #127
-    def test_python_legacy_table_matches_kernel(self):
+    def test_python_legacy_table_matches_kernel(self):  # #127
         g = load_python_legacy()
         self.assertEqual(set(g["APPLE_PRODUCTS"]), set(kernel_keyboard_pids()))
 
-    @unittest.expectedFailure  # #127
-    def test_python_find_devices_rejects_mouse_and_sees_magic_keyboard(self):
+    def test_python_find_devices_rejects_mouse_and_sees_magic_keyboard(self):  # #127
         g = load_python_legacy()
         with tempfile.TemporaryDirectory() as tmp:
             sysroot = Path(tmp)

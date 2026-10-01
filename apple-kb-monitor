@@ -82,7 +82,8 @@ except ImportError:
 # Constants
 # ---------------------------------------------------------------------------
 
-APPLE_VID = 0x05AC
+APPLE_VID = 0x05AC     # USB vendor (BCM2042 keyboards announce it over Bluetooth too)
+APPLE_BT_VID = 0x004C  # Bluetooth SIG vendor (Magic Keyboards over Bluetooth)
 
 # HID Feature Report IDs (BCM2042 / BCM20733)
 REP_DEVICE_STATE   = 0x09
@@ -139,30 +140,46 @@ BLUEZ_SERVICE = "org.bluez"
 PROVIDER_ROOT = "/com/agenceapi/AppleKbMonitor"
 BATTERY_PROVIDER_MANAGER_IFACE = "org.bluez.BatteryProviderManager1"
 
-# Known Apple Bluetooth keyboard product IDs
-APPLE_PRODUCTS = {
-    0x0205: "Apple Extended Keyboard II (M3501)",
-    0x020B: "Apple Pro Keyboard (M7803)",
-    0x020C: "Apple Extended Keyboard (M0115)",
-    0x0220: "Apple Wireless Keyboard (A1016, white)",
-    0x0229: "Apple Wireless Keyboard (A1255, aluminum, ANSI)",
-    0x022C: "Apple Wireless Keyboard (A1255, aluminum, JIS)",
-    0x0255: "Apple Wireless Keyboard (A1314, aluminum, ANSI)",
-    0x0256: "Apple Wireless Keyboard (A1314, aluminum, ISO)",
-    0x0257: "Apple Wireless Keyboard (A1314, aluminum, JIS)",
-    0x024F: "Apple Magic Keyboard (A1644, ANSI)",
-    0x0250: "Apple Magic Keyboard (A1644, ISO)",
-    0x0267: "Apple Magic Keyboard with Touch ID (A2449, ANSI)",
-    0x026C: "Apple Magic Keyboard with Touch ID (A2449, ISO)",
+# Supported Apple wireless keyboards: COPY of APPLE_MODELS in
+# apihub-app/akm-core/src/model.rs (checked against drivers/hid/hid-ids.h).
+# tests/test_apple_kb.py::TestModelTableParity fails if the two diverge.
+# Wired models (ALU 0x0220, ALU_REVB 0x024F/0x0250) and the internal GEYSER4
+# (0x0229) are deliberately absent. pid -> (model, chip, family)
+MODELS = {
+    0x022C: ("Apple Wireless Keyboard (A1255, aluminum, ANSI)", "BCM2042", "Bcm2042"),
+    0x022D: ("Apple Wireless Keyboard (A1255, aluminum, ISO)", "BCM2042", "Bcm2042"),
+    0x022E: ("Apple Wireless Keyboard (A1255, aluminum, JIS)", "BCM2042", "Bcm2042"),
+    0x0239: ("Apple Wireless Keyboard (A1314, 2009, ANSI)", "BCM2042", "Bcm2042"),
+    0x023A: ("Apple Wireless Keyboard (A1314, 2009, ISO)", "BCM2042", "Bcm2042"),
+    0x023B: ("Apple Wireless Keyboard (A1314, 2009, JIS)", "BCM2042", "Bcm2042"),
+    0x0255: ("Apple Wireless Keyboard (A1314, aluminum, ANSI)", "BCM2042", "Bcm2042"),
+    0x0256: ("Apple Wireless Keyboard (A1314, aluminum, ISO)", "BCM2042", "Bcm2042"),
+    0x0257: ("Apple Wireless Keyboard (A1314, aluminum, JIS)", "BCM2042", "Bcm2042"),
+    0x0267: ("Apple Magic Keyboard 2015 (A1644)", "BCM20733", "MagicKeyboard"),
+    0x026C: ("Apple Magic Keyboard with Numeric Keypad 2015 (A1843)", "BCM20733", "MagicKeyboard"),
+    0x029C: ("Apple Magic Keyboard 2021 (A2450)", "Apple", "MagicKeyboard"),
+    0x029A: ("Apple Magic Keyboard with Touch ID 2021 (A2449)", "Apple", "MagicKeyboard"),
+    0x029F: ("Apple Magic Keyboard with Touch ID and Numeric Keypad 2021 (A2520)", "Apple", "MagicKeyboard"),
+    0x0320: ("Apple Magic Keyboard 2024", "Apple", "MagicKeyboard"),
+    0x0321: ("Apple Magic Keyboard with Touch ID 2024", "Apple", "MagicKeyboard"),
+    0x0322: ("Apple Magic Keyboard with Touch ID and Numeric Keypad 2024", "Apple", "MagicKeyboard"),
 }
 
-# BCM chip identification by firmware traits
-BCM_CHIPS = {
-    (0x0220, 0x022C): "Broadcom BCM2042 (ARM7TDMI, BT 2.0+EDR)",
-    (0x0255, 0x0257): "Broadcom BCM2042 (ARM7TDMI, BT 2.0+EDR)",
-    (0x024F, 0x0250): "Broadcom BCM20733 (ARM Cortex-M3, BT 4.0 LE)",
-    (0x0267, 0x026C): "Broadcom BCM20733 (ARM Cortex-M3, BT 4.0 LE)",
+APPLE_PRODUCTS = {pid: m[0] for pid, m in MODELS.items()}
+
+CHIP_NAMES = {
+    "BCM2042": "Broadcom BCM2042 (ARM7TDMI, BT 2.0+EDR)",
+    "BCM20733": "Broadcom BCM20733 (ARM Cortex-M3, BT 4.0 LE)",
+    "Apple": "Apple (Magic Keyboard 2021+)",
 }
+
+
+def lookup_model(vid, pid):
+    """(model, chip, family) of a supported keyboard, or None. Both Apple
+    vendors (USB 0x05AC, Bluetooth 0x004C) are accepted, as in model.rs."""
+    if vid not in (APPLE_VID, APPLE_BT_VID):
+        return None
+    return MODELS.get(pid)
 
 
 def ensure_state_dir():
@@ -174,10 +191,47 @@ def ensure_state_dir():
 
 
 def identify_chip(pid):
-    for (lo, hi), chip in BCM_CHIPS.items():
-        if lo <= pid <= hi:
-            return chip
-    return "Broadcom (unknown variant)"
+    m = MODELS.get(pid)
+    return CHIP_NAMES[m[1]] if m else "unknown (not a supported keyboard)"
+
+
+# ---------------------------------------------------------------------------
+# HID report descriptor (keyboard collection, declared input reports)
+# ---------------------------------------------------------------------------
+
+def parse_rdesc(d):
+    """Minimal HID report descriptor walk, same rules as akm-core discover.rs.
+
+    Returns (is_keyboard, input_report_ids): is_keyboard when an application
+    collection has usage Generic Desktop / Keyboard (0x00010006)."""
+    keyboard, inputs = False, set()
+    usage_page, report_id, usages = 0, 0, []
+    i = 0
+    while i < len(d):
+        b = d[i]
+        if b == 0xFE:  # long item
+            i += 3 + (d[i + 1] if i + 1 < len(d) else 0)
+            continue
+        size = 4 if b & 3 == 3 else b & 3
+        raw = d[i + 1:i + 1 + size]
+        if len(raw) < size:
+            break
+        val = int.from_bytes(raw, "little")
+        kind, tag = (b >> 2) & 3, b >> 4
+        if kind == 1 and tag == 0x0:
+            usage_page = val
+        elif kind == 1 and tag == 0x8:
+            report_id = val & 0xFF
+        elif kind == 2 and tag == 0x0:
+            usages.append(val if size == 4 else (usage_page << 16) | val)
+        elif kind == 0:
+            if tag == 0x8:
+                inputs.add(report_id)
+            elif tag == 0xA and val == 1 and usages[:1] == [0x00010006]:
+                keyboard = True
+            usages = []
+        i += 1 + size
+    return keyboard, inputs
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +252,11 @@ def find_power_supply(mac):
 
 
 def find_devices():
-    """Find all Apple Bluetooth keyboards via hidraw sysfs."""
+    """Find the supported Apple Bluetooth keyboards via hidraw sysfs.
+
+    A device is kept only if vendor:product is in MODELS (vendors 0x05AC and
+    0x004C) and, when sysfs exposes it, its report descriptor declares a
+    keyboard collection: Magic Mouse / Trackpad are never taken (#127)."""
     devices = []
     for hidraw in sorted(glob.glob("/sys/class/hidraw/hidraw*")):
         uevent_path = os.path.join(hidraw, "device", "uevent")
@@ -223,8 +281,20 @@ def find_devices():
             pid_int = int(pid, 16)
         except ValueError:
             continue
-        if vid_int != APPLE_VID:
+        info = lookup_model(vid_int, pid_int)
+        if info is None:
             continue
+        model_name, _chip, family = info
+        rdesc = None
+        try:
+            rdesc = Path(hidraw, "device", "report_descriptor").read_bytes()
+        except OSError:
+            pass
+        is_kb, inputs = parse_rdesc(rdesc) if rdesc else (None, set())
+        if is_kb is False:
+            continue
+        # wake report 0x13: from the descriptor, else only BCM2042 have it (#129)
+        wake = (REP_VENDOR_WAKE in inputs) if rdesc else family == "Bcm2042"
 
         mac = props.get("HID_UNIQ", "")
         devnode = f"/dev/{os.path.basename(hidraw)}"
@@ -242,9 +312,12 @@ def find_devices():
             "sysfs": hidraw,
             "name": props.get("HID_NAME", "Apple Keyboard"),
             "mac": mac,
+            "vid": vid_int,
             "pid": pid_int,
-            "model": APPLE_PRODUCTS.get(pid_int, f"Apple Keyboard (0x{pid_int:04X})"),
+            "model": model_name,
             "chip": identify_chip(pid_int),
+            "family": family,
+            "wake_report": wake,
             "ps_path": ps_path,
             "evdev": evdev,
             "driver": props.get("DRIVER", ""),
@@ -256,19 +329,42 @@ def find_devices():
 # HID Feature Report reads
 # ---------------------------------------------------------------------------
 
-def hid_get_feature(devpath, report_id, length=16):
-    """Read a HID Feature Report from hidraw device."""
-    fd = None
+# Minimum real length (report ID included) of each decoded Feature Report:
+# a shorter answer is rejected instead of being completed with zeros (#137).
+REPORT_MIN_LEN = {
+    REP_DEVICE_STATE: 2, REP_BT_CONN_PARAMS: 3, REP_BATTERY_PCT: 2,
+    REP_BT_TIMING: 3, REP_POWER_CFG: 2, REP_MODE_CLASS: 3, REP_IDENTITY: 3,
+    REP_FW_VERSION: 2, REP_NAME_1: 2, REP_NAME_2: 2, REP_NAME_3: 2,
+    REP_CALIB_CURVE: 9, REP_VOLT_REF: 5, REP_CALIB_MIRROR_1: 9,
+    REP_BATTERY_FINE: 2, REP_CALIB_MIRROR_2: 9, REP_ADC_REF: 3,
+    REP_ADC_VOLTAGE: 3, REP_CFG_REG_1: 2, REP_CFG_REG_2: 2, REP_BUILD_REV: 4,
+}
+
+
+def hid_get_feature(dev, report_id, length=64):
+    """Read a HID Feature Report (GET_REPORT, read-only on the device).
+
+    `dev` is an open hidraw fd or a /dev/hidrawN path. Returns exactly the
+    bytes the kernel reported (ioctl return value, report ID included), or
+    None on error or when shorter than REPORT_MIN_LEN (#137)."""
+    fd = dev if isinstance(dev, int) else None
+    own = fd is None
     try:
-        fd = os.open(devpath, os.O_RDWR)
+        if own:
+            fd = os.open(dev, os.O_RDWR)
         buf = bytearray(length)
         buf[0] = report_id
-        fcntl.ioctl(fd, HIDIOCGFEATURE(length), buf)
-        return bytes(buf)
+        n = fcntl.ioctl(fd, HIDIOCGFEATURE(length), buf, True)
+        if not isinstance(n, int) or n <= 0:
+            return None
+        data = bytes(buf[:n])
+        if len(data) < REPORT_MIN_LEN.get(report_id, 2):
+            return None
+        return data
     except (OSError, IOError):
         return None
     finally:
-        if fd is not None:
+        if own and fd is not None:
             os.close(fd)
 
 
@@ -281,22 +377,41 @@ def calibration_valid(t):
             and t[0] > t[1] > t[2] > t[3])
 
 
+def read_device_reports(dev):
+    """Vendor Feature Reports of a keyboard: only BCM2042 declare them; a Magic
+    Keyboard is never polled with undeclared reports (battery: kernel)."""
+    if dev.get("family", "Bcm2042") != "Bcm2042":
+        return {}
+    return read_all_reports(dev["path"])
+
+
 def read_all_reports(devpath):
-    """Read all known Feature Reports and return decoded dict."""
+    """Read all known Feature Reports (node opened once) and return decoded dict."""
+    try:
+        fd = os.open(devpath, os.O_RDWR)
+    except OSError:
+        return {}
+    try:
+        return _read_all_reports_fd(fd)
+    finally:
+        os.close(fd)
+
+
+def _read_all_reports_fd(fd):
     r = {}
 
     # Battery percentage (standard)
-    d = hid_get_feature(devpath, REP_BATTERY_PCT)
+    d = hid_get_feature(fd, REP_BATTERY_PCT)
     if d and d[0] == REP_BATTERY_PCT:
         r["battery_pct"] = d[1]
 
     # Battery precise (vendor)
-    d = hid_get_feature(devpath, REP_BATTERY_FINE)
+    d = hid_get_feature(fd, REP_BATTERY_FINE)
     if d and d[0] == REP_BATTERY_FINE:
         r["battery_fine"] = d[1]
 
     # Raw ADC voltage
-    d = hid_get_feature(devpath, REP_ADC_VOLTAGE)
+    d = hid_get_feature(fd, REP_ADC_VOLTAGE)
     if d and d[0] == REP_ADC_VOLTAGE:
         raw = (d[1] << 8) | d[2]
         r["adc_raw"] = raw
@@ -304,12 +419,12 @@ def read_all_reports(devpath):
             r["voltage"] = round(raw / ADC_MAX * ADC_VREF, 3)
 
     # ADC reference
-    d = hid_get_feature(devpath, REP_ADC_REF)
+    d = hid_get_feature(fd, REP_ADC_REF)
     if d and d[0] == REP_ADC_REF:
         r["adc_ref"] = (d[1] << 8) | d[2]
 
     # Calibration curve (4 x 16-bit thresholds in millivolts)
-    d = hid_get_feature(devpath, REP_CALIB_CURVE)
+    d = hid_get_feature(fd, REP_CALIB_CURVE)
     if d and d[0] == REP_CALIB_CURVE:
         thresholds_mv = []
         for i in range(4):
@@ -320,19 +435,19 @@ def read_all_reports(devpath):
         r["calib_valid"] = calibration_valid(thresholds_mv)
 
     # Voltage reference pair
-    d = hid_get_feature(devpath, REP_VOLT_REF)
+    d = hid_get_feature(fd, REP_VOLT_REF)
     if d and d[0] == REP_VOLT_REF:
         r["volt_ref_1"] = (d[1] << 8) | d[2]
         r["volt_ref_2"] = (d[3] << 8) | d[4]
 
     # Firmware version
-    d = hid_get_feature(devpath, REP_FW_VERSION)
+    d = hid_get_feature(fd, REP_FW_VERSION)
     if d and d[0] == REP_FW_VERSION:
         r["fw_byte"] = d[1]
         r["fw_version"] = f"{d[1] >> 4}.{d[1] & 0x0F}"
 
     # Build/revision
-    d = hid_get_feature(devpath, REP_BUILD_REV)
+    d = hid_get_feature(fd, REP_BUILD_REV)
     if d and d[0] == REP_BUILD_REV:
         r["build_number"] = (d[1] << 8) | d[2]
         r["build_flag"] = d[3]
@@ -340,56 +455,56 @@ def read_all_reports(devpath):
     # Device name (3 chunks)
     name_parts = []
     for rid in [REP_NAME_1, REP_NAME_2, REP_NAME_3]:
-        d = hid_get_feature(devpath, rid)
+        d = hid_get_feature(fd, rid)
         if d and d[0] == rid:
             name_parts.append(d[1:16].split(b"\x00")[0].decode("ascii", errors="replace"))
     if name_parts:
         r["device_name"] = "".join(name_parts)
 
     # Device identity (128-bit)
-    d = hid_get_feature(devpath, REP_IDENTITY)
+    d = hid_get_feature(fd, REP_IDENTITY)
     if d and d[0] == REP_IDENTITY:
         r["identity_type"] = d[1]
         r["identity_key"] = d[2:16].hex()
 
     # Device state
-    d = hid_get_feature(devpath, REP_DEVICE_STATE)
+    d = hid_get_feature(fd, REP_DEVICE_STATE)
     if d and d[0] == REP_DEVICE_STATE:
         r["state_flag"] = d[1]
 
     # BT connection params
-    d = hid_get_feature(devpath, REP_BT_CONN_PARAMS)
+    d = hid_get_feature(fd, REP_BT_CONN_PARAMS)
     if d and d[0] == REP_BT_CONN_PARAMS:
         r["bt_interval"] = d[1]
         r["bt_latency"] = d[2]
 
     # BT timing
-    d = hid_get_feature(devpath, REP_BT_TIMING)
+    d = hid_get_feature(fd, REP_BT_TIMING)
     if d and d[0] == REP_BT_TIMING:
         r["bt_timeout"] = d[1]
         r["bt_timing_2"] = d[2]
 
     # Power config
-    d = hid_get_feature(devpath, REP_POWER_CFG)
+    d = hid_get_feature(fd, REP_POWER_CFG)
     if d and d[0] == REP_POWER_CFG:
         r["power_cfg"] = d[1]
 
     # Mode/class
-    d = hid_get_feature(devpath, REP_MODE_CLASS)
+    d = hid_get_feature(fd, REP_MODE_CLASS)
     if d and d[0] == REP_MODE_CLASS:
         r["mode"] = d[1]
         r["dev_class"] = d[2]
 
     # Config registers
     for rid, key in [(REP_CFG_REG_1, "cfg_reg_1"), (REP_CFG_REG_2, "cfg_reg_2")]:
-        d = hid_get_feature(devpath, rid)
+        d = hid_get_feature(fd, rid)
         if d and d[0] == rid:
             r[key] = d[1:4].hex()
 
     # Calibration ROM mirrors (0x60, 0xEB) — verify consistency with 0x5A
     for rid, key in [(REP_CALIB_MIRROR_1, "calib_mirror_0x60"),
                      (REP_CALIB_MIRROR_2, "calib_mirror_0xEB")]:
-        d = hid_get_feature(devpath, rid)
+        d = hid_get_feature(fd, rid)
         if d and d[0] == rid:
             thresholds = []
             for i in range(4):
@@ -442,8 +557,10 @@ def decode_input_report(data):
         return None
     rid = data[0]
     if rid == REP_VENDOR_WAKE:
-        # Vendor FF01 — wake/connection signal
+        # Vendor FF01 — bit 0 Usage 0x0A, bit 1 Usage 0x0C, 6 padding bits.
         bits = data[1]
+        if not bits & 0x03:
+            return None  # release of the 1-bit fields, not an event (#129)
         return {
             "report_id": rid,
             "type": "vendor_wake",
@@ -506,7 +623,8 @@ class HidrawMonitor:
 # ---------------------------------------------------------------------------
 
 def dump_all_reports(devpath):
-    """Scan all 256 Feature Report IDs, return those with data."""
+    """Scan all 256 Feature Report IDs; return (id, exact frame) for each
+    report the device answers, with its real length (#137)."""
     results = []
     fd = None
     try:
@@ -520,14 +638,12 @@ def dump_all_reports(devpath):
             buf = bytearray(64)
             buf[0] = rid
             try:
-                fcntl.ioctl(fd, HIDIOCGFEATURE(64), buf)
-                if any(buf[1:]):
-                    last = 63
-                    while last > 0 and buf[last] == 0:
-                        last -= 1
-                    results.append((rid, bytes(buf[: last + 1])))
+                n = fcntl.ioctl(fd, HIDIOCGFEATURE(64), buf, True)
             except (OSError, IOError):
-                pass
+                continue
+            # exact frame, zeros included: an all-zero report is data (#137)
+            if isinstance(n, int) and n > 0:
+                results.append((rid, bytes(buf[:n])))
     finally:
         if fd is not None:
             os.close(fd)
@@ -853,31 +969,44 @@ async def get_sdp_records(bus, mac):
 
 
 # ---------------------------------------------------------------------------
-# LED control (HID Output Report)
+# LED control (evdev EV_LED, same path as akm-core led.rs, #128)
 # ---------------------------------------------------------------------------
+#
+# The LED is set through the input layer, never with a raw hidraw output
+# report (the kernel and keyd would not see it and would overwrite it):
+# - keyd's virtual keyboard when keyd runs AND its [ids] grab this keyboard
+#   (keyd relays EV_LED only to the devices it grabbed, #125);
+# - otherwise the keyboard's own evdev.
+# The current state is the one of THIS keyboard's LED (inputN::<led>), never
+# an aggregate of every LED of the system. Through keyd the write is primed
+# with that state: the input core drops an EV_LED equal to the virtual
+# keyboard's own state. NumLock is never switched on (hid-apple NumLock
+# emulation turns J/K/L/U/I/O/M... into keypad keys).
 
-LED_BITS = {
-    "numlock": 0x01,
-    "capslock": 0x02,
-    "scrolllock": 0x04,
-    "compose": 0x08,
-    "kana": 0x10,
+LED_CODES = {
+    "numlock": 0,
+    "capslock": 1,
+    "scrolllock": 2,
+    "compose": 3,
+    "kana": 4,
 }
+LED_BITS = {name: 1 << code for name, code in LED_CODES.items()}
 
+EV_LED = 0x11
+KEYD_VIRTUAL_KEYBOARD = "keyd virtual keyboard"
+KEYD_CONFIG_DIR = "/etc/keyd"
 
 LED_STATES_ON = frozenset({"on", "1", "true"})
 LED_STATES_OFF = frozenset({"off", "0", "false"})
 
 
-def read_leds(evdev):
-    """Read current LED state from sysfs, matching by evdev input number."""
+def read_leds(evdev, sys_root="/sys"):
+    """Current LED state of THIS evdev's input device (sysfs inputN::<led>)."""
     if not evdev:
         return {}
-    # Extract input number from evdev path, e.g. /dev/input/event29 → find parent inputN
     evname = os.path.basename(evdev)  # event29
-    # Find which inputN owns this eventN
     input_num = None
-    for inp in glob.glob("/sys/class/input/input*"):
+    for inp in glob.glob(f"{sys_root}/class/input/input*"):
         if os.path.exists(os.path.join(inp, evname)):
             input_num = os.path.basename(inp)  # e.g. "input35"
             break
@@ -885,54 +1014,120 @@ def read_leds(evdev):
         return {}
 
     result = {}
-    for led_dir in glob.glob(f"/sys/class/leds/{input_num}::*"):
+    for led_dir in glob.glob(f"{sys_root}/class/leds/{input_num}::*"):
         name = os.path.basename(led_dir)
         try:
             brightness = int(Path(led_dir, "brightness").read_text().strip())
             led_name = name.split("::")[-1]  # e.g. "capslock"
-            if led_name in LED_BITS:
+            if led_name in LED_CODES:
                 result[led_name] = brightness > 0
         except (OSError, ValueError):
             pass
     return result
 
 
-def set_led(devpath, led_name, state):
-    """Set a keyboard LED via HID Output Report write."""
-    if led_name not in LED_BITS:
-        return False, f"Unknown LED: {led_name}. Valid: {', '.join(LED_BITS)}"
+def keyd_virtual_evdev(sys_root="/sys", dev_root="/dev"):
+    """/dev/input/eventN of keyd's virtual keyboard, if keyd runs."""
+    for ev in sorted(glob.glob(f"{sys_root}/class/input/event*")):
+        try:
+            name = Path(ev, "device", "name").read_text().strip()
+        except OSError:
+            continue
+        if name == KEYD_VIRTUAL_KEYBOARD:
+            return f"{dev_root}/input/{os.path.basename(ev)}"
+    return None
 
-    # Read current LED state to preserve other LEDs
-    # Build output report: report_id=0x01, led_byte
+
+def keyd_conf_matches(conf, vid, pid):
+    """Does one keyd config grab vid:pid? keyd [ids] rules: explicit ids, or
+    `*` with `-id` exclusions; `k:`/`m:` prefixes and a 3rd field accepted."""
+    want = f"{vid:04x}:{pid:04x}"
+    in_ids = wildcard = listed = excluded = False
+    for line in conf.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("["):
+            in_ids = line.lower() == "[ids]"
+            continue
+        if not in_ids:
+            continue
+        neg = line.startswith("-")
+        ident = line[1:].strip() if neg else line
+        if ident == "*":
+            wildcard = wildcard or not neg
+            continue
+        if ident.startswith("k:"):
+            ident = ident[2:]
+        if ident.startswith("m:"):
+            continue
+        f = ident.split(":")
+        if len(f) >= 2 and f"{f[0]}:{f[1]}".lower() == want:
+            if neg:
+                excluded = True
+            else:
+                listed = True
+    return listed or (wildcard and not excluded)
+
+
+def keyd_grabs(vid, pid, conf_dir=KEYD_CONFIG_DIR):
+    """True/False from keyd's configuration, None if it cannot be read."""
+    try:
+        names = sorted(os.listdir(conf_dir))
+    except OSError:
+        return None
+    for n in names:
+        if not n.endswith(".conf"):
+            continue
+        try:
+            if keyd_conf_matches(Path(conf_dir, n).read_text(), vid, pid):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def led_target(dev, sys_root="/sys", dev_root="/dev", conf_dir=KEYD_CONFIG_DIR):
+    """("keyd"|"direct", evdev path) for this keyboard, or None."""
+    evdev = dev.get("evdev")
+    if not evdev:
+        return None
+    virt = keyd_virtual_evdev(sys_root, dev_root)
+    if virt and keyd_grabs(dev.get("vid", APPLE_VID), dev["pid"], conf_dir) is not False:
+        return ("keyd", virt)
+    return ("direct", evdev)
+
+
+def led_event(code, value):
+    """struct input_event carrying EV_LED (24 bytes on 64-bit)."""
+    return struct.pack("@llHHi", 0, 0, EV_LED, code, 1 if value else 0)
+
+
+def set_led(dev, led_name, state, sys_root="/sys", dev_root="/dev",
+            conf_dir=KEYD_CONFIG_DIR):
+    """Set one LED of this keyboard through the input layer (see above)."""
+    if led_name not in LED_CODES:
+        return False, f"Unknown LED: {led_name}. Valid: {', '.join(LED_CODES)}"
+    if led_name == "numlock" and state:
+        return False, ("refusing to switch NumLock on: hid-apple would turn "
+                       "letters into keypad keys")
+    target = led_target(dev, sys_root, dev_root, conf_dir)
+    if target is None:
+        return False, "no evdev found for this keyboard"
+    kind, path = target
+    current = read_leds(dev.get("evdev"), sys_root).get(led_name, False)
+    if current == state:
+        return True, f"{led_name} already {'ON' if state else 'OFF'}"
+    writes = [current, state] if kind == "keyd" else [state]
+    code = LED_CODES[led_name]
     fd = None
     try:
-        fd = os.open(devpath, os.O_RDWR)
-        # Current state not easily readable via output report
-        # Construct the LED byte
-        bit = LED_BITS[led_name]
-        # We need the current state of ALL LEDs to set just one
-        # Read from sysfs
-        current = 0
-        for lname, lbit in LED_BITS.items():
-            led_sysfs = glob.glob(f"/sys/class/leds/*{lname}*")
-            for p in led_sysfs:
-                try:
-                    if int(Path(p, "brightness").read_text().strip()) > 0:
-                        current |= lbit
-                except (OSError, ValueError):
-                    pass
-
-        if state:
-            current |= bit
-        else:
-            current &= ~bit
-
-        # Write HID Output Report: [report_id, led_byte]
-        buf = bytes([0x01, current])
-        os.write(fd, buf)
-        return True, f"{led_name} {'ON' if state else 'OFF'}"
+        fd = os.open(path, os.O_WRONLY)
+        for v in writes:
+            os.write(fd, led_event(code, v))
+        return True, f"{led_name} {'ON' if state else 'OFF'} (via {kind} {path})"
     except OSError as e:
-        return False, str(e)
+        return False, f"{path}: {e.strerror or e}"
     finally:
         if fd is not None:
             os.close(fd)
@@ -1020,7 +1215,7 @@ def read_input_caps(evdev):
 
 async def collect_report(bus, dev):
     """Collect all telemetry into a single dict."""
-    reps = read_all_reports(dev["path"])
+    reps = read_device_reports(dev)
     bluez = await get_bluez_props(bus, dev["mac"]) if dev["mac"] else {}
     conn = get_conn_info(dev["mac"]) if dev["mac"] else None
     sysfs = read_sysfs(dev.get("ps_path"))
@@ -1364,8 +1559,8 @@ def print_dump(devpath):
         if all(32 <= b < 127 for b in printable if b != 0):
             text = printable.split(b"\x00")[0].decode("ascii", errors="replace")
             ascii_part = f'  "{text}"'
-        print(f"  0x{rid:02X}  {data.hex()}{ascii_part}")
-    print(f"\n  Total: {len(reports)} reports with data")
+        print(f"  0x{rid:02X}  len={len(data):<2d} {data.hex()}{ascii_part}")
+    print(f"\n  Total: {len(reports)} reports answered")
     print(f"{'=' * 65}")
 
 
@@ -1380,7 +1575,7 @@ def waybar_output(devices):
         return
 
     dev = devices[0]
-    reps = read_all_reports(dev["path"])
+    reps = read_device_reports(dev)
     pct = reps.get("battery_fine") or reps.get("battery_pct")
     volts = reps.get("voltage")
     conn = get_conn_info(dev["mac"]) if dev["mac"] else None
@@ -1707,7 +1902,7 @@ def print_metrics(devices):
     for dev in devices:
         mac = dev["mac"]
         labels = f'mac="{mac}",model="{dev["model"]}"'
-        reps = read_all_reports(dev["path"])
+        reps = read_device_reports(dev)
         conn = get_conn_info(mac) if mac else None
 
         pct = reps.get("battery_pct")
@@ -1940,7 +2135,7 @@ async def _setup_provider(bus, provider=None):
         provider.reset()
     devices = find_devices()
     for dev in devices:
-        reps = read_all_reports(dev["path"])
+        reps = read_device_reports(dev)
         pct = best_level(reps)
         if pct is None:
             # no measurement: never publish a fake 0 % (#78); _poll_device
@@ -1961,7 +2156,7 @@ async def _setup_provider(bus, provider=None):
 def _poll_device(dev, provider, threshold):
     """One polling step for one keyboard: provider, history, low-battery alert."""
     mac = dev["mac"]
-    reps = read_all_reports(dev["path"])
+    reps = read_device_reports(dev)
     pct_fine = reps.get("battery_fine")
     pct = reps.get("battery_pct")
     volts = reps.get("voltage")
@@ -2097,7 +2292,7 @@ async def daemon_loop(threshold, interval, no_provider=False):
                     new_devs = find_devices()
                     for d in new_devs:
                         if d["mac"].upper() == mac.upper():
-                            reps = read_all_reports(d["path"])
+                            reps = read_device_reports(d)
                             pct = best_level(reps)
                             if pct is None:
                                 break
@@ -2143,7 +2338,7 @@ async def daemon_loop(threshold, interval, no_provider=False):
                 new_devs = find_devices()
                 for d in new_devs:
                     if d["mac"].upper() == mac.upper():
-                        reps = read_all_reports(d["path"])
+                        reps = read_device_reports(d)
                         pct = best_level(reps)
                         if pct is None:
                             break
@@ -2182,6 +2377,8 @@ async def daemon_loop(threshold, interval, no_provider=False):
                 })
 
     for dev in find_devices():
+        if not dev.get("wake_report"):
+            continue  # no input report 0x13 in its descriptor (#129)
         mon = HidrawMonitor(dev["path"])
         if mon.start(loop, on_input_event):
             hidraw_monitors.append(mon)
@@ -2322,7 +2519,7 @@ license: GPL-2.0-or-later
             print("No Apple Bluetooth keyboard found.", file=sys.stderr)
             sys.exit(1)
         for dev in devices:
-            reps = read_all_reports(dev["path"])
+            reps = read_device_reports(dev)
             pct = reps.get("battery_pct")
             fine = reps.get("battery_fine")
             volts = reps.get("voltage")
@@ -2344,6 +2541,9 @@ license: GPL-2.0-or-later
             sys.exit(1)
         for dev in devices:
             print(f"\n  Device: {dev['name']} [{dev['mac']}] @ {dev['path']}")
+            if dev.get("family") != "Bcm2042":
+                print("  (not a BCM2042 keyboard: vendor Feature Reports not probed)")
+                continue
             print_dump(dev["path"])
         return
 
@@ -2382,7 +2582,7 @@ license: GPL-2.0-or-later
             sys.exit(1)
         led_name = args.led[0].lower()
         led_state = state_word in LED_STATES_ON
-        ok, msg = set_led(devices[0]["path"], led_name, led_state)
+        ok, msg = set_led(devices[0], led_name, led_state)
         print(msg)
         sys.exit(0 if ok else 1)
 
