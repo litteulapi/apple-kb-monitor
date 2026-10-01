@@ -38,6 +38,7 @@ pub mod link;
 pub mod machine;
 pub mod model;
 pub mod power;
+pub mod read_policy;
 pub mod recovery;
 pub mod report;
 pub mod rssi;

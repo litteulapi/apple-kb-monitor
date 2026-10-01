@@ -140,8 +140,9 @@ pub fn notice_text(n: &Notice, name: &str, now: Instant, fr: bool) -> (String, S
                 (
                     "Clavier injoignable".into(),
                     format!(
-                        "« {name} » ne répond plus depuis {min} min. Appuyez sur une touche. \
-                         S'il ne revient pas : akmctl doctor"
+                        "« {name} » ne répond plus depuis {min} min. Appuyez sur une touche ; \
+                         sinon éteignez puis rallumez-le (le pairage n'est pas en cause). \
+                         Ensuite : akmctl doctor"
                     ),
                     Urgency::Normal,
                 )
@@ -149,8 +150,9 @@ pub fn notice_text(n: &Notice, name: &str, now: Instant, fr: bool) -> (String, S
                 (
                     "Keyboard unreachable".into(),
                     format!(
-                        "\u{201c}{name}\u{201d} has not answered for {min} min. Press a key. \
-                         If it does not come back: akmctl doctor"
+                        "\u{201c}{name}\u{201d} has not answered for {min} min. Press a key; \
+                         otherwise switch it off and on (the pairing is not at fault). \
+                         Then: akmctl doctor"
                     ),
                     Urgency::Normal,
                 )

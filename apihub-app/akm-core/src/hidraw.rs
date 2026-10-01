@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use crate::decode::{build_report, report_from_uevent, HidSource};
+use crate::decode::{report_from_uevent, HidSource};
 use crate::model::apple_model_from_uevent;
 use crate::report::{KbReport, KbWake};
 
@@ -184,12 +184,15 @@ pub fn read_keyboard() -> Option<KbReport> {
         last_age_s: wake.last().map(|t| t.elapsed().as_secs_f64()),
         count: wake.count(),
     };
-    let r = build_report(&uevent, kernel, &Hidraw(fd), wake);
-    if r.is_none() {
+    // Safe read policy (#177): allow-list 0x47/0x46/0x49, only while the
+    // keyboard is in use, one reader, stop at the first failure.
+    let (r, outcome) =
+        crate::read_policy::build_report_safe(&uevent, kernel, &Hidraw(fd), wake, Instant::now());
+    if outcome == crate::read_policy::SafeRead::Partial {
         // Keyboard not responding: reopen next time.
         close_hid_fd();
     }
-    r
+    Some(r)
 }
 
 // ── Wake event monitor (Input Report 0x13) ──────────────────────────────
@@ -314,6 +317,8 @@ fn wake_loop(path: &str, lw: &WakeState) {
         if n == 0 {
             break;
         }
+        // Timestamp only (never the content): gates the safe reads (#177).
+        crate::read_policy::note_input();
         if is_wake_report(&buf[..n as usize]) {
             lw.record();
         }

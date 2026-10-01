@@ -3,7 +3,10 @@
 //! 1. Diagnose (read-only). A healthy link is left alone.
 //! 2. Non-destructive first: the user presses a key, `Device1.Connect` is
 //!    tried a few times, 20 s apart (the keyboard listens a while after a
-//!    key press). Most "lost" keyboards come back here: the pairing was fine.
+//!    key press); then the user switches the keyboard OFF and ON (its firmware
+//!    can hang after HID request bursts, docs/RECONNEXION-PAIRAGE.md §3.6) and
+//!    the pages start again. Most "lost" keyboards come back here: the
+//!    pairing was fine.
 //! 3. Only with evidence that the pairing is refused (or when step 2 failed
 //!    and the user wants to go on), and only after the user TYPES the
 //!    confirmation word, the pairing is removed (`Adapter1.RemoveDevice`) and
@@ -120,8 +123,26 @@ fn wait_connected(conn: &Connection, path: &str, max: Duration) -> bool {
     false
 }
 
-/// Step 2: wake + page, spaced. True if the keyboard came back.
+/// Step 2: key press + pages, then power cycle + pages. True if back.
 fn wake_and_page(conn: &Connection, k: &KbFacts) -> bool {
+    if press_and_page(conn, k) {
+        return true;
+    }
+    say(
+        "\u{2192} Éteignez le clavier (bouton d'alimentation, 3 s, le voyant s'éteint), attendez 5 s, rallumez-le.\n  \
+         (Cela ne touche pas au pairage ; c'est souvent ce qui « répare » vraiment.) Entrée quand c'est fait…",
+        "\u{2192} Switch the keyboard OFF (power button, 3 s, light off), wait 5 s, switch it ON.\n  \
+         (The pairing is untouched; this is often what really fixes it.) Enter when done…",
+    );
+    let _ = std::io::stdout().flush();
+    if std::io::stdin().is_terminal() {
+        let mut l = String::new();
+        let _ = std::io::stdin().lock().read_line(&mut l);
+    }
+    press_and_page(conn, k)
+}
+
+fn press_and_page(conn: &Connection, k: &KbFacts) -> bool {
     say(
         &format!("\u{2192} Appuyez sur une touche de « {} » maintenant (il se réveille et appelle l'ordinateur).", k.name),
         &format!("\u{2192} Press a key on \u{201c}{}\u{201d} now (it wakes up and calls the computer).", k.name),
