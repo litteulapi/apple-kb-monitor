@@ -347,3 +347,53 @@ kill -TERM $A; wait $A; kill $DM
     assert!(!frames.is_empty(), "no frame statistics\n{log}");
     assert!(worst_frame < 100.0, "a frame took {worst_frame} ms\n{frames}");
 }
+
+/// #240: the window publishes `ui-heartbeat.json` from its frames. It advances
+/// while the interface runs (even idle), goes stale when the process is frozen
+/// (SIGSTOP stops the UI thread like a real stall), resumes, and disappears on
+/// a clean close. Mode 0600 file in a 0700 directory.
+#[test]
+fn ui_heartbeat_advances_goes_stale_when_frozen_and_is_removed_on_close() {
+    let script = format!(
+        r#"{WAIT_WINDOW}
+export XDG_RUNTIME_DIR="$OUT/run"; mkdir -m 700 "$XDG_RUNTIME_DIR"
+HB="$XDG_RUNTIME_DIR/apple-kb-monitor/ui-heartbeat.json"
+"$APP" > "$OUT/app.log" 2>&1 & A=$!
+wait_window || echo "no window" >> "$OUT/app.log"
+sleep 2; cp "$HB" "$OUT/hb1"
+stat -c '%a' "$HB" > "$OUT/mode.file"; stat -c '%a' "$(dirname "$HB")" > "$OUT/mode.dir"
+sleep 3; cp "$HB" "$OUT/hb2"
+kill -STOP $A; sleep 1; cp "$HB" "$OUT/hb3"; date +%s%3N > "$OUT/now3"
+sleep 4; cp "$HB" "$OUT/hb4"; date +%s%3N > "$OUT/now4"
+kill -CONT $A; sleep 3; cp "$HB" "$OUT/hb5"; date +%s%3N > "$OUT/now5"
+python3 "$XCLOSE" "$(xdotool search --name 'Apple Keyboard Monitor' | head -1)"
+for k in $(seq 100); do kill -0 $A 2>/dev/null || break; sleep 0.1; done
+[ -e "$HB" ] && echo present > "$OUT/after-close" || echo absent > "$OUT/after-close"
+kill -KILL $A 2>/dev/null; wait $A 2>/dev/null
+"#
+    );
+    let Some(read) = run_sandboxed("heartbeat", &script) else { return };
+    let log = read("app.log");
+    assert!(!log.contains("panicked") && !log.contains("no window"), "{log}\n{}", read("script.err"));
+    let hb = |n: &str| -> serde_json::Value {
+        serde_json::from_str(read(n).trim()).unwrap_or_else(|e| panic!("{n}: {e}: {:?}\n{log}\n{}", read(n), read("script.err")))
+    };
+    let num = |v: &serde_json::Value, k: &str| v[k].as_u64().unwrap_or_else(|| panic!("{k} in {v}"));
+    let now = |n: &str| read(n).trim().parse::<u64>().expect("clock");
+    let (h1, h2, h3, h4, h5) = (hb("hb1"), hb("hb2"), hb("hb3"), hb("hb4"), hb("hb5"));
+    assert_eq!(read("mode.file").trim(), "600");
+    assert_eq!(read("mode.dir").trim(), "700");
+    assert!(num(&h1, "pid") > 1);
+    assert_eq!(h1["version"], env!("CARGO_PKG_VERSION"));
+    assert!(h1["frame_max_ms"].is_number() && h1["frame_last_ms"].is_number());
+    // Running (idle window): the pulse advances.
+    assert!(num(&h2, "ts_ms") > num(&h1, "ts_ms") + 1000, "no pulse while running: {h1} -> {h2}");
+    assert!(num(&h2, "frames") > num(&h1, "frames"));
+    // Frozen: nothing moves between hb3 and hb4 and the pulse is stale.
+    assert_eq!(num(&h4, "ts_ms"), num(&h3, "ts_ms"), "pulse advanced while frozen");
+    assert!(now("now4") - num(&h4, "ts_ms") >= 3500, "pulse not stale after the freeze: {h4}");
+    // Thawed: it resumes and is fresh again.
+    assert!(num(&h5, "ts_ms") > num(&h4, "ts_ms"), "pulse did not resume");
+    assert!(now("now5") - num(&h5, "ts_ms") < 2500, "pulse not fresh after resume: {h5}");
+    assert_eq!(read("after-close").trim(), "absent", "heartbeat left behind after a clean close");
+}
