@@ -1,0 +1,5 @@
+# Known contradictions with the registry (docs/CONTRE-AUDIT.md), each tied to an issue.
+# path-regex<TAB>line-regex<TAB>reason. Remove the line when the document is fixed.
+^docs/ROADMAP-FONCTIONNALITES\.md$	`0xF5` ADC	issue #228
+^docs/ROADMAP-FONCTIONNALITES\.md$	RSSI < -80 dBm	issue #228
+^docs/REVUE-UI-TRAY\.md$	RSSI −48 dBm	issue #228

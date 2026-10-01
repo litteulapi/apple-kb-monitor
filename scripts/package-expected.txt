@@ -1,0 +1,24 @@
+# Files the built package must contain (paths inside the package, no leading /).
+# Checked by scripts/qa_checks.py package after makepkg in scripts/ci-local.sh.
+usr/bin/apihub-app
+usr/bin/apple-kb-monitord
+usr/bin/akmctl
+usr/lib/apple-kb-monitor/akm-helper
+usr/lib/apple-kb-monitor/rssi-helper
+usr/lib/sysusers.d/apple-kb-monitor.conf
+usr/lib/systemd/user/apple-kb-monitord.service
+usr/lib/systemd/user/apple-kb-monitor-selfcheck.service
+usr/lib/systemd/user/apple-kb-monitor-selfcheck.timer
+usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor1.service
+usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.service
+usr/share/polkit-1/actions/com.agenceapi.AppleKbMonitor.policy
+usr/lib/udev/rules.d/70-apple-kb-hidraw.rules
+usr/share/applications/com.agenceapi.AppleKbMonitor.desktop
+usr/share/man/man1/akmctl.1
+usr/share/bash-completion/completions/akmctl
+usr/share/icons/hicolor/scalable/apps/apihub-scarab.svg
+usr/share/plasma/plasmoids/com.agenceapi.devicehub/metadata.json
+usr/share/doc/apple-kb-monitor/QA-AUTOMATIQUE.md
+etc/keyd/apple-keyboard.conf
+etc/modprobe.d/hid_apple.conf
+usr/lib/systemd/user/timers.target.wants/apple-kb-monitor-selfcheck.timer
