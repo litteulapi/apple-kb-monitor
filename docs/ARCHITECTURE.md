@@ -1,6 +1,6 @@
 # System architecture
 
-> Line counts measured with `wc -l` on commit `c28fd8b`+ (2026-10-01): `apihub-app/src` 4 095 lines in 7 files (main 1032, keyboard 1065, bluez 576, tray 487, power 285, rssi 253, history 97); `rssi-helper.c` 132; `apple-kb-monitor` (Python) 2 693. Module headers in the source are the reference for design decisions.
+> Line counts measured with `wc -l` on commit `c28fd8b`+ (2026-10-01): `apihub-app/src` 3 795 lines in 7 files (main 1032, keyboard 1065, bluez 576, tray 487, power 285, rssi 253, history 97); `rssi-helper.c` 132; `apple-kb-monitor` (Python) 2 693. Module headers in the source are the reference for design decisions.
 
 ## Overview
 
