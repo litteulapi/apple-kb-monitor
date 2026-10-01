@@ -1,0 +1,471 @@
+# French translation of the Apple Keyboard Monitor window (#114).
+# English is the source language; format: gettext (msgid = the English text).
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: fr\n"
+
+msgid "Keyboard"
+msgstr "Clavier"
+
+msgid "daemon did not answer within {} s"
+msgstr "le démon n’a pas répondu en {} s"
+
+msgid "→ application"
+msgstr "→ application"
+
+msgid "no KDE action"
+msgstr "aucune action KDE"
+
+msgid "Special keys"
+msgstr "Touches spéciales"
+
+msgid "Refresh"
+msgstr "Actualiser"
+
+msgid "Daemon unreachable: {}"
+msgstr "Démon injoignable : {}"
+
+msgid "Loading…"
+msgstr "Chargement…"
+
+msgid "(not connected)"
+msgstr "(non connecté)"
+
+msgid "NOT applied"
+msgstr "NON appliqué"
+
+msgid "none"
+msgstr "aucun"
+
+msgid "Keyboard 05ac:{}{} · hid_apple fnmode={} swap_opt_cmd={} iso_layout={} · profile {} (preset {}){}"
+msgstr "Clavier 05ac:{}{} · hid_apple fnmode={} swap_opt_cmd={} iso_layout={} · profil {} (préset {}){}"
+
+msgid "KDE (KGlobalAccel) unreachable: actions not shown."
+msgstr "KDE (KGlobalAccel) injoignable : actions non affichées."
+
+msgid "Key"
+msgstr "Touche"
+
+msgid "Without Fn"
+msgstr "Sans Fn"
+
+msgid "With Fn"
+msgstr "Avec Fn"
+
+msgid "Note"
+msgstr "Note"
+
+msgid "Manual mapping (udev hwdb, without keyd; nothing changes until \"Apply\", administrator password):"
+msgstr "Mapping manuel (udev hwdb, sans keyd ; rien ne change avant « Appliquer », mot de passe administrateur) :"
+
+msgid "Remap"
+msgstr "Remapper"
+
+msgid "Restore this key"
+msgstr "Rétablir cette touche"
+
+msgid "Saved (not applied yet)"
+msgstr "Enregistré (pas encore appliqué)"
+
+msgid "Preset:"
+msgstr "Préset :"
+
+msgid "None (current settings kept)"
+msgstr "Aucun (paramètres actuels conservés)"
+
+msgid "Choose"
+msgstr "Choisir"
+
+msgid "Preset saved (not applied yet)"
+msgstr "Préset enregistré (pas encore appliqué)"
+
+msgid "Apply"
+msgstr "Appliquer"
+
+msgid "Back to the kernel mapping"
+msgstr "Revenir au mapping du noyau"
+
+msgid "hid_apple applies to all Apple keyboards."
+msgstr "hid_apple s’applique à tous les claviers Apple."
+
+msgid "Error: {}"
+msgstr "Erreur : {}"
+
+msgid "daemon still busy: history read from the file"
+msgstr "démon occupé : historique lu depuis le fichier"
+
+msgid "daemon did not answer within {} s: history read from the file"
+msgstr "le démon n’a pas répondu en {} s : historique lu depuis le fichier"
+
+msgid "applied (sysfs) = {} · configured (modprobe.d) = {}"
+msgstr "appliqué (sysfs) = {} · configuré (modprobe.d) = {}"
+
+msgid "unreadable (hid_apple not loaded?)"
+msgstr "illisible (hid_apple non chargé ?)"
+
+msgid "{} — differ: reload hid_apple or reboot"
+msgstr "{} — différent : recharger hid_apple ou redémarrer"
+
+msgid "{} (not persistent: akmctl set fnmode N --persist)"
+msgstr "{} (non persistant : akmctl set fnmode N --persist)"
+
+msgid "Name: {}"
+msgstr "Nom : {}"
+
+msgid "excellent"
+msgstr "excellent"
+
+msgid "good"
+msgstr "bon"
+
+msgid "weak"
+msgstr "faible"
+
+msgid "new batteries, no estimate yet"
+msgstr "piles neuves, pas encore d’estimation"
+
+msgid "≈ {}% ({} to {}%), {}"
+msgstr "≈ {} % ({} à {} %), {}"
+
+msgid "{}% (macOS-style display)"
+msgstr "{} % (affichage façon macOS)"
+
+msgid "Full {} / Low {} / Critical {} / Empty {} mV · {} mV to Low, {} mV to Critical"
+msgstr "Plein {} / Bas {} / Critique {} / Vide {} mV · {} mV avant Bas, {} mV avant Critique"
+
+msgid "Full {} / Low {} / Critical {} / Empty {} mV"
+msgstr "Plein {} / Bas {} / Critique {} / Vide {} mV"
+
+msgid "{} s ago"
+msgstr "il y a {} s"
+
+msgid "{} min ago"
+msgstr "il y a {} min"
+
+msgid "{} h ago"
+msgstr "il y a {} h"
+
+msgid "{} d ago"
+msgstr "il y a {} j"
+
+msgid "keyboard indication"
+msgstr "indication du clavier"
+
+msgid "estimate from the voltage curve"
+msgstr "estimation d’après la courbe de tension"
+
+msgid "battery level unknown"
+msgstr "niveau de batterie inconnu"
+
+msgid "{} (declared)"
+msgstr "{} (déclarée)"
+
+msgid "{} (guess from the voltage)"
+msgstr "{} (estimation d’après la tension)"
+
+msgid "Yes"
+msgstr "Oui"
+
+msgid "≈ {} days left"
+msgstr "≈ {} jours restants"
+
+msgid "≈ {} h left"
+msgstr "≈ {} h restantes"
+
+msgid "{} ({} since start)"
+msgstr "{} ({} depuis le démarrage)"
+
+msgid "No history data yet."
+msgstr "Pas encore de données d’historique."
+
+msgid "No data in the last 24 h."
+msgstr "Aucune donnée sur les dernières 24 h."
+
+msgid "Only one reading in the last 24 h: {}."
+msgstr "Une seule mesure sur les dernières 24 h : {}."
+
+msgid "Battery %"
+msgstr "Batterie %"
+
+msgid "Voltage {}–{} V"
+msgstr "Tension {}–{} V"
+
+msgid "{} points over {}"
+msgstr "{} points sur {}"
+
+msgid "{} min"
+msgstr "{} min"
+
+msgid "{} h"
+msgstr "{} h"
+
+msgid "now"
+msgstr "maintenant"
+
+msgid "Estimated charge"
+msgstr "Charge estimée"
+
+msgid "Keyboard indication"
+msgstr "Indication du clavier"
+
+msgid "{}: {}  ({})"
+msgstr "{} : {}  ({})"
+
+msgid "{}: {}"
+msgstr "{} : {}"
+
+msgid "{}  ·  estimate {}"
+msgstr "{}  ·  estimation {}"
+
+msgid "Signal: {}"
+msgstr "Signal : {}"
+
+msgid "ON"
+msgstr "ACTIVÉ"
+
+msgid "off"
+msgstr "désactivé"
+
+msgid "CapsLock: {}  NumLock: {}"
+msgstr "Verr. maj : {}  Verr. num : {}"
+
+msgid "Remaining: {}"
+msgstr "Restant : {}"
+
+msgid "Show Window"
+msgstr "Afficher la fenêtre"
+
+msgid "Quit"
+msgstr "Quitter"
+
+msgid "daemon unreadable: {}"
+msgstr "démon illisible : {}"
+
+msgid "Keys"
+msgstr "Touches"
+
+msgid "Diag"
+msgstr "Diag"
+
+msgid "Waiting for keyboard data..."
+msgstr "En attente des données du clavier…"
+
+msgid "Voltage"
+msgstr "Tension"
+
+msgid "Estimate"
+msgstr "Estimation"
+
+msgid "Apple display"
+msgstr "Affichage Apple"
+
+msgid "Thresholds"
+msgstr "Seuils"
+
+msgid "Batteries"
+msgstr "Batteries"
+
+msgid "Updated"
+msgstr "Mis à jour"
+
+msgid "Remaining"
+msgstr "Restant"
+
+msgid "LEDs"
+msgstr "Voyants"
+
+msgid "Signal"
+msgstr "Signal"
+
+msgid "Measured"
+msgstr "Mesuré"
+
+msgid "TX Power"
+msgstr "Puissance TX"
+
+msgid "Connected"
+msgstr "Connecté"
+
+msgid "Paired"
+msgstr "Appairé"
+
+msgid "Last wake"
+msgstr "Dernier réveil"
+
+msgid "Model"
+msgstr "Modèle"
+
+msgid "Own name"
+msgstr "Nom propre"
+
+msgid "MAC"
+msgstr "MAC"
+
+msgid "Driver"
+msgstr "Pilote"
+
+msgid "Paired host"
+msgstr "Hôte appairé"
+
+msgid "Chip"
+msgstr "Puce"
+
+msgid "Read"
+msgstr "Lecture"
+
+msgid "CAPS"
+msgstr "CAPS"
+
+msgid "NUM"
+msgstr "NUM"
+
+msgid "Radio"
+msgstr "Radio"
+
+msgid "Device"
+msgstr "Appareil"
+
+msgid "Name"
+msgstr "Nom"
+
+msgid "Firmware"
+msgstr "Firmware"
+
+msgid "No"
+msgstr "Non"
+
+msgid "Source: {} · table of {}"
+msgstr "Source : {} · table du {}"
+
+msgid "Firmware: not read yet (read once per connection)"
+msgstr "Firmware : pas encore lu (lu une fois par connexion)"
+
+msgid "{} (raw)"
+msgstr "{} (brut)"
+
+msgid "incomplete (timeout)"
+msgstr "incomplète (délai dépassé)"
+
+msgid "Keyboard name"
+msgstr "Nom du clavier"
+
+msgid "Rename"
+msgstr "Renommer"
+
+msgid "Reset"
+msgstr "Réinitialiser"
+
+msgid "Restore the keyboard's own name"
+msgstr "Rétablir le nom d’origine du clavier"
+
+msgid "Battery History (24 h)"
+msgstr "Historique de la batterie (24 h)"
+
+msgid "Loading history..."
+msgstr "Chargement de l’historique…"
+
+msgid "Monitor daemon binary"
+msgstr "Binaire du démon de surveillance"
+
+msgid "BlueZ CLI"
+msgstr "CLI BlueZ"
+
+msgid "{}: installed"
+msgstr "{} : installé"
+
+msgid "{}: exit {}"
+msgstr "{} : code de sortie {}"
+
+msgid "{}: no answer within {} s (killed)"
+msgstr "{} : pas de réponse en {} s (processus tué)"
+
+msgid "{}: NOT FOUND"
+msgstr "{} : INTROUVABLE"
+
+msgid "active (running)"
+msgstr "actif (en cours d’exécution)"
+
+msgid "inactive / not found"
+msgstr "inactif / introuvable"
+
+msgid "daemon reachable (this window is a client)"
+msgstr "démon joignable (cette fenêtre est un client)"
+
+msgid "daemon absent: this app reads the keyboard itself"
+msgstr "démon absent : cette application lit elle-même le clavier"
+
+msgid "no Apple hidraw device found (keyboard off or not paired?)"
+msgstr "aucun périphérique hidraw Apple trouvé (clavier éteint ou non appairé ?)"
+
+msgid "{}: readable"
+msgstr "{} : lisible"
+
+msgid "{}: {} — check the udev uaccess rule"
+msgstr "{} : {} — vérifier la règle udev uaccess"
+
+msgid "hidraw readable"
+msgstr "hidraw lisible"
+
+msgid "kernel mapping, no hwdb installed (optional: akmctl keymap; check: akmctl keys --check)"
+msgstr "mapping du noyau, aucun hwdb installé (optionnel : akmctl keymap ; vérification : akmctl keys --check)"
+
+msgid "{}: {} model(s) remapped (akmctl keys --check)"
+msgstr "{} : {} modèle(s) remappé(s) (akmctl keys --check)"
+
+msgid "{} - reinstall: akmctl keymap apply, or remove: akmctl keymap reset"
+msgstr "{} - réinstaller : akmctl keymap apply, ou supprimer : akmctl keymap reset"
+
+msgid "{} · keyd also active with /etc/keyd/apple-keyboard.conf (optional, see KEYD.md)"
+msgstr "{} · keyd est aussi actif avec /etc/keyd/apple-keyboard.conf (optionnel, voir KEYD.md)"
+
+msgid "Key mapping"
+msgstr "Mapping des touches"
+
+msgid "udev rules"
+msgstr "Règles udev"
+
+msgid "70-apple-kb-hidraw.rules installed"
+msgstr "70-apple-kb-hidraw.rules installé"
+
+msgid "NOT FOUND"
+msgstr "INTROUVABLE"
+
+msgid "hid_apple fnmode"
+msgstr "hid_apple fnmode"
+
+msgid "RSSI helper"
+msgstr "Utilitaire RSSI"
+
+msgid "rssi-helper installed (needs CAP_NET_ADMIN)"
+msgstr "rssi-helper installé (nécessite CAP_NET_ADMIN)"
+
+msgid "System Diagnostics"
+msgstr "Diagnostic du système"
+
+msgid "Running..."
+msgstr "En cours…"
+
+msgid "Run Full Check"
+msgstr "Lancer la vérification complète"
+
+msgid "Diagnostics in progress..."
+msgstr "Diagnostic en cours…"
+
+msgid "Press 'Run Full Check' to scan all components."
+msgstr "Appuyez sur « Lancer la vérification complète » pour examiner tous les composants."
+
+msgid "{}/{} passed"
+msgstr "{}/{} réussis"
+
+msgid "  {} issues"
+msgstr "  {} problèmes"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "FAIL"
+msgstr "ÉCHEC"
+
+msgid "Apple Keyboard Monitor"
+msgstr "Moniteur de clavier Apple"

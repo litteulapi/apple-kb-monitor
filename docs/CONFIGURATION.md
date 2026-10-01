@@ -15,6 +15,7 @@ enabled = true
 [notifications]
 connection = true          # "disconnected" / "reconnected (N %)", low urgency
 battery_replaced = true    # "new batteries detected"
+defer_to_powerdevil = true # KDE PowerDevil already warns about this keyboard: one distinct reminder only (#254)
 
 [display]
 apple_percent = true       # also show the percentage "as macOS shows it", labelled "Apple display" (#213)
@@ -24,6 +25,8 @@ will_shutdown = true       # tell the keyboard once at shutdown / restart, as ma
 ```
 
 `will_shutdown` (default **true**, because it is what macOS sends to this keyboard at every shutdown and restart): when the computer shuts down or restarts, the daemon sends **one** Feature report to the keyboard, `0x40` (`WillShutdown`), made of the report id alone (on the Bluetooth link `53 40`), exactly as Apple's driver does. Conditions, all required: the option is on, the keyboard is connected, nothing was sent yet in this run, the circuit breaker is closed, at least 1 s since the previous hardware access. A failure is logged and never retried, and never delays the shutdown by more than 3.5 s. It is the **only** write this software can make to the keyboard (`docs/PARITE-APPLE.md`). Set `will_shutdown = false` to send nothing; `akmctl status` shows the current choice (`Shutdown:` line, `will_shutdown` key of `--json`). Two doors lead to the same single write: the logind `PrepareForShutdown` delay inhibitor held by the daemon, and the user unit `apple-kb-monitor-shutdown.service` (`ExecStop=akmctl shutdown-notify --only-if-stopping`); `systemctl --user mask apple-kb-monitor-shutdown.service` disables the unit, the inhibitor stays governed by the option.
+
+`defer_to_powerdevil` (default **true**, #254): see `docs/INTEGRATION-KDE.md` §3. With `false` the 30 / 15 / 5 % alerts are sent as usual even though PowerDevil also warns.
 
 `apple_percent` only adds a secondary figure (tray tooltip, window, widget, `akmctl status`): IOBluetooth remaps the raw `0x47` value (54..100 -> 100 %, 21..53 -> 21 + (raw - 21) x 2.4375, below 21 unchanged). Alerts and the estimate do not use it.
 

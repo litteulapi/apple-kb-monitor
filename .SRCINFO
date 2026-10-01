@@ -8,6 +8,7 @@ pkgbase = apple-kb-monitor
 	license = GPL-2.0-or-later
 	makedepends = rust
 	makedepends = gcc
+	makedepends = gettext
 	depends = bluez
 	depends = polkit
 	depends = dbus

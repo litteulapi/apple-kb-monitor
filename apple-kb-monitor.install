@@ -33,6 +33,7 @@ post_upgrade() {
     fi
     if [ "$(vercmp "$2" 3.1.0-11)" -lt 0 ]; then
         _akm_hid_suspend_notice
+        _akm_kde_keys_hint
     fi
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
@@ -65,6 +66,17 @@ _akm_keyd_notice() {
     echo "    - or keep the keyd macros:      sudo install -Dm644 /usr/share/doc/apple-kb-monitor/examples/keyd/apple-keyboard.conf /etc/keyd/"
     echo "                                    sudo systemctl restart keyd   (never 'keyd reload': it crashes keyd 2.6.0)"
     echo "    Details: /usr/share/doc/apple-kb-monitor/KEYD.md"
+}
+
+# F4 (Launchpad) and Eject are bound to nothing in KDE Plasma (#247). The
+# package changes no KDE shortcut by itself: it only says how to bind them.
+_akm_kde_keys_hint() {
+    echo ">>> KDE shortcuts: F4 (Launchpad) and Eject are bound to nothing by default in Plasma."
+    echo "    The package does not touch your KDE configuration. To bind F4 to the application"
+    echo "    launcher and Eject to the session menu, as a user (no sudo):"
+    echo "      akmctl keymap kde-apply --dry-run     # shows what would be added"
+    echo "      akmctl keymap kde-apply               # applies it; --undo removes exactly those keys"
+    echo "    Which key does what right now: akmctl keys --check"
 }
 
 # RSSI helper (#209): file capability cap_net_admin, executable by the members
@@ -121,6 +133,8 @@ _akm_message() {
     echo ">>> Launch:"
     echo "      apihub-app                     # from terminal"
     echo "      # or search 'ApiHub' in KDE application menu"
+    echo ""
+    _akm_kde_keys_hint
     echo ""
     echo ">>> Special keys: akmctl keys --check shows what each key does in KDE; optional"
     echo "    remapping: akmctl keymap (udev hwdb, nothing installed by default). keyd is optional:"

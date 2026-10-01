@@ -3,6 +3,8 @@
 
 use eframe::egui::Color32;
 
+use crate::i18n::{is_french, tr, tr_in, trf, trf_in};
+
 /// BlueZ / the daemon report 127 when a radio value is unavailable.
 pub const RADIO_UNKNOWN: i32 = 127;
 /// Shown instead of any unknown value.
@@ -19,38 +21,43 @@ pub fn rssi_valid(r: Option<i32>) -> Option<i32> {
 /// value in parentheses, no unit.
 pub fn rssi_text(r: Option<i32>) -> String {
     match rssi_valid(r) {
-        Some(v) => format!(
-            "{} ({})",
-            akm_core::signal::quality(v).en(),
-            akm_core::signal::raw_text(v)
-        ),
+        Some(v) => {
+            use akm_core::signal::SignalQuality as Q;
+            let word = match akm_core::signal::quality(v) {
+                Q::Excellent => tr("excellent"),
+                Q::Good => tr("good"),
+                Q::Weak => tr("weak"),
+            };
+            format!("{} ({})", word, akm_core::signal::raw_text(v))
+        }
         None => DASH.to_string(),
     }
 }
 
 /// Estimated charge by chemistry, always marked as an estimate (#178).
 pub fn estimate_text(b: &akm_core::report::KbBattery) -> Option<String> {
+    estimate_text_in(is_french(), b)
+}
+
+pub fn estimate_text_in(fr: bool, b: &akm_core::report::KbBattery) -> Option<String> {
     if b.new_batteries {
-        return Some("new batteries, no estimate yet".to_string());
+        return Some(tr_in(fr, "new batteries, no estimate yet").to_string());
     }
     let e = b.charge_estimate.as_ref()?;
-    Some(format!(
-        "\u{2248} {:.0}% ({:.0} to {:.0}%), {}",
-        e.pct,
-        e.low,
-        e.high,
-        e.chemistry.as_str()
+    Some(trf_in(
+        fr,
+        "\u{2248} {}% ({} to {}%), {}",
+        &[&format!("{:.0}", e.pct), &format!("{:.0}", e.low), &format!("{:.0}", e.high), &e.chemistry.as_str()],
     ))
 }
 
-/// French locale (`LC_ALL` > `LC_MESSAGES` > `LANG`), for the firmware line
-/// only: the rest of the window is English.
-pub fn locale_is_french() -> bool {
-    ["LC_ALL", "LC_MESSAGES", "LANG"]
-        .iter()
-        .filter_map(|k| std::env::var(k).ok())
-        .find(|v| !v.is_empty())
-        .is_some_and(|v| v.to_ascii_lowercase().starts_with("fr"))
+/// Decimal comma in French (`2.99` -> `2,99`), unchanged otherwise.
+fn dec_in(fr: bool, s: String) -> String {
+    if fr {
+        s.replace('.', ",")
+    } else {
+        s
+    }
 }
 
 /// The firmware line of the window and its level (#227): `Firmware : 0x0050 —
@@ -73,32 +80,44 @@ pub fn firmware_line(fw: &akm_core::report::KbFirmware, fr: bool) -> Option<(Str
 /// Percentage as macOS shows it, labelled (#213).
 pub fn apple_display_text(b: &akm_core::report::KbBattery) -> Option<String> {
     let p = b.apple_display_pct.filter(|p| p.is_finite())?;
-    Some(format!("{p:.0}% (macOS-style display)"))
+    Some(trf("{}% (macOS-style display)", &[&format!("{p:.0}")]))
 }
 
 /// Battery thresholds read from the keyboard (report 0x60) and where the
 /// voltage sits against them.
 pub fn thresholds_text(b: &akm_core::report::KbBattery) -> Option<String> {
+    thresholds_text_in(is_french(), b)
+}
+
+pub fn thresholds_text_in(fr: bool, b: &akm_core::report::KbBattery) -> Option<String> {
     let t = b.thresholds?;
-    let mut s = format!(
-        "Full {} / Low {} / Critical {} / Empty {} mV",
-        t.full_mv, t.low_mv, t.critical_mv, t.empty_mv
-    );
-    if let Some([_, low, crit, _]) = b.threshold_margins_mv {
-        s += &format!(" \u{b7} {low:+} mV to Low, {crit:+} mV to Critical");
-    }
-    Some(s)
+    Some(match b.threshold_margins_mv {
+        Some([_, low, crit, _]) => trf_in(
+            fr,
+            "Full {} / Low {} / Critical {} / Empty {} mV \u{b7} {} mV to Low, {} mV to Critical",
+            &[&t.full_mv, &t.low_mv, &t.critical_mv, &t.empty_mv, &format!("{low:+}"), &format!("{crit:+}")],
+        ),
+        None => trf_in(
+            fr,
+            "Full {} / Low {} / Critical {} / Empty {} mV",
+            &[&t.full_mv, &t.low_mv, &t.critical_mv, &t.empty_mv],
+        ),
+    })
 }
 
 /// Age of the last reading. The kernel percentage only steps down at
 /// reconnections, so this age says how stale the indication can be (#179).
 pub fn age_text(age_s: Option<u64>) -> String {
+    age_text_in(is_french(), age_s)
+}
+
+pub fn age_text_in(fr: bool, age_s: Option<u64>) -> String {
     match age_s {
         None => DASH.to_string(),
-        Some(a) if a < 60 => format!("{a} s ago"),
-        Some(a) if a < 3600 => format!("{} min ago", a / 60),
-        Some(a) if a < 86_400 => format!("{} h ago", a / 3600),
-        Some(a) => format!("{} d ago", a / 86_400),
+        Some(a) if a < 60 => trf_in(fr, "{} s ago", &[&a]),
+        Some(a) if a < 3600 => trf_in(fr, "{} min ago", &[&(a / 60)]),
+        Some(a) if a < 86_400 => trf_in(fr, "{} h ago", &[&(a / 3600)]),
+        Some(a) => trf_in(fr, "{} d ago", &[&(a / 86_400)]),
     }
 }
 
@@ -113,7 +132,11 @@ pub fn tx_power_text(t: Option<i32>) -> String {
 /// Battery percentage; unknown is a dash, never "0%".
 pub fn pct_text(p: Option<f64>, decimals: usize) -> String {
     match p.filter(|v| v.is_finite()) {
-        Some(v) => format!("{v:.decimals$}%"),
+        Some(v) => {
+            let n = dec_in(is_french(), format!("{v:.decimals$}"));
+            // French typography: narrow no-break space before the percent sign.
+            if is_french() { format!("{n}\u{202f}%") } else { format!("{n}%") }
+        }
         None => DASH.to_string(),
     }
 }
@@ -142,7 +165,8 @@ pub fn battery_level(p: Option<f64>) -> Level {
 
 /// Measured battery voltage, rounded to 0.01 V.
 pub fn volts_text(v: f64) -> String {
-    format!("{v:.2} V")
+    let fr = is_french();
+    format!("{}{}V", dec_in(fr, format!("{v:.2}")), if fr { "\u{202f}" } else { " " })
 }
 
 pub fn voltage_level(v: f64) -> Level {
@@ -210,9 +234,9 @@ impl PctSource {
     }
     pub fn caption(self) -> &'static str {
         match self {
-            Self::Indication(_) => "keyboard indication",
-            Self::Estimate(_) => "estimate from the voltage curve",
-            Self::Unknown => "battery level unknown",
+            Self::Indication(_) => tr("keyboard indication"),
+            Self::Estimate(_) => tr("estimate from the voltage curve"),
+            Self::Unknown => tr("battery level unknown"),
         }
     }
 }
@@ -221,31 +245,42 @@ impl PctSource {
 /// estimate, else a guess from the voltage, always marked as such.
 pub fn chemistry_text(b: &akm_core::report::KbBattery) -> Option<String> {
     if let Some(e) = &b.charge_estimate {
-        return Some(format!("{} (declared)", e.chemistry.as_str()));
+        return Some(trf("{} (declared)", &[&e.chemistry.as_str()]));
     }
     b.voltage
         .filter(|v| v.is_finite() && *v > 0.0)
-        .map(|v| format!("{} (guess from the voltage)", akm_core::calibration::detect_battery_type(v)))
+        .map(|v| trf("{} (guess from the voltage)", &[&akm_core::calibration::detect_battery_type(v)]))
 }
 
 /// Paired state. The daemon never fills `bluetooth.paired` (always false
 /// while BlueZ says Paired=true, #198): only the paired host read from the
 /// keyboard (0x4C) or an explicit `true` prove it; otherwise unknown.
 pub fn paired_text(b: &akm_core::report::KbBluetooth) -> Option<&'static str> {
-    (b.paired || b.paired_host_addr.is_some()).then_some("Yes")
+    (b.paired || b.paired_host_addr.is_some()).then(|| tr("Yes"))
 }
 
 /// Autonomy left: the daemon's forecast, else the legacy text.
 pub fn remaining_text(s: &akm_core::Snapshot, now: u64) -> Option<String> {
     s.remaining_s(now)
-        .map(akm_core::forecast::format_days)
+        .map(format_days)
         .or_else(|| s.remaining_display.clone().filter(|t| !t.trim().is_empty()))
+}
+
+/// `"≈ 41 days left"`, `"≈ 20 h left"` (same rule as the core's English
+/// text, translated here).
+fn format_days(remaining_s: u64) -> String {
+    let days = remaining_s as f64 / 86_400.0;
+    if days >= 2.0 {
+        trf("\u{2248} {} days left", &[&format!("{days:.0}")])
+    } else {
+        trf("\u{2248} {} h left", &[&format!("{:.0}", remaining_s as f64 / 3600.0)])
+    }
 }
 
 /// Last wake event of the keyboard (input report 0x13), passive listening.
 pub fn wake_text(w: &akm_core::report::KbWake) -> Option<String> {
     let age = w.last_age_s.filter(|a| a.is_finite() && *a >= 0.0)?;
-    Some(format!("{} ({} since start)", age_text(Some(age as u64)), w.count))
+    Some(trf("{} ({} since start)", &[&age_text(Some(age as u64)), &w.count]))
 }
 
 /// Two side-by-side tiles only when each gets a usable width; below, the
@@ -302,20 +337,24 @@ pub fn chart_model(battery: &[(f64, f64)], voltage: &[(f64, f64)], now: f64) -> 
     let cutoff = now - CHART_WINDOW_S;
     let batt = chart_points(battery, cutoff, true);
     if batt.is_empty() {
-        return Err(if battery.is_empty() { "No history data yet.".into() } else { "No data in the last 24 h.".into() });
+        return Err(if battery.is_empty() { tr("No history data yet.").into() } else { tr("No data in the last 24 h.").into() });
     }
     let (t_min, t_max) = (batt[0].0, batt[batt.len() - 1].0);
     if batt.len() < 2 || t_max - t_min < 1.0 {
-        return Err(format!("Only one reading in the last 24 h: {}.", pct_text(Some(batt[batt.len() - 1].1), 0)));
+        return Err(trf("Only one reading in the last 24 h: {}.", &[&pct_text(Some(batt[batt.len() - 1].1), 0)]));
     }
     let volt: Vec<(f64, f64)> = chart_points(voltage, t_min, false).into_iter().filter(|p| p.0 <= t_max).collect();
-    let mut legend = vec!["Battery %".to_string()];
+    let mut legend = vec![tr("Battery %").to_string()];
     let volt_axis = if volt.len() >= 2 {
         let lo = volt.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
         let hi = volt.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
         // Constant voltage: a flat line in the middle, not a division by 0.
         let pad = ((hi - lo) * 0.05).max(0.05);
-        legend.push(clip_label(&format!("Voltage {lo:.2}\u{2013}{hi:.2} V")));
+        let fr = is_french();
+        legend.push(clip_label(&trf(
+            "Voltage {}\u{2013}{} V",
+            &[&dec_in(fr, format!("{lo:.2}")), &dec_in(fr, format!("{hi:.2}"))],
+        )));
         Some((lo - pad, hi + pad))
     } else {
         None
@@ -323,7 +362,7 @@ pub fn chart_model(battery: &[(f64, f64)], voltage: &[(f64, f64)], now: f64) -> 
     let hours = (t_max - t_min) / 3600.0;
     Ok(ChartModel {
         x_ticks: time_ticks(t_min, t_max, now),
-        summary: format!("{} points over {}", batt.len(), span_text(hours)),
+        summary: trf("{} points over {}", &[&batt.len(), &span_text(hours)]),
         batt,
         volt,
         t_min,
@@ -343,9 +382,9 @@ fn clip_label(s: &str) -> String {
 
 fn span_text(hours: f64) -> String {
     if hours < 1.0 {
-        format!("{:.0} min", (hours * 60.0).max(1.0))
+        trf("{} min", &[&format!("{:.0}", (hours * 60.0).max(1.0))])
     } else {
-        format!("{hours:.1} h")
+        trf("{} h", &[&dec_in(is_french(), format!("{hours:.1}"))])
     }
 }
 
@@ -368,9 +407,9 @@ pub fn time_ticks(t_min: f64, t_max: f64, now: f64) -> Vec<(f64, String)> {
         }
         let ago = (k * step).round() as u64;
         let label = match ago {
-            0 => "now".to_string(),
-            a if a < 3600 => format!("{} min ago", a / 60),
-            a => format!("{} h ago", a / 3600),
+            0 => tr("now").to_string(),
+            a if a < 3600 => trf("{} min ago", &[&(a / 60)]),
+            a => trf("{} h ago", &[&(a / 3600)]),
         };
         ticks.push((t, label));
         k += 1.0;
@@ -645,6 +684,33 @@ mod tests {
     fn layout_switches_to_one_column_when_narrow() {
         assert!(!two_columns(500.0));
         assert!(two_columns(704.0));
+    }
+
+    #[test]
+    fn dynamic_texts_in_french() {
+        assert_eq!(age_text_in(true, Some(12)), "il y a 12\u{202f}s");
+        assert_eq!(age_text_in(true, Some(7200)), "il y a 2\u{202f}h");
+        assert_eq!(age_text_in(true, None), "\u{2014}");
+        let mut b = akm_core::report::KbBattery {
+            charge_estimate: akm_core::chemistry::estimate_charge(2460, akm_core::chemistry::Chemistry::Alkaline),
+            ..Default::default()
+        };
+        assert_eq!(estimate_text_in(true, &b).unwrap(), "\u{2248} 30\u{202f}% (20 \u{e0} 40\u{202f}%), alkaline");
+        b.new_batteries = true;
+        assert_eq!(estimate_text_in(true, &b).unwrap(), "piles neuves, pas encore d\u{2019}estimation");
+        let t = akm_core::registry::Thresholds { full_mv: 2954, low_mv: 2506, critical_mv: 2404, empty_mv: 2054 };
+        b.thresholds = Some(t);
+        b.threshold_margins_mv = Some(t.margins(2986));
+        assert_eq!(
+            thresholds_text_in(true, &b).unwrap(),
+            "Plein 2954 / Bas 2506 / Critique 2404 / Vide 2054\u{202f}mV \u{b7} +480\u{202f}mV avant Bas, +582\u{202f}mV avant Critique"
+        );
+    }
+
+    #[test]
+    fn decimal_comma_in_french_only() {
+        assert_eq!(dec_in(true, "2.99".into()), "2,99");
+        assert_eq!(dec_in(false, "2.99".into()), "2.99");
     }
 
     #[test]

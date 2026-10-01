@@ -13,6 +13,8 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
 use zbus::blocking::Connection;
+
+use crate::i18n::{tr, trf};
 use zbus::interface;
 use zbus::zvariant::{OwnedValue, Signature, Value};
 
@@ -217,38 +219,38 @@ impl DbusmenuServer {
                 // Unknown is a dash, never "0%" (#198); an estimate says so.
                 let src = crate::view::pct_source(&kb.battery);
                 let what = match src {
-                    crate::view::PctSource::Estimate(_) => "Estimated charge",
-                    _ => "Keyboard indication",
+                    crate::view::PctSource::Estimate(_) => tr("Estimated charge"),
+                    _ => tr("Keyboard indication"),
                 };
                 let pct = crate::view::pct_text(src.value(), 0);
                 // Measured voltage (reports 0x46/0xFF), rounded to 0.01 V.
                 let mut label = match kb.battery.voltage.filter(|v| v.is_finite() && *v > 0.0) {
-                    Some(v) => format!("{what}: {pct}  ({})", crate::view::volts_text(v)),
-                    None => format!("{what}: {pct}"),
+                    Some(v) => trf("{}: {}  ({})", &[&what, &pct, &crate::view::volts_text(v)]),
+                    None => trf("{}: {}", &[&what, &pct]),
                 };
                 if let Some(e) = crate::view::estimate_text(&kb.battery) {
-                    label += &format!("  \u{b7}  estimate {e}");
+                    label = trf("{}  \u{b7}  estimate {}", &[&label, &e]);
                 }
                 root_children.push(info_item(menu_id::INFO_BATTERY, label));
                 // Relative BR/EDR value, no unit (#174).
                 if let Some(rssi) = kb.radio.rel_db() {
                     root_children.push(info_item(
                         menu_id::INFO_RSSI,
-                        format!("Signal: {}", crate::view::rssi_text(Some(rssi))),
+                        trf("Signal: {}", &[&crate::view::rssi_text(Some(rssi))]),
                     ));
                 }
-                let caps = if snap.caps_lock { "ON" } else { "off" };
-                let num = if snap.num_lock { "ON" } else { "off" };
+                let caps = if snap.caps_lock { tr("ON") } else { tr("off") };
+                let num = if snap.num_lock { tr("ON") } else { tr("off") };
                 root_children.push(info_item(
                     menu_id::INFO_LOCKS,
-                    format!("CapsLock: {}  NumLock: {}", caps, num),
+                    trf("CapsLock: {}  NumLock: {}", &[&caps, &num]),
                 ));
             }
             let now = akm_core::history::Clock::now(&akm_core::history::SystemClock);
             if let Some(rem) = crate::view::remaining_text(snap, now) {
                 root_children.push(info_item(
                     menu_id::INFO_REMAINING,
-                    format!("Remaining: {}", rem),
+                    trf("Remaining: {}", &[&rem]),
                 ));
             }
         }
@@ -256,8 +258,8 @@ impl DbusmenuServer {
         root_children.push(sep(menu_id::SEP1));
 
         root_children.push(sep(menu_id::SEP2));
-        root_children.push(action_item(menu_id::SHOW_WINDOW, "Show Window"));
-        root_children.push(action_item(menu_id::QUIT, "Quit"));
+        root_children.push(action_item(menu_id::SHOW_WINDOW, tr("Show Window")));
+        root_children.push(action_item(menu_id::QUIT, tr("Quit")));
 
         // Root node
         MenuItem {

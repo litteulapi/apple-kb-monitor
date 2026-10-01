@@ -25,7 +25,7 @@ pub fn submit(mac: String, name: String, status: Status, ctx: eframe::egui::Cont
         .spawn(move || {
             let res = apply(&mac, &name);
             *status.lock().unwrap_or_else(|e| e.into_inner()) = Some(match res {
-                Ok(now) => (true, format!("Name: {now}")),
+                Ok(now) => (true, crate::i18n::trf("Name: {}", &[&now])),
                 Err(e) => (false, e),
             });
             ctx.request_repaint();

@@ -13,6 +13,7 @@
 //! [notifications]
 //! connection = true          # "disconnected" / "reconnected (N %)", low urgency
 //! battery_replaced = true    # "new batteries detected"
+//! defer_to_powerdevil = true # PowerDevil already warns about this keyboard: one distinct reminder only (#254)
 //!
 //! [display]
 //! apple_percent = true       # also show the percentage "as macOS shows it" (#213)
@@ -40,6 +41,10 @@ pub struct Config {
     pub alerts_enabled: bool,
     pub notify_connection: bool,
     pub notify_battery_replaced: bool,
+    /// When KDE PowerDevil already raises its low-battery notification for
+    /// this keyboard, our percentage alerts shrink to one distinct reminder
+    /// ("estimate from your batteries", #254). Default **on**.
+    pub defer_to_powerdevil: bool,
     /// Declared chemistry of the batteries (#178), default alkaline.
     pub chemistry: Chemistry,
     /// Show the percentage as macOS displays it, labelled "Apple display"
@@ -58,6 +63,7 @@ impl Default for Config {
             alerts_enabled: true,
             notify_connection: true,
             notify_battery_replaced: true,
+            defer_to_powerdevil: true,
             chemistry: Chemistry::default(),
             apple_percent: true,
             will_shutdown: true,
@@ -208,6 +214,7 @@ pub fn parse(content: &str) -> (Config, Vec<String>) {
             ("apple", "will_shutdown", Val::Bool(b)) => cfg.will_shutdown = b,
             ("notifications", "connection", Val::Bool(b)) => cfg.notify_connection = b,
             ("notifications", "battery_replaced", Val::Bool(b)) => cfg.notify_battery_replaced = b,
+            ("notifications", "defer_to_powerdevil", Val::Bool(b)) => cfg.defer_to_powerdevil = b,
             (s, k, _) => warn.push(format!("line {}: unknown or mistyped key [{s}] {k}", n + 1)),
         }
     }
@@ -255,6 +262,16 @@ mod tests {
         let (c, w) = parse("[display]\napple_percent = 3\n");
         assert_eq!(w.len(), 1);
         assert!(c.apple_percent, "a mistyped value keeps the default");
+    }
+
+    #[test]
+    fn defer_to_powerdevil_defaults_to_on() {
+        assert!(Config::default().defer_to_powerdevil);
+        let (c, w) = parse("[notifications]\ndefer_to_powerdevil = false\n");
+        assert!(w.is_empty() && !c.defer_to_powerdevil);
+        let (c, w) = parse("[notifications]\ndefer_to_powerdevil = 3\n");
+        assert_eq!(w.len(), 1);
+        assert!(c.defer_to_powerdevil, "a mistyped value keeps the default");
     }
 
     #[test]

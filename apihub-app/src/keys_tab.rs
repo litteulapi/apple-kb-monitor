@@ -17,6 +17,8 @@ use eframe::egui;
 use serde_json::Value;
 use zbus::blocking::Connection;
 
+use crate::i18n::tr;
+
 const IFACE: &str = "com.agenceapi.AppleKbMonitor1.Keymap";
 pub const READ_TIMEOUT: Duration = Duration::from_secs(5);
 pub const APPLY_TIMEOUT: Duration = Duration::from_secs(150);
@@ -132,7 +134,7 @@ fn spawn(ctx: egui::Context, timeout: Duration, job: impl FnOnce(&Connection) ->
         });
         let outcome = match inner {
             Err(e) => Err(e.to_string()),
-            Ok(_) => rx.recv_timeout(timeout).unwrap_or_else(|_| Err(format!("daemon did not answer within {} s", timeout.as_secs()))),
+            Ok(_) => rx.recv_timeout(timeout).unwrap_or_else(|_| Err(crate::i18n::trf("daemon did not answer within {} s", &[&timeout.as_secs()]))),
         };
         {
             let mut s = lock(&t2);
@@ -165,10 +167,10 @@ fn kde_label(s: &TabState, side: &Value) -> String {
         _ if !s.kde_ok => String::new(),
         Some(q) => match s.kde.get(&q).cloned().flatten() {
             Some(a) => a,
-            None if code.starts_with("KEY_F") => "→ application".into(),
-            None => "aucune action KDE".into(),
+            None if code.starts_with("KEY_F") => tr("→ application").into(),
+            None => tr("no KDE action").into(),
         },
-        None => "→ application".into(),
+        None => tr("→ application").into(),
     }
 }
 
@@ -183,8 +185,8 @@ pub fn show(ui: &mut egui::Ui) {
     let mut s = lock(&t).clone();
 
     ui.horizontal(|ui| {
-        ui.heading("Touches spéciales");
-        if ui.add_enabled(!s.busy, egui::Button::new("Actualiser")).clicked() {
+        ui.heading(tr("Special keys"));
+        if ui.add_enabled(!s.busy, egui::Button::new(tr("Refresh"))).clicked() {
             spawn(ctx.clone(), READ_TIMEOUT, |_| Ok(None));
         }
         if s.busy {
@@ -194,32 +196,36 @@ pub fn show(ui: &mut egui::Ui) {
 
     let Some(table) = s.table.clone() else {
         match &s.status {
-            Some((_, e)) => ui.label(format!("Démon injoignable : {e}")),
-            None => ui.label("Chargement…"),
+            Some((_, e)) => ui.label(crate::i18n::trf("Daemon unreachable: {}", &[e])),
+            None => ui.label(tr("Loading…")),
         };
         return;
     };
     let p = &table["params"];
     let pv = |n: &str| p[n].as_i64().map_or("?".into(), |v| v.to_string());
-    ui.label(format!(
-        "Clavier 05ac:{}{} · hid_apple fnmode={} swap_opt_cmd={} iso_layout={} · profil {} (préset {}){}",
-        table["pid"].as_str().unwrap_or("?"),
-        if table["connected"].as_bool() == Some(true) { "" } else { " (non connecté)" },
-        pv("fnmode"),
-        pv("swap_opt_cmd"),
-        pv("iso_layout"),
-        table["profile"].as_str().unwrap_or("?"),
-        table["preset"].as_str().unwrap_or("aucun"),
-        if table["pending"].as_bool() == Some(true) { " · NON appliqué" } else { "" },
+    let not_connected = if table["connected"].as_bool() == Some(true) { String::new() } else { format!(" {}", tr("(not connected)")) };
+    let pending = if table["pending"].as_bool() == Some(true) { format!(" · {}", tr("NOT applied")) } else { String::new() };
+    ui.label(crate::i18n::trf(
+        "Keyboard 05ac:{}{} · hid_apple fnmode={} swap_opt_cmd={} iso_layout={} · profile {} (preset {}){}",
+        &[
+            &table["pid"].as_str().unwrap_or("?"),
+            &not_connected,
+            &pv("fnmode"),
+            &pv("swap_opt_cmd"),
+            &pv("iso_layout"),
+            &table["profile"].as_str().unwrap_or("?"),
+            &table["preset"].as_str().unwrap_or(tr("none")),
+            &pending,
+        ],
     ));
     if !s.kde_ok {
-        ui.label("KDE (KGlobalAccel) injoignable : actions non affichées.");
+        ui.label(tr("KDE (KGlobalAccel) unreachable: actions not shown."));
     }
     ui.add_space(6.0);
 
     egui::ScrollArea::vertical().max_height(ui.available_height() * 0.6).show(ui, |ui| {
         egui::Grid::new("keys-table").striped(true).num_columns(4).show(ui, |ui| {
-            for h in ["Touche", "Sans Fn", "Avec Fn", "Note"] {
+            for h in [tr("Key"), tr("Without Fn"), tr("With Fn"), tr("Note")] {
                 ui.strong(h);
             }
             ui.end_row();
@@ -236,7 +242,7 @@ pub fn show(ui: &mut egui::Ui) {
     });
 
     ui.separator();
-    ui.label("Mapping manuel (udev hwdb, sans keyd ; rien ne change avant « Appliquer », mot de passe administrateur) :");
+    ui.label(tr("Manual mapping (udev hwdb, without keyd; nothing changes until \"Apply\", administrator password):"));
     let ids: Vec<String> = s.keymap.as_ref().and_then(|k| k["keys"].as_array().cloned()).unwrap_or_default().iter().filter_map(|k| k["id"].as_str().map(String::from)).collect();
     let mut changed = false;
     ui.horizontal(|ui| {
@@ -248,17 +254,17 @@ pub fn show(ui: &mut egui::Ui) {
         ui.label("→");
         changed |= ui.add(egui::TextEdit::singleline(&mut s.edit_code).hint_text("KEY_F13").desired_width(160.0)).changed();
         let (key, code) = (s.edit_key.clone(), s.edit_code.trim().to_string());
-        if ui.add_enabled(!s.busy && !code.is_empty(), egui::Button::new("Remapper")).clicked() {
-            spawn(ctx.clone(), READ_TIMEOUT, move |c| call(c, "SetKey", &("", key.as_str(), code.as_str())).map(|_| Some("Enregistré (pas encore appliqué)".into())));
+        if ui.add_enabled(!s.busy && !code.is_empty(), egui::Button::new(tr("Remap"))).clicked() {
+            spawn(ctx.clone(), READ_TIMEOUT, move |c| call(c, "SetKey", &("", key.as_str(), code.as_str())).map(|_| Some(tr("Saved (not applied yet)").into())));
         }
         let key = s.edit_key.clone();
-        if ui.add_enabled(!s.busy, egui::Button::new("Rétablir cette touche")).clicked() {
-            spawn(ctx.clone(), READ_TIMEOUT, move |c| call(c, "SetKey", &("", key.as_str(), "")).map(|_| Some("Enregistré (pas encore appliqué)".into())));
+        if ui.add_enabled(!s.busy, egui::Button::new(tr("Restore this key"))).clicked() {
+            spawn(ctx.clone(), READ_TIMEOUT, move |c| call(c, "SetKey", &("", key.as_str(), "")).map(|_| Some(tr("Saved (not applied yet)").into())));
         }
     });
     ui.horizontal(|ui| {
-        ui.label("Préset :");
-        let presets: Vec<(String, String)> = std::iter::once(("none".to_string(), "Aucun (paramètres actuels conservés)".to_string()))
+        ui.label(tr("Preset:"));
+        let presets: Vec<(String, String)> = std::iter::once(("none".to_string(), tr("None (current settings kept)").to_string()))
             .chain(s
             .keymap
             .as_ref()
@@ -274,21 +280,21 @@ pub fn show(ui: &mut egui::Ui) {
             }
         });
         let pr = s.edit_preset.clone();
-        if ui.add_enabled(!s.busy, egui::Button::new("Choisir")).clicked() {
-            spawn(ctx.clone(), READ_TIMEOUT, move |c| call(c, "SetPreset", &("", pr.as_str())).map(|_| Some("Préset enregistré (pas encore appliqué)".into())));
+        if ui.add_enabled(!s.busy, egui::Button::new(tr("Choose"))).clicked() {
+            spawn(ctx.clone(), READ_TIMEOUT, move |c| call(c, "SetPreset", &("", pr.as_str())).map(|_| Some(tr("Preset saved (not applied yet)").into())));
         }
     });
     ui.horizontal(|ui| {
-        if ui.add_enabled(!s.busy, egui::Button::new("Appliquer")).clicked() {
+        if ui.add_enabled(!s.busy, egui::Button::new(tr("Apply"))).clicked() {
             spawn(ctx.clone(), APPLY_TIMEOUT, |c| call(c, "Apply", &()).map(Some));
         }
-        if ui.add_enabled(!s.busy, egui::Button::new("Revenir au mapping du noyau")).clicked() {
+        if ui.add_enabled(!s.busy, egui::Button::new(tr("Back to the kernel mapping"))).clicked() {
             spawn(ctx.clone(), APPLY_TIMEOUT, |c| call(c, "Reset", &()).map(Some));
         }
-        ui.label("hid_apple s'applique à tous les claviers Apple.");
+        ui.label(tr("hid_apple applies to all Apple keyboards."));
     });
     if let Some((ok, m)) = &s.status {
-        ui.label(if *ok { m.clone() } else { format!("Erreur : {m}") });
+        ui.label(if *ok { m.clone() } else { crate::i18n::trf("Error: {}", &[m]) });
     }
     if changed {
         let mut g = lock(&t);
@@ -313,7 +319,7 @@ mod tests {
         let f = serde_json::json!({"code": "KEY_F4", "qt_key": 16777267u64});
         assert_eq!(kde_label(&s, &f), "→ application");
         let e = serde_json::json!({"code": "KEY_EJECTCD", "qt_key": 16777401u64});
-        assert_eq!(kde_label(&s, &e), "aucune action KDE");
+        assert_eq!(kde_label(&s, &e), "no KDE action");
     }
 
     /// The UI thread never waits: a job that never ends leaves the tab busy

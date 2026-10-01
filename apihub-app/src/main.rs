@@ -2,6 +2,7 @@ mod diag;
 mod fnmode_diag;
 mod framestats;
 mod heartbeat;
+mod i18n;
 mod history_view;
 mod instance;
 mod keyboard;
@@ -15,6 +16,7 @@ mod view;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
+use crate::i18n::{tr, trf};
 use view::{Level, Palette};
 use std::thread;
 
@@ -157,9 +159,9 @@ impl ApiHubApp {
 
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.tab, Tab::Keyboard, "Keyboard");
-                ui.selectable_value(&mut self.tab, Tab::Keys, "Touches");
-                ui.selectable_value(&mut self.tab, Tab::Diag, "Diag");
+                ui.selectable_value(&mut self.tab, Tab::Keyboard, tr("Keyboard"));
+                ui.selectable_value(&mut self.tab, Tab::Keys, tr("Keys"));
+                ui.selectable_value(&mut self.tab, Tab::Diag, tr("Diag"));
             });
         });
 
@@ -211,7 +213,7 @@ impl ApiHubApp {
 
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             let Some(kb) = &snap.keyboard else {
-                ui.label(egui::RichText::new("Waiting for keyboard data...").size(16.0));
+                ui.label(egui::RichText::new(tr("Waiting for keyboard data...")).size(16.0));
                 return;
             };
             let now = unix_now();
@@ -261,61 +263,61 @@ impl ApiHubApp {
         kv_grid(ui, "bat_detail", |ui| {
             if let Some(v) = kb.battery.voltage.filter(|v| v.is_finite() && *v > 0.0) {
                 // Measured: reports 0x46 / 0xFF, in mV (#139).
-                key(ui, "Voltage");
+                key(ui, tr("Voltage"));
                 value(ui, self.tint(egui::RichText::new(view::volts_text(v)).strong().size(18.0), view::voltage_level(v)));
                 ui.end_row();
             }
             if let Some(t) = view::estimate_text(&kb.battery) {
                 // Charge estimated by the declared chemistry [hypothèse] (#178).
-                key(ui, "Estimate");
+                key(ui, tr("Estimate"));
                 value(ui, egui::RichText::new(t).size(16.0));
                 ui.end_row();
             }
             if let Some(t) = view::apple_display_text(&kb.battery) {
                 // What macOS would show for the same raw value (#213).
-                key(ui, "Apple display");
+                key(ui, tr("Apple display"));
                 value(ui, egui::RichText::new(t).size(16.0));
                 ui.end_row();
             }
             if let Some(t) = view::thresholds_text(&kb.battery) {
                 // Thresholds the keyboard reports (0x60, read once per connection).
-                key(ui, "Thresholds");
+                key(ui, tr("Thresholds"));
                 value(ui, egui::RichText::new(t).size(16.0));
                 ui.end_row();
             }
             if let Some(t) = view::chemistry_text(&kb.battery) {
-                key(ui, "Batteries");
+                key(ui, tr("Batteries"));
                 value(ui, egui::RichText::new(t).size(16.0));
                 ui.end_row();
             }
             // The kernel % steps down only at reconnections (#179).
-            key(ui, "Updated");
+            key(ui, tr("Updated"));
             value(ui, egui::RichText::new(view::age_text(snap.update_age_s(now))).size(16.0));
             ui.end_row();
             if let Some(rem) = view::remaining_text(snap, now) {
-                key(ui, "Remaining");
+                key(ui, tr("Remaining"));
                 value(ui, egui::RichText::new(rem).size(16.0));
                 ui.end_row();
             }
-            key(ui, "LEDs");
+            key(ui, tr("LEDs"));
             ui.horizontal(|ui| {
                 let on = |b: bool| if b { Level::Good } else { Level::Unknown };
                 let weak = |b: bool, t: egui::RichText| if b { t } else { t.weak() };
-                ui.label(weak(snap.caps_lock, self.tint(egui::RichText::new("CAPS").size(16.0).strong(), on(snap.caps_lock))));
-                ui.label(weak(snap.num_lock, self.tint(egui::RichText::new("NUM").size(16.0).strong(), on(snap.num_lock))));
+                ui.label(weak(snap.caps_lock, self.tint(egui::RichText::new(tr("CAPS")).size(16.0).strong(), on(snap.caps_lock))));
+                ui.label(weak(snap.num_lock, self.tint(egui::RichText::new(tr("NUM")).size(16.0).strong(), on(snap.num_lock))));
             });
             ui.end_row();
         });
     }
 
     fn radio_tile(&mut self, ui: &mut egui::Ui, snap: &Snapshot, kb: &akm_core::report::KbReport, now: u64) {
-        ui.label(egui::RichText::new("Radio").strong().size(18.0));
+        ui.label(egui::RichText::new(tr("Radio")).strong().size(18.0));
         ui.add_space(4.0);
         kv_grid(ui, "radio_detail", |ui| {
             // Relative BR/EDR value (dB to the ideal range), not dBm (#174).
             let rssi = kb.radio.rel_db();
             let lvl = view::rssi_level(rssi);
-            key(ui, "Signal");
+            key(ui, tr("Signal"));
             ui.horizontal(|ui| {
                 ui.label(self.tint(egui::RichText::new(view::rssi_text(rssi)).strong().size(18.0), lvl));
                 let c = self.palette.color(lvl).unwrap_or_else(|| ui.visuals().text_color());
@@ -324,26 +326,26 @@ impl ApiHubApp {
             ui.end_row();
             if view::rssi_valid(rssi).is_some() {
                 if let Some(age) = snap.rssi_age_s(now) {
-                    key(ui, "Measured");
+                    key(ui, tr("Measured"));
                     value(ui, egui::RichText::new(view::age_text(Some(age))).size(16.0));
                     ui.end_row();
                 }
             }
-            key(ui, "TX Power");
+            key(ui, tr("TX Power"));
             value(ui, egui::RichText::new(view::tx_power_text(kb.radio.tx_power_dbm)).size(16.0));
             ui.end_row();
-            key(ui, "Connected");
-            let (txt, lvl) = if kb.bluetooth.connected { ("Yes", Level::Good) } else { ("No", Level::Bad) };
+            key(ui, tr("Connected"));
+            let (txt, lvl) = if kb.bluetooth.connected { (tr("Yes"), Level::Good) } else { (tr("No"), Level::Bad) };
             value(ui, self.tint(egui::RichText::new(txt).strong().size(16.0), lvl));
             ui.end_row();
             if let Some(p) = view::paired_text(&kb.bluetooth) {
-                key(ui, "Paired");
+                key(ui, tr("Paired"));
                 value(ui, egui::RichText::new(p).size(16.0));
                 ui.end_row();
             }
             if let Some(w) = view::wake_text(&kb.wake) {
                 // Passive listening of input report 0x13.
-                key(ui, "Last wake");
+                key(ui, tr("Last wake"));
                 value(ui, egui::RichText::new(w).size(16.0));
                 ui.end_row();
             }
@@ -351,31 +353,31 @@ impl ApiHubApp {
     }
 
     fn device_tile(&mut self, ui: &mut egui::Ui, snap: &Snapshot, kb: &akm_core::report::KbReport) {
-        ui.label(egui::RichText::new("Device").strong().size(18.0));
+        ui.label(egui::RichText::new(tr("Device")).strong().size(18.0));
         ui.add_space(4.0);
         kv_grid(ui, "dev_left", |ui| {
             if let Some(ref model) = kb.device.model {
-                key(ui, "Model");
+                key(ui, tr("Model"));
                 value(ui, egui::RichText::new(model).strong().size(16.0));
                 ui.end_row();
             }
             if let Some(ref name) = kb.device.name {
-                key(ui, "Own name");
+                key(ui, tr("Own name"));
                 value(ui, egui::RichText::new(name).size(16.0));
                 ui.end_row();
             }
             if let Some(ref mac) = kb.device.mac {
-                key(ui, "MAC");
+                key(ui, tr("MAC"));
                 value(ui, egui::RichText::new(mac).monospace().size(16.0));
                 ui.end_row();
             }
             if let Some(ref driver) = kb.device.driver {
-                key(ui, "Driver");
+                key(ui, tr("Driver"));
                 value(ui, egui::RichText::new(driver.as_str()).size(16.0));
                 ui.end_row();
             }
             if let Some(ref host) = kb.bluetooth.paired_host_addr {
-                key(ui, "Paired host");
+                key(ui, tr("Paired host"));
                 value(ui, egui::RichText::new(host).monospace().size(16.0));
                 ui.end_row();
             }
@@ -383,42 +385,42 @@ impl ApiHubApp {
         // The editor gets the full tile width, below the table (#195).
         if let Some(ref mac) = kb.device.mac {
             ui.add_space(4.0);
-            ui.label(egui::RichText::new("Name").weak().size(16.0));
+            ui.label(egui::RichText::new(tr("Name")).weak().size(16.0));
             self.rename_row(ui, mac, snap.display_name());
         }
     }
 
     fn firmware_tile(&mut self, ui: &mut egui::Ui, kb: &akm_core::report::KbReport) {
-        ui.label(egui::RichText::new("Firmware").strong().size(18.0));
+        ui.label(egui::RichText::new(tr("Firmware")).strong().size(18.0));
         ui.add_space(4.0);
         // Firmware check against the embedded table (#227); never a flash offer.
-        match view::firmware_line(&kb.firmware, view::locale_is_french()) {
+        match view::firmware_line(&kb.firmware, crate::i18n::is_french()) {
             Some((line, level)) => {
                 ui.add(egui::Label::new(self.tint(egui::RichText::new(line).strong().size(16.0), level)).wrap());
                 if let Some(src) = kb.firmware.source.as_deref() {
-                    ui.add(egui::Label::new(egui::RichText::new(format!("Source: {src} \u{b7} table of {}", kb.firmware.table_date.as_deref().unwrap_or("?"))).weak().size(13.0)).wrap());
+                    ui.add(egui::Label::new(egui::RichText::new(trf("Source: {} \u{b7} table of {}", &[&src, &kb.firmware.table_date.as_deref().unwrap_or("?")])).weak().size(13.0)).wrap());
                 }
             }
             None => {
-                ui.label(egui::RichText::new("Firmware: not read yet (read once per connection)").weak().size(16.0));
+                ui.label(egui::RichText::new(tr("Firmware: not read yet (read once per connection)")).weak().size(16.0));
             }
         }
         ui.add_space(4.0);
         kv_grid(ui, "dev_right", |ui| {
             if let Some(ref chip) = kb.device.chip {
-                key(ui, "Chip");
+                key(ui, tr("Chip"));
                 value(ui, egui::RichText::new(chip.as_str()).size(16.0));
                 ui.end_row();
             }
             // Uninterpreted vendor reports (meaning not proven, #131/#132).
             for (id, hex) in &kb.raw {
-                key(ui, &format!("{id} (raw)"));
+                key(ui, &trf("{} (raw)", &[id]));
                 value(ui, egui::RichText::new(hex).monospace().size(16.0));
                 ui.end_row();
             }
             if kb.incomplete {
-                key(ui, "Read");
-                value(ui, egui::RichText::new("incomplete (timeout)").size(16.0));
+                key(ui, tr("Read"));
+                value(ui, egui::RichText::new(tr("incomplete (timeout)")).size(16.0));
                 ui.end_row();
             }
         });
@@ -436,7 +438,7 @@ impl ApiHubApp {
                     egui::TextEdit::singleline(&mut self.rename_buf)
                         .desired_width(w)
                         .char_limit(akm_core::alias::MAX_CHARS)
-                        .hint_text("Keyboard name"),
+                        .hint_text(tr("Keyboard name")),
                 );
                 // Follow the daemon's name unless the user is typing.
                 if self.rename_loaded.as_deref() != Some(current.as_str()) && !edit.has_focus() {
@@ -445,10 +447,10 @@ impl ApiHubApp {
                 }
                 let changed = self.rename_buf.trim() != current;
                 let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if (ui.add_enabled(changed, egui::Button::new("Rename")).clicked() || enter) && changed {
+                if (ui.add_enabled(changed, egui::Button::new(tr("Rename"))).clicked() || enter) && changed {
                     submit = Some(self.rename_buf.clone());
                 }
-                if ui.button("Reset").on_hover_text("Restore the keyboard's own name").clicked() {
+                if ui.button(tr("Reset")).on_hover_text(tr("Restore the keyboard's own name")).clicked() {
                     submit = Some(String::new());
                 }
             });
@@ -474,8 +476,8 @@ impl ApiHubApp {
         let data = self.history.data();
         tile(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Battery History (24 h)").strong().size(18.0));
-                let refresh = ui.add_enabled(!data.loading, egui::Button::new(egui::RichText::new("Refresh").size(14.0)));
+                ui.label(egui::RichText::new(tr("Battery History (24 h)")).strong().size(18.0));
+                let refresh = ui.add_enabled(!data.loading, egui::Button::new(egui::RichText::new(tr("Refresh")).size(14.0)));
                 if refresh.clicked() {
                     let ctx = ui.ctx().clone();
                     self.history.request(move || ctx.request_repaint());
@@ -491,7 +493,7 @@ impl ApiHubApp {
             let model = match view::chart_model(&data.battery, &data.voltage, unix_now() as f64) {
                 Ok(m) => m,
                 Err(msg) => {
-                    let msg = if data.loading && data.battery.is_empty() { "Loading history..." } else { msg.as_str() };
+                    let msg = if data.loading && data.battery.is_empty() { tr("Loading history...") } else { msg.as_str() };
                     ui.label(egui::RichText::new(msg).weak().size(16.0));
                     return;
                 }
@@ -587,8 +589,8 @@ impl ApiHubApp {
             let mut out: Vec<DiagResult> = Vec::new();
 
             let checks: Vec<(&str, Vec<String>, &str)> = vec![
-                ("apple-kb-monitord", vec!["--version".into()], "Monitor daemon binary"),
-                ("bluetoothctl", vec!["--version".into()], "BlueZ CLI"),
+                ("apple-kb-monitord", vec!["--version".into()], tr("Monitor daemon binary")),
+                ("bluetoothctl", vec!["--version".into()], tr("BlueZ CLI")),
             ];
 
             for (bin, args, desc) in &checks {
@@ -607,25 +609,25 @@ impl ApiHubApp {
                         if err.contains("Usage") || err.contains("usage") {
                             out.push(DiagResult {
                                 label: desc.to_string(), ok: true,
-                                detail: format!("{}: installed", bin),
+                                detail: trf("{}: installed", &[bin]),
                             });
                         } else {
                             out.push(DiagResult {
                                 label: desc.to_string(), ok: false,
-                                detail: format!("{}: exit {}", bin, o.status.code().unwrap_or(-1)),
+                                detail: trf("{}: exit {}", &[bin, &o.status.code().unwrap_or(-1)]),
                             });
                         }
                     }
                     Err(diag::RunError::Timeout) => {
                         out.push(DiagResult {
                             label: desc.to_string(), ok: false,
-                            detail: format!("{}: no answer within {} s (killed)", bin, diag::COMMAND_TIMEOUT.as_secs()),
+                            detail: trf("{}: no answer within {} s (killed)", &[bin, &diag::COMMAND_TIMEOUT.as_secs()]),
                         });
                     }
                     Err(diag::RunError::Spawn) => {
                         out.push(DiagResult {
                             label: desc.to_string(), ok: false,
-                            detail: format!("{}: NOT FOUND", bin),
+                            detail: trf("{}: NOT FOUND", &[bin]),
                         });
                     }
                 }
@@ -637,7 +639,7 @@ impl ApiHubApp {
                 .unwrap_or(false);
             out.push(DiagResult {
                 label: "apple-kb-monitord.service".into(), ok: active,
-                detail: if active { "active (running)".into() } else { "inactive / not found".into() },
+                detail: if active { tr("active (running)").into() } else { tr("inactive / not found").into() },
             });
             let on_bus = instance::bounded(diag::COMMAND_TIMEOUT, false, || {
                 zbus::blocking::Connection::session()
@@ -646,53 +648,53 @@ impl ApiHubApp {
             });
             out.push(DiagResult {
                 label: "D-Bus com.agenceapi.AppleKbMonitor1".into(), ok: on_bus,
-                detail: if on_bus { "daemon reachable (this window is a client)".into() }
-                        else { "daemon absent: this app reads the keyboard itself".into() },
+                detail: if on_bus { tr("daemon reachable (this window is a client)").into() }
+                        else { tr("daemon absent: this app reads the keyboard itself").into() },
             });
 
             // Apple keyboard hidraw node: present AND readable by this user
             // (udev rule uses TAG+="uaccess", no group membership needed).
             let (hid_ok, hid_detail) = match keyboard::find_apple_hidraw() {
-                None => (false, "no Apple hidraw device found (keyboard off or not paired?)".to_string()),
+                None => (false, tr("no Apple hidraw device found (keyboard off or not paired?)").to_string()),
                 Some(path) => match std::fs::File::open(&path) {
-                    Ok(_) => (true, format!("{}: readable", path)),
-                    Err(e) => (false, format!("{}: {} — check the udev uaccess rule", path, e)),
+                    Ok(_) => (true, trf("{}: readable", &[&path])),
+                    Err(e) => (false, trf("{}: {} — check the udev uaccess rule", &[&path, &e])),
                 },
             };
-            out.push(DiagResult { label: "hidraw readable".into(), ok: hid_ok, detail: hid_detail });
+            out.push(DiagResult { label: tr("hidraw readable").into(), ok: hid_ok, detail: hid_detail });
 
             // Key mapping (#247): udev hwdb written by `akmctl keymap apply`;
             // none = kernel mapping (the default). keyd is optional (#246).
             let hwdb = akm_core::keymap::HWDB_PATH;
             let (km_ok, mut km_detail) = match akm_core::keymap::read_installed(std::path::Path::new(hwdb)) {
-                Ok(r) if r.is_empty() => (true, "kernel mapping, no hwdb installed (optional: akmctl keymap; check: akmctl keys --check)".to_string()),
-                Ok(r) => (true, format!("{hwdb}: {} model(s) remapped (akmctl keys --check)", r.len())),
-                Err(e) => (false, format!("{e} - reinstall: akmctl keymap apply, or remove: akmctl keymap reset")),
+                Ok(r) if r.is_empty() => (true, tr("kernel mapping, no hwdb installed (optional: akmctl keymap; check: akmctl keys --check)").to_string()),
+                Ok(r) => (true, trf("{}: {} model(s) remapped (akmctl keys --check)", &[&hwdb, &r.len()])),
+                Err(e) => (false, trf("{} - reinstall: akmctl keymap apply, or remove: akmctl keymap reset", &[&e])),
             };
             let keyd_active = diag::run_bounded(Command::new("systemctl").args(["is-active", "--quiet", "keyd.service"]), diag::COMMAND_TIMEOUT)
                 .map(|o| o.status.success())
                 .unwrap_or(false);
             if keyd_active && std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists() {
-                km_detail.push_str(" · keyd also active with /etc/keyd/apple-keyboard.conf (optional, see KEYD.md)");
+                km_detail = trf("{} · keyd also active with /etc/keyd/apple-keyboard.conf (optional, see KEYD.md)", &[&km_detail]);
             }
-            out.push(DiagResult { label: "Key mapping".into(), ok: km_ok, detail: km_detail });
+            out.push(DiagResult { label: tr("Key mapping").into(), ok: km_ok, detail: km_detail });
 
             // udev rules
             let udev_ok = std::path::Path::new("/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules").exists();
             out.push(DiagResult {
-                label: "udev rules".into(), ok: udev_ok,
-                detail: if udev_ok { "70-apple-kb-hidraw.rules installed".into() } else { "NOT FOUND".into() },
+                label: tr("udev rules").into(), ok: udev_ok,
+                detail: if udev_ok { tr("70-apple-kb-hidraw.rules installed").into() } else { tr("NOT FOUND").into() },
             });
 
             // hid_apple fnmode: applied value (sysfs) vs configured (modprobe.d)
             let (fn_ok, fn_detail) = fnmode_diag::diagnose();
-            out.push(DiagResult { label: "hid_apple fnmode".into(), ok: fn_ok, detail: fn_detail });
+            out.push(DiagResult { label: tr("hid_apple fnmode").into(), ok: fn_ok, detail: fn_detail });
 
             // rssi-helper caps
             let rssi_ok = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper").exists();
             out.push(DiagResult {
-                label: "RSSI helper".into(), ok: rssi_ok,
-                detail: if rssi_ok { "rssi-helper installed (needs CAP_NET_ADMIN)".into() } else { "NOT FOUND".into() },
+                label: tr("RSSI helper").into(), ok: rssi_ok,
+                detail: if rssi_ok { tr("rssi-helper installed (needs CAP_NET_ADMIN)").into() } else { tr("NOT FOUND").into() },
             });
 
             // Store results (the guard clears the running flag on drop)
@@ -706,10 +708,10 @@ impl ApiHubApp {
         let is_running = self.diag_running.load(std::sync::atomic::Ordering::Relaxed);
 
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("System Diagnostics").strong().size(18.0));
+            ui.label(egui::RichText::new(tr("System Diagnostics")).strong().size(18.0));
             if is_running {
-                ui.label(egui::RichText::new("Running...").size(16.0).color(self.palette.warn));
-            } else if ui.button(egui::RichText::new("Run Full Check").size(16.0).strong()).clicked() {
+                ui.label(egui::RichText::new(tr("Running...")).size(16.0).color(self.palette.warn));
+            } else if ui.button(egui::RichText::new(tr("Run Full Check")).size(16.0).strong()).clicked() {
                 self.run_diagnostics();
             }
         });
@@ -719,9 +721,9 @@ impl ApiHubApp {
 
         if results.is_empty() {
             if is_running {
-                ui.label(egui::RichText::new("Diagnostics in progress...").weak().size(16.0));
+                ui.label(egui::RichText::new(tr("Diagnostics in progress...")).weak().size(16.0));
             } else {
-                ui.label(egui::RichText::new("Press 'Run Full Check' to scan all components.").weak().size(16.0));
+                ui.label(egui::RichText::new(tr("Press 'Run Full Check' to scan all components.")).weak().size(16.0));
             }
             return;
         }
@@ -731,10 +733,10 @@ impl ApiHubApp {
         let fail_count = total - ok_count;
 
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(format!("{}/{} passed", ok_count, total)).strong().size(18.0)
+            ui.label(egui::RichText::new(trf("{}/{} passed", &[&ok_count, &total])).strong().size(18.0)
                 .color(if fail_count == 0 { self.palette.good } else { self.palette.warn }));
             if fail_count > 0 {
-                ui.label(egui::RichText::new(format!("  {} issues", fail_count)).size(16.0)
+                ui.label(egui::RichText::new(trf("  {} issues", &[&fail_count])).size(16.0)
                     .color(self.palette.bad));
             }
         });
@@ -744,7 +746,7 @@ impl ApiHubApp {
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             egui::Grid::new("diag").num_columns(3).spacing([8.0, 6.0]).show(ui, |ui| {
                 for r in &results {
-                    let (icon, c) = if r.ok { ("OK", self.palette.good) } else { ("FAIL", self.palette.bad) };
+                    let (icon, c) = if r.ok { (tr("OK"), self.palette.good) } else { (tr("FAIL"), self.palette.bad) };
                     ui.label(egui::RichText::new(icon).size(16.0).strong().color(c));
                     ui.label(egui::RichText::new(&r.label).strong().size(16.0));
                     // Long details wrap instead of running off the window (#195).
@@ -803,7 +805,7 @@ fn signal_bars(ui: &mut egui::Ui, lit: u8, color: egui::Color32) {
 fn open_window(state: &State, raise: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBool>, open: &Arc<AtomicBool>) -> bool {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_title("Apple Keyboard Monitor")
+            .with_title(crate::i18n::tr("Apple Keyboard Monitor"))
             .with_app_id(instance::APP_ID)
             .with_inner_size([720.0, 600.0])
             .with_min_inner_size([500.0, 400.0]),

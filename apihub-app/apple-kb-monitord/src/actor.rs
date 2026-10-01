@@ -27,7 +27,7 @@ use akm_core::{discover, hidraw, led, power, KbReport, Snapshot, Watch};
 
 use crate::alias::{AliasBackend, BluezAlias};
 use crate::events::{DeviceEvent, EventHub};
-use crate::{bluez, notify, watcher};
+use crate::{bluez, notify, powerdevil, watcher};
 
 /// Messages handled by the actor thread.
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +82,12 @@ pub struct Options {
     pub notify_connection: bool,
     /// "New batteries" notification (#85).
     pub notify_battery_replaced: bool,
+    /// Defer percentage alerts to KDE PowerDevil when it covers this keyboard
+    /// (`[notifications] defer_to_powerdevil`, #254).
+    pub defer_to_powerdevil: bool,
+    /// Does PowerDevil raise its own low-battery notification for this
+    /// keyboard? Replaceable in tests.
+    pub powerdevil: Arc<dyn crate::powerdevil::Probe>,
     /// Declared battery chemistry (`[battery] chemistry`, #178).
     pub chemistry: Chemistry,
     /// Publish the "Apple display" percentage (`[display] apple_percent`, #213).
@@ -104,6 +110,8 @@ impl Default for Options {
             alerts_enabled: true,
             notify_connection: true,
             notify_battery_replaced: true,
+            defer_to_powerdevil: true,
+            powerdevil: Arc::new(crate::powerdevil::SystemProbe::default()),
             chemistry: Chemistry::default(),
             apple_percent: true,
             will_shutdown: true,
@@ -120,6 +128,7 @@ impl Options {
         self.alerts_enabled = c.alerts_enabled;
         self.notify_connection = c.notify_connection;
         self.notify_battery_replaced = c.notify_battery_replaced;
+        self.defer_to_powerdevil = c.defer_to_powerdevil;
         self.chemistry = c.chemistry;
         self.apple_percent = c.apple_percent;
         self.will_shutdown = c.will_shutdown;
@@ -161,6 +170,9 @@ struct Actor {
     /// The keyboard reconnected and no reading was judged since: the next one
     /// may carry a firmware step that is not a discharge (#179).
     reconnected: bool,
+    /// The single "estimate" reminder was sent for this set of batteries
+    /// (PowerDevil covers the keyboard, #254).
+    estimate_reminded: bool,
 }
 
 impl Actor {
@@ -204,6 +216,7 @@ impl Actor {
             last_update: 0,
             last_error: None,
             reconnected: false,
+            estimate_reminded: false,
         }
     }
 
@@ -470,7 +483,22 @@ impl Actor {
                     tracing::info!("low battery {alert_pct:.0}%: not shown, the keyboard already announced it");
                 }
                 if self.opts.notify && fresh {
-                    notify::battery_crossing(&c, basis);
+                    let covered = self.opts.defer_to_powerdevil && self.opts.powerdevil.covers();
+                    match powerdevil::plan(
+                        self.opts.defer_to_powerdevil,
+                        covered,
+                        basis == chemistry::AlertBasis::Estimate,
+                        self.estimate_reminded,
+                    ) {
+                        powerdevil::Plan::Normal => notify::battery_crossing(&c, basis),
+                        powerdevil::Plan::Reminder => {
+                            self.estimate_reminded = true;
+                            notify::battery_estimate(alert_pct, self.opts.powerdevil.low_level());
+                        }
+                        powerdevil::Plan::Skip => tracing::info!(
+                            "low battery {alert_pct:.0}%: not shown, KDE PowerDevil already warns about this keyboard"
+                        ),
+                    }
                     if c.urgency == Urgency::Critical {
                         led::flash_capslock_for(mac.clone(), 5);
                     }
@@ -494,6 +522,7 @@ impl Actor {
             r.voltage_after
         );
         self.alerts.rearm_all();
+        self.estimate_reminded = false;
         akm_core::alerts::dedupe().reset();
         self.installed_at = Some(r.ts);
         if self.opts.notify && self.opts.notify_battery_replaced {

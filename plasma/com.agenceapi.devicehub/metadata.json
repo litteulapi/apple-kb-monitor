@@ -2,7 +2,9 @@
     "KPlugin": {
         "Id": "com.agenceapi.devicehub",
         "Name": "ApiHub",
+        "Name[fr]": "ApiHub",
         "Description": "Apple Bluetooth keyboard: battery, voltage and signal",
+        "Description[fr]": "Clavier Bluetooth Apple : piles, tension et signal",
         "Icon": "apihub-scarab",
         "Category": "System Information",
         "Authors": [

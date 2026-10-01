@@ -36,6 +36,10 @@ pub const LINK_PATH: &str = "/com/agenceapi/AppleKbMonitor1/Link";
 pub const LINK_INTERFACE: &str = "com.agenceapi.AppleKbMonitor1.Link";
 /// Fresh BlueZ enumeration pushed to the acquisition machine this often.
 pub const RECONCILE_PERIOD: Duration = Duration::from_secs(5 * 60);
+/// BlueZ clears `Paired` just before it drops the object when a device is
+/// forgotten. A `Paired=false` is believed (and the re-pairing notice
+/// raised) only if the object is still there after this delay (#252).
+pub const BOND_GRACE: Duration = Duration::from_millis(1500);
 /// Longest idle wait of the keeper loop.
 const IDLE_WAIT: Duration = Duration::from_secs(60);
 
@@ -60,6 +64,11 @@ pub enum KMsg {
     BluezGone,
     Connected(String, bool),
     Paired(String, bool),
+    /// BlueZ removed the device object (Plasma "Forget", `bluetoothctl
+    /// remove`): `ObjectManager.InterfacesRemoved` carrying `Device1` (#252).
+    Removed(String),
+    /// A `Device1` object appeared (`InterfacesAdded`).
+    Added(String),
     Disconnected(String, DisconnectReason),
     Adapter(bool),
     Sleep(SleepEvent),
@@ -83,6 +92,9 @@ pub trait LinkBus {
     }
     /// Tell the acquisition machine which keyboards are really connected.
     fn reconcile(&mut self, connected: Vec<String>);
+    /// The keyboard `name` was removed from the computer from outside; tell
+    /// the user once what to do next (#252).
+    fn removed(&mut self, _name: &str) {}
     /// Fresh enumeration; `None` if BlueZ cannot be reached.
     fn enumerate(&mut self) -> Option<Vec<DevInfo>>;
 }
@@ -209,6 +221,9 @@ struct Dev {
     name: String,
     connected: bool,
     rec: Recovery,
+    /// `Paired=false` seen at this instant: the bond loss is declared once
+    /// the grace delay passes without an `InterfacesRemoved` (#252).
+    unpair_at: Option<Instant>,
 }
 
 pub struct Keeper<B: LinkBus> {
@@ -269,6 +284,7 @@ impl<B: LinkBus> Keeper<B> {
                 Some(d) => {
                     d.path = info.path.clone();
                     d.name = info.name.clone();
+                    d.unpair_at = None;
                     if info.connected && !d.connected {
                         d.rec.on_connected(now);
                     } else if !info.connected && d.connected {
@@ -292,6 +308,7 @@ impl<B: LinkBus> Keeper<B> {
                             name: info.name.clone(),
                             connected: info.connected,
                             rec,
+                            unpair_at: None,
                         },
                     );
                 }
@@ -339,12 +356,39 @@ impl<B: LinkBus> Keeper<B> {
             KMsg::Paired(path, p) => match (self.mac_of(&path), p) {
                 (Some(mac), false) => {
                     if let Some(d) = self.devs.get_mut(&mac) {
-                        d.rec.on_bond_lost(now);
+                        d.unpair_at.get_or_insert(now + BOND_GRACE);
+                    }
+                }
+                (Some(mac), true) => {
+                    if let Some(d) = self.devs.get_mut(&mac) {
+                        d.unpair_at = None;
                     }
                 }
                 (None, true) => self.resync(now),
                 _ => {}
             },
+            KMsg::Removed(path) => {
+                if let Some(mac) = self.mac_of(&path) {
+                    if let Some(d) = self.devs.remove(&mac) {
+                        tracing::info!("link: {mac} removed from BlueZ from outside");
+                        if self.notify {
+                            self.bus.removed(&d.name);
+                        }
+                    }
+                    let connected = self
+                        .devs
+                        .iter()
+                        .filter(|(_, d)| d.connected)
+                        .map(|(m, _)| m.clone())
+                        .collect();
+                    self.bus.reconcile(connected);
+                }
+            }
+            KMsg::Added(path) => {
+                if self.mac_of(&path).is_none() {
+                    self.resync(now);
+                }
+            }
             KMsg::Disconnected(path, reason) => {
                 if let Some(d) = self.mac_of(&path).and_then(|m| self.devs.get_mut(&m)) {
                     d.connected = false;
@@ -414,6 +458,10 @@ impl<B: LinkBus> Keeper<B> {
         let mut notes = Vec::new();
         for (mac, d) in self.devs.iter_mut() {
             let before = d.rec.health();
+            if d.unpair_at.is_some_and(|t| now >= t) {
+                d.unpair_at = None;
+                d.rec.on_bond_lost(now);
+            }
             for a in d.rec.poll(now) {
                 match a {
                     Action::Connect => connects.push((d.path.clone(), mac.clone())),
@@ -449,7 +497,7 @@ impl<B: LinkBus> Keeper<B> {
             .flatten();
         self.devs
             .values()
-            .filter_map(|d| d.rec.next_deadline())
+            .flat_map(|d| d.rec.next_deadline().into_iter().chain(d.unpair_at))
             .chain(reconcile)
             .min()
     }
@@ -600,6 +648,10 @@ impl LinkBus for SystemBus {
         self.mailbox.send(Msg::Bus(Event::Reconcile(connected)));
     }
 
+    fn removed(&mut self, name: &str) {
+        crate::notify::keyboard_removed(name);
+    }
+
     fn enumerate(&mut self) -> Option<Vec<DevInfo>> {
         let r = self.calls().map(enumerate);
         match r {
@@ -614,7 +666,7 @@ impl LinkBus for SystemBus {
     }
 }
 
-fn add_rules(conn: &Connection) -> zbus::Result<()> {
+pub fn add_rules(conn: &Connection) -> zbus::Result<()> {
     let dbus = DBusProxy::new(conn)?;
     for iface in ["org.bluez.Device1", "org.bluez.Adapter1"] {
         dbus.add_match_rule(
@@ -624,6 +676,16 @@ fn add_rules(conn: &Connection) -> zbus::Result<()> {
                 .interface("org.freedesktop.DBus.Properties")?
                 .member("PropertiesChanged")?
                 .arg(0, iface)?
+                .build(),
+        )?;
+    }
+    for member in ["InterfacesRemoved", "InterfacesAdded"] {
+        dbus.add_match_rule(
+            MatchRule::builder()
+                .msg_type(zbus::message::Type::Signal)
+                .sender("org.bluez")?
+                .interface("org.freedesktop.DBus.ObjectManager")?
+                .member(member)?
                 .build(),
         )?;
     }
@@ -648,8 +710,12 @@ fn add_rules(conn: &Connection) -> zbus::Result<()> {
 }
 
 fn listen_once(tx: &Sender<KMsg>) -> zbus::Result<()> {
-    let conn = Connection::system()?;
-    let calls = Connection::system()?;
+    listen_on(Connection::system()?, Connection::system()?, tx)
+}
+
+/// The listener loop on explicit connections (`events` subscribes, `calls`
+/// enumerates): the system bus, or a private bus in tests.
+pub fn listen_on(conn: Connection, calls: Connection, tx: &Sender<KMsg>) -> zbus::Result<()> {
     add_rules(&conn)?;
     let it = MessageIterator::from(conn);
     // Subscribed first, then enumerated: nothing falls in the gap.
@@ -693,6 +759,30 @@ fn listen_once(tx: &Sender<KMsg>) -> zbus::Result<()> {
                         Ok(l) => vec![KMsg::Sync(l)],
                         Err(_) => vec![KMsg::BluezGone],
                     }
+                }
+            }
+            ("InterfacesRemoved", _) => {
+                let Ok((gone, ifaces)) = msg.body().deserialize::<(zbus::zvariant::OwnedObjectPath, Vec<String>)>()
+                else {
+                    continue;
+                };
+                if ifaces.iter().any(|i| i == "org.bluez.Device1") {
+                    vec![KMsg::Removed(gone.to_string())]
+                } else {
+                    Vec::new()
+                }
+            }
+            ("InterfacesAdded", _) => {
+                let Ok((added, ifaces)) = msg
+                    .body()
+                    .deserialize::<(zbus::zvariant::OwnedObjectPath, HashMap<String, Props>)>()
+                else {
+                    continue;
+                };
+                if ifaces.contains_key("org.bluez.Device1") {
+                    vec![KMsg::Added(added.to_string())]
+                } else {
+                    Vec::new()
                 }
             }
             ("Disconnected", "org.bluez.Device1") => {
@@ -882,6 +972,7 @@ mod tests {
         bluez_up: bool,
         connects: Vec<Instant>,
         notes: Vec<(String, Urgency)>,
+        removed: Vec<String>,
         machine: Machine,
         clears: usize,
         now: Instant,
@@ -893,6 +984,9 @@ mod tests {
         }
         fn notify(&mut self, summary: &str, _body: &str, u: Urgency) {
             self.notes.push((summary.to_string(), u));
+        }
+        fn removed(&mut self, name: &str) {
+            self.removed.push(name.to_string());
         }
         fn reconcile(&mut self, connected: Vec<String>) {
             if self
@@ -924,6 +1018,7 @@ mod tests {
             bluez_up: true,
             connects: Vec::new(),
             notes: Vec::new(),
+            removed: Vec::new(),
             machine: Machine::new(),
             clears: 0,
             now: t0,
@@ -1102,11 +1197,89 @@ mod tests {
         let w = k.bus().world.clone();
         k.handle(KMsg::Sync(w), t0);
         k.handle(KMsg::Paired(PATH.into(), false), t0);
-        k.tick(t0);
-        assert_eq!(health(&k, t0), Health::AuthFailed.as_str());
+        let t1 = t0 + BOND_GRACE + Duration::from_millis(1);
+        k.tick(t1);
+        assert_eq!(health(&k, t1), Health::AuthFailed.as_str());
         assert_eq!(k.bus().notes.len(), 1);
+        k.handle(KMsg::Sync(vec![]), t1);
+        assert!(k.status(t1).is_empty());
+    }
+
+    /// #252: Plasma "Forget" = Disconnected, Paired=false, then the object
+    /// leaves BlueZ. The ghost keyboard disappears at once, nothing is paged,
+    /// no "re-pairing needed" is raised, and one clear notice is sent.
+    #[test]
+    fn forgetting_from_plasma_removes_the_keyboard_and_notifies_once() {
+        let t0 = Instant::now();
+        let mut k = keeper(true, t0);
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        k.handle(KMsg::Disconnected(PATH.into(), DisconnectReason::Local), t0);
+        k.handle(KMsg::Connected(PATH.into(), false), t0);
+        k.handle(KMsg::Paired(PATH.into(), false), t0);
+        k.tick(t0);
+        let t1 = t0 + Duration::from_millis(40);
+        k.bus().world = vec![];
+        k.handle(KMsg::Removed(PATH.into()), t1);
+        assert!(k.status(t1).is_empty(), "ghost keyboard gone immediately");
+        assert_eq!(k.bus().removed, ["Clavier de maria #1"]);
+        let t = run_for(&mut k, t1, 3600);
+        assert!(k.bus().connects.is_empty(), "no reconnection to a forgotten device");
+        assert!(k.bus().notes.is_empty(), "no re-pairing notice: {:?}", k.bus().notes);
+        assert!(k.next_deadline().is_none_or(|d| d > t + Duration::from_secs(30)));
+        // a second signal for the same object says nothing more
+        k.handle(KMsg::Removed(PATH.into()), t);
+        assert_eq!(k.bus().removed.len(), 1);
+    }
+
+    #[test]
+    fn removal_of_a_planned_reconnection_cancels_it() {
+        let t0 = Instant::now();
+        let mut k = keeper(false, t0);
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        assert_eq!(health(&k, t0), "dormant");
+        k.bus().world = vec![];
+        k.handle(KMsg::Removed(PATH.into()), t0 + Duration::from_secs(1));
+        run_for(&mut k, t0, 600);
+        assert!(k.bus().connects.is_empty());
+    }
+
+    #[test]
+    fn a_pairing_that_stays_lost_still_asks_for_repair_after_the_grace() {
+        let t0 = Instant::now();
+        let mut k = keeper(true, t0);
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        k.handle(KMsg::Paired(PATH.into(), false), t0);
+        k.tick(t0 + BOND_GRACE / 2);
+        assert!(k.bus().notes.is_empty(), "tolerance: nothing yet");
+        k.tick(t0 + BOND_GRACE);
+        assert_eq!(k.bus().notes.len(), 1);
+        assert!(k.bus().removed.is_empty());
+    }
+
+    #[test]
+    fn paired_again_within_the_grace_cancels_the_bond_loss() {
+        let t0 = Instant::now();
+        let mut k = keeper(true, t0);
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        k.handle(KMsg::Paired(PATH.into(), false), t0);
+        k.handle(KMsg::Paired(PATH.into(), true), t0 + Duration::from_millis(200));
+        k.tick(t0 + BOND_GRACE * 2);
+        assert!(k.bus().notes.is_empty());
+        assert_ne!(health(&k, t0), Health::AuthFailed.as_str());
+    }
+
+    #[test]
+    fn a_new_device_object_triggers_an_enumeration() {
+        let t0 = Instant::now();
+        let mut k = keeper(true, t0);
         k.handle(KMsg::Sync(vec![]), t0);
         assert!(k.status(t0).is_empty());
+        k.handle(KMsg::Added(PATH.into()), t0);
+        assert_eq!(k.status(t0).len(), 1);
     }
 
     #[test]

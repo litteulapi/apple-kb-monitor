@@ -66,7 +66,7 @@ impl Source {
 /// Last known state with the reason the daemon could not be read.
 fn unreadable_snapshot(last: &Snapshot, err: &str) -> Snapshot {
     let mut s = last.clone();
-    s.kb_error = Some(format!("daemon unreadable: {err}"));
+    s.kb_error = Some(crate::i18n::trf("daemon unreadable: {}", &[&err]));
     s
 }
 

@@ -160,6 +160,8 @@ pub enum Event {
     KeyboardOff,
     KeyboardUnreachable,
     RepairNeeded,
+    KeyboardRemoved,
+    BatteryEstimate,
     FirmwareUpdate,
     BatteryReminder,
     BatteryReplaced,
@@ -167,7 +169,7 @@ pub enum Event {
 }
 
 impl Event {
-    pub const ALL: [Event; 12] = [
+    pub const ALL: [Event; 14] = [
         Event::BatteryLow,
         Event::BatteryCritical,
         Event::KeyboardAlert,
@@ -176,6 +178,8 @@ impl Event {
         Event::KeyboardOff,
         Event::KeyboardUnreachable,
         Event::RepairNeeded,
+        Event::KeyboardRemoved,
+        Event::BatteryEstimate,
         Event::FirmwareUpdate,
         Event::BatteryReminder,
         Event::BatteryReplaced,
@@ -193,6 +197,8 @@ impl Event {
             Event::KeyboardOff => "KeyboardOff",
             Event::KeyboardUnreachable => "KeyboardUnreachable",
             Event::RepairNeeded => "RepairNeeded",
+            Event::KeyboardRemoved => "KeyboardRemoved",
+            Event::BatteryEstimate => "BatteryEstimate",
             Event::FirmwareUpdate => "FirmwareUpdate",
             Event::BatteryReminder => "BatteryReminder",
             Event::BatteryReplaced => "BatteryReplaced",
@@ -209,12 +215,13 @@ impl Event {
             | Event::BatteryCritical
             | Event::KeyboardAlert
             | Event::BatteryReminder
+            | Event::BatteryEstimate
             | Event::BatteryReplaced => "battery",
             Event::KeyboardDisconnected
             | Event::KeyboardReconnected
             | Event::KeyboardOff
             | Event::KeyboardUnreachable => "link",
-            Event::RepairNeeded => "repair",
+            Event::RepairNeeded | Event::KeyboardRemoved => "repair",
             Event::FirmwareUpdate => "firmware",
             Event::Error => "error",
         }
@@ -224,7 +231,7 @@ impl Event {
     pub fn category(self) -> &'static str {
         match self {
             Event::KeyboardReconnected => "device.added",
-            Event::KeyboardDisconnected | Event::KeyboardOff => "device.removed",
+            Event::KeyboardDisconnected | Event::KeyboardOff | Event::KeyboardRemoved => "device.removed",
             Event::KeyboardUnreachable | Event::RepairNeeded | Event::Error => "device.error",
             _ => "device",
         }
@@ -234,7 +241,7 @@ impl Event {
     /// first one if it is `Open`).
     pub fn actions(self) -> &'static [Action] {
         match self {
-            Event::RepairNeeded => &[Action::Repair, Action::Open],
+            Event::RepairNeeded | Event::KeyboardRemoved => &[Action::Repair, Action::Open],
             Event::BatteryReminder => &[Action::Open, Action::Ignore],
             Event::Error => &[],
             _ => &[Action::Open],
@@ -572,6 +579,67 @@ pub fn reminder_notification(pct: f64, lang: Lang) -> Notification {
         "battery-caution",
         Urgency::Normal,
     )
+}
+
+/// The single reminder that replaces our percentage alerts when KDE
+/// PowerDevil already warns about this keyboard (#254): it says it is an
+/// estimate drawn from the batteries, not the figure PowerDevil sees.
+pub fn estimate_notification(pct: f64, low_level: u8, lang: Lang) -> Notification {
+    let body = match lang {
+        Lang::En => format!(
+            "Estimate from your batteries: about {:.0}% left. KDE warns separately at {low_level}% \
+             of the keyboard's own indication.",
+            pct
+        ),
+        Lang::Fr => format!(
+            "Estimation selon vos piles\u{a0}: environ {} restant. KDE pr\u{e9}vient s\u{e9}par\u{e9}ment \u{e0} \
+             {low_level}\u{202f}% de l'indication propre du clavier.",
+            pct_s(lang, pct)
+        ),
+    };
+    Notification::new(
+        Event::BatteryEstimate,
+        lang,
+        lang.t(
+            "Apple Keyboard \u{2014} batteries getting low",
+            "Clavier Apple \u{2014} piles bient\u{f4}t faibles",
+        )
+        .into(),
+        body,
+        "battery-caution",
+        Urgency::Normal,
+    )
+}
+
+pub fn battery_estimate(pct: f64, low_level: u8) {
+    deliver(estimate_notification(pct, low_level, Lang::detect()));
+}
+
+/// The keyboard was removed from this computer from outside (Plasma "Forget",
+/// `bluetoothctl remove`) (#252): what happened and the next step.
+pub fn removed_notification(name: &str, lang: Lang) -> Notification {
+    let body = match lang {
+        Lang::En => format!(
+            "\u{201c}{name}\u{201d} was removed from this computer: switch it off and on to pair it again \
+             (button Repair, or \u{201c}akmctl repair\u{201d})."
+        ),
+        Lang::Fr => format!(
+            "\u{ab}\u{a0}{name}\u{a0}\u{bb} a \u{e9}t\u{e9} supprim\u{e9} du poste\u{a0}: \u{e9}teignez puis rallumez-le pour le \
+             r\u{e9}appairer (bouton R\u{e9}parer, ou \u{ab}\u{a0}akmctl repair\u{a0}\u{bb})."
+        ),
+    };
+    Notification::new(
+        Event::KeyboardRemoved,
+        lang,
+        lang.t("Keyboard removed from this computer", "Clavier supprim\u{e9} du poste").into(),
+        body,
+        "input-keyboard-virtual-off",
+        Urgency::Normal,
+    )
+}
+
+pub fn keyboard_removed(name: &str) {
+    deliver(removed_notification(name, Lang::detect()));
 }
 
 /// Send the reminder unless the user ignored it (until new batteries).
@@ -1004,6 +1072,8 @@ mod tests {
             (crossing_notification(&c, AlertBasis::Estimate, Lang::En), crossing_notification(&c, AlertBasis::Estimate, Lang::Fr)),
             (crossing_notification(&cc, AlertBasis::Firmware, Lang::En), crossing_notification(&cc, AlertBasis::Firmware, Lang::Fr)),
             (reminder_notification(9.0, Lang::En), reminder_notification(9.0, Lang::Fr)),
+            (estimate_notification(12.0, 10, Lang::En), estimate_notification(12.0, 10, Lang::Fr)),
+            (removed_notification("Kb", Lang::En), removed_notification("Kb", Lang::Fr)),
             (firmware_notification("0x0050", "0x0060", Lang::En), firmware_notification("0x0050", "0x0060", Lang::Fr)),
         ];
         for s in [B::Low, B::Critical] {

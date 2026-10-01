@@ -76,6 +76,8 @@ fn minimized_window_keeps_the_main_thread_alive_under_wayland() {
         .env("OUT", &dir)
         .env("XDG_CONFIG_HOME", dir.join("config"))
         .env("XDG_STATE_HOME", dir.join("state"))
+        // The scripts find the window by its English title (#114).
+        .env("LC_ALL", "C")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()

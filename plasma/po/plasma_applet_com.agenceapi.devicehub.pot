@@ -1,0 +1,192 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the apple-kb-monitor package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-10-01 18:22+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "ApiHub"
+msgstr ""
+
+msgid "Monitor stopped"
+msgstr ""
+
+msgid "apple-kb-monitord is not on the session bus."
+msgstr ""
+
+msgid "No Apple keyboard connected"
+msgstr ""
+
+msgid "Battery level"
+msgstr ""
+
+msgid "Keyboard indication (its own percentage, not a linear charge)"
+msgstr ""
+
+msgid "Estimate:"
+msgstr ""
+
+msgid "Last reading:"
+msgstr ""
+
+msgid "The keyboard's percentage only goes down when it reconnects"
+msgstr ""
+
+msgid "Voltage:"
+msgstr ""
+
+msgid "%1 V"
+msgstr ""
+
+msgid "Curve estimate:"
+msgstr ""
+
+msgid "%1% (estimate)"
+msgstr ""
+
+msgid "Battery type (estimate):"
+msgstr ""
+
+msgid "Signal:"
+msgstr ""
+
+msgid "Estimated autonomy:"
+msgstr ""
+
+msgid "Name:"
+msgstr ""
+
+msgid "Keyboard name"
+msgstr ""
+
+msgid "Rename"
+msgstr ""
+
+msgid "Reset"
+msgstr ""
+
+msgid "Restore the keyboard's own name"
+msgstr ""
+
+msgid "Model:"
+msgstr ""
+
+msgid "Firmware:"
+msgstr ""
+
+msgid "Apple display:"
+msgstr ""
+
+msgid "%1% (macOS-style display)"
+msgstr ""
+
+msgid "Thresholds:"
+msgstr ""
+
+msgid "Open ApiHub window"
+msgstr ""
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr ""
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr ""
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr ""
+
+msgid "%1%"
+msgstr ""
+
+msgid "%1 (%2)"
+msgstr ""
+
+msgid "new batteries, no estimate yet"
+msgstr ""
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr ""
+
+msgid "Connected"
+msgstr ""
+
+msgid "Keyboard not connected"
+msgstr ""
+
+msgid "unknown"
+msgstr ""
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr ""
+
+msgid "Apple keyboard, %1"
+msgstr ""
+
+msgid "Keyboard indication %1"
+msgstr ""
+
+msgid "Estimate: %1"
+msgstr ""
+
+msgid "Apple display: %1%"
+msgstr ""
+
+msgid "Signal: %1"
+msgstr ""
+
+msgid "Firmware: %1"
+msgstr ""
+
+msgid "Waiting for the Apple keyboard…"
+msgstr ""
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr ""
+
+msgid "Could not open the ApiHub window."
+msgstr ""
+
+msgid "Lithium (fresh)"
+msgstr ""
+
+msgid "Alkaline (fresh)"
+msgstr ""
+
+msgid "Alkaline or NiMH"
+msgstr ""
+
+msgid "NiMH (likely)"
+msgstr ""
+
+msgid "Depleted"
+msgstr ""
+
+msgid "Critical, replace"
+msgstr ""
+
+msgid "excellent"
+msgstr ""
+
+msgid "good"
+msgstr ""
+
+msgid "weak"
+msgstr ""
+
+msgid "Apple Keyboard"
+msgstr ""
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr ""

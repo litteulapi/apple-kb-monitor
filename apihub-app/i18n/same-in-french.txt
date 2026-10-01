@@ -1,0 +1,14 @@
+# Texts that are the same in French (proper nouns, abbreviations, units).
+→ application
+Note
+excellent
+Diag
+Batteries
+Signal
+MAC
+CAPS
+NUM
+Radio
+Firmware
+hid_apple fnmode
+OK

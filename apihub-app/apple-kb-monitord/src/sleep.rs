@@ -98,7 +98,28 @@ fn drain_io(max: Duration) -> bool {
 }
 
 fn take_inhibitor(calls: &Connection) -> zbus::Result<OwnedFd> {
-    take_inhibitor_for(calls, "sleep", "Pause keyboard reads before the Bluetooth link goes down")
+    take_inhibitor_for(calls, "sleep", inhibitor_reason(Inhibit::Sleep, crate::notify::Lang::detect()))
+}
+
+/// Which delay lock a reason is worded for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Inhibit {
+    Sleep,
+    Shutdown,
+}
+
+/// Text shown by `systemd-inhibit --list` and by session managers (#114).
+pub fn inhibitor_reason(which: Inhibit, lang: crate::notify::Lang) -> &'static str {
+    match which {
+        Inhibit::Sleep => lang.t(
+            "Pause keyboard reads before the Bluetooth link goes down",
+            "Suspend la lecture du clavier avant la coupure de la liaison Bluetooth",
+        ),
+        Inhibit::Shutdown => lang.t(
+            "Tell the keyboard the computer is shutting down (WillShutdown)",
+            "Prévient le clavier que l'ordinateur s'éteint (WillShutdown)",
+        ),
+    }
 }
 
 fn take_inhibitor_for(calls: &Connection, what: &str, why: &str) -> zbus::Result<OwnedFd> {
@@ -138,7 +159,7 @@ pub fn spawn(on_event: impl Fn(SleepEvent) + Send + 'static) {
 }
 
 fn take_shutdown_inhibitor(calls: &Connection) -> Option<OwnedFd> {
-    match take_inhibitor_for(calls, "shutdown", "Tell the keyboard the computer is shutting down (WillShutdown)") {
+    match take_inhibitor_for(calls, "shutdown", inhibitor_reason(Inhibit::Shutdown, crate::notify::Lang::detect())) {
         Ok(fd) => Some(fd),
         Err(e) => {
             tracing::warn!("no shutdown inhibitor ({e}): WillShutdown may be cut short");
@@ -230,6 +251,17 @@ fn watch_once(on_event: &dyn Fn(SleepEvent)) -> zbus::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use crate::notify::Lang;
+
+    #[test]
+    fn inhibitor_reasons_exist_in_both_languages() {
+        for w in [Inhibit::Sleep, Inhibit::Shutdown] {
+            let (en, fr) = (inhibitor_reason(w, Lang::En), inhibitor_reason(w, Lang::Fr));
+            assert!(!en.is_empty() && !fr.is_empty() && en != fr, "{w:?}");
+        }
+        assert!(inhibitor_reason(Inhibit::Shutdown, Lang::Fr).contains("WillShutdown"));
+    }
+
     use super::*;
 
     // One test: the state is process-global.

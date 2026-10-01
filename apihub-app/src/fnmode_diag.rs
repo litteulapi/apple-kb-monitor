@@ -5,6 +5,8 @@ use std::path::Path;
 
 use akm_core::hid_params::Param;
 
+use crate::i18n::{tr, trf};
+
 pub const MODPROBE_DIR: &str = "/etc/modprobe.d";
 
 /// `fnmode` set by `options hid_apple ... fnmode=N ...` lines of one file
@@ -46,15 +48,14 @@ pub fn configured_in(dir: &Path) -> Option<i32> {
 /// `(ok, detail)` of the Diag row from the live value and the configured one.
 pub fn verdict(live: Option<i32>, configured: Option<i32>) -> (bool, String) {
     let show = |v: Option<i32>, none: &str| v.map_or(none.to_string(), |n| n.to_string());
-    let state = format!(
+    let state = trf(
         "applied (sysfs) = {} · configured (modprobe.d) = {}",
-        show(live, "unreadable (hid_apple not loaded?)"),
-        show(configured, "none")
+        &[&show(live, tr("unreadable (hid_apple not loaded?)")), &show(configured, tr("none"))],
     );
     match (live, configured) {
         (Some(l), Some(c)) if l == c => (true, state),
-        (Some(_), Some(_)) => (false, format!("{state} — differ: reload hid_apple or reboot")),
-        (Some(_), None) => (true, format!("{state} (not persistent: akmctl set fnmode N --persist)")),
+        (Some(_), Some(_)) => (false, trf("{} — differ: reload hid_apple or reboot", &[&state])),
+        (Some(_), None) => (true, trf("{} (not persistent: akmctl set fnmode N --persist)", &[&state])),
         (None, _) => (false, state),
     }
 }

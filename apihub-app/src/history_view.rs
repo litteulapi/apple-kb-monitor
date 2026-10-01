@@ -89,7 +89,7 @@ fn load_bounded(
     file: impl FnOnce() -> Vec<HistoryEntry>,
 ) -> (Vec<HistoryEntry>, Option<String>) {
     if daemon_call.swap(true, Ordering::AcqRel) {
-        return (file(), Some("daemon still busy: history read from the file".into()));
+        return (file(), Some(crate::i18n::tr("daemon still busy: history read from the file").into()));
     }
     let (tx, rx) = mpsc::channel();
     let flag = daemon_call.clone();
@@ -105,7 +105,7 @@ fn load_bounded(
     match rx.recv_timeout(DAEMON_TIMEOUT) {
         Ok(Some(h)) => (h, None),
         Ok(None) => (file(), None),
-        Err(_) => (file(), Some(format!("daemon did not answer within {} s: history read from the file", DAEMON_TIMEOUT.as_secs()))),
+        Err(_) => (file(), Some(crate::i18n::trf("daemon did not answer within {} s: history read from the file", &[&DAEMON_TIMEOUT.as_secs()]))),
     }
 }
 

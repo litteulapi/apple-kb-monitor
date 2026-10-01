@@ -30,6 +30,8 @@ installé). Les réglages de l'utilisateur sont écrits par Plasma dans
 | `KeyboardOff` | clavier éteint (annoncé avant la coupure) | basse, transitoire | Ouvrir | `link` |
 | `KeyboardUnreachable` | clavier appairé qui ne répond plus | normale | Ouvrir | `link` |
 | `RepairNeeded` | ré-appairage nécessaire | critique, persistante | Réparer…, Ouvrir | `repair` |
+| `KeyboardRemoved` | clavier supprimé du poste depuis l'extérieur (Oublier de Plasma, `bluetoothctl remove`) (#252) | normale, 12 s | Réparer…, Ouvrir | `repair` |
+| `BatteryEstimate` | l'unique rappel « estimation selon vos piles » quand PowerDevil alerte déjà (#254) | normale, 12 s | Ouvrir | `battery` |
 | `FirmwareUpdate` | firmware plus récent connu | normale | Ouvrir | `firmware` |
 | `BatteryReminder` | rappel « changez les piles » | normale, 15 s | Ouvrir, Ignorer ce rappel | `battery` |
 | `BatteryReplaced` | piles neuves détectées | normale | Ouvrir | `battery` |
