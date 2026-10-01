@@ -1,0 +1,932 @@
+{
+ "_meta": {
+  "source": "btmon de la session reconnect-diag (btmon2T.txt, 11:37-12:15, fichier supprimé depuis par son auteur), requêtes appariées à la réponse suivante sur le canal de contrôle HIDP (CID 0x0041) pendant les passes Feature 12:02:30-12:04:28 et Input 12:09:35-12:11:29 de exhaustive_probe.py",
+  "hidp": "requête 0x43 = GET_REPORT Feature, 0x41 = GET_REPORT Input (bit Size 0x08 jamais posé par BlueZ) ; réponse 0x02/0x03 = HANDSHAKE, 0xA3/0xA1 = DATA",
+  "spec": "Bluetooth HID Profile 1.1.1 §7.4.1 (HANDSHAKE : 0 SUCCESSFUL, 1 NOT_READY, 2 ERR_INVALID_REPORT_ID, 3 ERR_UNSUPPORTED_REQUEST, 4 ERR_INVALID_PARAMETER, E ERR_UNKNOWN, F ERR_FATAL), §7.4.3 GET_REPORT",
+  "counts": {
+   "feature": {
+    "0x02": 2180,
+    "0x03": 110,
+    "DATA 0xA3": 294
+   },
+   "input": {
+    "0x02": 2510,
+    "DATA 0xA1": 50
+   },
+   "latency_ms_median": {
+    "feature 0x02": 8.7,
+    "feature DATA": 8.9,
+    "feature 0x03": 9.7,
+    "input 0x02": 8.2,
+    "input DATA": 7.8
+   },
+   "latency_ms_max": {
+    "feature 0x02": 679.8,
+    "feature DATA": 984.8
+   },
+   "sniff": "Mode Change Active/Sniff : 1372 cycles pendant la passe Feature, 1380 pendant la passe Input (sniff 12,5 ms)"
+  }
+ },
+ "by_type": {
+  "feature": {
+   "DATA": [
+    "09",
+    "46",
+    "47",
+    "49",
+    "4a",
+    "4b",
+    "4c",
+    "4f",
+    "51",
+    "52",
+    "53",
+    "54",
+    "5a",
+    "5b",
+    "5c",
+    "5d",
+    "60",
+    "d1",
+    "d8",
+    "ea",
+    "eb",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "fe",
+    "ff"
+   ],
+   "HANDSHAKE ERR_UNSUPPORTED_REQUEST": [
+    "40",
+    "41",
+    "44",
+    "45",
+    "50",
+    "55",
+    "d0",
+    "d4",
+    "d5",
+    "fa",
+    "fb"
+   ],
+   "HANDSHAKE ERR_INVALID_REPORT_ID": [
+    "00",
+    "01",
+    "02",
+    "03",
+    "04",
+    "05",
+    "06",
+    "07",
+    "08",
+    "0a",
+    "0b",
+    "0c",
+    "0d",
+    "0e",
+    "0f",
+    "10",
+    "11",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "1a",
+    "1b",
+    "1c",
+    "1d",
+    "1e",
+    "1f",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25",
+    "26",
+    "27",
+    "28",
+    "29",
+    "2a",
+    "2b",
+    "2c",
+    "2d",
+    "2e",
+    "2f",
+    "30",
+    "31",
+    "32",
+    "33",
+    "34",
+    "35",
+    "36",
+    "37",
+    "38",
+    "39",
+    "3a",
+    "3b",
+    "3c",
+    "3d",
+    "3e",
+    "3f",
+    "42",
+    "43",
+    "48",
+    "4d",
+    "4e",
+    "56",
+    "57",
+    "58",
+    "59",
+    "5e",
+    "5f",
+    "61",
+    "62",
+    "63",
+    "64",
+    "65",
+    "66",
+    "67",
+    "68",
+    "69",
+    "6a",
+    "6b",
+    "6c",
+    "6d",
+    "6e",
+    "6f",
+    "70",
+    "71",
+    "72",
+    "73",
+    "74",
+    "75",
+    "76",
+    "77",
+    "78",
+    "79",
+    "7a",
+    "7b",
+    "7c",
+    "7d",
+    "7e",
+    "7f",
+    "80",
+    "81",
+    "82",
+    "83",
+    "84",
+    "85",
+    "86",
+    "87",
+    "88",
+    "89",
+    "8a",
+    "8b",
+    "8c",
+    "8d",
+    "8e",
+    "8f",
+    "90",
+    "91",
+    "92",
+    "93",
+    "94",
+    "95",
+    "96",
+    "97",
+    "98",
+    "99",
+    "9a",
+    "9b",
+    "9c",
+    "9d",
+    "9e",
+    "9f",
+    "a0",
+    "a1",
+    "a2",
+    "a3",
+    "a4",
+    "a5",
+    "a6",
+    "a7",
+    "a8",
+    "a9",
+    "aa",
+    "ab",
+    "ac",
+    "ad",
+    "ae",
+    "af",
+    "b0",
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "b5",
+    "b6",
+    "b7",
+    "b8",
+    "b9",
+    "ba",
+    "bb",
+    "bc",
+    "bd",
+    "be",
+    "bf",
+    "c0",
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+    "c5",
+    "c6",
+    "c7",
+    "c8",
+    "c9",
+    "ca",
+    "cb",
+    "cc",
+    "cd",
+    "ce",
+    "cf",
+    "d2",
+    "d3",
+    "d6",
+    "d7",
+    "d9",
+    "da",
+    "db",
+    "dc",
+    "dd",
+    "de",
+    "df",
+    "e0",
+    "e1",
+    "e2",
+    "e3",
+    "e4",
+    "e5",
+    "e6",
+    "e7",
+    "e8",
+    "e9",
+    "ec",
+    "ed",
+    "ee",
+    "ef",
+    "f0",
+    "f1",
+    "f2",
+    "f3",
+    "f8",
+    "f9",
+    "fc",
+    "fd"
+   ]
+  },
+  "input": {
+   "DATA": [
+    "01",
+    "04",
+    "05",
+    "11",
+    "30"
+   ],
+   "HANDSHAKE ERR_INVALID_REPORT_ID": [
+    "00",
+    "02",
+    "03",
+    "06",
+    "07",
+    "08",
+    "09",
+    "0a",
+    "0b",
+    "0c",
+    "0d",
+    "0e",
+    "0f",
+    "10",
+    "12",
+    "13",
+    "14",
+    "15",
+    "16",
+    "17",
+    "18",
+    "19",
+    "1a",
+    "1b",
+    "1c",
+    "1d",
+    "1e",
+    "1f",
+    "20",
+    "21",
+    "22",
+    "23",
+    "24",
+    "25",
+    "26",
+    "27",
+    "28",
+    "29",
+    "2a",
+    "2b",
+    "2c",
+    "2d",
+    "2e",
+    "2f",
+    "31",
+    "32",
+    "33",
+    "34",
+    "35",
+    "36",
+    "37",
+    "38",
+    "39",
+    "3a",
+    "3b",
+    "3c",
+    "3d",
+    "3e",
+    "3f",
+    "40",
+    "41",
+    "42",
+    "43",
+    "44",
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "4a",
+    "4b",
+    "4c",
+    "4d",
+    "4e",
+    "4f",
+    "50",
+    "51",
+    "52",
+    "53",
+    "54",
+    "55",
+    "56",
+    "57",
+    "58",
+    "59",
+    "5a",
+    "5b",
+    "5c",
+    "5d",
+    "5e",
+    "5f",
+    "60",
+    "61",
+    "62",
+    "63",
+    "64",
+    "65",
+    "66",
+    "67",
+    "68",
+    "69",
+    "6a",
+    "6b",
+    "6c",
+    "6d",
+    "6e",
+    "6f",
+    "70",
+    "71",
+    "72",
+    "73",
+    "74",
+    "75",
+    "76",
+    "77",
+    "78",
+    "79",
+    "7a",
+    "7b",
+    "7c",
+    "7d",
+    "7e",
+    "7f",
+    "80",
+    "81",
+    "82",
+    "83",
+    "84",
+    "85",
+    "86",
+    "87",
+    "88",
+    "89",
+    "8a",
+    "8b",
+    "8c",
+    "8d",
+    "8e",
+    "8f",
+    "90",
+    "91",
+    "92",
+    "93",
+    "94",
+    "95",
+    "96",
+    "97",
+    "98",
+    "99",
+    "9a",
+    "9b",
+    "9c",
+    "9d",
+    "9e",
+    "9f",
+    "a0",
+    "a1",
+    "a2",
+    "a3",
+    "a4",
+    "a5",
+    "a6",
+    "a7",
+    "a8",
+    "a9",
+    "aa",
+    "ab",
+    "ac",
+    "ad",
+    "ae",
+    "af",
+    "b0",
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "b5",
+    "b6",
+    "b7",
+    "b8",
+    "b9",
+    "ba",
+    "bb",
+    "bc",
+    "bd",
+    "be",
+    "bf",
+    "c0",
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+    "c5",
+    "c6",
+    "c7",
+    "c8",
+    "c9",
+    "ca",
+    "cb",
+    "cc",
+    "cd",
+    "ce",
+    "cf",
+    "d0",
+    "d1",
+    "d2",
+    "d3",
+    "d4",
+    "d5",
+    "d6",
+    "d7",
+    "d8",
+    "d9",
+    "da",
+    "db",
+    "dc",
+    "dd",
+    "de",
+    "df",
+    "e0",
+    "e1",
+    "e2",
+    "e3",
+    "e4",
+    "e5",
+    "e6",
+    "e7",
+    "e8",
+    "e9",
+    "ea",
+    "eb",
+    "ec",
+    "ed",
+    "ee",
+    "ef",
+    "f0",
+    "f1",
+    "f2",
+    "f3",
+    "f4",
+    "f5",
+    "f6",
+    "f7",
+    "f8",
+    "f9",
+    "fa",
+    "fb",
+    "fc",
+    "fd",
+    "fe",
+    "ff"
+   ]
+  },
+  "output": "non mesuré : passe refusée à 12:16:43 par la garde (clavier déconnecté depuis 12:13:28)"
+ },
+ "incidents": {
+  "2026-10-01T04:00": {
+   "source": "tests/live/re/capture-2026-10-01.jsonl (sample_reports.py, tampon 64, 0,4 s entre requêtes)",
+   "reads": [
+    {
+     "t": 1790820009.0,
+     "id": "0x46",
+     "ret": 3,
+     "errno": null,
+     "ms": 8.2
+    },
+    {
+     "t": 1790820009.4,
+     "id": "0x47",
+     "ret": 2,
+     "errno": null,
+     "ms": 18.8
+    },
+    {
+     "t": 1790820009.8,
+     "id": "0x49",
+     "ret": 3,
+     "errno": null,
+     "ms": 26.1
+    },
+    {
+     "t": 1790820010.3,
+     "id": "0x4A",
+     "ret": 2,
+     "errno": null,
+     "ms": 23.6
+    },
+    {
+     "t": 1790820010.7,
+     "id": "0x4B",
+     "ret": 3,
+     "errno": null,
+     "ms": 25.8
+    },
+    {
+     "t": 1790820011.1,
+     "id": "0xEA",
+     "ret": 2,
+     "errno": null,
+     "ms": 24.8
+    },
+    {
+     "t": 1790820011.6,
+     "id": "0xF4",
+     "ret": 3,
+     "errno": null,
+     "ms": 39.9
+    },
+    {
+     "t": 1790820012.0,
+     "id": "0xF5",
+     "ret": 3,
+     "errno": null,
+     "ms": 22.8
+    },
+    {
+     "t": 1790820012.4,
+     "id": "0xF6",
+     "ret": 3,
+     "errno": null,
+     "ms": 23.9
+    },
+    {
+     "t": 1790820012.8,
+     "id": "0xF7",
+     "ret": 3,
+     "errno": null,
+     "ms": 41.9
+    },
+    {
+     "t": 1790820016.6,
+     "id": "0xFE",
+     "ret": -1,
+     "errno": 5,
+     "ms": 3392.9
+    },
+    {
+     "t": 1790820020.6,
+     "id": "0xFF",
+     "ret": -1,
+     "errno": 5,
+     "ms": 3598.9
+    },
+    {
+     "t": 1790820024.6,
+     "id": "0x5B",
+     "ret": -1,
+     "errno": 5,
+     "ms": 3598.7
+    },
+    {
+     "t": 1790820028.6,
+     "id": "0x09",
+     "ret": -1,
+     "errno": 5,
+     "ms": 3603.4
+    }
+   ]
+  },
+  "2026-10-01T12:13": {
+   "_meta": {
+    "source": "btmon -w (agent reconnect-diag, scratchpad btmon2T.txt), extrait 12:13:05-12:13:30 ; aucune charge utile recopiée",
+    "note": "lecture par un autre outil que la sonde exhaustive (dernière requête de la sonde : 12:11:28.493)"
+   },
+   "timeline": [
+    {
+     "t": "12:13:05.781734",
+     "ev": "ACL hôte→clavier HIDP 43 d1 (GET_REPORT Feature 0xd1)"
+    },
+    {
+     "t": "12:13:05.781749",
+     "ev": "HCI Command 0x02|0x0004"
+    },
+    {
+     "t": "12:13:05.783032",
+     "ev": "Command Status Exit Sniff Mode (0x02|0x0004) ncmd 1"
+    },
+    {
+     "t": "12:13:05.793028",
+     "ev": "HCI Number of Completed Packets (accusé bande de base)"
+    },
+    {
+     "t": "12:13:05.806494",
+     "ev": "ACL clavier→hôte HIDP a3 d1 (DATA Feature, payload omis)"
+    },
+    {
+     "t": "12:13:05.821036",
+     "ev": "Mode Change Status: Success (0x00) Mode: Active (0x00)"
+    },
+    {
+     "t": "12:13:05.848028",
+     "ev": "Mode Change Status: Success (0x00) Mode: Sniff (0x02)"
+    },
+    {
+     "t": "12:13:06.206740",
+     "ev": "ACL hôte→clavier HIDP 43 d8 (GET_REPORT Feature 0xd8)"
+    },
+    {
+     "t": "12:13:06.206756",
+     "ev": "HCI Command 0x02|0x0004"
+    },
+    {
+     "t": "12:13:06.208069",
+     "ev": "Command Status Exit Sniff Mode (0x02|0x0004) ncmd 1"
+    },
+    {
+     "t": "12:13:06.218048",
+     "ev": "HCI Number of Completed Packets (accusé bande de base)"
+    },
+    {
+     "t": "12:13:06.243049",
+     "ev": "Mode Change Status: Success (0x00) Mode: Active (0x00)"
+    },
+    {
+     "t": "12:13:06.247500",
+     "ev": "ACL clavier→hôte HIDP a3 d8 (DATA Feature, payload omis)"
+    },
+    {
+     "t": "12:13:06.273035",
+     "ev": "Mode Change Status: Success (0x00) Mode: Sniff (0x02)"
+    },
+    {
+     "t": "12:13:06.647782",
+     "ev": "ACL hôte→clavier HIDP 43 eb (GET_REPORT Feature 0xeb)"
+    },
+    {
+     "t": "12:13:06.647807",
+     "ev": "HCI Command 0x02|0x0004"
+    },
+    {
+     "t": "12:13:06.649040",
+     "ev": "Command Status Exit Sniff Mode (0x02|0x0004) ncmd 1"
+    },
+    {
+     "t": "12:13:06.655041",
+     "ev": "HCI Number of Completed Packets (accusé bande de base)"
+    },
+    {
+     "t": "12:13:06.668517",
+     "ev": "ACL clavier→hôte HIDP a3 eb (DATA Feature, payload omis)"
+    },
+    {
+     "t": "12:13:06.683057",
+     "ev": "Mode Change Status: Success (0x00) Mode: Active (0x00)"
+    },
+    {
+     "t": "12:13:06.710034",
+     "ev": "Mode Change Status: Success (0x00) Mode: Sniff (0x02)"
+    },
+    {
+     "t": "12:13:07.068807",
+     "ev": "ACL hôte→clavier HIDP 43 f4 (GET_REPORT Feature 0xf4)"
+    },
+    {
+     "t": "12:13:07.068837",
+     "ev": "HCI Command 0x02|0x0004"
+    },
+    {
+     "t": "12:13:07.070051",
+     "ev": "Command Status Exit Sniff Mode (0x02|0x0004) ncmd 1"
+    },
+    {
+     "t": "12:13:07.080057",
+     "ev": "HCI Number of Completed Packets (accusé bande de base)"
+    },
+    {
+     "t": "12:13:07.093501",
+     "ev": "ACL clavier→hôte HIDP a3 f4 (DATA Feature, payload omis)"
+    },
+    {
+     "t": "12:13:07.108053",
+     "ev": "Mode Change Status: Success (0x00) Mode: Active (0x00)"
+    },
+    {
+     "t": "12:13:07.135048",
+     "ev": "Mode Change Status: Success (0x00) Mode: Sniff (0x02)"
+    },
+    {
+     "t": "12:13:07.493808",
+     "ev": "ACL hôte→clavier HIDP 43 f5 (GET_REPORT Feature 0xf5)"
+    },
+    {
+     "t": "12:13:07.493826",
+     "ev": "HCI Command 0x02|0x0004"
+    },
+    {
+     "t": "12:13:07.495045",
+     "ev": "Command Status Exit Sniff Mode (0x02|0x0004) ncmd 1"
+    },
+    {
+     "t": "12:13:07.505051",
+     "ev": "HCI Number of Completed Packets (accusé bande de base)"
+    },
+    {
+     "t": "12:13:07.518492",
+     "ev": "ACL clavier→hôte HIDP a3 f5 (DATA Feature, payload omis)"
+    },
+    {
+     "t": "12:13:07.533079",
+     "ev": "Mode Change Status: Success (0x00) Mode: Active (0x00)"
+    },
+    {
+     "t": "12:13:07.560054",
+     "ev": "Mode Change Status: Success (0x00) Mode: Sniff (0x02)"
+    },
+    {
+     "t": "12:13:07.918743",
+     "ev": "ACL hôte→clavier HIDP 43 f6 (GET_REPORT Feature 0xf6)"
+    },
+    {
+     "t": "12:13:07.918763",
+     "ev": "HCI Command 0x02|0x0004"
+    },
+    {
+     "t": "12:13:07.920085",
+     "ev": "Command Status Exit Sniff Mode (0x02|0x0004) ncmd 1"
+    },
+    {
+     "t": "12:13:07.955054",
+     "ev": "HCI Number of Completed Packets (accusé bande de base)"
+    },
+    {
+     "t": "12:13:07.956050",
+     "ev": "Mode Change Status: Success (0x00) Mode: Active (0x00)"
+    },
+    {
+     "t": "12:13:07.958665",
+     "ev": "ACL clavier→hôte HIDP a3 f6 (DATA Feature, payload omis)"
+    },
+    {
+     "t": "12:13:07.987052",
+     "ev": "Mode Change Status: Success (0x00) Mode: Sniff (0x02)"
+    },
+    {
+     "t": "12:13:08.358947",
+     "ev": "ACL hôte→clavier HIDP 43 f7 (GET_REPORT Feature 0xf7)"
+    },
+    {
+     "t": "12:13:08.358975",
+     "ev": "HCI Command 0x02|0x0004"
+    },
+    {
+     "t": "12:13:08.360060",
+     "ev": "Command Status Exit Sniff Mode (0x02|0x0004) ncmd 1"
+    },
+    {
+     "t": "12:13:08.368088",
+     "ev": "HCI Number of Completed Packets (accusé bande de base)"
+    },
+    {
+     "t": "12:13:08.395089",
+     "ev": "Mode Change Status: Success (0x00) Mode: Active (0x00)"
+    },
+    {
+     "t": "12:13:08.397493",
+     "ev": "ACL clavier→hôte HIDP a3 f7 (DATA Feature, payload omis)"
+    },
+    {
+     "t": "12:13:08.425069",
+     "ev": "Mode Change Status: Success (0x00) Mode: Sniff (0x02)"
+    },
+    {
+     "t": "12:13:08.797751",
+     "ev": "ACL hôte→clavier HIDP 43 fe (GET_REPORT Feature 0xfe)"
+    },
+    {
+     "t": "12:13:08.797771",
+     "ev": "HCI Command 0x02|0x0004"
+    },
+    {
+     "t": "12:13:08.799062",
+     "ev": "Command Status Exit Sniff Mode (0x02|0x0004) ncmd 1"
+    },
+    {
+     "t": "12:13:08.805077",
+     "ev": "HCI Number of Completed Packets (accusé bande de base)"
+    },
+    {
+     "t": "12:13:12.083257",
+     "ev": "bluetoothd: profiles/input/device.c:hidp_repor..   2026-10"
+    },
+    {
+     "t": "12:13:20.621966",
+     "ev": "bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10"
+    },
+    {
+     "t": "12:13:20.622486",
+     "ev": "bluetoothd: Adv Monitor app :1.704 disc..   [hci0] 2026-10"
+    },
+    {
+     "t": "12:13:21.599708",
+     "ev": "ACL hôte→clavier HIDP 43 47 (GET_REPORT Feature 0x47)"
+    },
+    {
+     "t": "12:13:25.071589",
+     "ev": "bluetoothd: profiles/input/device.c:hidp_repor..   2026-10"
+    },
+    {
+     "t": "12:13:28.822273",
+     "ev": "Mode Change Status: Connection Timeout (0x08) Mode: Active (0x00)"
+    },
+    {
+     "t": "12:13:28.823260",
+     "ev": "Disconnection Complete Reason: Connection Timeout (0x08)"
+    },
+    {
+     "t": "12:13:28.823278",
+     "ev": "@ MGMT Event: Dev.. (0x000c) plen 8  {0x0001} [hci"
+    },
+    {
+     "t": "12:13:28.850598",
+     "ev": "HCI Command 0x03|0x001a"
+    },
+    {
+     "t": "12:13:28.851266",
+     "ev": "Command Status Write Scan Enable (0x03|0x001a) ncmd 2"
+    },
+    {
+     "t": "12:13:30.071573",
+     "ev": "HCI Command 0x01|0x0005"
+    },
+    {
+     "t": "12:13:30.072274",
+     "ev": "Command Status Create Connection (0x01|0x0005) ncmd 1"
+    }
+   ]
+  }
+ }
+}
