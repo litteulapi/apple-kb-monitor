@@ -80,7 +80,7 @@ proptest! {
                 }
                 Op::Due => { let _ = m.due(now); }
                 Op::AcquireDone(ok) => m.acquire_done(ok, now),
-                Op::Force => m.force_refresh(now),
+                Op::Force => { let _ = m.force_refresh(now); }
                 Op::Wait(s) => now += Duration::from_secs(s),
             }
             check_machine(&mut m, now)?;
@@ -99,7 +99,7 @@ proptest! {
             match o {
                 Op::Ev(e) => { let _ = m.on_event(&e, now); }
                 Op::Wait(s) => now += Duration::from_secs(s),
-                Op::Force => m.force_refresh(now),
+                Op::Force => { let _ = m.force_refresh(now); }
                 _ => {}
             }
             let was_connected = m.is_connected();
