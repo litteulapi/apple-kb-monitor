@@ -17,6 +17,32 @@ Niveaux de preuve : **[plist]**, **[décompilé]** (sortie du décompilateur Ghi
 **[chaîne]**, **[déduction]**, **[mesuré]** (renvoie à `HARDWARE-RAPPORTS-HID.md`).
 Les adresses sont celles du kernelcache arm64e démarré (`0xfffffe00…`) ; celles du KC x86_64 (`0xffffff80…`) sont signalées.
 
+## 0. Rapport avec `RE-GHIDRA-IOBLUETOOTH.md` (travail parallèle)
+
+Une étude menée en parallèle (branche `re/ghidra-iobluetooth`, issues #239, #242-#244) a décompilé avec Ghidra
+IOBluetooth.framework, CoreBluetooth, `bluetoothd` **et** le pilote noyau. Les deux études ont été faites **indépendamment**
+(projets Ghidra, scripts et lectures distincts) ; leurs constats noyau concordent, ce qui vaut contre-vérification :
+disjoncteur commun GET/SET avec `SetHIDDriverReady(false)`, compteur à 1 après veille, délais 3 500/4 500/5 500 ms,
+34 commandes, `handleSleep` sans émission, SET_PROTOCOL initial à 10 000 ms, `KeyboardOff` + drapeau `+0x169`,
+fenêtre de rejet de 1,6 s inactive.
+
+**Propre à ce document** (absent de `RE-GHIDRA-IOBLUETOOTH.md`) :
+
+1. le test du disjoncteur est aussi dans **`sendData`** : une fois levé, **plus aucune** émission, HID_CONTROL et LED comprises (§2.2) ;
+2. **`HIDExitSuspend` n'émet pas `0x14`** : il n'appelle que `handleWake`, qui ne fait qu'effacer des drapeaux ; le noyau
+   n'appelle `hidControl(4)` nulle part. Pour l'A1314 (pilote noyau), le « EXIT_SUSPEND » de `bluetoothd` au réveil passe par
+   cette commande et **ne met donc rien sur le fil** ; cela nuance #244 (§2.4) ;
+3. table `DecodedHandshake` (codes de retour IOKit par type de refus) et rejet des réponses dont l'**ID** diffère de la requête
+   (« Report does not equal the report we asked for » → expiration) (§2.5) ;
+4. `getExtendedReport` **exige `size`** : les entrées `0x40 0x41 0x44 0x45 0x50` sont illisibles par construction (§4) ;
+5. `newReportDescriptor` ne corrige pas le descripteur ; `A1 30 xx` est consommé avant IOHID (§4) ;
+6. second chemin `0x09` par IOHID (`FWCapsLockDelay`, claviers USB `0x220-0x222`/`0x24F-0x251`, version ≥ `0x68`) (§4.1) ;
+7. classe **`IOBluetoothHIDChannel`** d'`IOBluetoothFamily`, second pilote HID sans couche Apple (§5.1) ;
+8. balayage exhaustif des immédiats **et des segments de données** de six kexts, dont `IOHIDFamily` et `AppleHIDTransport` (§5) ;
+9. **diff x86_64 ↔ arm64e** (§6) ;
+10. `Info.plist` du plug-in présent sur disque, clés `Connection/DisconnectionNotificationType`, `'bsk2'` = type générique (§2.1) ;
+11. chaîne Ghidra réutilisable pour les KC fileset, dont l'application des `LC_SYMTAB` que le chargeur de Ghidra 12.1.2 omet (§1).
+
 ## 1. Sources et méthode
 
 | Élément | Origine (Mac) | Traitement |
@@ -80,7 +106,7 @@ Le décompilé montre davantage **[décompilé]** :
 | Remise à zéro | `waitForData`/`waitForHandshake`/`waitForOkToSend` (réponse reçue), `init` ; `deviceConnectTimerFired` `0xfffffe000a35a8bc` (compteur seul) | drapeau et compteur repassent à 0 à la première réponse valide (y compris un refus HANDSHAKE) ; le compteur seul à la connexion. Une fois le drapeau levé, plus rien n'est émis : en pratique seuls une nouvelle connexion (nouvel objet pilote) ou une veille de l’hôte (`handleSleep` : drapeau à 0, compteur à 1) le lèvent |
 | **Après une veille** | `IOBluetoothHIDDriver::handleSleep` `0xfffffe000a35abe4` | compteur forcé à **1** (*« setting mHandshakeTimeoutCounter to 1 and _mUseSleepTimeout to true »*) : au réveil, **2** expirations suffisent à déclencher la déconnexion |
 
-Conséquence pour #175/#214 : le comportement Apple n'est pas « se taire » mais **se taire puis abandonner la liaison**.
+Conséquence pour #175/#243 : le comportement Apple n'est pas « se taire » mais **se taire puis abandonner la liaison**.
 
 ### 2.3 Délais réels d'une requête (et non 3,5 s)
 
@@ -115,8 +141,9 @@ le pilote noyau envoyait `0x13`/`0x14`. En 26.5 arm64e **[décompilé]** :
 | `getReportWL` / `setReportWL` | `0xfffffe000a360d28` / `0xfffffe000a36111c` | si `_mHIDSuspendSent` et le dernier « exit suspend » a échoué, appellent `handleWake` puis émettent quand même : la **première requête après le réveil** fait office de sortie de veille |
 
 Conclusion **[décompilé + déduction]** : sur macOS 26.5, `0x13` n'est émis que si `bluetoothd` envoie la commande `HIDSuspend`
-(chaîne *« Sending SUSPEND command… »* de `bluetoothd`, `RE-PILOTE-MACOS.md` E5). Le *« Sending EXIT_SUSPEND »* de `bluetoothd`
-aboutit à la commande `HIDExitSuspend`, qui **ne met rien sur le fil**. Le clavier sort donc de SUSPEND par son propre trafic
+(`prepareForSleep`, `RE-GHIDRA-IOBLUETOOTH.md` §5.3). Au réveil, `bluetoothd` (`prepareForWake`) passe, pour un appareil piloté
+par le noyau comme l'A1314, par la commande `HIDExitSuspend`, qui **ne met rien sur le fil** ; le chemin « direct » de
+`bluetoothd` concerne les appareils à pilote HID en espace utilisateur (`RE-GHIDRA-IOBLUETOOTH.md` §5.3). Le clavier sort donc de SUSPEND par son propre trafic
 (frappe) ou par la requête suivante de l'hôte. `0x14` n'est émissible qu'avec la commande brute `HIDControl 4`.
 
 **Filtre de touches au réveil (code mort en 26.5)** : `IOBluetoothHIDDriver::processInterruptData` (`0xfffffe000a35d1c8`)
@@ -271,11 +298,11 @@ Seules les lignes **nouvelles ou corrigées** par rapport à `RE-PILOTE-MACOS.md
 
 | Registre / commande | Fonction Apple (arm64e) | Preuve | Fait nouveau | Risque d'écriture / conséquence projet |
 |---|---|---|---|---|
-| GET ×3 sans réponse | `waitForData` `0xfffffe000a35daa0` (+ `waitForHandshake`, `waitForOkToSend`) | [décompilé] | disjoncteur **+ demande de déconnexion à `bluetoothd`** (`SetHIDDriverReady(false)`) ; 2 expirations suffisent après une veille | à imiter dans #214 : couper les requêtes **et** laisser tomber la liaison plutôt qu'insister |
+| GET ×3 sans réponse | `waitForData` `0xfffffe000a35daa0` (+ `waitForHandshake`, `waitForOkToSend`) | [décompilé] | disjoncteur **+ demande de déconnexion à `bluetoothd`** (`SetHIDDriverReady(false)`) ; 2 expirations suffisent après une veille | à imiter dans #243 : couper les requêtes **et** laisser tomber la liaison plutôt qu'insister |
 | Refus HANDSHAKE (`0x03`…) | `DecodedHandshake` `0xfffffe000a35e324` | [décompilé] | compte comme réponse, remet le compteur à 0 | nos 11 IDs « sans GET » ne sont pas la cause des coupures (#175) ; seul le silence l'est |
 | Délais | `waitForData`, `waitForHandshake`, `deviceReady` | [décompilé] | GET/SET : 3 500 ms + garde 1 000 ms ; après veille 4 500/5 500 ms ; SET_PROTOCOL initial 10 000 ms | nos délais (3 s BlueZ, 5 s noyau) sont du même ordre |
 | HID_CONTROL `0x13` | `hidControl` `0xfffffe000a35f488` ← `processCommandWL` (`HIDSuspend`) | [décompilé] | jamais émis par le noyau de lui-même ; seulement sur commande de `bluetoothd` | faible |
-| HID_CONTROL `0x14` | `processCommandWL` (`HIDExitSuspend`) | [décompilé] | **jamais émis** par macOS 26.5 (sauf commande brute `HIDControl 4`) : la sortie de veille est implicite | ne pas compter sur `0x14` pour réveiller l'A1314 |
+| HID_CONTROL `0x14` | `processCommandWL` (`HIDExitSuspend`) | [décompilé] | **jamais émis par le noyau** (sauf commande brute `HIDControl 4`) ; la requête de `bluetoothd` au réveil n'émet rien pour un appareil piloté par le noyau : sortie de veille implicite | #244 : `0x14` reste conforme au protocole HID, mais ce n'est pas ce que fait macOS 26.5 pour l'A1314 |
 | HID_CONTROL `0x15` reçu | `processControlData` `0xfffffe000a35c898` | [décompilé] | fermeture des deux canaux puis `closeConnection` | lecture passive : à journaliser si BlueZ le remonte |
 | `0x30` (Input) | `IOAppleBluetoothHIDDriver::processInterruptData` `0xfffffe000a355388` | [décompilé] | exactement 3 octets `A1 30 xx`, consommé (n'atteint pas IOHID) ; réaction **au changement** seulement | lecture passive (#189) |
 | `0x13` (Input) bit 1 = 0 | `AppleBluetoothHIDKeyboard::processInterruptData` `0xfffffe00090758a0` | [décompilé] | `KeyboardOff` **et** suppression de la notification `Disconnected` qui suit | #190 : ne pas alerter « liaison perdue » après un `0x13` bit 1 = 0 |
@@ -307,5 +334,10 @@ Seules les lignes **nouvelles ou corrigées** par rapport à `RE-PILOTE-MACOS.md
 
 ## 10. Suivi Gitea
 
-Voir les issues ouvertes par cette étude (disjoncteur et déconnexion, `0x14` jamais émis, suppression de l'alerte après `KeyboardOff`)
-et les commentaires sur #175, #189, #190, #214.
+| Issue | Objet |
+|---|---|
+| #243 | disjoncteur complet (commenté : test dans `sendData`, refus HANDSHAKE = réponse) |
+| #244 | veille SUSPEND/EXIT_SUSPEND (commenté : `HIDExitSuspend` n'émet pas `0x14`) |
+| #190 | extinction `0x13` bit 1 (commenté : `Disconnected` supprimée ensuite) |
+| #175 | coupures (commenté : seul le silence arme le disjoncteur) |
+| #245 | docs — corrections issues de ce document |
