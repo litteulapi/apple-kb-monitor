@@ -45,11 +45,11 @@ Dernière requête de cette sonde : **12:11:28.493** (Input `0xFF`, tampon 256, 
   implémentés ont reçu un HANDSHAKE d'erreur en 8-10 ms (médiane), en rafale à 40 ms d'intervalle, sans aucune coupure **[mesuré]**.
 * **La forme restreinte tient : « un GET_REPORT Feature `0xFE` peut figer le micrologiciel ».**
   * **[mesuré]** Dans les deux coupures instrumentées, la dernière requête est `0xFE`, juste après `0xF7`, à 0,4 s d'intervalle.
-    Si l'ID fatal était tiré au hasard dans ces séquences de 14 à 27 IDs, deux fois `0xFE` aurait une probabilité de l'ordre
-    de (1/27)², soit 0,14 %.
+    Si l'ID fatal était tiré au hasard dans ces séquences (14 IDs à 04:00, ~27 à 12:13), deux fois `0xFE` aurait une probabilité
+    de l'ordre de 1/14 × 1/27 ≈ 0,26 % [calcul contre-audit ; le modèle « ID tiré au hasard » est lui-même une hypothèse].
   * **[mesuré]** `0xFE` est aussi le seul rapport vide dont le contenu a changé : le dump de 03:57 donne `fe 00 04…`
     (l'outil supprime les zéros de fin, mais pas un `04` intérieur), puis des zéros. Ce n'était donc **pas** un artefact,
-    contrairement à ce que dit HARDWARE-RAPPORTS-HID §2.
+    contrairement à ce que disait HARDWARE-RAPPORTS-HID §2 (corrigé au contre-audit : l'ancien `--dump` allouait un tampon neuf par ID).
   * **Contre-exemples [mesuré]** : `0xFE` a été lu sans incident 2 fois à 03:58, 13 fois dans la série de 04:15 à 05:15
     (à chaque fois juste après `0xF7`), 10 fois dans la passe Feature de 12:02 (après des refus de `0xFD`) et au moins une
     fois plus tôt dans la capture de 12:13. Cela fait **2 blocages sur environ 27 lectures** : le déclencheur n'est pas
@@ -136,7 +136,7 @@ par un seul lecteur. `0x5A`, `0x4F` et `0x51-0x54` au plus une fois par connexio
   |---|---|---|
   | `0x46` | 2974-2982 mV | 2986-2991 mV |
   | `0xFF` | 2969-2978 mV | idem `0x46` |
-  | `0x49` | **2945 mV**, stable sur 11 lectures | 2950 mV |
+  | `0x49` | **2945 mV**, stable sur les 9 lectures de 3 octets (tampons ≥ 3 ; tampon 2 tronqué, tampon 1 refusé) | 2950 mV |
   | `0x47` | 98 | 99 |
   | `0xEA` | 98 | 98 |
   | BlueZ | 98 % | 99 % |
@@ -194,11 +194,11 @@ de risque particulier, mais elle n'est pas prioritaire : à reprendre seulement 
 | BlueZ `profiles/input/device.c` | GET_REPORT = en-tête + ID, **sans BufferSize** ; correspondance des types de rapport uhid → HIDP ; `REPORT_REQ_TIMEOUT 3` s | [source] confirmé par la mesure : réponse indépendante du tampon, EIO après ≈ 3,4 s |
 | Noyau `hidraw.c` | `count < 2` → EINVAL ; `HIDIOCGFEATURE`/`HIDIOCGINPUT`/`HIDIOCGOUTPUT` | [source] confirmé |
 | Noyau `uhid.c` | attente de 5 s, `req->err` → `-EIO`, copie `min3(...)` | [source] confirmé |
-| Noyau `hid-input.c` | quirk `PERCENT \| FEATURE` pour 0x0255/0x0256 ; tampon `max(len, 4)` ; lecture limitée à une toutes les 30 s | [source], expliqué par le refus du GET Input `0x47` [mesuré] |
+| Noyau `hid-input.c` | quirk `PERCENT \| FEATURE` pour 0x0255/0x0256 ; tampon `max(len, 4)` ; la limite de 30 s (`ratelimit_time`) ne concerne que `hidinput_update_battery` (rapports d'entrée spontanés), pas les lectures de `capacity` [contre-audit] | [source], expliqué par le refus du GET Input `0x47` [mesuré] |
 | Noyau `hid-apple.c` | 0x0256 : `APPLE_NUMLOCK_EMULATION \| APPLE_HAS_FN \| APPLE_ISO_TILDE_QUIRK`, aucune correction de descripteur, aucun rapport vendeur (`0xB0`/`0xBF` = rétroéclairage, d'autres modèles) | [source] |
 | Bluetooth HID Profile 1.1.1 §7.4 | codes HANDSHAKE, bit Size de GET_REPORT | [source] |
 | Fiche du module BM2042 (tiers, à base de BCM2042) ([PDF](https://pop.fsck.pl/hardware/toshiba-n554/SPEC-BM2042-V1.0.pdf)) | VBAT de **1,7 à 3,6 V**, sniff de 10 ms à 1,28 s, veille profonde réveillée par interruption | [source] ; **appuie l'hypothèse `0xF4` = 1740 mV = tension minimale de fonctionnement** |
-| macOS IOKit `AppleBluetoothHIDKeyboard` ([managingosx, 2014](https://managingosx.wordpress.com/2014/04/23/reporting-on-bluetooth-mousekeyboard-battery-status/)) | propriétés `BatteryPercent`, `BatteryLow`, `BatteryPanic` et un bloc binaire `"Battery" = <"MVLT…` | [source] ; **[hypothèse]** `MVLT` serait une étiquette « millivolts » : macOS lirait une tension en mV, comme `0x46` |
+| macOS IOKit `AppleBluetoothHIDKeyboard` ([managingosx, 2014](https://managingosx.wordpress.com/2014/04/23/reporting-on-bluetooth-mousekeyboard-battery-status/)) | propriétés `BatteryPercent`, `BatteryLow`, `BatteryPanic` et un bloc binaire `"Battery" = <"MVLT…` | [source, revérifiée] ; l'hypothèse « macOS calcule le % depuis des mV » est **réfutée** pour le pilote 2026 (RE-PILOTE-MACOS §6 : `0x47` recopié) ; l'origine du bloc `MVLT` de 2014 reste **inconnue** |
 | Projets publics | le seul résultat qui documente ces IDs est **ce projet lui-même** (miroir GitHub `litteulapi/apple-kb-monitor`, source circulaire, non retenue). Aucune autre carte des registres BCM2042 n'a été trouvée | — |
 
 ## 4. Classement octet par octet
@@ -212,7 +212,7 @@ Ce tableau ne liste que les ajouts et corrections ; pour le reste, voir `HARDWAR
 | Feature `0xF4` | 1-2 (BE) | 1740 = tension minimale en mV (la fiche BM2042 donne VBAT ≥ 1,7 V) | valeur [mesuré], borne [source], lien [hypothèse renforcée] |
 | Feature `0x47` | 1 | % ; **ne suit pas** tronc(interp(`0x49`)) | [mesuré] (#179) |
 | Feature `0x49` | 1-2 (LE) | mV lissés : 2953 → 2950 → 2945 sur 8 h | [mesuré] |
-| Feature `0x46` / `0xFF` | 1-2 | mV instantanés, en baisse de 2991 à 2982 entre le matin et midi | [mesuré] |
+| Feature `0x46` / `0xFF` | 1-2 | mV instantanés : 2982-2991 le matin, 2974-2982 (`0x46`) / 2969-2978 (`0xFF`) à 12:02 | [mesuré] |
 | Feature `0x4C` | 0-19 | inchangé : `0x03`, l'hôte, 12 octets secrets, même empreinte toute la journée | [mesuré] |
 | Input `0x01` | 1-8 | état clavier de démarrage en direct | [mesuré] + descripteur |
 | Input `0x04` | 1 | `0x00` | [mesuré], sens inconnu |

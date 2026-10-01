@@ -158,8 +158,8 @@ Lecture par chimie, pour 2,98-2,99 V (≈ 1,49 V par pile) :
   à 1,20-1,25 V). Avec des NiMH, le firmware afficherait **85-90 % dès la pose**, puis **50-75 % pendant
   presque toute la vie** des piles, et 25 % à la toute fin : le pourcentage serait faux dans l'autre sens.
 * **Lithium (L91)** : 1,49 V par pile correspond à la **fin de vie** (moins de 15 % restants). Neuves, elles
-  liraient 3,3 à 3,5 V par paire, au-dessus de la plage d'alimentation de 2,7-3,3 V annoncée pour le BCM2042
-  (seul un régulateur sur la carte rendrait ce cas sûr, non vérifié). Elles afficheraient 100 % pendant
+  liraient 3,3 à 3,5 V par paire : dans la plage VBAT 1,7-3,6 V de la fiche du module BM2042 (la mention « 2,7-3,3 V »
+  du *brief* Broadcom est une étiquette de schéma, probablement la sortie du régulateur) ; marge faible, non vérifiée sur la carte. Elles afficheraient 100 % pendant
   ~90 % de leur vie, puis s'effondreraient en quelques jours.
 
 → **Seule l'alcaline (ou la saline) rend 98-99 % cohérent** avec 2,97-2,99 V quelques heures après la pose.
@@ -268,12 +268,12 @@ série 04:15-05:15, btmon 11:37-12:15, balayage voisin de 12:02) :
 
 | Varie avec le temps ou la charge | Exploité ? |
 |---|---|
-| `0x46` tension instantanée | prévu par #139 (le code lit encore `0xF5`, #136) |
+| `0x46` tension instantanée | oui dans `akm-core` (02fad76, #139) ; le CLI Python lit encore `0xF5` (#200) |
 | `0xFF` octets 1-2 = `0x46` | doublon de `0x46` ; octet 3 = `0x01` constant (drapeau à surveiller en fin de vie) |
 | `0x49` tension lente | prévu par #139 ; **c'est la grandeur que suit le firmware** |
 | `0x47` % | oui (noyau, démon) |
 | `0xEA` % (en avance sur `0x47`, 0 transitoire) | non (écrasé par le noyau côté Rust, #136) ; utile comme signe avant-coureur de la marche suivante |
-| `0xFE` (`fe0004` une fois, puis des zéros) | non : vraisemblablement un artefact ; **ne plus le lire** (le clavier n'y a pas répondu juste avant le décrochage de 12:13) |
+| `0xFE` (`fe0004` une fois, puis des zéros) | non : **pas** un artefact de l'outil (contre-audit, cf. HARDWARE-RAPPORTS-HID §2), sens inconnu ; **ne plus le lire** (le clavier n'y a pas répondu juste avant le décrochage de 12:13) |
 
 Constants sur 9 h : `0x09`, `0x4A` (18), `0x4B`, `0x4F`, `0x51-0x54`, `0x5A`/`0x60`/`0xEB`, `0x5B`, `0x5C`,
 `0x5D`, `0xD1`, `0xD8`, `0xF4`, `0xF5`, `0xF6`, `0xF7`. **Aucun rapport variable n'a été oublié.**

@@ -62,7 +62,7 @@ Ghidra** et ne pose pas de difficulté de principe (§4).
 | Composant | Ce qui est attesté | Preuve |
 |---|---|---|
 | **SoC Bluetooth** | **Broadcom BCM2042**, boîtier **BGA**, intègre radio/transceiver + scanner de matrice clavier + baseband + cœur **8051** | [source publique] teardown iFixit (A1255, PCB quasi identique), product brief BCM2042 |
-| **Mémoire interne** (dans le SoC) | **108 Ko ROM masquée + 22 Ko RAM + 20 Ko Boot ROM**, design *ROM-based* « eliminates external flash » | [source publique] product brief `2042-PB03-R` / datasheet digchip |
+| **Mémoire interne** (dans le SoC) | **108 Ko ROM + 22 Ko RAM + 20 Ko Boot ROM**, design *ROM-based* « eliminates external flash » (« masquée » = déduction ; le brief offre aussi une « Flash option ») | [source publique] product brief `2042-PB03-R` / datasheet digchip |
 | **Mémoire externe de config** | **EEPROM série I²C** (famille 24Cxx) ; sur modules BCM2042 tiers observés : **FM24C64** (PA-48-V3), **FM24C32** (geekhack « Wireless Model M ») ; teardown A1255 : **EEPROM/flash STMicroelectronics** | [source publique] iFixit A1255, keyglove, geekhack |
 
 - **[déduction]** Le A1314 (2009) partage l'architecture du A1255/A1016 : **BCM2042 BGA + une petite EEPROM
@@ -76,8 +76,11 @@ Ghidra** et ne pose pas de difficulté de principe (§4).
   teardowns centrés sur la réparation, pas sur le circuit). **[déduction]**
 - Le BCM2042 en BGA n'expose **pas** de bus externe parallèle pour un dump ROM « à la 8051dumper »
   (qui exige le bus d'adresses/données d'un 8051 classique). **[déduction]**
-- **[spéculation]** Les puces Broadcom de cette famille ont en interne une **UART de debug/HCI** et des
-  broches de **mode test** ; sur un clavier fini elles ne sont **pas câblées sur un connecteur**. Les
+- **[source publique, ajouté au contre-audit]** La fiche du module Sunitec BM2042 (BCM2042KFB) documente une
+  **UART de debug** (`UP_TX`/`UP_RX`) : « after power on reset, if UP_RX = 1, Boot-ROM waits for download of firmware ;
+  UP_RX = 0, Boot-ROM launches firmware image in the external Flash or internal ROM ». Le mode téléchargement du Boot-ROM
+  existe donc sur la puce. **[spéculation]** Sur le PCB du A1314 ces broches ne sont pas câblées sur un connecteur et
+  leur emplacement n'est pas publié. Les
   retrouver supposerait de tracer des pastilles nues au microscope/multimètre, sans garantie.
 - **Ce qui est réellement accessible au fer** : **les 2 lignes I²C (SDA/SCL) + VCC/GND de l'EEPROM**, plus
   éventuellement la broche **WP** (write-protect, vue sur les variantes 48 broches). **[source publique]**
@@ -140,7 +143,8 @@ Ghidra** et ne pose pas de difficulté de principe (§4).
 - Les firmwares Broadcom publics concernent les **contrôleurs hôtes** (Wi-Fi/BT des Mac/téléphones :
   `NoaHimesaka1873/apple-bcm-firmware`, patchram `.hcd` de BrcmPatchRAM), **pas** le 8051 d'un clavier.
   **[source publique]**
-- **[source publique]** La **datasheet BCM2042** documente un détail exploitable pour le désassemblage : le
+- **[source non revérifiée au contre-audit]** (le *product brief* `2042-PB03-R` ne le mentionne pas ; la datasheet
+  complète n'était pas accessible : alldatasheet 403) La **datasheet BCM2042** documenterait le
   **bank switching** du code 8051 — **zone commune `0x0000–0x7FFF`, zone bankée `0x8000–0xFFFF`,
   sélection de banque par les bits 3–2 du port P1**. C'est la carte mémoire à reproduire dans l'outil (§4).
 
@@ -181,7 +185,7 @@ InternalBlue et BrcmPatchRAM documentent des **HCI Vendor Specific Commands** Br
 | Voie | Principe | Faisabilité | Risque |
 |---|---|---|---|
 | **UART/HCI série sur le PCB** | retrouver les pastilles HCI internes, parler Download_Minidriver + Read_RAM | **spéculative** : pastilles non documentées, peut être désactivé en prod | ouverture + traçage microscope |
-| **Boot ROM via mode test** | forcer un mode de boot qui dumpe | **spéculative** : aucun mode test public A1314 | risque de brique |
+| **Boot ROM via UART (`UP_RX = 1`)** | mode téléchargement documenté par la fiche BM2042 ; reste à savoir s'il permet de **lire** | **spéculative** : broche non localisée sur le A1314, protocole non publié | risque de brique |
 | **Glitching (fault injection)** | glitch d'alim pour contourner une éventuelle protection de lecture | **recherche**, semaines, matériel ChipWhisperer (~250 €+) | élevé |
 | **Decap + lecture optique de la ROM masquée** | retirer le die, lire la ROM au microscope | **laboratoire**, destructif, coûteux | perte définitive de la puce |
 | **EEPROM + patchs RAM** | si l'EEPROM contient des patchs RAM, on lit **une partie** du code exécuté | **réaliste partiel** (§2) | celui de l'EEPROM |
@@ -236,7 +240,7 @@ rapport information/risque** et peut contenir des **patchs RAM** = fragments de 
 | EEPROM grillée (5 V CH341A) | élevé | remplacer par EEPROM vierge **reprogrammée avec le dump** (d'où dump **avant**) |
 | Appairage effacé | moyen | ré-appairer (bouton power) ; perte des hôtes mémorisés |
 | Brique SoC (glitch/mode test/flash) | **très élevé** | **aucun** garanti (ROM-based, pas de flash applicatif) |
-| Garantie | — | A1314 hors garantie (2009) ; ouverture = fin de toute prise en charge |
+| Garantie | — | A1314 hors garantie (notre exemplaire : PID 0x0256, génération 2011) ; ouverture = fin de toute prise en charge |
 
 **[déduction]** **Le seul vrai filet de sécurité est le dump EEPROM intégral conservé avant toute
 écriture.** La ROM interne n'a aucun retour arrière.

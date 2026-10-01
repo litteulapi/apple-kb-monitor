@@ -20,6 +20,14 @@ Convention de preuve :
 
 ---
 
+> **Contre-audit (docs/CONTRE-AUDIT.md)** : les §1.1 et §1.2 ci-dessous sont **remplacés** par la carte
+> `ExtendedFeatures` du pilote macOS pour le PID 598 (RE-PILOTE-MACOS §3, niveau [plist]) : `0x40` = WillShutdown,
+> `0x41` = RecantConnection, `0x44` = FullFactoryDefault, `0x45` = FactoryDefault, `0x50` = DeviceNameChange,
+> `0x55` = **LongDeviceName (64 o)** — pas un « registre de configuration ». Les déductions « famille batterie/identité »
+> et « config vendeur » sont donc fausses pour ces six IDs. Seuls `0xD0 0xD4 0xD5 0xFA 0xFB` restent inconnus.
+> Au §2.1, le SDK WICED d'Infineon vise des puces récentes (CYW207xx) : c'est une **analogie**, pas une « preuve directe »
+> pour le micrologiciel Apple du BCM2042 ; `0x04`/`0x05` restent non confirmés (inconnus de macOS).
+
 ## 1. Les 11 IDs Feature refusés en lecture (`ERR_UNSUPPORTED_REQUEST` 0x03)
 
 `0x40 0x41 0x44 0x45 0x50 0x55 0xD0 0xD4 0xD5 0xFA 0xFB` — le micrologiciel les **connaît** (code
@@ -82,7 +90,7 @@ Ces trois IDs répondent au GET Input alors qu'ils **ne sont pas dans le descrip
 (`RE-HID-EXHAUSTIF.md` §2.2 : `0x04`→`04 00`, `0x05`→`05 02`, `0x30`→`30 00`). Correspondance publique
 trouvée :
 
-### 2.1 `0x04` = SLEEP, `0x05` = FUNC_LOCK (firmware HID de référence Broadcom/Infineon — preuve directe)
+### 2.1 `0x04` = SLEEP, `0x05` = FUNC_LOCK ? (firmware HID de référence Broadcom/Infineon — analogie, non confirmée)
 
 Le **BTSDK « HID dual-mode keyboard »** d'Infineon (ex-Broadcom/Cypress WICED, le SDK officiel des puces
 BT HID Broadcom successeurs du BCM2042) définit publiquement ses **report IDs d'entrée** ainsi
@@ -101,7 +109,7 @@ RPT_ID_IN_CNT_CTL    = 0xcc,   // Connection Control (feature aussi)
 
 - **[source publique]** Dans le firmware HID de référence de la famille Broadcom, **`0x04` est le
   rapport SLEEP** (notification de mise en veille) et **`0x05` le rapport FUNC_LOCK** (état du verrou Fn).
-- **[déduction forte]** Nos valeurs collent : `0x05`=`05 02` = octet d'état du verrou de fonction
+- **[spéculation]** (rétrogradé au contre-audit : aucune source Apple ; macOS ignore ces IDs) Nos valeurs collent : `0x05`=`05 02` = octet d'état du verrou de fonction
   (`02` = un état de bascule), `0x04`=`04 00` = pas d'évènement de veille en cours. Ce sont des
   **rapports d'entrée internes** que le A1314 **n'émet pas en interruption** (pas de touche Fn-lock
   physique sur ce modèle), mais que le cœur Broadcom expose quand même au GET.
@@ -252,14 +260,14 @@ chaînes, méthodes Objective-C, `Parameters.plist`) :
 
 | Registre | Type | Fonction probable | Preuve | Risque d'écriture | Test SÛR (sans écrire) |
 |---|---|---|---|---|---|
-| **`0x55`** | Feature (WO) | registre Feature vendeur de config, 64 o, volatile | [source] descr. Magic KB `0xFF02:0x55` + [déduction] | **moyen-élevé** (config) | comparer notre refus `0x03` au descripteur Magic KB ; aucune écriture |
-| **`0x50`** | Feature (WO) | validation/commit nom, ou 2ᵉ config | [déduction] (famille `0x5x`) | **moyen** | corréler avec `0x51-0x54` en lecture |
-| **`0x40 0x41 0x44 0x45`** | Feature (WO) | écriture bloc batterie/identité (calibration, seuils) | [déduction] (famille `0x4x`) | **moyen** | lire les voisins `0x46/0x49/0x4C` seulement |
+| **`0x55`** | Feature (WO) | **LongDeviceName** (64 o) | [plist] RE-PILOTE-MACOS §3 (remplace la déduction « config vendeur ») | moyen (NVRAM) | aucune écriture |
+| **`0x50`** | Feature (WO) | **DeviceNameChange** (validation du nom) | [plist] RE-PILOTE-MACOS §3 | **moyen** | aucune écriture |
+| **`0x40 0x41 0x44 0x45`** | Feature (WO) | **WillShutdown, RecantConnection, FullFactoryDefault, FactoryDefault** | [plist] RE-PILOTE-MACOS §3 (remplace la déduction « bloc batterie ») | `0x40` faible (macOS l'envoie) ; `0x41` élevé ; `0x44`/`0x45` **INTERDIT** (remise à zéro) | aucune écriture |
 | **`0xD0 0xD4 0xD5`** | Feature (WO) | écriture bloc « état radio » | [déduction] (famille `0xDx`) | **inconnu** | lire `0xD1/0xD8` (passif) |
 | **`0xFA 0xFB`** | Feature (WO) | écriture bloc alim/veille (p.ex. délai `0xF5`) | [déduction] (famille `0xFx`) + [spéculation] | **élevé** (alim/radio) | mesure passive du délai de veille (#173) |
-| `0x04` | Input non décl. | **SLEEP** (notif. veille) | [source] WICED `RPT_ID_IN_SLEEP=0x04` | n/a (entrée) | **lecture passive** du nœud hidraw |
-| `0x05` | Input non décl. | **FUNC_LOCK** (état verrou Fn) | [source] WICED `RPT_ID_IN_FUNC_LOCK=0x05` + [mesuré] `05 02` | n/a (entrée) | lecture passive |
-| `0x30` | Input non décl. | **BATT_STAT** (état batterie) | [source] bthidd `BATT_STAT_REPORT_ID=0x30` | n/a (entrée) | lecture passive |
+| `0x04` | Input non décl. | SLEEP ? | [analogie] WICED `RPT_ID_IN_SLEEP=0x04` ; inconnu de macOS | n/a (entrée) | **lecture passive** du nœud hidraw |
+| `0x05` | Input non décl. | FUNC_LOCK ? | [analogie] WICED `RPT_ID_IN_FUNC_LOCK=0x05` + [mesuré] `05 02` ; inconnu de macOS | n/a (entrée) | lecture passive |
+| `0x30` | Input non décl. | **BatteryState** (0 normal, 1 bas, 2-3 critique) | [source] bthidd `BATT_STAT_REPORT_ID=0x30` + [plist/désassemblage] RE-PILOTE-MACOS | n/a (entrée) | lecture passive |
 | `0x47` | Input→Feature | battery strength (%) | [source] noyau quirk + [mesuré] | — (déjà lu) | déjà en prod |
 | `0x35` | Feature | **N/A A1314** (clé de lien Magic KB, CVE-2024-0230) | [source] Newlin | — | ne pas chercher (refusé `0x02`) |
 | `0x90` | Input | **N/A A1314** (batterie Magic KB/Mouse2) | [source] hid-magicmouse | — | — |

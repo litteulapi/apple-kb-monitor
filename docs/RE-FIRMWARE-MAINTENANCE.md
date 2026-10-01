@@ -24,14 +24,14 @@ Source : Broadcom *BCM2042 Single-Chip Bluetooth Mouse and Keyboard — Product 
 | Élément | Valeur attestée | Preuve |
 |---|---|---|
 | Cœur CPU | **8051** 8 bits, « on-board 8051 processor » | [source publique] product brief |
-| Mémoire | **108 KB ROM + 22 KB RAM + 20 KB Boot ROM** (bloc fonctionnel) | [source publique] block diagram |
+| Mémoire | **108 KB ROM + 22 KB RAM + 20 KB Boot ROM** (bloc fonctionnel) | [source publique] block diagram (revérifié) |
 | Conception | **ROM-based**, « eliminates external flash » ; « Flash option offered to support feature development » | [source publique] |
-| Config externe | EEPROM série I²C (modules tiers : « built-in 128K serial EEPROM » ; A1255 : EEPROM/flash STMicro) | [source publique] teardown iFixit + brief module BM2042 |
+| Config externe | EEPROM série I²C (module BM2042 : « built-in 128K serial EEPROM » = **128 kbit**, 16 Ko ; A1255 : EEPROM/flash STMicro) | [source publique] teardown iFixit + brief module BM2042 |
 | Matrice clavier | **jusqu'à 8 × 20 touches**, hot-keys personnalisables | [source publique] |
 | Entrées souris | décodeur quadrature 3 axes (ball/optique) | [source publique] |
 | Sorties | interface directe **LED et LCD**, GPIO LED/alim | [source publique] |
-| Alimentation | LDO intégré + régulateur à découpage, **2,7 V – 3,3 V** | [source publique] |
-| Radio | BT **2.0 + EDR**, AFH, fast connect, +4 dBm (classe 2), −85 dBm | [source publique] |
+| Alimentation | LDO intégré + régulateur à découpage (boost) ; le schéma bloc porte « Battery 2.7V to 3.3V ». La fiche du module BM2042 (même puce) donne **VBAT 1,7-3,6 V** (broche) / 1,8-3,6 V (conditions recommandées) et « dual output 1.5-1.8 V or 2.7-3.3 V » : la plage 2,7-3,3 V est vraisemblablement une **sortie** de régulateur, pas la plage des piles [contre-audit] | [source publique] |
+| Radio | BT **2.0** (le *brief* ne mentionne **pas** l'EDR ; le module BM2042 dit « 2.0+EDR compatible »), AFH, fast connect, +4 dBm (classe 2), −85 dBm | [source publique] |
 | Firmware | de la couche link control jusqu'à HCI exécuté sur le 8051 | [source publique] |
 
 > ⚠️ **Contradiction de nomenclature à trancher.** Le brief ci-dessus et le forum geekhack
@@ -76,8 +76,8 @@ modifiables. Ceci borne fortement ce que « mise à jour firmware » peut signif
 - **Obfuscation** (pas chiffrement) : fichier lu par blocs de **83 octets** ; bloc *i* XOR
   complément-à-1 d'un vecteur `A` (83 o), puis chaque octet XOR `B[(i+16) mod 53]` (vecteur
   `B` de 53 o). Dé-obfuscable par l'outil lui-même (ou en dumpant la RAM sous gdb).
-- **Pas de signature cryptographique** : « No cryptographic signature of the firmware » —
-  pour cette génération. Seules des sommes de contrôle protègent l'intégrité (voir 1.3).
+- **Pas de signature cryptographique** pour l'image du clavier **filaire** étudié (seules des sommes de contrôle ;
+  la citation exacte n'a pas été retrouvée dans le *paper*, à chercher dans les *slides*). Seules des sommes de contrôle protègent l'intégrité (voir 1.3).
 
 ### 1.3 Protocole bootloader (génération 2007–2009) **[source publique]** (Chen)
 
@@ -114,20 +114,21 @@ Paquets de 64 octets, préfixe `ff` + opcode :
 
 ### 1.4 Ce que cela implique pour notre A1314 (`0x0050`)
 
-- Le A1314 2009 ISO a le PID USB `0x023a` (ALU_WIRELESS_2009_ISO) côté noyau ; l'appairage BT
-  expose la version `0x0050` (notre `0x4F` décodé). **[source publique]** kernel `hid-ids.h`.
+- **Notre** A1314 ISO a le PID `0x0256` (ALU_WIRELESS_**2011**_ISO, `hid-ids.h:169`) ; `0x023a` est le A1314 2009 ISO.
+  L'appairage BT expose la version `0x0050` (notre `0x4F` décodé). **[source publique + mesuré]** (corrigé au contre-audit).
 - **[déduction]** Les updaters `.pkg` 2009–2011 restent le seul canal officiel ; ils exigent
   **macOS ancien + clavier appairé**. Aucun canal Linux/Windows public de flash n'existe.
-- **[source publique]** README `apple-kb-monitor` : « Signed Apple firmware (not flashable from
-  Linux) ». Nuance : pour la gén. 2009 Chen montre *qu'il n'y a pas de signature* ; la mention
-  « signed » du README est donc **à relativiser pour le A1314** (vraie surtout pour Magic Keyboard).
+- README `apple-kb-monitor` (avant contre-audit) : « Signed Apple firmware (not flashable from
+  Linux) ». **Statut de signature inconnu pour le A1314** : Chen (2009) a analysé l'updater du clavier **filaire USB**
+  (A1243, Cypress CY7C63923), pas celui du clavier Bluetooth (`bfu`, RE-COMMANDES-VENDEUR §4.3). Ni « signé » ni « non
+  signé » n'est démontré pour le A1314 ; README corrigé.
 
 ### 1.5 Identification du bootloader / vérification de signature — synthèse
 
 | Génération | Bootloader | Signature | Flashable hors macOS ancien |
 |---|---|---|---|
 | 2007–2009 USB (Cypress) | `ff 38/39/3a/3b`, mdp constant, checksum | **Aucune** [source publique] | Techniquement oui (Chen l'a fait), risque de brique |
-| 2009–2011 BT (BCM2042, A1314) | non prouvé public ; ROM-based | non démontrée | **Non** (canal `.pkg` macOS uniquement) [déduction] |
+| 2009–2011 BT (BCM2042, A1314) | updater `bfu` sur L2CAP (RE-COMMANDES-VENDEUR §4.3) ; ROM-based | **inconnue** (ni démontrée ni réfutée) | **Non** (canal `.pkg` macOS uniquement) [déduction] |
 | Magic Keyboard (BCM207xx ARM) | OTA sans fil Apple | **Oui** (chaîne moderne) | Non |
 
 ---
@@ -141,9 +142,9 @@ Paquets de 64 octets, préfixe `ff` + opcode :
   clignote** → le clavier est découvrable. Garder le bouton enfoncé pendant toute la séquence
   côté hôte (clic *Pair*, saisie du code PIN, Entrée).
 - **Reset « batterie »** : retirer les piles ≥ 12 h, réinsérer → démarrage auto en mode appairage.
-- **[déduction]** Il n'existe **pas** de « reset d'usine » logiciel documenté effaçant l'IRK/bond
-  côté clavier autrement que par ces manipulations physiques ; le désappairage se fait surtout
-  côté hôte (BlueZ `remove`).
+- **[déduction]** Aucun « reset d'usine » logiciel n'est documenté publiquement pour effacer la clé de lien (BR/EDR ;
+  « IRK » est une notion LE) côté clavier ; le désappairage se fait côté hôte (BlueZ `remove`). Le pilote macOS déclare
+  toutefois `FactoryDefault` (`0x45`) et `FullFactoryDefault` (`0x44`) en écriture, jamais envoyés (RE-PILOTE-MACOS §3).
 
 ### 2.2 « Pairing cable » / appairage par câble
 
@@ -195,8 +196,9 @@ Paquets de 64 octets, préfixe `ff` + opcode :
   `ALU_WIRELESS_ANSI (0x022c)` → `HID_BATTERY_QUIRK_PERCENT | HID_BATTERY_QUIRK_FEATURE`.
   C.-à-d. : le noyau **lit la batterie en Feature report** et la traite **directement en %**.
 - `apple_fetch_battery()` : envoie un **GET_REPORT** sur le report batterie ; **s'abstient si
-  `capacity == max`** (évite d'interroger à 100 %) ; cadencé par `battery_timer`
-  (`APPLE_BATTERY_TIMEOUT_SEC`). Confirme nos observations UPower (#146).
+  `capacity == max`** ; cadencé par `battery_timer` (`APPLE_BATTERY_TIMEOUT_SEC` = **60 s**). **Inactif pour le 0x0256** :
+  il exige le quirk `APPLE_RDESC_BATTERY`, que le A1314 n'a pas (`hid-apple.c:1087`). Les lectures toutes les 30 s
+  observées viennent d'UPower (#146), pas de ce minuteur [corrigé au contre-audit].
 - `hidinput_query_battery_capacity()` lit l'octet à `offset = 1 + report_offset/8` et met à
   l'échelle `min..max → 0..100`. **[source publique]**
 - **Magic Keyboard** (différent du A1314) : fixup du **descripteur 83 octets** sous
@@ -205,7 +207,8 @@ Paquets de 64 octets, préfixe `ff` + opcode :
   **`0x90`** sur Magic Keyboard (confirmé par la série de patchs kernel juillet 2026 :
   l'entrée BT manquait le quirk `APPLE_RDESC_BATTERY`, d'où power_supply bloqué à 0 %).
   **[source publique]**
-- Modules : `fnmode` (défaut **3** = auto : 4 sur MBP14/16, 2 sinon), `iso_layout`, `swap_opt_cmd`.
+- Modules : `fnmode` (défaut **3** = auto : 4 si `APPLE_DISABLE_FKEYS`, 2 pour un clavier non Apple, **1 sinon** —
+  donc 1 pour le A1314, `hid-apple.c:438-446`), `iso_layout`, `swap_opt_cmd`.
   → cohérent avec nos issues #126/#151 (remappage F-row, fnmode).
 
 ### 3.2 macOS (IOKit / AppleBluetoothHIDKeyboard) **[source publique partielle]**
@@ -266,12 +269,12 @@ projet** (mesures), pas sourçable ailleurs — d'où l'importance de la rigueur
 | `0x4F` = version firmware `0x0050` | **Confirmé** : = `bcdDevice d0050`, « HID v0.50 » du noyau. | [source publique] kernel + [mesuré] |
 | `0x47` = % batterie = source noyau | **Confirmé** : quirk `PERCENT|FEATURE`, = `power_supply/capacity`. | [source publique] kernel + [mesuré] |
 | `0x4C` = adresse de l'hôte appairé (pas une « identity_key ») | **Cohérent** : le lien contient l'adresse de l'hôte ; la vraie clé (link key) est ce que Newlin extrait sur Magic KB, pas exposé ici. | [source publique] Newlin + [mesuré] (#133/#140) |
-| « firmware signé, non flashable » | **Partiellement faux pour le A1314** : gén. 2009 **sans signature** (Chen) ; vrai surtout pour Magic KB. Non flashable depuis Linux = **vrai en pratique** (pas de canal public). | [source publique] Chen + [déduction] |
+| « firmware signé, non flashable » | **Non démontré** : Chen ne couvre que le clavier filaire USB ; la signature de l'updater BT du A1314 est inconnue. Non flashable depuis Linux = **vrai en pratique** (pas de canal public). | [source publique] Chen + [déduction] |
 
 **Bilan** : nos docs internes (`HARDWARE-RAPPORTS-HID.md`) sont **plus justes** que le README
 public, qui propage encore les décodages erronés `0xF5`/`0xEA`. Le seul point nouveau à corriger
-dans notre discours : « firmware **signé** » est inexact pour le A1314 (dire plutôt « pas de canal
-de flash public hors updater macOS ancien »).
+dans notre discours : « firmware **signé** » n'est pas démontré pour le A1314 (dire plutôt « pas de canal
+de flash public hors updater macOS ancien, signature inconnue »).
 
 ---
 

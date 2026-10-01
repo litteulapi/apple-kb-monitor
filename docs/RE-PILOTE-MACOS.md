@@ -1,6 +1,6 @@
 # Rétro-ingénierie du pilote macOS — ce que macOS envoie à l'A1314 (BCM2042)
 
-Analyse **statique, en lecture seule**, des pilotes Apple installés sur le Mac du gérant (Neo01, Mac17,5, macOS 26.5 build 25F71).
+Analyse **statique, en lecture seule**, des pilotes Apple installés sur le Mac du gérant (non reproductible depuis le poste Linux : aucun binaire ni extrait commité ; les faits [plist]/[désassemblage] n'ont pas pu être recontrôlés au contre-audit) (Neo01, Mac17,5, macOS 26.5 build 25F71).
 Elle sert l'interopérabilité avec **son** clavier Apple Wireless Keyboard A1314 ISO (VID `0x05AC`, PID `0x0256` = 598).
 
 * Aucun binaire Apple ni code décompilé n'est commité : seulement des faits courts (IDs, tailles, noms de clés et de symboles).
@@ -140,7 +140,9 @@ Format des requêtes, établi par le désassemblage de `getReportWL` :
 * **Pourcentage** : `updateBatteryLevel` lit l'octet 1 de la Feature `0x47`, le **borne à 100** (`min(v, 100)`), puis le publie tel quel
   (propriété IORegistry `BatteryPercent`). Une valeur forcée (`ForceBatteryPercent`) peut le remplacer à des fins de test.
   **Aucune conversion tension → % n'est faite par macOS** : le pourcentage est entièrement calculé par le micrologiciel [désassemblage].
-  L'hypothèse « `MVLT` = macOS lit une tension en mV » (RE-HID-EXHAUSTIF §3) est donc **réfutée pour l'A1314**.
+  L'hypothèse « macOS tire le % d'une tension en mV » (RE-HID-EXHAUSTIF §3) est donc **réfutée pour l'A1314** (pilote 2026).
+  *Contre-audit* : le bloc `"Battery" = <"MVLT…` relevé en 2014 (managingosx, revérifié) existe bien ; son origine
+  (autre version du pilote, autre rapport) reste **inconnue** : seule la conversion mV → % est réfutée.
 * **État** : Input `0x30`, lu par GET après chaque relevé et **poussé spontanément** par le clavier (`A1 30 xx`) [désassemblage].
 
   | `xx` | `BatteryLow` | `BatteryPanic` | Message IOKit | Notification |

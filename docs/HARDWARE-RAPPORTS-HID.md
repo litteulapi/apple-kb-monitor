@@ -27,10 +27,10 @@ Descripteur de 224 octets (`/sys/class/hidraw/hidraw7/device/report_descriptor`,
 | Report ID | Type | Contenu déclaré |
 |---|---|---|
 | `0x01` | Input/Output | clavier de démarrage : 8 modificateurs, 1 octet réservé, 6 touches ; 5 LED en sortie |
-| `0x47` | **Input** | Battery System `0x06` / Battery Strength `0x20`, 8 bits, 0-255 |
-| `0x11` | Input | Consumer Eject `0xB8`, vendeur Apple `0xFF:0x03` (= touche Fn) |
-| `0x12` | Input | Consumer Play/Pause, Next, Previous, Stop… |
-| `0x13` | Input | vendeur `0xFF01:0x0A` (1 bit), `0xFF01:0x0C` (1 bit relatif) |
+| `0x47` | **Input** | page `0x06` *Generic Device Controls* / usage `0x20` Battery Strength, 8 bits, 0-255 (dans une collection Consumer `0x0C:0x01` → Generic Desktop Keyboard) |
+| `0x11` | Input | 3 bits de bourrage, Consumer Eject `0xB8`, vendeur `0x00FF:0x03` (= touche Fn), 3 bits de bourrage |
+| `0x12` | Input | Consumer Play/Pause `0xCD`, Fast Forward `0xB3`, Rewind `0xB4`, Scan Next `0xB5`, Scan Previous `0xB6` + 3 bits de bourrage (pas de Stop `0xB7`) |
+| `0x13` | Input | vendeur `0xFF01:0x0A` (1 bit, `Input 0x02`), `0xFF01:0x0C` (1 bit, `Input 0x22` = Data,Var,**Abs**,No Preferred — pas relatif), 6 bits de bourrage |
 | `0x09` | **Feature** | vendeur `0xFF01:0x0B`, 1 octet de données + 2 octets constants (bourrage) |
 
 **Seul `0x09` est déclaré en Feature.** `0x47` est déclaré en Input, mais le noyau le lit en Feature :
@@ -79,7 +79,7 @@ Les IDs `0x54`, `0x5C`, `0x5D`, `0xD1`, `0xD8` n'étaient pas dans l'inventaire 
 | `0xF5` | 3 | `f5 03 84` | u16 BE = 900 | **constant à travers un changement de piles : ce n'est pas la tension** [mesuré] |
 | `0xF6` | 3 | `f6 00 04` | 4 | inconnu |
 | `0xF7` | 3 | `f7 00 04` | 4 | inconnu |
-| `0xFE` | 9 | 8 × `00` | vide | [mesuré] (le `--dump` du CLI a affiché `fe0004` à 03:57:18 : non reproduit en 14 lectures exactes, probable artefact de l'outil) |
+| `0xFE` | 9 | 8 × `00` | vide sauf une fois | [mesuré] `fe 00 04` au `--dump` de 03:57:18, puis zéros dans les 16 lectures exactes commitées (scan, tours A/B, 13 salves). **Pas un artefact de l'outil** : la version d'alors du `--dump` (avant 2219efa) allouait un tampon neuf par ID et ne listait un rapport que si un octet utile était non nul ; le `04` vient donc de la réponse [contre-audit]. Sens inconnu ; **ne plus lire** (#175) |
 | `0xFF` | 4 | `ff 0b aa 01` / `ff 0b af 01` | **u16 BE = même tension que `0x46`** + octet `0x01` | [mesuré], voir §3 |
 
 Endianness : `0x46`, `0x49`, `0x4F` sont en petit-boutiste ; `0x5A`/`0x5B`/`0xF4`/`0xF5`/`0xFF` en gros-boutiste.
@@ -102,8 +102,8 @@ Le firmware mélange donc deux conventions ; `0x46` (LE) et `0xFF` (BE) donnent 
 ## 3. Tension réelle des piles : `0x46` et `0xFF`, pas `0xF5`
 
 * **[mesuré]** Dans une même salve de lectures, `0x46` lu en LE et `0xFF[1..3]` lu en BE donnent la même
-  valeur (balayage : 2986/2986 ; échantillon 03:57:53 : 2991/2991). Le dump initial de l'inventaire
-  (lectures non simultanées) montrait 2991 (`0x46`) et 2986 (`0xFF`) : la grandeur bouge entre deux
+  valeur (balayage de 03:57:29 : 2986/2986 ; tour A de 03:58:24-33 : 2991/2991). Le dump initial de l'inventaire
+  (03:57:18, lectures non simultanées) montrait 2991 (`0x46`) et 2982 (`0xFF` = `0b a6`) : la grandeur bouge entre deux
   lectures, ce qu'une constante de configuration ne fait pas.
 * **[mesuré]** 2,99 V pour deux piles AA alcalines neuves (≈ 1,50 V/élément) : cohérent physiquement.
 * **[mesuré]** `0xF5` vaut `0x0384` (900) **avant et après le changement de piles** du 2026-10-01
@@ -111,9 +111,9 @@ Le firmware mélange donc deux conventions ; `0x46` (LE) et `0xFF` (BE) donnent 
   à 02:33 avec les anciennes piles, puis à 100 % à 03:07 avec les neuves). Une tension de piles
   ne peut pas rester identique au millivolt entre un jeu usé (90 %) et un jeu neuf.
   En avril 2026 l'historique donnait 924 (2,98 V) pendant 2 jours sans la moindre variation.
-* Conséquence : la « tension » affichée aujourd'hui par le CLI Python (`adc_raw * 3.3 / 1023`) et par
-  `akm-core` (`calibration.rs`, `decode.rs` : `0xF5` = « ADC raw », `0x46` = « connection params »,
-  `0xFF` = « firmware build ») est fausse. Le « numéro de build » `0x0BAA` est en fait 2986 mV.
+* Conséquence : la « tension » calculée comme `adc_raw * 3.3 / 1023` (`0xF5`) est fausse. Le « numéro de build »
+  `0x0BAA` est en fait 2986 mV. **État au contre-audit (c54c502)** : `akm-core` est corrigé (02fad76, tension = `0x46`) ;
+  le CLI Python garde les anciens décodages (#200).
 
 ## 4. Seuils, courbes et pourcentages
 
@@ -141,7 +141,7 @@ l'audit voisin (`tests/live/re/capture-2026-10-01.jsonl`, branche `audit/decodag
 | Heure | `0x46` mV | `0xFF` mV | `0x49` mV | `0x47` % | `0xEA` | noyau % |
 |---|---|---|---|---|---|---|
 | 03:57:18 (voisin) | 2991 | 2982 | 2953 | 99 | 98 | 99 |
-| 03:57:53 | 2991 | 2991 | 2953 | 99 | 98 | 99 |
+| 03:58:24 (tour A) | 2991 | 2991 | 2953 | 99 | 98 | 99 |
 | 04:15:26 | 2986 | 2986 | 2950 | 99 | 98 | 99 |
 | 04:25:27 | 2991 | 2986 | 2950 | 99 | 98 | 99 |
 | 04:40:31 | 2986 | 2986 | 2950 | 99 | **0** | 99 |
@@ -153,8 +153,8 @@ Constats **[mesuré]** :
 1. **Constants sur toute la journée** (balayage, série, capture voisine) : `0x09`, `0x4A`, `0x4B`, `0x4C`
    (empreinte identique), `0x4F`, `0x51-0x54`, `0x5A`/`0x60`/`0xEB`, `0x5B`, `0x5C`/`0x5D`, `0xD1`/`0xD8`,
    `0xF4`, `0xF5`, `0xF6`/`0xF7`, `0xFE`.
-2. **`0x46` et `0xFF`** oscillent entre 2982, 2986 et 2991 mV : pas de quantification ≈ 4,5 mV (un pas d'ADC),
-   bruit de ± 1 pas. Les deux registres sont lus à ~10 s d'écart dans une salve, d'où des écarts d'un pas.
+2. **`0x46` et `0xFF`** oscillent entre 2982, 2986 et 2991 mV : écarts de 4 à 5 mV (pas de quantification probable ;
+   la résolution de l'ADC n'est publiée nulle part [hypothèse]), bruit de ± 1 pas. Les deux registres sont lus à ~10 s d'écart dans une salve, d'où des écarts d'un pas.
 3. **`0x49`** passe de 2953 (03:57) à 2950 (dès 04:15) puis reste fixe une heure : grandeur lissée,
    sans le bruit de `0x46` → appuie « tension filtrée ».
 4. **`0xEA`** vaut 98 sauf **une lecture à 0** (04:40:31, `ea00`, longueur correcte) alors que `0x47` et le
@@ -176,6 +176,12 @@ Veille et déconnexion :
   disparition du nœud ; un écart dernier appui → déconnexion ≈ 900 s sur plusieurs cycles, sans aucun
   GET_REPORT pendant ce temps, confirmerait. Non exécuté jusqu'au bout ici (lectures suspendues sur
   consigne pendant la déconnexion).
+
+> **Contre-audit (docs/CONTRE-AUDIT.md)** : `0xEA` « second estimateur » et la relation `0x47` = tronc(interp(`0x49`))
+> sont mises en défaut à 2945 mV (#179, VERIF-BATTERIE §1.2). Noms Apple de plusieurs IDs (`0x30` BatteryState,
+> `0x40` WillShutdown, `0x41` RecantConnection, `0x44`/`0x45` FactoryDefault, `0x50` DeviceNameChange, `0x51-0x54`
+> DeviceName1..4, `0x55` LongDeviceName) : RE-PILOTE-MACOS §3. `0x09` : drapeau probable du délai Verr. Maj interne
+> (RE-PILOTE-MACOS §8, déduction).
 
 ## 6. Synthèse : décodé / décodable / inconnu
 

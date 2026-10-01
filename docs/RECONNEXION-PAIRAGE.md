@@ -119,18 +119,20 @@ Pendant la capture btmon passive, le lien est tombé **[mesuré]** (extrait assa
 | 12:13:08.799 | #31 534 | *Exit Sniff Mode* accepté par le contrôleur… mais **aucun *Mode Change*, aucune réponse, plus aucune trame du clavier** |
 | 12:13:12 / 12:13:25 | — | `HIDP GET_REPORT request timed out` (dont la lecture UPower `0x47` de 12:13:21) |
 | 12:13:28.823 | #31 538 | `Disconnect Complete`, raison **Connection Timeout (0x08)** : délai de supervision (20 s après la dernière trame), pas une déconnexion propre |
-| 12:13:30 → 12:16:34 | — | BlueZ (plugin *policy* puis profil HID) appelle 9 fois : `Page Timeout` à chaque fois ; puis plus rien |
+| 12:13:30 → 12:16:34 | — | BlueZ (plugin *policy* puis profil HID) appelle 9 fois : `Page Timeout` à chaque fois ; puis plus rien (RE-LIAISON en compte 7 jusqu'à 12:15:34, fin de sa copie de capture) |
 | ≥ 12:16 | — | adaptateur repassé en autosuspend USB (`usb_watch2.log`) |
 
 Lecture : le clavier est devenu **muet radio d'un coup**, au milieu d'une salve de lectures, et ne fait
-plus de *page scan* ensuite. Un clavier qui s'endort normalement envoie un *LMP detach* (raison *Remote*),
-il ne disparaît pas par délai de supervision. Même signature à 04:00:13 la nuit précédente (perte « en
+plus de *page scan* ensuite. **[hypothèse]** Un clavier qui s'endort normalement enverrait un *LMP detach* (raison
+*Remote*) plutôt que de disparaître par délai de supervision (comportement de veille du A1314 jamais capturé). Même signature à 04:00:13 la nuit précédente (perte « en
 pleine salve » de l'échantillonneur, `docs/HARDWARE-RAPPORTS-HID.md` §5), retour seulement 13 min plus
 tard, et le 29/09 15:09-15:21 (expirations GET_REPORT puis déconnexions pendant la rétro-ingénierie)
 **[mesuré]**. **[hypothèse forte]** le firmware du clavier se bloque (ou redémarre) sous certaines
 rafales de `GET_REPORT` sur des rapports non documentés ; il ne reprend qu'après une touche… ou une
 extinction/rallumage. La même lecture de `0xFE` à 11:47:23 (balayage complet) n'avait rien cassé : ce
-n'est pas un rapport « tueur » isolé mais un état atteint pendant une rafale.
+n'est pas un rapport « tueur » déterministe. *Contre-audit* : RE-HID-EXHAUSTIF §0.2 retient au contraire la forme
+restreinte « un GET `0xFE` peut figer le micrologiciel » (2 blocages sur ~27 lectures, toujours juste après `0xF7`).
+Les deux lectures sont compatibles (déclencheur non déterministe) ; **non tranché** sans le protocole E8 / §0.2.
 
 ### 3.7 Veille système
 

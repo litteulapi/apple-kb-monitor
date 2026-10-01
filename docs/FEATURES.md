@@ -2,23 +2,23 @@
 
 Every item below was checked against the source (module in parentheses). Line counts: see [ARCHITECTURE.md](ARCHITECTURE.md). This repository covers the Apple Bluetooth keyboard only; the display/DDC/MQTT features were removed (tag `archive/avec-ecran`, issue #59).
 
-## apihub-app (Rust, egui) -- primary interface
+## Daemon `apple-kb-monitord` and window `apihub-app` (Rust)
 
-Single process, tray-first, 2 tabs (`main.rs`): Keyboard and Diag.
+`apple-kb-monitord` is the single owner of the keyboard (D-Bus `com.agenceapi.AppleKbMonitor1`, tray, notifications); `apihub-app` is the egui window (2 tabs, `apihub-app/src/main.rs`: Keyboard and Diag). Shared logic lives in `akm-core`.
 
 | Area | Feature | Module |
 |---|---|---|
-| Keyboard | Battery percentage from the kernel `power_supply` node `hid-<mac>-battery*` (the one UPower reads), source of truth; status (charging, discharging, full) | `power.rs` |
-| Keyboard | HID Feature Reports via `HIDIOCGFEATURE` (precise battery, raw ADC voltage, calibration curve, firmware, build, name, identity, BT parameters), BCM2042 family only, diagnostics | `keyboard.rs` |
-| Keyboard | 17 Apple models identified by PID (USB vendor `05AC` and Bluetooth vendor `004C`) | `keyboard.rs` (`APPLE_MODELS`) |
-| Keyboard | Wake/connection events (HID Input Report 0x13), CapsLock/NumLock badges from sysfs | `keyboard.rs` |
-| Keyboard | RSSI + TX power through the `rssi-helper` child process (file capability `cap_net_admin`), 1.5 s timeout, 10 s cache | `rssi.rs`, `rssi-helper.c` |
-| Keyboard | Battery history (JSONL), 24 h graph, discharge rate and time remaining | `history.rs`, `main.rs` |
-| Desktop | BlueZ Battery Provider: one `BatteryProvider1` object per keyboard, so BlueZ creates `org.bluez.Battery1`; re-registered when bluetoothd restarts | `bluez.rs` |
-| Desktop | Tray icon (StatusNotifierItem + dbusmenu, pure zbus), re-registered when the StatusNotifierWatcher reappears | `tray.rs` |
-| Diagnostics | Diag tab: binaries, user service, `hidraw readable`, keyd config, udev rules, `hid_apple fnmode`, RSSI helper | `main.rs` |
-
-UPower hides the BlueZ battery of keyboards whose kernel driver already publishes a `power_supply` (same MAC serial), so for those the kernel value is what KDE shows; the provider stays a fallback and feeds clients that read `org.bluez.Battery1` directly (see the header of `bluez.rs`).
+| Keyboard | Battery percentage from the kernel `power_supply` node `hid-<mac>-battery*` (the one UPower reads, = Feature `0x47`), source of truth | `akm-core/src/power.rs` |
+| Keyboard | HID Feature Reports via `HIDIOCGFEATURE`, BCM2042 family only: daemon allow-list `0x47`, `0x46` (voltage mV LE, checked against `0xFF` BE), `0x49` (smoothed voltage), only after a key press in the last minute, under a cross-process lock; never `0xFE` | `akm-core/src/read_policy.rs`, `decode.rs` |
+| Keyboard | Decoded values: voltage (mV), discharge table `0x5A` (mV), firmware version `0x0050`, device name `0x51-0x54`, paired host address (`0x4C` bytes 2-7 only; the other 12 bytes are never published). Unknown reports stay raw | `akm-core/src/decode.rs` |
+| Keyboard | 17 Apple models identified by PID (USB vendor `05AC` and Bluetooth vendor `004C`) | `akm-core/src/model.rs` (`APPLE_MODELS`) |
+| Keyboard | Passive input events (Input `0x13`, `0x04`/`0x05`/`0x30` listened to, never requested); CapsLock/NumLock badges from sysfs | `akm-core/src/passive.rs`, `apple-kb-monitord/src/passive.rs` |
+| Keyboard | RSSI + TX power through the `rssi-helper` child process (file capability `cap_net_admin`), 1.5 s timeout, 10 s cache. BR/EDR RSSI is a relative gap in dB, not dBm (#174) | `akm-core/src/rssi.rs`, `signal.rs`, `rssi-helper.c` |
+| Keyboard | Battery history (JSONL), discharge rate, estimates by chemistry (estimate, not a measurement) | `akm-core/src/history.rs`, `forecast.rs`, `chemistry.rs` |
+| Link | Reconnection state machine (connected, dormant, unreachable, auth-failed, suspended), logind sleep inhibitor | `akm-core/src/recovery.rs`, `apple-kb-monitord/src/sleep.rs` |
+| Desktop | BlueZ Battery Provider: one `BatteryProvider1` object per keyboard, so BlueZ creates `org.bluez.Battery1` | `apple-kb-monitord/src/bluez.rs` |
+| Desktop | Tray icon (StatusNotifierItem + dbusmenu, zbus) | `apple-kb-monitord/src/tray.rs` |
+| Diagnostics | Diag tab: binaries, services, `hidraw readable`, keyd config, udev rules, `hid_apple fnmode`, RSSI helper; `akmctl doctor` / `repair` | `apihub-app/src/main.rs`, `fnmode_diag.rs`, `crates/akmctl` |
 
 ## CLI `akmctl` (Rust)
 
