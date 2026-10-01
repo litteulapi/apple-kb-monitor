@@ -12,19 +12,7 @@ use super::{lock, now_unix, Action, Event, SharedRef};
 /// StatusNotifierItem tooltips are rich text (HTML subset): the keyboard name
 /// is data (BlueZ alias, writable by any account), so `<img src=http://...>`
 /// would make the shell fetch a URL (#205). Escape what the host would parse.
-pub fn escape_markup(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for c in s.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            c => out.push(c),
-        }
-    }
-    out
-}
+pub use apple_kb_monitord::notify::escape_markup;
 
 /// ToolTip wire type: (icon_name, icon_pixmap[], title, description).
 pub type ToolTip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);

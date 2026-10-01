@@ -303,12 +303,35 @@ pub struct Notification {
     pub lang: Lang,
 }
 
+/// Escapes the body markup of the freedesktop notification spec (`&`, `<`,
+/// `>`, `"`): Plasma renders `<a href>`, `<img>`, `<b>` in a body. Every body
+/// carries external text (the keyboard name or alias, which any application
+/// of the session can set with `SetAlias`, a remote device name, a firmware
+/// version), so EVERY body is escaped in [`Notification::new`] (#257). The
+/// tray uses the same function.
+pub fn escape_markup(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 impl Notification {
+    /// `body` is plain text: it is escaped here, once, for every constructor
+    /// (#257). The summary is plain text by the spec (never rendered as
+    /// markup) and is kept as is.
     fn new(event: Event, lang: Lang, summary: String, body: String, icon: &str, urgency: Urgency) -> Self {
         Self {
             event,
             summary,
-            body,
+            body: escape_markup(&body),
             icon: icon.to_string(),
             urgency,
             // Low-urgency notifications (connection changes) are not kept in
