@@ -237,3 +237,20 @@ Enregistrer un runner (administrateur de l'instance) :
 | 3 | `abort()` d'un programme nommé `apihub-app` | ignoré hors répertoires installés ; avec `AKM_SELFTEST_EXE_DIRS` : `coredumps` **bad** « apihub-app crashed (SIGABRT…) » |
 | 3 | même problème sur 3 passages, faux serveur de notifications | 1 notification par clé (2 au total), `new_grave` vide aux passages 2 et 3 |
 | 3 | `--gitea-issue` lancé deux fois | issues #237/#238 créées puis « already open » ; fermées comme tests |
+
+### 6.1 Exemple : push refusé
+
+```text
+$ git push            # avec un fichier non suivi contenant demo_token = "ghp_QQQ…"
+pre-push: scripts/ci-local.sh --fast (fmt, clippy, tests, secrets, versions)...
+==> versions         pass (0.0s)
+==> secrets          fail (1.1s) -> scripts/out/20261001T135240Z/logs/secrets.log
+      leak-demo.txt:1: [github-token] looks like a secret: ghp_QQQQQQQQ…
+      -- secrets: 1 finding(s), 0 known/allow-listed
+==> fmt              pass (0.4s)
+==> clippy           pass (1.4s)
+==> test             pass (46.0s)
+==> shell            pass (0.0s)
+RESULT: FAILED: secrets
+pre-push: REFUSED - fix the failing step (report: scripts/out/latest/report.txt)
+```
