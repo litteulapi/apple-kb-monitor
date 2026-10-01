@@ -1,15 +1,14 @@
-mod history;
 mod keyboard;
+mod source;
 mod tray;
 
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
 use akm_core::{Snapshot, Watch};
-use apple_kb_monitord::actor;
 use eframe::egui;
 
 /// Latest keyboard state, published by the acquisition actor.
@@ -41,8 +40,6 @@ struct ApiHubApp {
     diag_results: Arc<Mutex<Vec<DiagResult>>>,
     diag_running: Arc<AtomicBool>,
     quit_flag: Arc<AtomicBool>,
-    // System tray tooltip (shared with tray thread)
-    tray_tooltip: Arc<Mutex<String>>,
     // Tray "Show Window" flag
     tray_show_window: Arc<AtomicBool>,
     // Battery history graph
@@ -55,13 +52,12 @@ impl ApiHubApp {
     /// main() and shared through the `Watch`.
     fn new(
         _cc: &eframe::CreationContext<'_>,
-        tray_tooltip: Arc<Mutex<String>>,
         state: State,
         tray_show_window: Arc<AtomicBool>,
         quit_flag: Arc<AtomicBool>,
     ) -> Self {
         // Load battery history from disk (once at startup)
-        let entries = history::read_history();
+        let entries = source::load_history();
         let battery_history: Vec<(f64, f64)> = entries
             .iter()
             .map(|e| (e.ts as f64, e.pct))
@@ -78,7 +74,6 @@ impl ApiHubApp {
             diag_results: Arc::new(Mutex::new(Vec::new())),
             diag_running: Arc::new(AtomicBool::new(false)),
             quit_flag,
-            tray_tooltip,
             tray_show_window,
             battery_history,
             voltage_history,
@@ -91,14 +86,6 @@ impl eframe::App for ApiHubApp {
         // Tray "Quit" while the window is open: close it so main() can exit.
         if self.quit_flag.load(Ordering::Relaxed) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-        }
-
-        // ── Update tray tooltip (every frame, lightweight) ─────
-        {
-            let text = self.state.get().tooltip_text();
-            if let Ok(mut tt) = self.tray_tooltip.lock() {
-                *tt = text;
-            }
         }
 
         // Dark theme + enforce 16px minimum — once only
@@ -380,7 +367,7 @@ impl ApiHubApp {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("Battery History").strong().size(18.0));
                 if ui.button(egui::RichText::new("Refresh").size(14.0)).clicked() {
-                    let entries = history::read_history();
+                    let entries = source::load_history();
                     self.battery_history = entries.iter().map(|e| (e.ts as f64, e.pct)).collect();
                     self.voltage_history = entries.iter().filter_map(|e| e.voltage.map(|v| (e.ts as f64, v))).collect();
                 }
@@ -561,7 +548,7 @@ impl ApiHubApp {
             let mut out: Vec<DiagResult> = Vec::new();
 
             let checks: Vec<(&str, Vec<String>, &str)> = vec![
-                ("apple-kb-monitor", vec!["--version".into()], "Main daemon binary"),
+                ("apple-kb-monitord", vec!["--version".into()], "Monitor daemon binary"),
                 ("keyd", vec!["-v".into()], "Key remapping daemon"),
                 ("bluetoothctl", vec!["--version".into()], "BlueZ CLI"),
             ];
@@ -604,15 +591,23 @@ impl ApiHubApp {
                 }
             }
 
-            // Service
+            // Daemon: owner of the keyboard, reached over the session bus
             let active = Command::new("systemctl")
-                .args(["--user", "is-active", "apple-kb-monitor.service"])
+                .args(["--user", "is-active", "apple-kb-monitord.service"])
                 .output()
                 .map(|o| o.status.success())
                 .unwrap_or(false);
             out.push(DiagResult {
-                label: "apple-kb-monitor.service".into(), ok: active,
+                label: "apple-kb-monitord.service".into(), ok: active,
                 detail: if active { "active (running)".into() } else { "inactive / not found".into() },
+            });
+            let on_bus = zbus::blocking::Connection::session()
+                .map(|c| apple_kb_monitord::client::daemon_present(&c))
+                .unwrap_or(false);
+            out.push(DiagResult {
+                label: "D-Bus com.agenceapi.AppleKbMonitor1".into(), ok: on_bus,
+                detail: if on_bus { "daemon reachable (this window is a client)".into() }
+                        else { "daemon absent: this app reads the keyboard itself".into() },
             });
 
             // Apple keyboard hidraw node: present AND readable by this user
@@ -717,80 +712,57 @@ impl ApiHubApp {
 
 // ── Entrypoint ──────────────────────────────────────────────────────────────
 
+fn open_window(state: &State, show_window: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBool>) {
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title("Apple Keyboard Monitor")
+            .with_inner_size([720.0, 600.0])
+            .with_min_inner_size([500.0, 400.0]),
+        vsync: true,
+        ..Default::default()
+    };
+    let (st, sw, qf) = (state.clone(), show_window.clone(), quit_flag.clone());
+    // Blocks until the window is closed.
+    if let Err(e) = eframe::run_native("apihub", options, Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, st, sw, qf))))) {
+        // No display / GPU init failure: stay in tray mode instead of dying silently.
+        eprintln!("[apihub] cannot open window: {}", e);
+    }
+}
+
 fn main() -> eframe::Result<()> {
-    // ── Single process architecture ──────────────────────────────────
-    // 1. Start tray (always, zero CPU via zbus epoll)
-    // 2. Start the supervised poll thread
-    // 3. Wait for "Show Window" → open eframe in THIS process
-    // 4. When window closes → back to tray-only (no subprocess, no zombie)
-    // 5. Quit flag — graceful shutdown, lets destructors run
-
+    // The keyboard belongs to apple-kb-monitord; this process is a D-Bus
+    // client (tray + window). It acquires locally only while no daemon can
+    // be reached (source.rs). main() sleeps on the tray channel: no polling.
     let state: State = Arc::new(Watch::new());
-
-    // Shared quit flag — set by tray "Quit", checked by main loop + poll thread
     let quit_flag = Arc::new(AtomicBool::new(false));
-
-    // ── Tray icon ────────────────────────────────────────────────────
-    let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("Apple Keyboard \u{2014} starting...".into()));
     let show_window = Arc::new(AtomicBool::new(false));
-    tray::spawn(
-        tray_tooltip.clone(),
-        state.clone(),
-        show_window.clone(),
-        quit_flag.clone(),
-    );
+    let (ui_tx, ui_rx) = mpsc::channel();
+    tray::spawn(state.clone(), show_window.clone(), quit_flag.clone(), ui_tx);
+    let src = source::spawn(state.clone());
 
-    // ── Acquisition (same actor as apple-kb-monitord) ────────────────
-    let acquisition = actor::spawn(state.clone(), actor::Mailbox::new(), actor::Options::default());
-
-    eprintln!("[apihub] tray mode — click scarab icon to open window");
-
-    // ── Main loop: tray-only until "Show Window" ─────────────────────
-    loop {
-        // Check quit flag — break out and let destructors run
-        if quit_flag.load(Ordering::Relaxed) {
-            eprintln!("[apihub] quit flag set — shutting down gracefully");
-            break;
-        }
-
-        std::thread::sleep(Duration::from_secs(2));
-
-        // Update tray tooltip
-        if let Ok(mut tt) = tray_tooltip.lock() {
-            *tt = state.get().tooltip_text();
-        }
-
-        // Show Window → open eframe in THIS process (blocks until window closed)
-        if show_window.swap(false, Ordering::Relaxed) {
-            eprintln!("[apihub] opening window...");
-            let options = eframe::NativeOptions {
-                viewport: egui::ViewportBuilder::default()
-                    .with_title("Apple Keyboard Monitor")
-                    .with_inner_size([720.0, 600.0])
-                    .with_min_inner_size([500.0, 400.0]),
-                vsync: true,
-                ..Default::default()
-            };
-            // eframe::run_native blocks until the window is closed
-            if let Err(e) = eframe::run_native(
-                "apihub",
-                options,
-                Box::new({
-                    let tt = tray_tooltip.clone();
-                    let st = state.clone();
-                    let sw = show_window.clone();
-                    let qf = quit_flag.clone();
-                    move |cc| Ok(Box::new(ApiHubApp::new(cc, tt, st, sw, qf)))
-                }),
-            ) {
-                // No display / GPU init failure: stay in tray mode instead of dying silently.
-                eprintln!("[apihub] cannot open window: {}", e);
+    if std::env::args().any(|a| a == "--show") {
+        open_window(&state, &show_window, &quit_flag);
+    }
+    eprintln!("[apihub] tray mode — click the scarab icon to open the window");
+    while let Ok(cmd) = ui_rx.recv() {
+        match cmd {
+            tray::UiCmd::Quit => break,
+            tray::UiCmd::ShowWindow => {
+                show_window.store(false, Ordering::Relaxed);
+                open_window(&state, &show_window, &quit_flag);
+                if quit_flag.load(Ordering::Relaxed) {
+                    break;
+                }
+                // Clicks on the tray while the window was open only focused it.
+                if std::iter::from_fn(|| ui_rx.try_recv().ok()).any(|c| c == tray::UiCmd::Quit) {
+                    break;
+                }
+                eprintln!("[apihub] window closed — back to tray mode");
             }
-            eprintln!("[apihub] window closed — back to tray mode");
         }
     }
-
-    acquisition.stop();
+    eprintln!("[apihub] shutting down");
+    src.stop();
     Ok(())
 }
 

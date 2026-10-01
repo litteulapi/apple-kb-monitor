@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 
 use zbus::blocking::Connection;
@@ -17,11 +18,37 @@ use zbus::zvariant::{OwnedValue, Signature, Value};
 
 type State = Arc<akm_core::Watch>;
 
+/// Requests from the tray to the main thread (no polling loop in main()).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UiCmd {
+    ShowWindow,
+    Quit,
+}
+
+/// Shared by the SNI item and the menu: flags for an open window + wake-up of main().
+#[derive(Clone)]
+struct Ui {
+    show_window: Arc<AtomicBool>,
+    quit_flag: Arc<AtomicBool>,
+    tx: Arc<Mutex<Sender<UiCmd>>>,
+}
+
+impl Ui {
+    fn show(&self) {
+        self.show_window.store(true, Ordering::Relaxed);
+        let _ = self.tx.lock().map(|t| t.send(UiCmd::ShowWindow));
+    }
+    fn quit(&self) {
+        self.quit_flag.store(true, Ordering::Relaxed);
+        let _ = self.tx.lock().map(|t| t.send(UiCmd::Quit));
+    }
+}
+
 // ── org.kde.StatusNotifierItem ───────────────────────────────────────────────
 
 struct SniItem {
-    tooltip: Arc<Mutex<String>>,
-    show_window: Arc<AtomicBool>,
+    state: State,
+    ui: Ui,
 }
 
 /// ToolTip wire type: (icon_name, icon_pixmap[], title, description)
@@ -75,7 +102,7 @@ impl SniItem {
     }
     #[zbus(property)]
     fn tool_tip(&self) -> ToolTipValue {
-        let desc = self.tooltip.lock().map(|t| t.clone()).unwrap_or_default();
+        let desc = self.state.get().tooltip_text();
         ("apihub-scarab".into(), Vec::new(), "ApiHub".into(), desc)
     }
     #[zbus(property)]
@@ -92,7 +119,7 @@ impl SniItem {
     }
 
     fn activate(&self, _x: i32, _y: i32) {
-        self.show_window.store(true, Ordering::Relaxed);
+        self.ui.show();
     }
     fn secondary_activate(&self, _x: i32, _y: i32) {}
     fn context_menu(&self, _x: i32, _y: i32) {}
@@ -133,8 +160,7 @@ mod menu_id {
 
 struct DbusmenuServer {
     state: State,
-    show_window: Arc<AtomicBool>,
-    quit_flag: Arc<AtomicBool>,
+    ui: Ui,
     revision: Arc<AtomicU32>,
 }
 
@@ -239,8 +265,8 @@ impl DbusmenuServer {
     fn handle_event(&self, id: i32) {
         use menu_id::*;
         match id {
-            SHOW_WINDOW => self.show_window.store(true, Ordering::Relaxed),
-            QUIT => self.quit_flag.store(true, Ordering::Relaxed),
+            SHOW_WINDOW => self.ui.show(),
+            QUIT => self.ui.quit(),
             _ => {}
         }
     }
@@ -371,31 +397,22 @@ fn sep(id: i32) -> MenuItem {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-/// Spawn the system tray on a dedicated thread (fire-and-forget, like ksni).
+/// Spawn the system tray on a dedicated thread (fire-and-forget).
 ///
 /// The thread owns the D-Bus connection and serves requests via epoll —
-/// near-zero CPU when idle (vs ksni's 50ms busy-poll loop).
-pub fn spawn(
-    tooltip: Arc<Mutex<String>>,
-    state: State,
-    show_window: Arc<AtomicBool>,
-    quit_flag: Arc<AtomicBool>,
-) {
+/// near-zero CPU when idle. Clicks are forwarded to main() through `tx`.
+pub fn spawn(state: State, show_window: Arc<AtomicBool>, quit_flag: Arc<AtomicBool>, tx: Sender<UiCmd>) {
+    let ui = Ui { show_window, quit_flag, tx: Arc::new(Mutex::new(tx)) };
     std::thread::Builder::new()
         .name("tray-sni".into())
         .spawn(move || {
             // Retry: the session bus may not be ready yet at login. `run` only
             // returns on error (it parks forever on success).
             loop {
-                if quit_flag.load(Ordering::Relaxed) {
+                if ui.quit_flag.load(Ordering::Relaxed) {
                     break;
                 }
-                if let Err(e) = run(
-                    tooltip.clone(),
-                    state.clone(),
-                    show_window.clone(),
-                    quit_flag.clone(),
-                ) {
+                if let Err(e) = run(state.clone(), ui.clone()) {
                     eprintln!("[tray] error: {} — retrying in 10s", e);
                 }
                 std::thread::sleep(std::time::Duration::from_secs(10));
@@ -432,22 +449,9 @@ fn register_with_backoff(conn: &Connection, bus_name: &str) -> bool {
     false
 }
 
-fn run(
-    tooltip: Arc<Mutex<String>>,
-    state: State,
-    show_window: Arc<AtomicBool>,
-    quit_flag: Arc<AtomicBool>,
-) -> zbus::Result<()> {
-    let sni = SniItem {
-        tooltip,
-        show_window: show_window.clone(),
-    };
-    let menu = DbusmenuServer {
-        state,
-        show_window,
-        quit_flag,
-        revision: Arc::new(AtomicU32::new(1)),
-    };
+fn run(state: State, ui: Ui) -> zbus::Result<()> {
+    let sni = SniItem { state: state.clone(), ui: ui.clone() };
+    let menu = DbusmenuServer { state, ui, revision: Arc::new(AtomicU32::new(1)) };
 
     let pid = std::process::id();
     let bus_name = format!("org.kde.StatusNotifierItem-{}-1", pid);

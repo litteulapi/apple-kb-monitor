@@ -30,6 +30,20 @@ pub fn daemon_present(conn: &Connection) -> bool {
     p.name_has_owner(BUS_NAME.try_into().expect("valid name")).unwrap_or(false)
 }
 
+/// Start the daemon by D-Bus activation if a service file declares it
+/// (`dbus/com.agenceapi.AppleKbMonitor1.service`). True if it is now running.
+pub fn activate(conn: &Connection) -> bool {
+    let Ok(p) = zbus::blocking::fdo::DBusProxy::new(conn) else { return false };
+    let activatable = p
+        .list_activatable_names()
+        .map(|names| names.iter().any(|n| n.as_str() == BUS_NAME))
+        .unwrap_or(false);
+    activatable
+        && p.start_service_by_name(BUS_NAME.try_into().expect("valid name"), 0)
+            .map_err(|e| tracing::warn!("activation of {BUS_NAME} failed: {e}"))
+            .is_ok()
+}
+
 fn get_prop(conn: &Connection, name: &str) -> zbus::Result<OwnedValue> {
     conn.call_method(Some(BUS_NAME), OBJECT_PATH, Some("org.freedesktop.DBus.Properties"), "Get", &(INTERFACE, name))?
         .body()
@@ -91,7 +105,7 @@ pub fn direct_snapshot() -> Snapshot {
 /// Daemon first; direct read only if allowed and the daemon is absent.
 pub fn snapshot(allow_direct: bool) -> Result<(Snapshot, Source), String> {
     let daemon_err = match Connection::session() {
-        Ok(conn) if daemon_present(&conn) => match fetch_snapshot(&conn) {
+        Ok(conn) if daemon_present(&conn) || activate(&conn) => match fetch_snapshot(&conn) {
             Ok(s) => return Ok((s, Source::Daemon)),
             Err(e) => format!("daemon error: {e}"),
         },
