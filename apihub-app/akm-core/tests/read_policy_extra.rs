@@ -153,12 +153,23 @@ fn safe_source_spacing_is_enforced_but_not_added_when_already_late() {
     assert!(gap >= MIN_GAP - Duration::from_millis(5), "{gap:?}");
     assert!(gap < MIN_GAP + Duration::from_millis(150), "{gap:?}");
     drop(c);
+    // Écart partiel : seul le complément est attendu, pas MIN_GAP en plus.
+    let before = src.calls.borrow().len();
+    s.feature(0x47).unwrap();
+    std::thread::sleep(Duration::from_millis(150));
+    s.feature(0x46).unwrap();
+    {
+        let c = src.calls.borrow();
+        let gap = c[before + 1].1.duration_since(c[before].1);
+        assert!(gap >= MIN_GAP - Duration::from_millis(5), "{gap:?}");
+        assert!(gap < MIN_GAP + Duration::from_millis(60), "{gap:?}");
+    }
     // Déjà en retard de plus de MIN_GAP : aucune attente supplémentaire.
     std::thread::sleep(MIN_GAP + Duration::from_millis(100));
     let t = Instant::now();
     s.feature(0x47).unwrap();
     assert!(t.elapsed() < Duration::from_millis(60), "{:?}", t.elapsed());
-    assert_eq!(s.sent(), 3);
+    assert_eq!(s.sent(), 5);
 }
 
 #[test]
