@@ -21,6 +21,8 @@
 #   private session bus + private "system" bus with a fake BlueZ/UPower.
 set -uo pipefail
 export LC_ALL=C
+# A relative CARGO_TARGET_DIR would be resolved from apihub-app/ by cargo.
+[ -n "${CARGO_TARGET_DIR:-}" ] && export CARGO_TARGET_DIR="$(realpath -m "$CARGO_TARGET_DIR")"
 
 top=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 out="" only="" duration=60 update="" bindir=""

@@ -16,6 +16,8 @@
 # in time is a FAILURE (a test that hangs is a bug, not a slow machine).
 set -uo pipefail
 export LC_ALL=C LANG=C
+# A relative CARGO_TARGET_DIR would be resolved from apihub-app/ by cargo.
+[ -n "${CARGO_TARGET_DIR:-}" ] && export CARGO_TARGET_DIR="$(realpath -m "$CARGO_TARGET_DIR")"
 
 top=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$top" || exit 1
