@@ -14,7 +14,7 @@ usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.service
 usr/share/polkit-1/actions/com.agenceapi.AppleKbMonitor.policy
 usr/lib/udev/rules.d/70-apple-kb-hidraw.rules
 usr/share/applications/com.agenceapi.AppleKbMonitor.desktop
-usr/share/man/man1/akmctl.1
+usr/share/man/man1/akmctl.1.gz
 usr/share/bash-completion/completions/akmctl
 usr/share/icons/hicolor/scalable/apps/apihub-scarab.svg
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/metadata.json

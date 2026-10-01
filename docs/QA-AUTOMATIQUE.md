@@ -103,6 +103,12 @@ du §3.2, `frame_max_ms` est joint au résultat.
 | `spy` | **vrai** `apple-kb-monitord` sur le faux clavier + fenêtre, tous deux sous `strace -y -P /dev/hidraw7 -P /dev/hidraw3` | écriture sur le clavier, `HIDIOCS*` (SET report), ioctl inconnu, accès à la souris, fenêtre qui ouvre le clavier alors que le démon le possède, fichier-clavier qui grossit, appel BlueZ hors lecture (Connect, Pair, RemoveDevice, Set…) |
 | `screens` | données figées, 900×700 et 420×700 | fenêtre uniforme (vide/noire), > 3 % des pixels diffèrent de `tests/e2e/refs/*.png` (image de différence jointe) |
 
+**Échecs connus.** `tests/e2e/known-failures.tsv` (`scénario<TAB>#issue<TAB>raison`) : le
+scénario tourne toujours et s'affiche `KNOWN-FAIL #233`, sans faire échouer le pipeline ; s'il
+repasse, le rapport demande de retirer la ligne (dans le commit du correctif). Au 01/10/2026 :
+`desktop_slow` → #233 (aucune fenêtre en 90 s sur `main` 8f73964 quand le portail et l'hôte du
+tray répondent en 40 s ; voir aussi #232).
+
 Chaque échec donne un message en clair et le chemin d'une capture prise **au moment du gel**
 (`stall-t13s.png`), ou de l'écran entier si la fenêtre n'apparaît pas.
 

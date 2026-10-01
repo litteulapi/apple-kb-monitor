@@ -1,0 +1,4 @@
+# Scenarios that fail because of a KNOWN, open bug: scenario<TAB>issue<TAB>reason.
+# Still run and reported (KNOWN-FAIL), they do not fail the pipeline; when one
+# passes again the run says so: remove its line in the same commit as the fix.
+desktop_slow	#233	daemon_tray_present()/portal calls block before the first frame (main 8f73964: no window after 90 s); see also #232

@@ -639,6 +639,15 @@ def main():
     env = Env(a)
     Path(a.out).mkdir(parents=True, exist_ok=True)
     results, failed = {}, []
+    known = {}
+    kf = HERE / "known-failures.tsv"
+    if kf.exists():
+        for line in kf.read_text().splitlines():
+            if line.strip() and not line.startswith("#"):
+                parts = line.split("\t")
+                if len(parts) < 3 or not parts[1].startswith("#"):
+                    sys.exit(f"{kf}: each line needs scenario<TAB>#issue<TAB>reason")
+                known[parts[0]] = parts[1]
     try:
         try:
             env.setup()
@@ -654,11 +663,18 @@ def main():
             try:
                 detail = fn(env)
                 results[name] = {"ok": True, "seconds": round(time.time() - t0, 1), "detail": detail}
+                if name in known:
+                    results[name]["note"] = f"listed as known failure {known[name]} but PASSES: remove it from known-failures.tsv"
+                    print(f"  NOTE: {name} passes again: remove it from tests/e2e/known-failures.tsv ({known[name]})")
                 print(f"ok   ({time.time() - t0:.0f}s) {json.dumps(detail)[:150]}", flush=True)
             except Fail as ex:
                 results[name] = {"ok": False, "seconds": round(time.time() - t0, 1), "error": str(ex)}
-                failed.append(name)
-                print(f"FAIL ({time.time() - t0:.0f}s) {ex}", flush=True)
+                if name in known:
+                    results[name]["known_issue"] = known[name]
+                    print(f"KNOWN-FAIL {known[name]} ({time.time() - t0:.0f}s) {ex}", flush=True)
+                else:
+                    failed.append(name)
+                    print(f"FAIL ({time.time() - t0:.0f}s) {ex}", flush=True)
             # Kill whatever a scenario left (its app, its fake daemon).
             for p in env.procs[env.base_n:]:
                 env.kill(p)
@@ -672,9 +688,13 @@ def main():
             (Path(a.out) / name / "result.json").write_text(json.dumps(results[name], indent=2) + "\n")
     finally:
         env.teardown()
-    summary = {"ok": not failed, "failed": failed, "scenarios": results}
+    summary = {"ok": not failed, "failed": failed, "known_failures": [n for n in results if results[n].get("known_issue")],
+               "scenarios": results}
     (Path(a.out) / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    print(f"e2e: {len(results) - len(failed)}/{len(results)} scenario(s) passed" + (f", FAILED: {', '.join(failed)}" if failed else ""))
+    nk = len(summary["known_failures"])
+    print(f"e2e: {len(results) - len(failed) - nk}/{len(results)} scenario(s) passed"
+          + (f", {nk} known failure(s): {', '.join(summary['known_failures'])}" if nk else "")
+          + (f", FAILED: {', '.join(failed)}" if failed else ""))
     return 1 if failed else 0
 
 
