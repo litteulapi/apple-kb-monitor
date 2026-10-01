@@ -30,7 +30,7 @@ Outils : `tests/live/re/link_sdp_decode.py` (décodage hors ligne du cache SDP d
 | Keepalive | aucun paquet L2CAP émis spontanément par le clavier au repos ; les seuls silences > 2 s durent **exactement 30,0 s** = sondage UPower | [mesuré] |
 | Qualité de lien | RSSI BR/EDR 0 à −3 (valeur **relative** à la plage de réception idéale, pas des dBm) ; puissance d'émission de l'**hôte** 8 dBm (max 8) | [mesuré] |
 | Réveil | après ≥ 0,5 s sans trafic, le clavier met **0,5 à 1,0 s** à quitter le sniff (au lieu de 8 ms) : il saute des ancres au repos | [mesuré] / mécanisme [hypothèse] |
-| Supervision | délai effectif **≈ 20 s** (défaut Core 0x7D00) mesuré sur une vraie coupure à 12:13:28 ; les 5 s du SDP ne sont appliquées par personne | [mesuré] + [source] |
+| Supervision | délai effectif **≈ 20 s** (12:13:08.4 → 12:13:28.8 ; = défaut Core 0x7D00) mesuré sur une vraie coupure à 12:13:28 ; les 5 s du SDP ne sont appliquées par personne | [mesuré] + [source] |
 | Page (hôte) | page timeout 5,12 s ; page scan 11,25 ms toutes les 1,28 s (R1, standard, pas *fast connectable*) | [mesuré] |
 | LMP distant | version, sous-version, fabricant, features pages 0-2, tailles de paquets, rôle : **inconnus** (échangés à la connexion, avant le début de la capture ; aucun outil de lecture passif). Référence publique d'un autre exemplaire : LMP 2.0, sous-version 0x31C, Apple (76), pas d'EDR/hold/park/SSR/SSP | inconnu, §4 |
 
@@ -94,7 +94,7 @@ Recoupement : le rapport vendeur `0x4F` vaut `50 00` = **0x0050** = `Version` SD
 
 ## 2. L2CAP et HIDP (couche transport)
 
-Capture : copie figée de `btmon1.snoop` (11:37:14 → 12:02:42, 1 528 s) décodée par
+Capture : copie figée de `btmon1.snoop` (11:37:14 → 12:02:42, 1 527,8 s ; brute non conservée, statistiques seules commitées) décodée par
 `btmon -r snap1.snoop -T --no-pager -C 200`, statistiques par `tests/live/re/link_btmon_stats.py`
 (`tests/fixtures/a1314_iso/link_btmon_stats_20261001.json`). Les octets des frappes ne sont **jamais**
 recopiés (seuls nombres et horodatages servent).
@@ -157,8 +157,8 @@ Délai `Exit Sniff Mode` → `Mode Change (Active)`, selon le temps passé en sn
 
 | Inactivité avant la requête | n | Délai médian | Min – max |
 |---|---|---|---|
-| < 0,5 s | 208 | **8 ms** | 6 – 246 ms |
-| 0,5 – 25 s | 20 | **≈ 690 ms** | 540 – 1 016 ms |
+| < 0,5 s | 207 | **8 ms** | 6 – 53 ms |
+| 0,5 – 25 s | 21 | **≈ 690 ms** | 246 – 1 016 ms |
 | ≥ 25 s (sondage UPower) | 31 | **≈ 1 000 ms** | 16 – 1 016 ms (2 valeurs < 50 ms) |
 
 * Un esclave en sniff 12,5 ms devrait accepter `LMP_unsniff_req` à l'ancre suivante (≤ 12,5 ms). Un délai de
@@ -293,7 +293,9 @@ PID 0x0256 « 2011 ») peut différer : à confirmer par l'expérience E1.
 ## 5. Sources externes
 
 * **BCM2042** : SoC HID Broadcom (8051 + pile Bluetooth complète en ROM, profil HID 1.0 intégré),
-  Bluetooth 2.0 (+EDR selon le module), AFH, *fast connect*. Fiche Broadcom (alldatasheet / digchip) ;
+  Bluetooth 2.0 (le *product brief* `2042-PB03-R` ne mentionne pas l'EDR ; la fiche du module BM2042 dit « 2.0+EDR
+  compatible »), AFH, *fast connect*. Le module BM2042 documente aussi une **UART de debug** et un Boot-ROM qui attend
+  un téléchargement de firmware si `UP_RX = 1` au reset [source, revérifiée au contre-audit]. Fiche Broadcom (alldatasheet / digchip) ;
   module Sunitec **BM2042** (BCM2042KFB) : courants sniff 10 ms 2,35 mA / 60 ms 0,39 mA / 100 ms 0,24 mA /
   1,28 s 0,018 mA, sommeil 50 µA, sommeil profond 16 µA, émission 0 dBm typ., +4 dBm max (classe 2).
   <https://pop.fsck.pl/hardware/toshiba-n554/SPEC-BM2042-V1.0.pdf>,
