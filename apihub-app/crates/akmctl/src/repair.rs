@@ -363,11 +363,13 @@ struct RealForget<'a> {
 
 impl crate::forget::ForgetEnv for RealForget<'_> {
     fn preflight(&mut self) -> crate::forget::Preflight {
+        // The daemon's breaker (Apple R3, #251): live over D-Bus, else its
+        // published state (`breaker.state`) when the daemon cannot be asked.
         let breaker_open = crate::bus::connect()
             .ok()
             .and_then(|c| crate::bus::get_state(&c).ok())
             .and_then(|s| s.keyboard.map(|k| k.breaker_open))
-            .unwrap_or(false);
+            .unwrap_or_else(|| crate::forget::published_breaker_blocks(&self.k.mac));
         crate::forget::Preflight {
             connected: connected(self.conn, &self.k.path),
             link_healthy: self.link_healthy,
@@ -513,6 +515,29 @@ fn forget_connected(conn: &Connection, k: &KbFacts, why: &str, report: &doctor::
         }
         crate::forget::Outcome::RemoveFailed(e) => {
             println!("  RemoveDevice: {e}");
+            crate::cli::EXIT_ERROR
+        }
+        // Apple R3 (#251): the breaker is open, the keyboard is mute, 0x41
+        // would not be heard. Nothing written; the existing wake + reconnect
+        // step runs instead, then the user is told.
+        crate::forget::Outcome::Preflight(fails)
+            if crate::forget::after_preflight(&fails) == crate::forget::Next::WakeAndPage =>
+        {
+            say(
+                "\u{2717} Disjoncteur ouvert : le clavier n'a pas répondu à 3 requêtes de suite, il est muet (règle Apple R3). RecantConnection (0x41) NON envoyé, rien supprimé. Retour à l'étape réveil + reconnexion.",
+                "\u{2717} Circuit breaker open: the keyboard did not answer 3 requests in a row, it is mute (Apple's R3). RecantConnection (0x41) NOT sent, nothing removed. Back to wake + reconnect.",
+            );
+            if wake_and_page(conn, k) {
+                say(
+                    "\u{2713} Clavier reconnecté, pairage intact : le disjoncteur se referme à la nouvelle connexion ; relancez `akmctl repair` si l'oubli reste nécessaire.",
+                    "\u{2713} Keyboard reconnected, pairing intact: the breaker closes on the new connection; run `akmctl repair` again if the forget is still needed.",
+                );
+                return crate::cli::EXIT_OK;
+            }
+            say(
+                "\u{2717} Le clavier ne répond pas. Éteignez-le, rallumez-le (voyant au démarrage) et vérifiez ses piles, puis relancez `akmctl repair`.",
+                "\u{2717} The keyboard does not answer. Switch it off and on (light at power-on), check its batteries, then run `akmctl repair` again.",
+            );
             crate::cli::EXIT_ERROR
         }
         other => {

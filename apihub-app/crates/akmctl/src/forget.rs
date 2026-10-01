@@ -111,6 +111,40 @@ pub fn preflight(p: &Preflight) -> Vec<PreflightFail> {
     v
 }
 
+/// What `akmctl repair` does after a failed pre-flight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Next {
+    /// The breaker is open: the keyboard is mute (Apple R3), `0x41` would
+    /// fall on deaf ears. Back to the existing wake + reconnect step, then
+    /// tell the user (#251).
+    WakeAndPage,
+    /// Anything else: cancelled, nothing changed.
+    Cancel,
+}
+
+pub fn after_preflight(fails: &[PreflightFail]) -> Next {
+    if fails.contains(&PreflightFail::BreakerOpen) {
+        Next::WakeAndPage
+    } else {
+        Next::Cancel
+    }
+}
+
+/// Does the daemon's published breaker state ([`akm_core::breaker_state`])
+/// forbid an emission to `mac`? Fallback of the pre-flight when the daemon
+/// cannot be asked over D-Bus: open, or stale / unreadable while the daemon
+/// runs = true; no state or a dead daemon = false.
+pub fn published_breaker_blocks(mac: &str) -> bool {
+    let found = akm_core::breaker_state::read_own(&akm_core::read_policy::breaker_state_path());
+    // SAFETY: getuid(2) has no preconditions.
+    let uid = unsafe { libc::getuid() };
+    let alive = |pid: Option<u32>| {
+        akm_core::breaker_state::daemon_alive_in(std::path::Path::new("/proc"), pid, uid)
+    };
+    !akm_core::breaker_state::verdict(&found, mac, akm_core::breaker_state::now_unix(), &alive)
+        .allows()
+}
+
 /// The outside world (simulated in the tests).
 pub trait ForgetEnv {
     fn preflight(&mut self) -> Preflight;
@@ -509,5 +543,51 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// #251: an open breaker does not cancel the repair, it skips the mute
+    /// `0x41` and goes back to wake + reconnect; every other failure cancels.
+    #[test]
+    fn an_open_breaker_sends_the_repair_back_to_wake_and_page() {
+        use PreflightFail as F;
+        assert_eq!(after_preflight(&[F::BreakerOpen]), Next::WakeAndPage);
+        assert_eq!(
+            after_preflight(&[F::LinkNotHealthy, F::BreakerOpen]),
+            Next::WakeAndPage
+        );
+        assert_eq!(after_preflight(&[]), Next::Cancel);
+        for f in [F::NotConnected, F::LinkNotHealthy, F::NotInteractive] {
+            assert_eq!(after_preflight(&[f]), Next::Cancel);
+        }
+        // and the run itself writes nothing with the breaker open (spy)
+        let mut s = Sim {
+            pre: Preflight {
+                connected: true,
+                link_healthy: true,
+                breaker_open: true,
+                interactive: true,
+            },
+            typed_ok: true,
+            ..Default::default()
+        };
+        let mut session = WriteSession::new();
+        let out = run(&mut session, &mut s);
+        assert_eq!(out, Outcome::Preflight(vec![F::BreakerOpen]));
+        assert!(
+            s.writes.borrow().is_empty(),
+            "no 0x41 while the breaker is open"
+        );
+        assert!(
+            s.events.borrow().is_empty(),
+            "no backup, no confirmation, no door"
+        );
+        assert!(!session.is_used());
+        assert_eq!(
+            after_preflight(match &out {
+                Outcome::Preflight(f) => f,
+                _ => unreachable!(),
+            }),
+            Next::WakeAndPage
+        );
     }
 }

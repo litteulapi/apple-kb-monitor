@@ -66,8 +66,9 @@ pub const ACTIVE_WINDOW: Duration = Duration::from_secs(60);
 pub const MIN_GAP: Duration = crate::apple_model::APPLE.min_gap;
 /// Consecutive silences that open the circuit breaker (the model's table).
 pub const TRIP_AFTER: u32 = crate::apple_model::APPLE.trip_after;
-/// Time budget of one read; no request starts after it.
-pub const BUDGET: Duration = Duration::from_secs(2);
+/// Time budget of one routine read; no request starts after it. Four
+/// requests 1 s apart (`0x47`, Input `0x30`, `0x46`, `0x49`: #251) need 3 s.
+pub const BUDGET: Duration = Duration::from_secs(3);
 /// Longest wait for the cross-process lock.
 pub const LOCK_WAIT: Duration = Duration::from_millis(500);
 
@@ -273,6 +274,47 @@ pub fn tripped() -> bool {
     !global_breaker().would_allow()
 }
 
+/// Consecutive silences counted by the global breaker.
+pub fn breaker_counter() -> u32 {
+    global_breaker().counter()
+}
+
+// ── the breaker, published for the other emitters (#244, #251) ─────────────
+
+static BREAKER_PUBLISHER: Mutex<crate::breaker_state::Publisher> =
+    Mutex::new(crate::breaker_state::Publisher::new());
+
+/// Path of the published state: next to the HID lock
+/// (`$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state`).
+pub fn breaker_state_path() -> PathBuf {
+    lock_path().with_file_name(crate::breaker_state::FILE_NAME)
+}
+
+/// The daemon publishes its breaker for `akm-hid-control` (root) and
+/// `akmctl`: called after every pass of the actor loop, it writes only on a
+/// change or as a heartbeat ([`crate::breaker_state::REFRESH`]). `mac` is the
+/// keyboard followed. Errors are logged by the caller.
+pub fn publish_breaker_state(mac: Option<&str>) -> io::Result<bool> {
+    let st = crate::breaker_state::BreakerState {
+        mac: mac.map(str::to_ascii_uppercase),
+        open: tripped(),
+        counter: breaker_counter(),
+        written_unix: crate::breaker_state::now_unix(),
+        pid: std::process::id(),
+    };
+    let path = breaker_state_path();
+    ensure_private_dir(path.parent().ok_or_else(|| io::Error::other("no parent"))?)?;
+    BREAKER_PUBLISHER
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .publish(&path, &st, Instant::now())
+}
+
+/// The daemon stops: no published state = the readers' former behaviour.
+pub fn withdraw_breaker_state() {
+    crate::breaker_state::remove(&breaker_state_path());
+}
+
 // ── single reader ──────────────────────────────────────────────────────────
 
 static IN_PROCESS: Mutex<()> = Mutex::new(());
@@ -436,17 +478,16 @@ impl<'a> SafeSource<'a> {
     }
 }
 
-impl HidSource for SafeSource<'_> {
-    fn feature(&self, report_id: u8) -> io::Result<Vec<u8>> {
-        // The register map decides: class SafeRead or OncePerConnection.
-        let class = crate::registry::check_read(report_id)?;
-        let once = class == crate::registry::Safety::OncePerConnection;
-        if once && self.conn().requested(report_id) {
-            return Err(io::Error::new(
-                io::ErrorKind::WouldBlock,
-                format!("report {report_id:#04x} is read once per connection and was already requested"),
-            ));
-        }
+impl SafeSource<'_> {
+    /// The one request path of the policy, Feature or Input: breaker (allow,
+    /// timeouts, outcome), 1 s spacing, hardware-access note. The register
+    /// map was consulted by the caller.
+    fn request(
+        &self,
+        report_id: u8,
+        once: bool,
+        send: impl FnOnce() -> io::Result<Vec<u8>>,
+    ) -> io::Result<Vec<u8>> {
         let timeouts = {
             let mut b = self.breaker();
             if !b.allow() {
@@ -466,7 +507,7 @@ impl HidSource for SafeSource<'_> {
         }
         self.sent.set(self.sent.get() + 1);
         let t0 = Instant::now();
-        let r = self.inner.feature(report_id);
+        let r = send();
         let took = t0.elapsed();
         self.last.set(Some(Instant::now()));
         note_hw_access();
@@ -482,6 +523,52 @@ impl HidSource for SafeSource<'_> {
             _ => r,
         }
     }
+}
+
+impl HidSource for SafeSource<'_> {
+    fn feature(&self, report_id: u8) -> io::Result<Vec<u8>> {
+        // The register map decides: class SafeRead or OncePerConnection.
+        let class = crate::registry::check_read(report_id)?;
+        let once = class == crate::registry::Safety::OncePerConnection;
+        if once && self.conn().requested(report_id) {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                format!(
+                    "report {report_id:#04x} is read once per connection and was already requested"
+                ),
+            ));
+        }
+        self.request(report_id, once, || self.inner.feature(report_id))
+    }
+
+    /// GET Input: the register map lets `0x30` through and nothing else
+    /// ([`crate::registry::check_read_input`]); same breaker, same spacing,
+    /// same verdict as a Feature read (a silence on `0x30` counts like one on
+    /// `0x47`, Apple's common counter).
+    fn input(&self, report_id: u8) -> io::Result<Vec<u8>> {
+        crate::registry::check_read_input(report_id)?;
+        self.request(report_id, false, || self.inner.input(report_id))
+    }
+}
+
+/// The routine battery read, in Apple's order (R2, #251): GET Feature `0x47`,
+/// then GET Input `0x30` once, then the project's voltage reports. Generated
+/// from the register map (`SAFE_READ_IDS` keeps its order, the Input ids
+/// follow the first Feature id).
+pub fn routine_reads() -> Vec<crate::apple_model::Request> {
+    use crate::apple_model::Request;
+    let mut out = Vec::new();
+    for (i, id) in crate::registry::SAFE_READ_IDS.into_iter().enumerate() {
+        out.push(Request::GetFeature(id));
+        if i == 0 {
+            out.extend(
+                crate::registry::SAFE_READ_INPUT_IDS
+                    .into_iter()
+                    .map(Request::GetInput),
+            );
+        }
+    }
+    out
 }
 
 /// Outcome of a safe read.
@@ -517,35 +604,59 @@ pub fn read_safe(src: &dyn HidSource, report: &mut KbReport) -> SafeRead {
 /// yet made in this connection. Every request goes through the same
 /// [`SafeSource`]: same spacing, same breaker, stop at the first failure.
 fn read_with(safe: SafeSource<'_>, report: &mut KbReport, with_once: bool) -> SafeRead {
+    use crate::apple_model::Request;
     let start = Instant::now();
     let mut complete = true;
-    for id in crate::registry::SAFE_READ_IDS {
+    // Apple's order (R2): 0x47, then GET Input 0x30 once, then 0x46 / 0x49.
+    for req in routine_reads() {
         if safe.sent() > 0 && start.elapsed() >= BUDGET {
             complete = false;
             break;
         }
-        let Ok(b) = safe.feature(id) else {
+        let r = match req {
+            Request::GetFeature(id) => safe.feature(id),
+            Request::GetInput(id) => safe.input(id),
+            _ => continue,
+        };
+        let Ok(b) = r else {
             complete = false;
             break;
         };
         if b.len() < 2 {
             continue;
         }
-        report.raw.insert(format!("{id:#04x}"), hex(&b[1..]));
-        match id {
-            0x47 => {
+        match req {
+            Request::GetInput(_) => {
+                // Decoded by the passive decoder, like the pushed `A1 30 xx`.
+                if let Some(crate::passive::PassiveEvent::BattStat { value }) =
+                    crate::passive::decode(&b)
+                {
+                    report.battery.state = Some(value);
+                    report
+                        .raw
+                        .insert(format!("input {:#04x}", b[0]), hex(&b[1..]));
+                }
+            }
+            Request::GetFeature(0x47) => {
+                report.raw.insert("0x47".into(), hex(&b[1..]));
                 if let Some(&pct) = b.get(1).filter(|&&p| p <= 100) {
                     if report.battery.percentage.is_none() {
                         report.battery.percentage = Some(f64::from(pct));
                     }
                 }
             }
-            0x46 if b.len() >= 3 => {
-                // [mesuré] battery voltage in mV, little-endian (= 0xFF BE).
-                let mv = u16::from_le_bytes([b[1], b[2]]);
-                if (1500..=3700).contains(&mv) {
-                    report.battery.voltage = Some(f64::from(mv) / 1000.0);
+            Request::GetFeature(0x46) => {
+                report.raw.insert("0x46".into(), hex(&b[1..]));
+                if b.len() >= 3 {
+                    // [mesuré] battery voltage in mV, little-endian (= 0xFF BE).
+                    let mv = u16::from_le_bytes([b[1], b[2]]);
+                    if (1500..=3700).contains(&mv) {
+                        report.battery.voltage = Some(f64::from(mv) / 1000.0);
+                    }
                 }
+            }
+            Request::GetFeature(id) => {
+                report.raw.insert(format!("{id:#04x}"), hex(&b[1..]));
             }
             _ => {}
         }
@@ -694,10 +805,17 @@ mod tests {
             self.log.borrow_mut().push(id);
             self.inner.feature(id)
         }
+        fn input(&self, id: u8) -> io::Result<Vec<u8>> {
+            self.log.borrow_mut().push(id);
+            self.inner.input(id)
+        }
     }
 
+    /// The keyboard as measured: Feature 0x47/0x46/0x49 and GET Input 0x30
+    /// answering `30 00` (RE-HID-EXHAUSTIF §2.2).
     fn fixture() -> Fixture {
         Fixture::new()
+            .with_input(&[0x30, 0])
             .with(&[0x47, 99])
             .with(&[0x46, 0xBA, 0x0B]) // 0x0BBA = 3002 mV
             .with(&[0x49, 0x89, 0x0B])
@@ -803,7 +921,7 @@ mod tests {
             SafeRead::Complete,
             "running out of time on the name is not a failure"
         );
-        assert_eq!(spy.log.borrow()[..5], [0x47, 0x46, 0x49, 0x4F, 0x60]);
+        assert_eq!(spy.log.borrow()[..6], [0x47, 0x30, 0x46, 0x49, 0x4F, 0x60]);
         // The name fragments follow, in order, over one or more bursts, once each.
         for _ in 0..4 {
             if crate::registry::DAEMON_DEFERRED_ONCE_IDS
@@ -845,17 +963,29 @@ mod tests {
         spy.log.borrow_mut().clear();
         let out = read_with(SafeSource::with_parts(&spy, &breaker, &conn), &mut r2, true);
         assert_eq!(out, SafeRead::Complete);
-        assert_eq!(*spy.log.borrow(), vec![0x47, 0x46, 0x49]);
+        assert_eq!(*spy.log.borrow(), vec![0x47, 0x30, 0x46, 0x49]);
         apply_frames(&mut r2, Some(0x0256), &conn.lock().unwrap());
-        assert_eq!(r2.firmware.version.as_deref(), Some("0x0050"), "cache survives");
+        assert_eq!(
+            r2.firmware.version.as_deref(),
+            Some("0x0050"),
+            "cache survives"
+        );
         // the CLI path (read_safe) never makes the once-per-connection reads
         let spy2 = Spy {
             inner: &f,
             log: RefCell::new(Vec::new()),
         };
         let mut r3 = KbReport::default();
-        let _ = read_with(SafeSource::with_parts(&spy2, &Mutex::new(Breaker::new()), &Mutex::new(ConnState::new())), &mut r3, false);
-        assert_eq!(*spy2.log.borrow(), vec![0x47, 0x46, 0x49]);
+        let _ = read_with(
+            SafeSource::with_parts(
+                &spy2,
+                &Mutex::new(Breaker::new()),
+                &Mutex::new(ConnState::new()),
+            ),
+            &mut r3,
+            false,
+        );
+        assert_eq!(*spy2.log.borrow(), vec![0x47, 0x30, 0x46, 0x49]);
     }
 
     #[test]
@@ -1011,24 +1141,219 @@ mod tests {
         assert_eq!(read_safe(&spy, &mut r), SafeRead::Complete);
         assert_eq!(
             *spy.log.borrow(),
-            vec![0x47, 0x46, 0x49],
-            "3 requests, no probe, no scan"
+            vec![0x47, 0x30, 0x46, 0x49],
+            "4 requests (0x47, Input 0x30, 0x46, 0x49), no probe, no scan"
         );
         assert_eq!(r.battery.percentage, Some(99.0));
         assert_eq!(r.battery.voltage, Some(3.002));
+        assert_eq!(
+            r.battery.state,
+            Some(0),
+            "GET Input 0x30 decoded by the passive decoder"
+        );
+        assert_eq!(r.raw.get("input 0x30").map(String::as_str), Some("00"));
         assert!(!r.incomplete);
+    }
+
+    // ── GET Input 0x30 (Apple R2, #251) ────────────────────────────────────
+
+    /// Records Feature and Input requests apart, with their instants.
+    struct DirSpy<'a> {
+        inner: &'a dyn HidSource,
+        log: RefCell<Vec<(&'static str, u8, Instant)>>,
+    }
+    impl<'a> DirSpy<'a> {
+        fn new(inner: &'a dyn HidSource) -> Self {
+            Self {
+                inner,
+                log: RefCell::new(Vec::new()),
+            }
+        }
+        fn seq(&self) -> Vec<(&'static str, u8)> {
+            self.log
+                .borrow()
+                .iter()
+                .map(|(d, id, _)| (*d, *id))
+                .collect()
+        }
+    }
+    impl HidSource for DirSpy<'_> {
+        fn feature(&self, id: u8) -> io::Result<Vec<u8>> {
+            self.log.borrow_mut().push(("feature", id, Instant::now()));
+            self.inner.feature(id)
+        }
+        fn input(&self, id: u8) -> io::Result<Vec<u8>> {
+            self.log.borrow_mut().push(("input", id, Instant::now()));
+            self.inner.input(id)
+        }
+    }
+
+    /// R2: 0x47, then GET Input 0x30 (as an Input, once), then 0x46 / 0x49,
+    /// at least 1 s between each; a second burst reads 0x30 once more, never
+    /// twice in one.
+    #[test]
+    fn the_burst_is_0x47_then_input_0x30_then_the_voltages_1s_apart() {
+        let f = fixture().with_input(&[0x30, 1]);
+        let spy = DirSpy::new(&f);
+        let mut r = KbReport::default();
+        assert_eq!(read_safe(&spy, &mut r), SafeRead::Complete);
+        assert_eq!(
+            spy.seq(),
+            vec![
+                ("feature", 0x47),
+                ("input", 0x30),
+                ("feature", 0x46),
+                ("feature", 0x49)
+            ]
+        );
+        assert_eq!(r.battery.state, Some(1), "low, from the Input read");
+        {
+            let log = spy.log.borrow();
+            for w in log.windows(2) {
+                let gap = w[1].2.duration_since(w[0].2);
+                assert!(
+                    gap >= MIN_GAP - Duration::from_millis(5),
+                    "{:?} -> {:?}: {gap:?}",
+                    w[0].1,
+                    w[1].1
+                );
+            }
+        }
+        assert_eq!(
+            routine_reads()[..2],
+            crate::apple_model::BATTERY_READ,
+            "Apple's battery read first"
+        );
+        // a second burst: exactly one more Input read
+        let mut r2 = KbReport::default();
+        assert_eq!(read_safe(&spy, &mut r2), SafeRead::Complete);
+        let inputs = spy.seq().iter().filter(|(d, _)| *d == "input").count();
+        assert_eq!(inputs, 2, "one GET Input 0x30 per burst");
+        assert!(spy.seq().iter().all(|(d, id)| *d != "input" || *id == 0x30));
+    }
+
+    /// The Input gate of the policy: of the 256 ids only 0x30 reaches the
+    /// device as a GET Input; the Feature path never sends 0x30.
+    #[test]
+    fn only_input_0x30_passes_the_safe_source() {
+        let full = Fixture::from_hex_dump(
+            &(0..=255u32)
+                .map(|i| format!("{i:02x} 00\n"))
+                .collect::<String>(),
+        )
+        .unwrap();
+        let mut f = full.clone();
+        for id in 0..=255u8 {
+            f = f.with_input(&[id, 0]);
+        }
+        let spy = DirSpy::new(&f);
+        let breaker = Mutex::new(Breaker::new());
+        let conn = Mutex::new(ConnState::new());
+        for id in 0..=255u8 {
+            let safe = SafeSource::with_parts(&spy, &breaker, &conn);
+            match safe.input(id) {
+                Ok(b) => assert_eq!(b, vec![0x30, 0]),
+                Err(e) => assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{id:#04x}"),
+            }
+        }
+        let reached: Vec<u8> = spy
+            .seq()
+            .iter()
+            .filter(|(d, _)| *d == "input")
+            .map(|(_, id)| *id)
+            .collect();
+        assert_eq!(reached, vec![0x30]);
+        assert!(SafeSource::with_parts(&spy, &breaker, &conn)
+            .feature(0x30)
+            .is_err());
+        assert!(!spy.seq().contains(&("feature", 0x30)));
+        assert!(
+            !breaker.lock().unwrap().is_open(),
+            "a refused id never counts"
+        );
+    }
+
+    /// A silent 0x30 counts like a silent 0x47 (Apple's common counter): the
+    /// burst stops there, the breaker opens at the third silence in a row.
+    #[test]
+    fn a_failed_input_0x30_counts_for_the_breaker_like_0x47() {
+        // 0x47 answers, 0x30 times out (no Input in the fixture = NotFound,
+        // slow it down with a Dead-like source): use a source that answers
+        // Feature and refuses Input with a link timeout.
+        struct HalfDead<'a> {
+            fixture: &'a Fixture,
+            inputs: std::cell::Cell<u32>,
+            /// Then the keyboard goes silent on everything.
+            all_dead: std::cell::Cell<bool>,
+        }
+        impl HidSource for HalfDead<'_> {
+            fn feature(&self, id: u8) -> io::Result<Vec<u8>> {
+                if self.all_dead.get() {
+                    return Err(io::Error::from(io::ErrorKind::TimedOut));
+                }
+                self.fixture.feature(id)
+            }
+            fn input(&self, _: u8) -> io::Result<Vec<u8>> {
+                self.inputs.set(self.inputs.get() + 1);
+                Err(io::Error::from(io::ErrorKind::TimedOut))
+            }
+        }
+        let f = fixture();
+        let src = HalfDead {
+            fixture: &f,
+            inputs: std::cell::Cell::new(0),
+            all_dead: std::cell::Cell::new(false),
+        };
+        let br = Mutex::new(Breaker::new());
+        // burst 1: 0x47 answers (counter 0), 0x30 silent (1), stop there
+        let mut r = KbReport::default();
+        let out = read_with(SafeSource::with_breaker(&src, &br), &mut r, false);
+        assert_eq!(out, SafeRead::Partial, "the burst stops at the silent 0x30");
+        assert_eq!(r.battery.percentage, Some(99.0), "0x47 was read");
+        assert_eq!(r.battery.state, None);
+        assert!(r.incomplete);
+        assert_eq!(br.lock().unwrap().counter(), 1, "the silent 0x30 counted");
+        assert_eq!(src.inputs.get(), 1);
+        // the keyboard goes mute: two more silences (0x47) open the breaker,
+        // the silence of 0x30 being the first of the three
+        src.all_dead.set(true);
+        for i in 2..=TRIP_AFTER {
+            let mut r = KbReport::default();
+            assert_eq!(
+                read_with(SafeSource::with_breaker(&src, &br), &mut r, false),
+                SafeRead::Partial
+            );
+            assert_eq!(br.lock().unwrap().counter(), i);
+        }
+        assert!(br.lock().unwrap().is_open());
+        assert_eq!(src.inputs.get(), 1, "0x47 failed first: 0x30 not asked");
+        // open: nothing goes out any more, not even 0x47
+        let mut r = KbReport::default();
+        read_with(SafeSource::with_breaker(&src, &br), &mut r, false);
+        assert_eq!(src.inputs.get(), 1);
+        assert_eq!(r.battery.percentage, None);
+        // a keyboard that answers 0x47 but never 0x30 never trips: the
+        // answer resets the counter each burst (Apple's DecodedHandshake)
+        let br2 = Mutex::new(Breaker::new());
+        src.all_dead.set(false);
+        for _ in 0..5 {
+            let mut r = KbReport::default();
+            read_with(SafeSource::with_breaker(&src, &br2), &mut r, false);
+            assert_eq!(br2.lock().unwrap().counter(), 1);
+        }
+        assert!(!br2.lock().unwrap().is_open());
     }
 
     #[test]
     fn first_failure_stops_the_read() {
-        let f = Fixture::new().with(&[0x47, 80]); // 0x46 missing -> error
+        let f = Fixture::new().with(&[0x47, 80]).with_input(&[0x30, 0]); // 0x46 missing -> error
         let spy = Spy {
             inner: &f,
             log: RefCell::new(Vec::new()),
         };
         let mut r = KbReport::default();
         assert_eq!(read_safe(&spy, &mut r), SafeRead::Partial);
-        assert_eq!(*spy.log.borrow(), vec![0x47, 0x46]);
+        assert_eq!(*spy.log.borrow(), vec![0x47, 0x30, 0x46]);
         assert!(r.incomplete);
         assert_eq!(r.battery.percentage, Some(80.0));
     }

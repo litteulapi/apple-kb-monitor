@@ -1,6 +1,7 @@
-//! `dump`: SAFE version. Reads only the three reports of the read policy
-//! (`akm_core::read_policy::ALLOWED`: 0x47, 0x46, 0x49), through
-//! `read_safe` (allow-list, spacing, time budget, stop at the first failure).
+//! `dump`: SAFE version. Reads only the routine reports of the read policy
+//! (`akm_core::read_policy::routine_reads()`: Feature 0x47, then GET Input
+//! 0x30 as Apple does (#251), then 0x46, 0x49), through `read_safe`
+//! (allow-list, spacing, time budget, stop at the first failure).
 //! No scan, never 0x4C / 0xFE / 0x01. The reverse-engineering scripts live in
 //! `tests/live/`, not here.
 
@@ -29,9 +30,20 @@ fn le_mv(hex: &str) -> Option<u32> {
 
 fn meaning(id: &str, hex: &str) -> String {
     match id {
-        "0x47" => u8::from_str_radix(hex.get(0..2).unwrap_or(""), 16).map_or("?".into(), |p| format!("battery {p} %")),
+        "0x47" => u8::from_str_radix(hex.get(0..2).unwrap_or(""), 16)
+            .map_or("?".into(), |p| format!("battery {p} %")),
         "0x46" => le_mv(hex).map_or("?".into(), |mv| format!("cell voltage {mv} mV (measured)")),
-        "0x49" => le_mv(hex).map_or("?".into(), |mv| format!("filtered voltage {mv} mV (measured)")),
+        "0x49" => le_mv(hex).map_or("?".into(), |mv| {
+            format!("filtered voltage {mv} mV (measured)")
+        }),
+        "input 0x30" => {
+            u8::from_str_radix(hex.get(0..2).unwrap_or(""), 16).map_or("?".into(), |b| {
+                format!(
+                    "battery state {} (GET Input, Apple R2)",
+                    akm_core::registry::BatteryState::from_byte(b).as_str()
+                )
+            })
+        }
         _ => "?".into(),
     }
 }
@@ -45,8 +57,13 @@ fn outcome_str(o: SafeRead) -> &'static str {
 }
 
 pub fn to_text(d: &Dump) -> String {
-    let mut out = format!("Safe read of reports {:?}: {}\n", read_policy::ALLOWED, outcome_str(d.outcome));
-    for id in ["0x47", "0x46", "0x49"] {
+    let mut out = format!(
+        "Safe read of reports {:?} + Input {:?}: {}\n",
+        read_policy::ALLOWED,
+        akm_core::registry::SAFE_READ_INPUT_IDS,
+        outcome_str(d.outcome)
+    );
+    for id in ["0x47", "input 0x30", "0x46", "0x49"] {
         match d.report.raw.get(id) {
             Some(h) => out.push_str(&format!("  {id}  {h:<8}  {}\n", meaning(id, h))),
             None => out.push_str(&format!("  {id}  (not read)\n")),
@@ -70,7 +87,7 @@ pub fn to_json(d: &Dump) -> Value {
     })
 }
 
-/// Open the keyboard's hidraw node and read the three allowed reports.
+/// Open the keyboard's hidraw node and read the routine reports.
 /// Takes the cross-process read lock shared with the daemon; refuses a
 /// keyboard that is not a BCM2042 (the only family with these reports).
 pub fn run() -> Result<Dump, String> {
@@ -106,10 +123,15 @@ mod tests {
             self.log.borrow_mut().push(id);
             self.inner.feature(id)
         }
+        fn input(&self, id: u8) -> io::Result<Vec<u8>> {
+            self.log.borrow_mut().push(id);
+            self.inner.input(id)
+        }
     }
 
     fn fixture() -> akm_core::decode::Fixture {
         akm_core::decode::Fixture::new()
+            .with_input(&[0x30, 1])
             .with(&[0x47, 99])
             .with(&[0x46, 0xBA, 0x0B])
             .with(&[0x49, 0x89, 0x0B])
@@ -121,9 +143,16 @@ mod tests {
     #[test]
     fn only_the_three_allowed_reports_are_ever_requested() {
         let f = fixture();
-        let spy = Spy { inner: &f, log: RefCell::new(vec![]) };
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(vec![]),
+        };
         let d = collect(&spy);
-        assert_eq!(*spy.log.borrow(), vec![0x47, 0x46, 0x49]);
+        assert_eq!(
+            *spy.log.borrow(),
+            vec![0x47, 0x30, 0x46, 0x49],
+            "Apple's order, Input 0x30 after 0x47"
+        );
         assert_eq!(d.outcome, SafeRead::Complete);
         for banned in ["0x4c", "0xfe", "0x01", "0x4C", "0xFE"] {
             assert!(!d.report.raw.contains_key(banned), "{banned}");
@@ -137,19 +166,33 @@ mod tests {
         assert!(t.contains("0x47  63        battery 99 %"), "{t}");
         assert!(t.contains("cell voltage 3002 mV (measured)"), "{t}");
         assert!(t.contains("filtered voltage 2953 mV (measured)"), "{t}");
+        assert!(
+            t.contains("input 0x30  01        battery state low (GET Input, Apple R2)"),
+            "{t}"
+        );
         let j = to_json(&d);
         assert_eq!(j["outcome"], "complete");
         assert_eq!(j["reports"]["0x46"]["hex"], "ba0b");
-        assert_eq!(j["reports"].as_object().unwrap().len(), 3);
+        assert_eq!(j["reports"]["input 0x30"]["hex"], "01");
+        assert_eq!(j["reports"].as_object().unwrap().len(), 4);
     }
 
     #[test]
     fn stops_at_the_first_failure() {
-        let f = akm_core::decode::Fixture::new().with(&[0x47, 50]); // 0x46 answers NotFound
-        let spy = Spy { inner: &f, log: RefCell::new(vec![]) };
+        let f = akm_core::decode::Fixture::new()
+            .with(&[0x47, 50])
+            .with_input(&[0x30, 0]); // 0x46 answers NotFound
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(vec![]),
+        };
         let d = collect(&spy);
         assert_eq!(d.outcome, SafeRead::Partial);
-        assert_eq!(*spy.log.borrow(), vec![0x47, 0x46], "0x49 is not tried after a failure");
+        assert_eq!(
+            *spy.log.borrow(),
+            vec![0x47, 0x30, 0x46],
+            "0x49 is not tried after a failure"
+        );
         assert!(to_text(&d).contains("0x49  (not read)"));
         assert!(d.report.incomplete);
     }

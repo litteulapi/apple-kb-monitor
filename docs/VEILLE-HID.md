@@ -27,6 +27,40 @@ akm-hid-control suspend|exit-suspend [--mac XX:XX:XX:XX:XX:XX] [--dry-run]
 4. **Write**: one `send(2)` of one byte with `MSG_DONTWAIT | MSG_NOSIGNAL`. The byte comes from the `HidControl` enum (`0x13`, `0x14`) and is checked again by `check_byte` (a test sweeps the 256 values). No `setsockopt`, no `fcntl`: the socket and its file flags are shared with `bluetoothd` and are never changed. No retry. Then at most 1 s (`DRAIN_WAIT`, as Apple) for the byte to leave the socket queue (`TIOCOUTQ` = `SO_SNDBUF`), and every duplicate is closed.
 5. **Journal**: every decision (keyboards, pid/exe, each L2CAP socket of the keyboard with PSM, CID and state, the byte sent or the reason for refusing) goes to journald: stderr under systemd, `syslog(3)` with the tag `akm-hid-control` under pkexec. `journalctl -t akm-hid-control` or `journalctl -u apple-kb-monitor-suspend -u apple-kb-monitor-resume`.
 6. **Source scan**: `this_file_has_one_write_path` fails if a second `send`, or any `write` / `sendmsg` / `setsockopt` / `fcntl`, appears in the helper.
+7. **Apple's breaker (R3, #251)**: before the byte, the circuit breaker of the user daemon is consulted (next section). Open: `NOT sent`, exit 0 (nothing to do, nothing to retry).
+
+## The daemon's circuit breaker reaches the helper (R3, #251)
+
+Apple's driver stops **every** emission after three consecutive silences, HID_CONTROL included (`docs/PARITE-APPLE.md` R3), until a new connection or a sleep. The breaker lives in `apple-kb-monitord` (user session); the helper runs as root from system units at sleep time, without a session bus, with `RestrictAddressFamilies=AF_UNIX` and `libc` only. The daemon therefore **publishes** its breaker as one small file, and the helper reads it:
+
+```text
+/run/user/<uid>/apple-kb-monitor/breaker.state      ($XDG_RUNTIME_DIR, next to hid.lock)
+schema=1
+mac=04:DB:56:CA:42:EE        (keyboard followed, or -)
+open=1                       (R3 flag)
+counter=3                    (consecutive silences)
+written_unix=1790000000
+pid=4242                     (the daemon)
+```
+
+* **Writer** (`akm-core/src/read_policy.rs::publish_breaker_state`, `breaker_state.rs`): after every pass of the actor loop, rewritten atomically (temp + rename, 0644 in the user's private 0700 directory) only on a change or every 20 s (heartbeat); removed when the daemon stops.
+* **Reader** (`hidctl::breaker_verdict`, same `breaker_state.rs` compiled in by path, `libc` only): every `/run/user/<uid>/apple-kb-monitor/breaker.state` is read with the checks of the other root readers (`fsutil::read_user_file`: owner = `<uid>` of the path, regular file, `O_NOFOLLOW`, one hard link, ≤ 1 KiB). The unit already holds `CAP_DAC_READ_SEARCH`.
+* **Decision** (`breaker_state::verdict`, pure, one refusal from any user's daemon is enough), per keyboard:
+
+| Published state | Daemon | Verdict |
+|---|---|---|
+| `open=1` for this MAC, fresh (≤ 60 s) | running or just dead | **refused** (Apple's verdict for this connection) |
+| closed, fresh | — | sent |
+| older than 60 s | running (`/proc/<pid>/comm` = `apple-kb-monito`, same uid) | **refused** (wedged daemon, breaker unknown: fail closed) |
+| older than 60 s | gone | sent |
+| unreadable / malformed | running (any `apple-kb-monitord` of that uid) | **refused** |
+| unreadable / malformed | gone | sent |
+| no file | — | sent (older daemon or none: the behaviour before #251) |
+| another MAC, or `mac=-` | — | sent (not concerned) |
+
+Why not D-Bus or a socket: no session bus at sleep time for a system unit, no `AF_BLUETOOTH`/`AF_INET` allowed, the helper stays without a D-Bus client in root; `/run/user/<uid>` is the directory the root helpers already read (`akm-keymap-helper`), with the same owner checks. The same verdict guards `akmctl` (`hidraw::WriteDoor`: `0x41` forget, `0x55` name): a short-lived process has a fresh breaker of its own, the daemon's is the one that counts.
+
+Journal: `… breaker state Closed: emission allowed` / `… NOT sent, breaker open: the keyboard did not answer 3 requests in a row (Apple R3: nothing is sent until a new connection or a sleep)` / `… breaker state is N s old (> 60 s) while the daemon runs: not trusted, nothing sent`. `--dry-run` prints the verdict too.
 
 ## Triggers
 
@@ -62,7 +96,7 @@ akmctl hid-control suspend                    # sends 0x13 once (administrator a
 akmctl hid-control exit-suspend               # sends 0x14 once
 ```
 
-Polkit action `com.agenceapi.AppleKbMonitor.hid-control`, `auth_admin` (no `_keep`). Exit 0 = sent or nothing to do, 1 = refused or failed (reason printed and logged), 64 = usage.
+Polkit action `com.agenceapi.AppleKbMonitor.hid-control`, `auth_admin` (no `_keep`). Exit 0 = sent or nothing to do (no keyboard, disabled, **breaker open**), 1 = refused or failed (reason printed and logged), 64 = usage.
 
 Dry run on PC01 (BlueZ 5.87, `uhid`, kernel 7.1, Yama 1), 2026-10-01, read-only:
 
@@ -81,4 +115,4 @@ bluetoothd pid 1144 (/usr/lib/bluetooth/bluetoothd): 11 L2CAP socket(s)
 
 ## Tests
 
-`cargo test -p akm-helper`: selection of the single candidate, refusal with 0 or 2+ candidates, refusal of every PSM other than `0x0011` (65 535 values each side), of a non-L2CAP or non-connected socket, of an executable other than `bluetoothd`, of a MAC outside the table, sweep of the 256 bytes (only `0x13` and `0x14` pass), strict arguments and configuration; `tests/hid_control_fake_bluetoothd.rs`: a child process holds the two ends of the fake channels, `pidfd_getfd` duplicates them, the peer of the control channel receives exactly one byte (`0x13`, then `0x14` in a fresh run), the interrupt peer nothing; dry run, a wrong executable, an unknown MAC and two candidates write nothing.
+`cargo test -p akm-helper`: selection of the single candidate, refusal with 0 or 2+ candidates, refusal of every PSM other than `0x0011` (65 535 values each side), of a non-L2CAP or non-connected socket, of an executable other than `bluetoothd`, of a MAC outside the table, sweep of the 256 bytes (only `0x13` and `0x14` pass), strict arguments and configuration; `tests/hid_control_fake_bluetoothd.rs`: a child process holds the two ends of the fake channels, `pidfd_getfd` duplicates them, the peer of the control channel receives exactly one byte (`0x13`, then `0x14` in a fresh run), the interrupt peer nothing; dry run, a wrong executable, an unknown MAC and two candidates write nothing; `the_daemons_breaker_blocks_the_hid_control_byte`: a published state `open=1` -> the control peer receives **nothing** and the run exits 0, closed -> the byte, stale or malformed with a "live" daemon -> nothing, with a dead one -> the byte, another keyboard's state -> the byte. `breaker_state.rs` has its own tests (strict parsing, rule table, liveness on a fake `/proc`, atomic write, heartbeat).

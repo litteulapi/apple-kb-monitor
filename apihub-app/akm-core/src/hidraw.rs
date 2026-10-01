@@ -18,6 +18,13 @@ use crate::report::{KbReport, KbWake};
 /// HIDIOCGFEATURE = _IOWR('H', 0x07, 256) — read HID Feature Report
 const HIDIOCGFEATURE: libc::c_ulong = 0xC1004807;
 
+/// HIDIOCGINPUT = _IOWR('H', 0x0A, 256) — read HID Input Report (GET_REPORT
+/// type Input, `UHID_GET_REPORT` -> HIDP `GET_REPORT` on the control channel,
+/// read-only on the device). Used for ONE id, `0x30`, the second half of
+/// Apple's battery read (R2, #251); the register map refuses the 255 others
+/// ([`crate::registry::check_read_input`]).
+const HIDIOCGINPUT: libc::c_ulong = 0xC100480A;
+
 /// The write twin of the read ioctl, sized for ONE byte: _IOWR('H', 0x06, 1).
 /// The size is part of the request number, so the kernel can never send more
 /// than the single report id (`WillShutdown`, wire `53 40`).
@@ -44,12 +51,28 @@ pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> io::Result<Vec<u8>> {
     // The single door to the hardware: the register map decides (#219). A
     // refused id never reaches the ioctl, whatever the caller.
     crate::registry::check_read(report_id)?;
+    hid_get_report(fd, HIDIOCGFEATURE, report_id)
+}
+
+/// Read one Input Report on a raw fd (GET_REPORT type Input: read-only on the
+/// device). Only the ids of class `SafeReadInput` pass the register map:
+/// `0x30` `BatteryState`, requested once per battery read right after `0x47`
+/// as Apple's `getBatteryState` does (R2, #251). The buffer returned starts
+/// with the report id.
+pub fn hid_read_input(fd: libc::c_int, report_id: u8) -> io::Result<Vec<u8>> {
+    crate::registry::check_read_input(report_id)?;
+    hid_get_report(fd, HIDIOCGINPUT, report_id)
+}
+
+/// The one GET_REPORT ioctl of the build (Feature or Input request number),
+/// after the register map agreed.
+fn hid_get_report(fd: libc::c_int, request: libc::c_ulong, report_id: u8) -> io::Result<Vec<u8>> {
     let mut attempts = 0;
     loop {
         let mut buf = [0u8; 256];
         buf[0] = report_id;
-        // SAFETY: buf is 256 bytes, the size encoded in HIDIOCGFEATURE.
-        let ret = unsafe { libc::ioctl(fd, HIDIOCGFEATURE, buf.as_mut_ptr()) };
+        // SAFETY: buf is 256 bytes, the size encoded in both request numbers.
+        let ret = unsafe { libc::ioctl(fd, request, buf.as_mut_ptr()) };
         if ret >= 0 {
             // The kernel never returns more than the 256 bytes encoded above.
             let n = (ret as usize).min(buf.len());
@@ -200,11 +223,28 @@ pub fn send_will_shutdown(enabled: bool, connected: bool) -> crate::parity::Outc
 /// daemon (released on drop). Every write still goes through
 /// [`hid_write_feature`] (register map, operation, length, fixed-size doors),
 /// after the 1 s spacing that follows the last hardware access, and is
-/// recorded by the circuit breaker. Opening it writes nothing.
+/// recorded by the circuit breaker. Apple's R3 (#251): the breaker that
+/// counts is the **daemon's**, read from its published state
+/// ([`crate::breaker_state`]): open for this keyboard, or stale / unreadable
+/// while the daemon runs, the door refuses to write. Opening it writes nothing.
 pub struct WriteDoor {
     file: std::fs::File,
     path: String,
+    /// `HID_UNIQ` of the node (the keyboard the daemon's state must concern).
+    mac: String,
     _lock: crate::read_policy::ReadLock,
+}
+
+/// The daemon's verdict for a write from another process (`akmctl`), from the
+/// state it publishes next to the HID lock (pure decision in
+/// [`crate::breaker_state::verdict`]).
+fn daemon_breaker_verdict(mac: &str) -> crate::breaker_state::Verdict {
+    let found = crate::breaker_state::read_own(&crate::read_policy::breaker_state_path());
+    // SAFETY: getuid(2) has no preconditions.
+    let uid = unsafe { libc::getuid() };
+    let alive =
+        |pid: Option<u32>| crate::breaker_state::daemon_alive_in(Path::new("/proc"), pid, uid);
+    crate::breaker_state::verdict(&found, mac, crate::breaker_state::now_unix(), &alive)
 }
 
 impl WriteDoor {
@@ -229,12 +269,18 @@ impl WriteDoor {
         Ok(Self {
             file,
             path: dev,
+            mac: crate::model::mac_from_uevent(&uevent).unwrap_or_default(),
             _lock: lock,
         })
     }
 
     pub fn path(&self) -> &str {
         &self.path
+    }
+
+    /// `HID_UNIQ` of the opened node (upper-case).
+    pub fn mac(&self) -> String {
+        self.mac.to_ascii_uppercase()
     }
 }
 
@@ -247,6 +293,18 @@ impl crate::parity::FeatureSink for WriteDoor {
             .allow();
         if !allowed {
             return Err(io::Error::other("circuit breaker open: nothing written"));
+        }
+        // Apple's R3 belongs to the daemon's breaker, not to this short-lived
+        // process (whose own breaker is always fresh): its published state
+        // decides (#251).
+        match daemon_breaker_verdict(&self.mac) {
+            crate::breaker_state::Verdict::Allow(a) => {
+                eprintln!("[hid-write] daemon breaker state {a:?}: write allowed");
+            }
+            crate::breaker_state::Verdict::Refuse(r) => {
+                eprintln!("[hid-write] refused by the daemon's breaker: {r}");
+                return Err(io::Error::other(format!("daemon's circuit breaker: {r}")));
+            }
         }
         let wait =
             crate::read_policy::wait_before(crate::read_policy::last_hw_access(), Instant::now());
@@ -268,6 +326,10 @@ pub struct Hidraw(pub libc::c_int);
 impl HidSource for Hidraw {
     fn feature(&self, report_id: u8) -> io::Result<Vec<u8>> {
         hid_read_feature(self.0, report_id)
+    }
+
+    fn input(&self, report_id: u8) -> io::Result<Vec<u8>> {
+        hid_read_input(self.0, report_id)
     }
 }
 
@@ -617,8 +679,16 @@ mod tests {
                 if op == WriteOp::DeviceName && id == 0x55 {
                     assert_eq!(e.raw_os_error(), Some(libc::EBADF), "{id:#04x}");
                 } else {
-                    assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{op:?} {id:#04x}");
-                    assert_eq!(e.raw_os_error(), None, "{op:?} {id:#04x} must not reach the ioctl");
+                    assert_eq!(
+                        e.kind(),
+                        io::ErrorKind::PermissionDenied,
+                        "{op:?} {id:#04x}"
+                    );
+                    assert_eq!(
+                        e.raw_os_error(),
+                        None,
+                        "{op:?} {id:#04x} must not reach the ioctl"
+                    );
                 }
             }
         }
@@ -637,15 +707,23 @@ mod tests {
         let f = &crate::devname::frames_for("alex").unwrap()[0];
         assert_eq!(f.report.len(), 65);
         assert_eq!(
-            hid_write_feature(-1, f.op, &f.report).unwrap_err().raw_os_error(),
+            hid_write_feature(-1, f.op, &f.report)
+                .unwrap_err()
+                .raw_os_error(),
             Some(libc::EBADF)
         );
     }
 
     #[test]
     fn disabled_or_disconnected_never_touches_the_node() {
-        assert_eq!(send_will_shutdown(false, true), crate::parity::Outcome::Disabled);
-        assert_eq!(send_will_shutdown(true, false), crate::parity::Outcome::NotConnected);
+        assert_eq!(
+            send_will_shutdown(false, true),
+            crate::parity::Outcome::Disabled
+        );
+        assert_eq!(
+            send_will_shutdown(true, false),
+            crate::parity::Outcome::NotConnected
+        );
     }
 
     #[test]
@@ -669,6 +747,32 @@ mod tests {
         );
     }
 
+    /// GET Input: of the 256 ids only `0x30` reaches the ioctl (EBADF on an
+    /// invalid fd), every other one is refused before it (#251).
+    #[test]
+    fn only_input_0x30_reaches_the_input_ioctl() {
+        let iowr = |nr: libc::c_ulong, n: libc::c_ulong| (3 << 30) | (n << 16) | (0x48 << 8) | nr;
+        assert_eq!(HIDIOCGINPUT, iowr(0x0A, 256));
+        assert_eq!(HIDIOCGFEATURE, iowr(0x07, 256));
+        let mut reached = Vec::new();
+        for id in 0..=255u8 {
+            let e = hid_read_input(-1, id).unwrap_err();
+            let e2 = Hidraw(-1).input(id).unwrap_err();
+            if e.raw_os_error() == Some(libc::EBADF) {
+                reached.push(id);
+                assert_eq!(e2.raw_os_error(), Some(libc::EBADF));
+            } else {
+                assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{id:#04x}");
+                assert_eq!(e.raw_os_error(), None, "{id:#04x} must not reach the ioctl");
+                assert_eq!(e2.kind(), io::ErrorKind::PermissionDenied, "{id:#04x}");
+            }
+        }
+        assert_eq!(reached, vec![0x30]);
+        // A source without Input reads refuses without any I/O.
+        let e = crate::decode::Fixture::new().input(0x30).unwrap_err();
+        assert_eq!(e.kind(), io::ErrorKind::NotFound);
+    }
+
     #[test]
     fn only_the_register_map_decides_what_reaches_the_ioctl() {
         // On an invalid fd an allowed id fails in the ioctl (EBADF); every
@@ -683,7 +787,10 @@ mod tests {
                 assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{id:#04x}");
                 assert_eq!(e.raw_os_error(), None, "{id:#04x} must not reach the ioctl");
             }
-            assert_eq!(Hidraw(-1).feature(id).unwrap_err().kind() == io::ErrorKind::PermissionDenied, !allowed);
+            assert_eq!(
+                Hidraw(-1).feature(id).unwrap_err().kind() == io::ErrorKind::PermissionDenied,
+                !allowed
+            );
         }
     }
 }

@@ -10,6 +10,7 @@
 //! |---|---|
 //! | [`Safety::SafeRead`] | may be requested in routine (spaced, breaker, one reader) |
 //! | [`Safety::OncePerConnection`] | may be requested once per connection |
+//! | [`Safety::SafeReadInput`] | Input report that may be requested (GET Input) once per battery read, right after `0x47`, as Apple's driver does (R2): `0x30` only; listened to passively as well |
 //! | [`Safety::PassiveInput`] | only listened to on the hidraw node, never requested |
 //! | [`Safety::ManualOnly`] | readable and harmless in principle, but never requested by the daemon (RE tools only) |
 //! | [`Safety::NeverRead`] | never requested (secret, or freezes the firmware) |
@@ -18,9 +19,10 @@
 //! | [`Safety::Unknown`] | not understood: neither read nor written |
 //!
 //! The allow-lists of [`crate::read_policy`] are **generated from this table**
-//! ([`SAFE_READ_IDS`], [`ONCE_PER_CONNECTION_IDS`]); the only function that
-//! reads the hardware ([`crate::hidraw::hid_read_feature`]) calls
-//! [`check_read`]. Writes: [`check_write`] accepts only the Feature ids of
+//! ([`SAFE_READ_IDS`], [`ONCE_PER_CONNECTION_IDS`], [`SAFE_READ_INPUT_IDS`]);
+//! the only functions that read the hardware ([`crate::hidraw::hid_read_feature`],
+//! [`crate::hidraw::hid_read_input`]) call [`check_read`] / [`check_read_input`].
+//! Writes: [`check_write`] accepts only the Feature ids of
 //! class [`Safety::WriteApple`], and [`check_write_op`] only the ids of one
 //! named Apple operation ([`WriteOp`]): `Shutdown` = `0x40` `WillShutdown`
 //! (no data, wire `53 40`, sent by macOS at every shutdown), `DeviceName` =
@@ -65,6 +67,12 @@ impl Direction {
 pub enum Safety {
     SafeRead,
     OncePerConnection,
+    /// Input report requested (GET Input) once per battery read, right after
+    /// `0x47`, as Apple's `getBatteryState` does (R2, #251); also pushed by
+    /// the keyboard and listened to passively. `0x30` only. [mesuré] the
+    /// exhaustive pass read it (`30 00`) without any incident
+    /// (`RE-HID-EXHAUSTIF.md` §2.2).
+    SafeReadInput,
     PassiveInput,
     ManualOnly,
     NeverRead,
@@ -80,6 +88,7 @@ impl Safety {
         match self {
             Self::SafeRead => "SafeRead",
             Self::OncePerConnection => "OncePerConnection",
+            Self::SafeReadInput => "SafeReadInput",
             Self::PassiveInput => "PassiveInput",
             Self::ManualOnly => "ManualOnly",
             Self::NeverRead => "NeverRead",
@@ -89,9 +98,14 @@ impl Safety {
         }
     }
 
-    /// May the daemon request this report on the hardware (GET_REPORT)?
+    /// May the daemon request this Feature report on the hardware (GET_REPORT)?
     pub fn daemon_may_read(self) -> bool {
         matches!(self, Self::SafeRead | Self::OncePerConnection)
+    }
+
+    /// May the daemon request this Input report (GET_REPORT, type Input)?
+    pub fn daemon_may_read_input(self) -> bool {
+        self == Self::SafeReadInput
     }
 }
 
@@ -256,10 +270,11 @@ pub const TABLE: &[Entry] = &[
     r(0x54, F, Some(9), Some("DeviceName4"), "device_name_4",
       "Keyboard name, fragment 4 of 4 (empty for short names; name <= 32 bytes)", "text", E::None,
       D::Ascii, P::Measured, S::OncePerConnection, "RE-PILOTE-MACOS §3"),
-    // ── PassiveInput ──────────────────────────────────────────────────────
+    // ── SafeReadInput (GET Input once per battery read, after 0x47) ───────
     r(0x30, I, Some(2), Some("BatteryState"), "battery_state",
-      "Battery state pushed by the keyboard: 0 normal, 1 low, 2-3 critical",
-      "enum", E::None, D::BatteryState, P::Disassembly, S::PassiveInput, "RE-PILOTE-MACOS §3, §6"),
+      "Battery state: 0 normal, 1 low, 2-3 critical; pushed by the keyboard and read by GET Input right after 0x47 (Apple R2, getBatteryState; GET answered `30 00` in the exhaustive pass without incident)",
+      "enum", E::None, D::BatteryState, P::Disassembly, S::SafeReadInput, "RE-PILOTE-MACOS §3, §6, RE-HID-EXHAUSTIF §2.2, RE-GHIDRA-KEXT updateBatteryLevel"),
+    // ── PassiveInput ──────────────────────────────────────────────────────
     r(0x04, I, Some(2), None, "sleep",
       "Sleep notification (analogy with the Broadcom reference firmware, unknown to macOS)",
       "-", E::None, D::U8, P::Hypothesis, S::PassiveInput, "RE-COMMANDES-VENDEUR §2.1"),
@@ -427,6 +442,11 @@ const fn ids<const N: usize>(class: Safety, dir: Direction) -> [u8; N] {
 
 const N_SAFE: usize = count(Safety::SafeRead, Direction::Feature);
 const N_ONCE: usize = count(Safety::OncePerConnection, Direction::Feature);
+const N_SAFE_INPUT: usize = count(Safety::SafeReadInput, Direction::Input);
+
+/// Input ids that may be requested (GET Input) once per battery read, right
+/// after `0x47`, generated from [`TABLE`]: `0x30` and nothing else.
+pub const SAFE_READ_INPUT_IDS: [u8; N_SAFE_INPUT] = ids(Safety::SafeReadInput, Direction::Input);
 
 /// Feature ids that may be requested in routine, in table order, generated
 /// from [`TABLE`] (the safe read policy iterates this).
@@ -494,10 +514,32 @@ impl From<Refusal> for std::io::Error {
     }
 }
 
-/// May the daemon request this Feature report? The single gate of every read.
+/// May the daemon request this Feature report? The single gate of every
+/// Feature read.
 pub fn check_read(id: u8) -> Result<Safety, Refusal> {
     let class = classify_feature(id);
     if class.daemon_may_read() {
+        Ok(class)
+    } else {
+        Err(Refusal {
+            id,
+            class,
+            write: false,
+        })
+    }
+}
+
+/// Safety class of an Input id: its entry's class, else `Unknown`.
+pub fn classify_input(id: u8) -> Safety {
+    lookup(id, Direction::Input).map_or(Safety::Unknown, |e| e.safety)
+}
+
+/// May the daemon request this Input report (GET Input)? The single gate of
+/// every Input read: only [`Safety::SafeReadInput`] (`0x30`) passes; every
+/// passive input (`0x01` key codes, `0x13`, `0x11`...) is refused.
+pub fn check_read_input(id: u8) -> Result<Safety, Refusal> {
+    let class = classify_input(id);
+    if class.daemon_may_read_input() {
         Ok(class)
     } else {
         Err(Refusal {
@@ -946,6 +988,10 @@ mod tests {
                 assert!(e.len.is_some(), "{:#04x}", e.id);
                 assert_eq!(e.dir, Direction::Feature);
             }
+            if e.safety.daemon_may_read_input() {
+                assert!(e.len.is_some(), "{:#04x}", e.id);
+                assert_eq!(e.dir, Direction::Input);
+            }
         }
     }
 
@@ -978,10 +1024,71 @@ mod tests {
         assert_eq!(class(0x40), Safety::WriteApple);
         assert_eq!(class(0x55), Safety::WriteApple);
         assert_eq!(class(0x41), Safety::WriteApple);
-        for id in [0x04, 0x05, 0x30, 0x13, 0x11, 0x12] {
-            assert_eq!(lookup(id, Direction::Input).unwrap().safety, Safety::PassiveInput);
+        for id in [0x04, 0x05, 0x13, 0x11, 0x12] {
+            assert_eq!(
+                lookup(id, Direction::Input).unwrap().safety,
+                Safety::PassiveInput
+            );
         }
-        assert_eq!(lookup(0x01, Direction::Input).unwrap().safety, Safety::NeverRead);
+        // 0x30: the one Input the daemon requests (after 0x47, Apple R2, #251).
+        assert_eq!(
+            lookup(0x30, Direction::Input).unwrap().safety,
+            Safety::SafeReadInput
+        );
+        assert_eq!(
+            lookup(0x01, Direction::Input).unwrap().safety,
+            Safety::NeverRead
+        );
+    }
+
+    /// The 256 ids as Input reads: exactly `0x30` passes, nothing else (not
+    /// the key codes `0x01`, not the wake `0x13`, not the Feature ids).
+    #[test]
+    fn input_read_gate_allows_exactly_0x30() {
+        let mut ok = Vec::new();
+        for id in 0..=255u8 {
+            match check_read_input(id) {
+                Ok(c) => {
+                    assert_eq!(c, Safety::SafeReadInput);
+                    ok.push(id);
+                }
+                Err(r) => {
+                    assert!(!r.write);
+                    assert_eq!(r.id, id);
+                    let e: std::io::Error = r.into();
+                    assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
+                }
+            }
+            assert_eq!(
+                check_read_input(id).is_ok(),
+                classify_input(id).daemon_may_read_input(),
+                "{id:#04x}"
+            );
+        }
+        assert_eq!(ok, vec![0x30]);
+        assert_eq!(SAFE_READ_INPUT_IDS, [0x30]);
+        // The Feature gate never lets 0x30 through, the Input gate never a Feature id.
+        assert!(check_read(0x30).is_err());
+        for id in SAFE_READ_IDS.into_iter().chain(ONCE_PER_CONNECTION_IDS) {
+            assert!(check_read_input(id).is_err(), "{id:#04x}");
+        }
+        for s in [
+            Safety::SafeRead,
+            Safety::OncePerConnection,
+            Safety::PassiveInput,
+            Safety::ManualOnly,
+            Safety::NeverRead,
+            Safety::WriteApple,
+            Safety::NeverWrite,
+            Safety::Unknown,
+        ] {
+            assert!(!s.daemon_may_read_input(), "{s:?}");
+        }
+        assert!(
+            !Safety::SafeReadInput.daemon_may_read(),
+            "an Input class is no Feature permission"
+        );
+        assert_eq!(Safety::SafeReadInput.as_str(), "SafeReadInput");
     }
 
     #[test]

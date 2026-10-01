@@ -54,6 +54,23 @@ pub fn set_keyboard_alerts(on: bool) {
     KEYBOARD_ALERTS.store(on, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Second source of input events: the battery state the daemon READS (GET
+/// Input `0x30` after `0x47`, Apple's R2, #251) enters the same publisher as
+/// the pushed `A1 30 xx`, so the state, the D-Bus properties and the alerts
+/// of #189 are deduplicated in one place ([`passive::battery_state_alert`]
+/// only fires on a rise).
+static INJECT: std::sync::OnceLock<Mutex<mpsc::Sender<Msg>>> = std::sync::OnceLock::new();
+
+/// Hand a decoded input report to the publisher; false when no listener runs.
+pub fn inject(ev: PassiveEvent) -> bool {
+    INJECT.get().is_some_and(|tx| {
+        tx.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .send(Msg::Event(ev))
+            .is_ok()
+    })
+}
+
 fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -201,11 +218,15 @@ impl Publisher {
         use akm_core::registry::BatteryState as B;
         let rank = if st == B::Critical { 2 } else { 1 };
         if !alerts::dedupe().allow_keyboard(rank, now) {
-            tracing::info!("keyboard {} alert not shown: the same alert was already raised", st.as_str());
+            tracing::info!(
+                "keyboard {} alert not shown: the same alert was already raised",
+                st.as_str()
+            );
             return;
         }
         crate::notify::battery_state(st);
-        if st == B::Critical {
+        // Apple's breaker blocks every emission, the LED included (R3, #251).
+        if st == B::Critical && !akm_core::read_policy::tripped() {
             akm_core::led::flash_capslock_for(self.mac(), 5);
         }
     }
@@ -233,7 +254,9 @@ impl Publisher {
         let mut battery_alert: Option<akm_core::registry::BatteryState> = None;
         if let Some(PassiveEvent::BattStat { value }) = sig {
             battery_alert = passive::battery_state_alert(old.batt_stat, value);
-            if akm_core::registry::BatteryState::from_byte(value) == akm_core::registry::BatteryState::Normal {
+            if akm_core::registry::BatteryState::from_byte(value)
+                == akm_core::registry::BatteryState::Normal
+            {
                 // the keyboard is back to normal: percentage alerts are armed again
                 alerts::dedupe().reset();
             }
@@ -245,7 +268,9 @@ impl Publisher {
             }
         }
         if matches!(sig, Some(PassiveEvent::KeyboardOff)) {
-            tracing::info!("the keyboard announces that it switches off (0x13 bit 1 = 0): not a lost link");
+            tracing::info!(
+                "the keyboard announces that it switches off (0x13 bit 1 = 0): not a lost link"
+            );
         }
         let Some(path) = self.ensure() else { return };
         let Ok(iref) = self.conn.object_server().interface::<_, Input>(&path) else {
@@ -274,7 +299,9 @@ impl Publisher {
                 Input::battery_alert(ctx, st.as_str()).await?;
             }
             match sig {
-                Some(PassiveEvent::KeyboardOff) => Input::keyboard_off(ctx, new.last_off_ts).await?,
+                Some(PassiveEvent::KeyboardOff) => {
+                    Input::keyboard_off(ctx, new.last_off_ts).await?
+                }
                 Some(PassiveEvent::Sleep { code }) => {
                     Input::sleep_event(ctx, new.last_sleep_ts, code).await?
                 }
@@ -314,6 +341,8 @@ pub fn start(
     find: impl Fn() -> Option<PathBuf> + Send + 'static,
 ) -> std::io::Result<PassiveHandle> {
     let (tx, rx): (_, Receiver<Msg>) = mpsc::channel();
+    // The acquisition thread feeds the read `0x30` through the same channel.
+    let _ = INJECT.set(Mutex::new(tx.clone()));
     let state: Shared = Arc::new(Mutex::new(PassiveState::default()));
     let mut publisher = Publisher {
         conn,
@@ -324,7 +353,7 @@ pub fn start(
     std::thread::Builder::new()
         .name("kb-passive-dbus".into())
         .spawn(move || {
-            // Ends when the listener (the only sender) is dropped.
+            // Ends when every sender (listener, `inject`) is dropped.
             for msg in rx {
                 publisher.handle(msg);
             }

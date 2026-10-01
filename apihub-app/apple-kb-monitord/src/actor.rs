@@ -144,6 +144,16 @@ impl Options {
     }
 }
 
+/// The event the passive publisher gets for a battery state read by GET Input
+/// `0x30` (R2, #251): the same `BattStat` as the pushed `A1 30 xx`, so the
+/// publisher's `battery_state_alert(old, new)` dedupes a repeat and alerts on
+/// a rise only.
+pub fn battery_state_event(k: &KbReport) -> Option<akm_core::passive::PassiveEvent> {
+    k.battery
+        .state
+        .map(|value| akm_core::passive::PassiveEvent::BattStat { value })
+}
+
 /// Minimum spacing between two history samples.
 const HISTORY_SPACING: Duration = Duration::from_secs(300);
 /// The published snapshot (LED, RSSI expiry) is refreshed at least this often.
@@ -289,6 +299,17 @@ impl Actor {
                 }
                 let pct = k.battery_pct();
                 k.device.alias = mac.as_deref().and_then(|m| self.opts.alias.get(m));
+                // The battery state READ (GET Input 0x30 after 0x47, Apple's
+                // R2, #251) joins the pushed `A1 30 xx` in the passive
+                // publisher: one state, one dedupe, the alerts of #189.
+                if let Some(ev) = battery_state_event(&k) {
+                    if !crate::passive::inject(ev) {
+                        tracing::debug!(
+                            "battery state {:?} read, no passive publisher to tell",
+                            k.battery.state
+                        );
+                    }
+                }
                 self.kb = Some(k);
                 self.linked = true;
                 self.last_update = unix_now();
@@ -728,6 +749,7 @@ pub fn spawn(watch: Arc<Watch>, mailbox: Arc<Mailbox>, opts: Options) -> ActorHa
             }
             hidraw::set_wake_monitor_enabled(false);
             hidraw::close_hid_fd();
+            akm_core::read_policy::withdraw_breaker_state();
         })
         .expect("spawn kb-supervisor");
     ActorHandle {
@@ -826,7 +848,14 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             }
         }
         watch.publish(actor.snapshot());
+        // The breaker, published for akm-hid-control (root) and akmctl: Apple's
+        // R3 applies to every emitter, HID_CONTROL and the forget included
+        // (#244, #251). Written on a change or as a heartbeat only.
+        if let Err(e) = akm_core::read_policy::publish_breaker_state(machine.mac()) {
+            tracing::warn!("breaker state not published: {e}");
+        }
     }
+    akm_core::read_policy::withdraw_breaker_state();
     // Dropping the actor drops the BlueZ provider: unregistered cleanly.
     drop(actor);
 }
@@ -851,6 +880,38 @@ mod tests {
         k.device.mac = Some("04:DB:56:CA:42:EE".into());
         k.device.model = Some("Apple Wireless Keyboard (A1314)".into());
         k
+    }
+
+    /// #251: the read `0x30` becomes the passive `BattStat` event (same path
+    /// as the pushed report); nothing when the burst did not read it.
+    #[test]
+    fn the_read_battery_state_feeds_the_passive_publisher_once() {
+        use akm_core::passive::{battery_state_alert, PassiveEvent, PassiveState};
+        let mut k = report(50.0, None);
+        assert_eq!(battery_state_event(&k), None);
+        k.battery.state = Some(1);
+        assert_eq!(
+            battery_state_event(&k),
+            Some(PassiveEvent::BattStat { value: 1 })
+        );
+        // without a publisher started (tests) the injection reports false
+        assert!(!crate::passive::inject(PassiveEvent::BattStat { value: 1 }));
+        // and the publisher's dedupe: the same state read again raises nothing,
+        // a rise does (what the pushed report already gets, #189)
+        let mut st = PassiveState::default();
+        st.apply(PassiveEvent::BattStat { value: 1 }, 1);
+        assert!(
+            battery_state_alert(st.batt_stat, 1).is_none(),
+            "repeat: no second alert"
+        );
+        assert!(
+            battery_state_alert(st.batt_stat, 2).is_some(),
+            "rise: alert"
+        );
+        assert!(
+            battery_state_alert(Some(2), 1).is_none(),
+            "de-escalation: nothing"
+        );
     }
 
     #[test]

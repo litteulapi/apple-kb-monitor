@@ -114,9 +114,19 @@ impl Default for DecodeOptions {
     }
 }
 
-/// A source of HID Feature Reports. The returned buffer starts with the report id.
+/// A source of HID reports (GET_REPORT). The returned buffer starts with the
+/// report id.
 pub trait HidSource {
+    /// GET Feature `report_id`.
     fn feature(&self, report_id: u8) -> io::Result<Vec<u8>>;
+    /// GET Input `report_id` (Apple's second half of the battery read, `0x30`,
+    /// R2 #251). A source without Input reads answers `Unsupported`.
+    fn input(&self, report_id: u8) -> io::Result<Vec<u8>> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            format!("no GET Input on this source (report {report_id:#04x})"),
+        ))
+    }
 }
 
 /// Recorded frames, for tests without hardware. Unknown ids answer `NotFound`
@@ -124,6 +134,7 @@ pub trait HidSource {
 #[derive(Debug, Clone, Default)]
 pub struct Fixture {
     reports: HashMap<u8, Vec<u8>>,
+    inputs: HashMap<u8, Vec<u8>>,
 }
 
 impl Fixture {
@@ -131,10 +142,18 @@ impl Fixture {
         Self::default()
     }
 
-    /// Add one frame (`bytes[0]` is the report id).
+    /// Add one Feature frame (`bytes[0]` is the report id).
     pub fn with(mut self, bytes: &[u8]) -> Self {
         if let Some(&id) = bytes.first() {
             self.reports.insert(id, bytes.to_vec());
+        }
+        self
+    }
+
+    /// Add one Input frame answered to GET Input (`bytes[0]` is the report id).
+    pub fn with_input(mut self, bytes: &[u8]) -> Self {
+        if let Some(&id) = bytes.first() {
+            self.inputs.insert(id, bytes.to_vec());
         }
         self
     }
@@ -183,6 +202,15 @@ impl HidSource for Fixture {
             io::Error::new(
                 io::ErrorKind::NotFound,
                 format!("no report {report_id:#04x}"),
+            )
+        })
+    }
+
+    fn input(&self, report_id: u8) -> io::Result<Vec<u8>> {
+        self.inputs.get(&report_id).cloned().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("no input report {report_id:#04x}"),
             )
         })
     }

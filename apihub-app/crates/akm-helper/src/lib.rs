@@ -15,7 +15,11 @@
 //! The whitelists are the very source files of `akm-core` (`keymap.rs`,
 //! `keycodes.rs`, `hid_params.rs`, std only), compiled in here by path: one
 //! definition, and the programs that run as root still depend on `libc` only.
+//! So is `breaker_state.rs`: the daemon's circuit breaker as `akm-hid-control`
+//! reads it from `/run/user/<uid>/apple-kb-monitor/breaker.state` (#244, #251).
 
+#[path = "../../../akm-core/src/breaker_state.rs"]
+pub mod breaker_state;
 #[path = "../../../akm-core/src/hid_params.rs"]
 pub mod hid_params;
 #[path = "../../../akm-core/src/keycodes.rs"]

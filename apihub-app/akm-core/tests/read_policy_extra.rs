@@ -30,27 +30,42 @@ fn private_runtime_dir(tag: &str) -> std::path::PathBuf {
 }
 
 struct Src {
+    /// Every request in order: Feature ids as is, Input ids too (`0x30`).
     calls: RefCell<Vec<(u8, Instant)>>,
     delay: Duration,
     answers: Vec<(u8, Vec<u8>)>,
+    /// GET Input answers; by default the keyboard answers `30 00` (normal),
+    /// as the exhaustive pass measured (RE-HID-EXHAUSTIF §2.2).
+    inputs: Vec<(u8, Vec<u8>)>,
 }
 impl Src {
     fn new(delay_ms: u64, answers: Vec<(u8, Vec<u8>)>) -> Self {
-        Self { calls: RefCell::new(vec![]), delay: Duration::from_millis(delay_ms), answers }
+        Self {
+            calls: RefCell::new(vec![]),
+            delay: Duration::from_millis(delay_ms),
+            answers,
+            inputs: vec![(0x30, vec![0x30, 0])],
+        }
     }
     fn ids(&self) -> Vec<u8> {
         self.calls.borrow().iter().map(|c| c.0).collect()
     }
-}
-impl HidSource for Src {
-    fn feature(&self, id: u8) -> io::Result<Vec<u8>> {
+    fn answer(&self, table: &[(u8, Vec<u8>)], id: u8) -> io::Result<Vec<u8>> {
         self.calls.borrow_mut().push((id, Instant::now()));
         std::thread::sleep(self.delay);
-        self.answers
+        table
             .iter()
             .find(|(i, _)| *i == id)
             .map(|(_, b)| b.clone())
             .ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))
+    }
+}
+impl HidSource for Src {
+    fn feature(&self, id: u8) -> io::Result<Vec<u8>> {
+        self.answer(&self.answers, id)
+    }
+    fn input(&self, id: u8) -> io::Result<Vec<u8>> {
+        self.answer(&self.inputs, id)
     }
 }
 
@@ -64,11 +79,30 @@ fn constants_are_the_documented_policy() {
     // (docs/RE-MACOS-SILICON.md) : jamais en dessous.
     assert_eq!(MIN_GAP, Duration::from_millis(1000));
     assert_eq!(TRIP_AFTER, 3);
-    assert_eq!(BUDGET, Duration::from_secs(2));
+    assert_eq!(
+        BUDGET,
+        Duration::from_secs(3),
+        "4 routine requests 1 s apart (0x47, Input 0x30, 0x46, 0x49)"
+    );
     assert_eq!(LOCK_WAIT, Duration::from_millis(500));
-    // Le registre est la source de vérité : routine = 0x47/0x46/0x49,
+    // Le registre est la source de vérité : routine = 0x47/0x46/0x49 en
+    // Feature + l'Input 0x30 (lu une fois après 0x47, Apple R2, #251),
     // une fois par connexion = 0x4F/0x51..0x54/0x60 ; rien d'autre.
     assert_eq!(registry::SAFE_READ_IDS, [0x47, 0x46, 0x49]);
+    assert_eq!(registry::SAFE_READ_INPUT_IDS, [0x30]);
+    assert_eq!(
+        akm_core::read_policy::routine_reads(),
+        vec![
+            akm_core::apple_model::Request::GetFeature(0x47),
+            akm_core::apple_model::Request::GetInput(0x30),
+            akm_core::apple_model::Request::GetFeature(0x46),
+            akm_core::apple_model::Request::GetFeature(0x49),
+        ]
+    );
+    assert_eq!(
+        &akm_core::read_policy::routine_reads()[..2],
+        &akm_core::apple_model::BATTERY_READ[..]
+    );
     assert_eq!(registry::DAEMON_ONCE_IDS, [0x4F, 0x60]);
     for id in 0..=255u8 {
         let expected = matches!(id, 0x47 | 0x46 | 0x49 | 0x4F | 0x51..=0x54 | 0x60);
@@ -211,7 +245,7 @@ fn read_safe_stores_raw_hex_and_decodes() {
     let src = Src::new(0, full());
     let mut r = KbReport::default();
     assert_eq!(read_safe(&src, &mut r), SafeRead::Complete);
-    assert_eq!(src.ids(), vec![0x47, 0x46, 0x49]);
+    assert_eq!(src.ids(), vec![0x47, 0x30, 0x46, 0x49]);
     assert_eq!(r.raw.get("0x47").map(String::as_str), Some("50"));
     assert_eq!(r.raw.get("0x46").map(String::as_str), Some("a00b"));
     assert_eq!(r.raw.get("0x49").map(String::as_str), Some("890b"));
@@ -255,15 +289,22 @@ fn read_safe_short_answers() {
     assert_eq!(read_safe(&src, &mut r), SafeRead::Complete);
     assert_eq!(r.battery.voltage, None);
     assert_eq!(r.raw.get("0x46").map(String::as_str), Some("a0"));
-    assert_eq!(src.ids(), vec![0x47, 0x46, 0x49]);
+    assert_eq!(src.ids(), vec![0x47, 0x30, 0x46, 0x49]);
     // Réponse d'un seul octet (l'id seul) : ignorée sans clé brute, lecture poursuivie.
-    let src = Src::new(0, vec![(0x47, vec![0x47]), (0x46, vec![0x46, 0xA0, 0x0B]), (0x49, vec![0x49])]);
+    let src = Src::new(
+        0,
+        vec![
+            (0x47, vec![0x47]),
+            (0x46, vec![0x46, 0xA0, 0x0B]),
+            (0x49, vec![0x49]),
+        ],
+    );
     let mut r = KbReport::default();
     assert_eq!(read_safe(&src, &mut r), SafeRead::Complete);
     assert!(!r.raw.contains_key("0x47") && !r.raw.contains_key("0x49"));
     assert_eq!(r.battery.percentage, None);
     assert_eq!(r.battery.voltage, Some(2.976));
-    assert_eq!(src.ids(), vec![0x47, 0x46, 0x49]);
+    assert_eq!(src.ids(), vec![0x47, 0x30, 0x46, 0x49]);
 }
 
 #[test]
@@ -272,21 +313,29 @@ fn read_safe_stops_at_first_failure_and_flags_incomplete() {
         let ans: Vec<_> = full().into_iter().filter(|(i, _)| *i != missing).collect();
         let src = Src::new(0, ans);
         let mut r = KbReport::default();
-        assert_eq!(read_safe(&src, &mut r), SafeRead::Partial, "manque {missing:#x}");
+        assert_eq!(
+            read_safe(&src, &mut r),
+            SafeRead::Partial,
+            "manque {missing:#x}"
+        );
         assert!(r.incomplete);
-        let n = [0x47u8, 0x46, 0x49].iter().position(|i| *i == missing).unwrap();
+        let n = [0x47u8, 0x30, 0x46, 0x49]
+            .iter()
+            .position(|i| *i == missing)
+            .unwrap();
         assert_eq!(src.ids().len(), n + 1, "arrêt au premier échec");
     }
 }
 
 #[test]
 fn read_safe_stops_when_the_budget_is_spent() {
-    // 1,1 s par requête : la 1re part, la 2e (t ~ 1,35 s) aussi, la 3e (t ~ 2,7 s) non.
+    // 1,1 s par requête : 0x47 part, l'Input 0x30 (t ~ 2,1 s après l'espacement)
+    // aussi, 0x46 (t ~ 3,2 s) non.
     let src = Src::new(1100, full());
     let mut r = KbReport::default();
     let t = Instant::now();
     assert_eq!(read_safe(&src, &mut r), SafeRead::Partial);
-    assert_eq!(src.ids(), vec![0x47, 0x46]);
+    assert_eq!(src.ids(), vec![0x47, 0x30]);
     assert!(r.incomplete);
     assert!(t.elapsed() < Duration::from_millis(3500));
 }
@@ -320,9 +369,9 @@ fn build_report_safe_paths() {
     let (r, o) = build_report_safe(BCM, None, &src, wake.clone(), Instant::now());
     assert_eq!(o, SafeRead::Complete);
     let ids = src.ids();
-    assert_eq!(ids[..5], [0x47, 0x46, 0x49, 0x4F, 0x60]);
+    assert_eq!(ids[..6], [0x47, 0x30, 0x46, 0x49, 0x4F, 0x60]);
     assert!(
-        [0x51u8, 0x52, 0x53, 0x54].starts_with(&ids[5..]),
+        [0x51u8, 0x52, 0x53, 0x54].starts_with(&ids[6..]),
         "{ids:x?}"
     );
     assert_eq!(r.battery.percentage, Some(80.0));

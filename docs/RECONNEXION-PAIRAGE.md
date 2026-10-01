@@ -244,6 +244,13 @@ vivante, ou refus de clé constaté pendant une connexion), il reproduit ce que 
 
 * Si `0x41` n'est pas envoyé (porte hidraw indisponible, verrou pris) ou n'est pas accepté (erreur, clavier muet) : **rien
   n'est supprimé**, retour à l'étape « réveil + reconnexion », aucune nouvelle tentative.
+* **Disjoncteur ouvert** (règle Apple R3, #251 : trois silences consécutifs, plus aucune émission jusqu'à une nouvelle
+  connexion ou une veille) : le pré-vol l'apprend du démon (D-Bus, sinon l'état publié
+  `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state`) ; `0x41` n'est **pas** écrit (le clavier est muet, l'ordre ne serait
+  pas entendu), l'étape « réveil + reconnexion » existante est enchaînée, puis l'utilisateur est informé (le disjoncteur
+  se referme à la reconnexion ; relancer `akmctl repair` si l'oubli reste nécessaire). La porte d'écriture elle-même
+  (`hidraw::WriteDoor`) applique le même verdict : un `akmctl` lancé pendant que le démon a ouvert le disjoncteur n'écrit
+  ni `0x41` ni `0x55`.
 * Arrêt au premier échec ; chaque octet (`[hid-write] Forget …`) et chaque décision (`[forget] …`) sont journalisés sur stderr.
 * Un clavier **non connecté** est désappairé comme avant, sans `0x41` : macOS n'envoie `RecantConnection` qu'à un appareil
   connecté.

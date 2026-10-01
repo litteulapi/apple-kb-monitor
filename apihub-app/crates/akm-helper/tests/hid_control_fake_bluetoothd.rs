@@ -92,6 +92,11 @@ struct Fake {
     cs: FakeL2cap,
     exe: String,
     hid_root: PathBuf,
+    /// Fake `/run/user`: the daemon's published breaker state goes under
+    /// `<run_user_root>/<uid>/apple-kb-monitor/breaker.state`.
+    run_user_root: PathBuf,
+    /// What the fake liveness check answers for the daemon.
+    daemon_alive: std::cell::Cell<bool>,
     _serial: std::sync::MutexGuard<'static, ()>,
 }
 
@@ -100,6 +105,32 @@ impl Drop for Fake {
         let _ = self.child.kill();
         let _ = self.child.wait();
         let _ = fs::remove_dir_all(&self.hid_root);
+        let _ = fs::remove_dir_all(&self.run_user_root);
+    }
+}
+
+impl Fake {
+    fn uid() -> u32 {
+        // SAFETY: getuid never fails.
+        unsafe { libc::getuid() }
+    }
+
+    /// Publish a breaker state as the daemon would (file owned by us, 0644).
+    fn publish(&self, text: &str) {
+        let p = akm_helper::breaker_state::path_for_uid(&self.run_user_root, Self::uid());
+        fs::create_dir_all(p.parent().unwrap()).unwrap();
+        fs::write(&p, text).unwrap();
+    }
+
+    fn state(&self, open: bool, counter: u32, age_s: u64, mac: &str) -> String {
+        akm_helper::breaker_state::BreakerState {
+            mac: Some(mac.into()),
+            open,
+            counter,
+            written_unix: akm_helper::breaker_state::now_unix().saturating_sub(age_s),
+            pid: 4242,
+        }
+        .render()
     }
 }
 
@@ -137,6 +168,10 @@ fn spawn(tag: &str) -> Fake {
         ),
     )
     .unwrap();
+    let run_user_root =
+        std::env::temp_dir().join(format!("akm-hidctl-run-{tag}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&run_user_root);
+    fs::create_dir_all(&run_user_root).unwrap();
     Fake {
         child,
         ctrl_local,
@@ -144,6 +179,8 @@ fn spawn(tag: &str) -> Fake {
         cs: FakeL2cap { by_ino },
         exe,
         hid_root,
+        run_user_root,
+        daemon_alive: std::cell::Cell::new(false),
         _serial: serial,
     }
 }
@@ -177,13 +214,15 @@ fn go(
 ) -> (akm_helper::hidctl::Report, Vec<Event>) {
     let pid = f.child.id() as i32;
     let pidf = move || Ok(pid);
+    let alive = |uid: u32, _pid: Option<u32>| uid == Fake::uid() && f.daemon_alive.get();
     let env = Env {
         proc_root: PathBuf::from("/proc"),
         hid_root: f.hid_root.clone(),
         allowed_exes: exes,
-        // SAFETY: getuid never fails.
-        required_uid: unsafe { libc::getuid() },
+        required_uid: Fake::uid(),
         daemon_pid: &pidf,
+        run_user_root: f.run_user_root.clone(),
+        daemon_alive: &alive,
     };
     let mut ev = Vec::new();
     let rep = run(
@@ -233,23 +272,25 @@ fn inspect_reports_the_control_channel_mtu_and_sends_nothing() {
     let exe = f.exe.clone();
     let pid = f.child.id() as i32;
     let pidf = move || Ok(pid);
+    let alive = |_: u32, _: Option<u32>| false;
     let env = Env {
         proc_root: PathBuf::from("/proc"),
         hid_root: f.hid_root.clone(),
         allowed_exes: &[&exe],
-        // SAFETY: getuid never fails.
-        required_uid: unsafe { libc::getuid() },
+        required_uid: Fake::uid(),
         daemon_pid: &pidf,
+        run_user_root: f.run_user_root.clone(),
+        daemon_alive: &alive,
     };
     let mut ev = Vec::new();
-    let rep = akm_helper::hidctl::inspect(
-        Some(Mac::parse(KB).unwrap()),
-        &env,
-        &f.cs,
-        &mut |e| ev.push(e),
-    );
+    let rep = akm_helper::hidctl::inspect(Some(Mac::parse(KB).unwrap()), &env, &f.cs, &mut |e| {
+        ev.push(e)
+    });
     assert!(rep.ok(), "{ev:?}");
-    assert_eq!(rep.per_keyboard, vec![(Mac::parse(KB).unwrap(), KbOutcome::Inspected)]);
+    assert_eq!(
+        rep.per_keyboard,
+        vec![(Mac::parse(KB).unwrap(), KbOutcome::Inspected)]
+    );
     // The per-socket line akmctl parses: control channel, connected, mtu out 672.
     let line = ev
         .iter()
@@ -258,11 +299,26 @@ fn inspect_reports_the_control_channel_mtu_and_sends_nothing() {
             _ => None,
         })
         .expect("control socket line");
-    assert!(line.contains("state connected") && line.contains("mtu out 672 in 672"), "{line}");
-    assert!(ev.iter().any(|e| matches!(e, Event::Info(m) if m.contains("inspected, nothing sent"))), "{ev:?}");
+    assert!(
+        line.contains("state connected") && line.contains("mtu out 672 in 672"),
+        "{line}"
+    );
+    assert!(
+        ev.iter()
+            .any(|e| matches!(e, Event::Info(m) if m.contains("inspected, nothing sent"))),
+        "{ev:?}"
+    );
     // The interrupt channel is described too (its own MTU), but never selected.
-    assert!(ev.iter().any(|e| matches!(e, Event::Info(m) if m.contains("peer 0x0013") && m.contains("mtu out 48"))), "{ev:?}");
-    assert!(recv_all(&f.ctrl_local).is_empty(), "nothing on the control channel");
+    assert!(
+        ev.iter().any(
+            |e| matches!(e, Event::Info(m) if m.contains("peer 0x0013") && m.contains("mtu out 48"))
+        ),
+        "{ev:?}"
+    );
+    assert!(
+        recv_all(&f.ctrl_local).is_empty(),
+        "nothing on the control channel"
+    );
     assert!(recv_all(&f.intr_local).is_empty());
 }
 
@@ -288,6 +344,109 @@ fn wrong_exe_or_unknown_mac_writes_nothing() {
     assert!(matches!(rep.global, Some(Refusal::MacNotInTable(_))));
     assert!(recv_all(&f.ctrl_local).is_empty());
     assert!(recv_all(&f.intr_local).is_empty());
+}
+
+/// Apple's R3 reaches the root helper (#251): with the daemon's breaker open
+/// the control channel receives NOTHING and the unit still exits 0; with it
+/// closed the byte goes out as before; a stale or unreadable state of a
+/// running daemon is refused, that of a dead daemon is ignored.
+#[test]
+fn the_daemons_breaker_blocks_the_hid_control_byte() {
+    let f = spawn("breaker");
+    let exe = f.exe.clone();
+    // 1. open, fresh -> refused, exit 0, nothing on either channel
+    f.publish(&f.state(true, 3, 2, KB));
+    f.daemon_alive.set(true);
+    let (rep, ev) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert!(
+        matches!(rep.per_keyboard[0].1, KbOutcome::BreakerOpen(_)),
+        "{ev:?}"
+    );
+    assert!(rep.ok(), "nothing to do is not a failure");
+    assert!(ev.iter().any(|e| matches!(e, Event::Warn(m) if m.contains("NOT sent") && m.contains("breaker open") && m.contains("3 requests"))), "{ev:?}");
+    assert!(
+        recv_all(&f.ctrl_local).is_empty(),
+        "no byte while the breaker is open"
+    );
+    assert!(recv_all(&f.intr_local).is_empty());
+    // an open breaker of a daemon that just died is still Apple's verdict
+    f.daemon_alive.set(false);
+    let (rep, _) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert!(matches!(rep.per_keyboard[0].1, KbOutcome::BreakerOpen(_)));
+    assert!(recv_all(&f.ctrl_local).is_empty());
+    // dry run: the verdict is logged, nothing sent either way
+    f.daemon_alive.set(true);
+    let (rep, ev) = go(&f, HidControl::Suspend, true, &[&exe], None);
+    assert_eq!(rep.per_keyboard[0].1, KbOutcome::DryRun);
+    assert!(
+        ev.iter()
+            .any(|e| matches!(e, Event::Warn(m) if m.contains("breaker open"))),
+        "{ev:?}"
+    );
+    assert!(recv_all(&f.ctrl_local).is_empty());
+    // 2. closed, fresh -> sent (unchanged behaviour)
+    f.publish(&f.state(false, 1, 2, KB));
+    let (rep, ev) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert_eq!(rep.per_keyboard[0].1, KbOutcome::Sent, "{ev:?}");
+    assert!(
+        ev.iter()
+            .any(|e| matches!(e, Event::Info(m) if m.contains("breaker state Closed"))),
+        "{ev:?}"
+    );
+    assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x13u8]]);
+    // 3. stale (> 60 s) while the daemon runs -> refused; daemon gone -> sent
+    f.publish(&f.state(false, 0, 61, KB));
+    let (rep, ev) = go(&f, HidControl::ExitSuspend, false, &[&exe], None);
+    assert!(
+        matches!(rep.per_keyboard[0].1, KbOutcome::BreakerOpen(_)),
+        "{ev:?}"
+    );
+    assert!(
+        ev.iter()
+            .any(|e| matches!(e, Event::Warn(m) if m.contains("61 s old"))),
+        "{ev:?}"
+    );
+    assert!(recv_all(&f.ctrl_local).is_empty());
+    f.daemon_alive.set(false);
+    let (rep, _) = go(&f, HidControl::ExitSuspend, false, &[&exe], None);
+    assert_eq!(rep.per_keyboard[0].1, KbOutcome::Sent);
+    assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x14u8]]);
+    // 4. unreadable state: refused with a live daemon, ignored without one
+    f.daemon_alive.set(true);
+    f.publish("schema=9\n");
+    let (rep, ev) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert!(
+        matches!(rep.per_keyboard[0].1, KbOutcome::BreakerOpen(_)),
+        "{ev:?}"
+    );
+    assert!(recv_all(&f.ctrl_local).is_empty());
+    f.daemon_alive.set(false);
+    let (rep, _) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert_eq!(rep.per_keyboard[0].1, KbOutcome::Sent);
+    assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x13u8]]);
+    // 5. the daemon follows another keyboard: this one is not concerned
+    f.daemon_alive.set(true);
+    f.publish(&f.state(true, 3, 1, "11:22:33:44:55:66"));
+    let (rep, _) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert_eq!(rep.per_keyboard[0].1, KbOutcome::Sent);
+    assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x13u8]]);
+    // 6. a state file owned by another uid's directory is not trusted (owner
+    //    check): placed under /<uid+1>/ it is an error, refused while "alive"
+    let foreign = akm_helper::breaker_state::path_for_uid(&f.run_user_root, Fake::uid() + 1);
+    fs::create_dir_all(foreign.parent().unwrap()).unwrap();
+    fs::write(&foreign, f.state(false, 0, 0, KB)).unwrap();
+    f.publish(&f.state(false, 0, 0, KB));
+    let (rep, ev) = go(&f, HidControl::Suspend, false, &[&exe], None);
+    assert_eq!(
+        rep.per_keyboard[0].1,
+        KbOutcome::Sent,
+        "alive() answers false for the foreign uid: ignored; {ev:?}"
+    );
+    assert_eq!(recv_all(&f.ctrl_local), vec![vec![0x13u8]]);
+    assert!(
+        recv_all(&f.intr_local).is_empty(),
+        "the interrupt channel never got anything"
+    );
 }
 
 #[test]

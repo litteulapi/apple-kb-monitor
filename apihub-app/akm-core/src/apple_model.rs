@@ -153,7 +153,9 @@ pub enum Request {
     SetFeature(u8),
     /// SET_PROTOCOL(Report) `71`, sent once by `deviceReady` (R1).
     SetProtocol,
-    /// HID_CONTROL `1n` (never sent by this project; blocked like the rest).
+    /// HID_CONTROL `1n`: sent by `akm-hid-control` (SUSPEND / EXIT_SUSPEND,
+    /// #244), which reads the daemon's published breaker
+    /// (`crate::breaker_state`) and is blocked like the rest while it is open.
     HidControl(u8),
     /// DATA Output on the interrupt channel (CapsLock LED).
     Output,

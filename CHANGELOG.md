@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [3.1.0] - Unreleased
 
+### Fixed (Apple's breaker reaches every emitter, #244 #251)
+- The daemon publishes its circuit breaker in `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` (`schema`, `mac`, `open`, `counter`, `written_unix`, `pid`; atomic rewrite on a change or every 20 s, removed at exit). `akm-hid-control` (root, system units at sleep / wake) reads `/run/user/<uid>/apple-kb-monitor/breaker.state` with the owner / symlink / size checks of the other root readers and sends **no** HID_CONTROL byte while the breaker is open, or while the state is older than 60 s or unreadable with the daemon running (exit 0, journal `NOT sent, breaker open…`); no state or a dead daemon = sent as before. One refusal from any user's daemon is enough.
+- `hidraw::WriteDoor` (`akmctl`: `0x41` forget, `0x55` name) refuses the write on the same verdict: the breaker that counts is the daemon's, not the fresh one of a short-lived process.
+- `akmctl repair` on a connected keyboard with the breaker open: `0x41` is not written (the keyboard is mute), the existing wake + reconnect step runs, the user is told; the pre-flight falls back to the published state when the daemon cannot be asked over D-Bus.
+- The CapsLock flash of the keyboard-driven critical alert (`passive.rs`) is blocked while the breaker is open, like the one of the percentage alert.
+
+### Added (GET Input 0x30 as Apple, #251 #189)
+- The battery read is now Apple's R2 in full: GET Feature `0x47`, then **GET Input `0x30`** (`HIDIOCGINPUT`, 1 s later, once per burst), then `0x46` / `0x49`; 60 s after the connection, then every 4 h (1 h after a failure). Register map: class `SafeReadInput` for Input `0x30` and nothing else (`check_read_input`, 256-id sweep; `hid_read_input` is the second GET door, same `ioctl` path). The state is decoded by the passive decoder and handed to the passive publisher (`passive::inject`): one state, one dedupe, the alerts of #189 never fire twice for the same report. A silent `0x30` counts for the breaker like a silent `0x47`. `KbBattery.state`, `akmctl dump` line `input 0x30`. Routine budget 2 s -> 3 s (four requests 1 s apart). [mesuré] the exhaustive pass read GET Input `0x30` (`30 00`) without incident (RE-HID-EXHAUSTIF §2.2).
+
 ### Added (clean forget like macOS, #217)
 - `akmctl repair`, keyboard still connected: pre-flight (connected, doctor link healthy, breaker closed, terminal), host-side backup `forget-backup-<UTC>.json` (0600, no link key), explanation + typed `OUBLIER`, then ONE SET Feature `0x41` `RecantConnection` (wire `53 41`, macOS 26.5 `bluetoothd`), the daemon mutes the disconnection (`ExpectDisconnect()`), 2000 ms, then only `RemoveDevice`; if `0x41` fails nothing is removed and the repair goes back to wake + reconnect. Registry operation `Forget` (`0x41` only, once per session), reachable from `repair` only. Effect on the keyboard not measured.
 

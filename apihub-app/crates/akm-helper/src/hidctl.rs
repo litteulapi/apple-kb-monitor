@@ -19,7 +19,12 @@
 //!    SOCK_SEQPACKET, connected, peer = MAC, peer PSM `0x0011` (control), local
 //!    PSM `0x0011` or `0` (outgoing, unbound); `0x0013` (interrupt) never
 //!    qualifies. Zero or several candidates: nothing is written;
-//! 5. one `send(2)` of one byte, `MSG_DONTWAIT | MSG_NOSIGNAL` (never blocks,
+//! 5. Apple's R3 (#251): the circuit breaker of the user daemon, published in
+//!    `/run/user/<uid>/apple-kb-monitor/breaker.state` ([`crate::breaker_state`]),
+//!    is consulted ([`breaker_verdict`]): open for this keyboard, or stale /
+//!    unreadable while the daemon runs, nothing is sent ([`KbOutcome::BreakerOpen`],
+//!    exit 0: nothing to do); no state or a dead daemon = the byte goes;
+//! 6. one `send(2)` of one byte, `MSG_DONTWAIT | MSG_NOSIGNAL` (never blocks,
 //!    never retried), the byte coming from [`HidControl`] only (`0x13`,
 //!    `0x14`); then a wait of at most [`DRAIN_WAIT`] for the byte to leave the
 //!    socket queue (Apple waits up to 1 s too); every duplicate is closed.
@@ -39,6 +44,7 @@ use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use crate::breaker_state;
 use crate::model;
 
 /// Longest wait for the sent bytes to leave the socket queues (all keyboards
@@ -434,10 +440,20 @@ pub struct Env<'a> {
     pub allowed_exes: &'a [&'a str],
     pub required_uid: u32,
     pub daemon_pid: &'a dyn Fn() -> Result<i32, String>,
+    /// Root of the per-user runtime directories where `apple-kb-monitord`
+    /// publishes its circuit breaker (`<root>/<uid>/apple-kb-monitor/breaker.state`).
+    pub run_user_root: PathBuf,
+    /// Is `apple-kb-monitord` running as `uid` (`Some(pid)`: that process)?
+    pub daemon_alive: &'a dyn Fn(u32, Option<u32>) -> bool,
+}
+
+fn system_daemon_alive(uid: u32, pid: Option<u32>) -> bool {
+    breaker_state::daemon_alive_in(Path::new("/proc"), pid, uid)
 }
 
 impl Env<'static> {
-    /// The real system: `/proc`, `/sys/bus/hid/devices`, `bluetooth.service`.
+    /// The real system: `/proc`, `/sys/bus/hid/devices`, `bluetooth.service`,
+    /// `/run/user`.
     pub fn system() -> Env<'static> {
         Env {
             proc_root: PathBuf::from("/proc"),
@@ -445,8 +461,50 @@ impl Env<'static> {
             allowed_exes: BLUETOOTHD_EXES,
             required_uid: 0,
             daemon_pid: &bluetoothd_main_pid,
+            run_user_root: PathBuf::from(breaker_state::RUN_USER_ROOT),
+            daemon_alive: &system_daemon_alive,
         }
     }
+}
+
+/// Published breaker states of every user, read with the checks of a root
+/// reader ([`crate::fsutil::read_user_file`]: owner = the `<uid>` of the path,
+/// regular file, no symlink, single link, ≤ 1 KiB). An absent file is
+/// `Ok(None)`; anything else wrong is `Err`.
+pub fn published_breakers(run_user_root: &Path) -> Vec<(u32, breaker_state::Found)> {
+    let mut v: Vec<(u32, breaker_state::Found)> = fs::read_dir(run_user_root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.file_name().to_str()?.parse::<u32>().ok())
+        .map(|uid| {
+            let p = breaker_state::path_for_uid(run_user_root, uid);
+            let found = match crate::fsutil::read_user_file(&p, uid, breaker_state::MAX_LEN) {
+                Ok(s) => breaker_state::BreakerState::parse(&s)
+                    .map(Some)
+                    .map_err(|e| format!("{}: {e}", p.display())),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+                Err(e) => Err(e.to_string()),
+            };
+            (uid, found)
+        })
+        .collect();
+    v.sort_by_key(|(uid, _)| *uid);
+    v
+}
+
+/// Apple's R3 for this program: may a HID_CONTROL byte go to `mac` now? One
+/// refusal from any user's daemon is enough (#251).
+pub fn breaker_verdict(env: &Env<'_>, mac: Mac, now_unix: u64) -> breaker_state::Verdict {
+    let mac = mac.to_string();
+    breaker_state::combine(
+        published_breakers(&env.run_user_root)
+            .iter()
+            .map(|(uid, found)| {
+                let alive = |pid: Option<u32>| (env.daemon_alive)(*uid, pid);
+                breaker_state::verdict(found, &mac, now_unix, &alive)
+            }),
+    )
 }
 
 /// `systemctl show -p MainPID --value bluetooth.service` (absolute path, empty environment).
@@ -552,6 +610,9 @@ pub enum KbOutcome {
     DryRun,
     /// `inspect`: the control channel was found and described, nothing sent.
     Inspected,
+    /// Apple's R3: the daemon's breaker is open (or its state is not
+    /// trustworthy while it runs): nothing sent, and nothing to retry.
+    BreakerOpen(String),
     Refused(Refusal),
     SendFailed(String),
 }
@@ -583,13 +644,17 @@ pub struct Report {
 }
 
 impl Report {
-    /// Exit status: 0 if every keyboard was handled (or none connected), 1 otherwise.
+    /// Exit status: 0 if every keyboard was handled (or none connected, or
+    /// the breaker forbade the byte: nothing to do), 1 otherwise.
     pub fn ok(&self) -> bool {
         self.global.is_none()
             && self.per_keyboard.iter().all(|(_, o)| {
                 matches!(
                     o,
-                    KbOutcome::Sent | KbOutcome::DryRun | KbOutcome::Inspected
+                    KbOutcome::Sent
+                        | KbOutcome::DryRun
+                        | KbOutcome::Inspected
+                        | KbOutcome::BreakerOpen(_)
                 )
             })
     }
@@ -675,7 +740,11 @@ fn run_action(
         log(Event::Info(format!(
             "no Apple keyboard connected: {} not {}",
             action.name(),
-            if action == Action::Inspect { "done" } else { "sent" }
+            if action == Action::Inspect {
+                "done"
+            } else {
+                "sent"
+            }
         )));
         return rep;
     }
@@ -808,6 +877,29 @@ fn run_action(
                     cmd.byte(),
                     cmd.name()
                 );
+                // Apple's R3 (#251): the daemon's breaker, published in
+                // /run/user/<uid>/apple-kb-monitor/breaker.state, forbids every
+                // emission while open; a stale or unreadable state from a
+                // running daemon is not trusted either.
+                let verdict = breaker_verdict(env, kb.mac, breaker_state::now_unix());
+                match &verdict {
+                    breaker_state::Verdict::Allow(a) => {
+                        log(Event::Info(format!(
+                            "{}: breaker state {a:?}: emission allowed",
+                            kb.mac
+                        )));
+                    }
+                    breaker_state::Verdict::Refuse(r) => {
+                        log(Event::Warn(format!("{what}: NOT sent, {r}")));
+                    }
+                }
+                if let breaker_state::Verdict::Refuse(r) = verdict {
+                    if !dry_run {
+                        rep.per_keyboard
+                            .push((kb.mac, KbOutcome::BreakerOpen(r.to_string())));
+                        continue;
+                    }
+                }
                 if dry_run {
                     log(Event::Info(format!("{what}: NOT sent (--dry-run)")));
                     KbOutcome::DryRun

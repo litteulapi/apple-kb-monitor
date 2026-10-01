@@ -73,6 +73,10 @@ pub struct KbBattery {
     pub apple_display_pct: Option<f64>,
     /// Margins in mV above Full / Low / Critical / Empty (negative = below).
     pub threshold_margins_mv: Option<[i32; 4]>,
+    /// [désassemblage] Battery state read by GET Input `0x30` right after
+    /// `0x47` (Apple's `getBatteryState`, R2 #251): 0 normal, 1 low, 2-3
+    /// critical. `None` when not read in this burst.
+    pub state: Option<u8>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

@@ -372,9 +372,9 @@ impl Machine {
         }
         if std::mem::take(&mut self.battery_cycle) {
             let read_ok = ok && vendor_ok == Some(true);
-            // GET Input 0x30 is not emitted (the state is pushed, #189): it
-            // cannot fail.
-            self.link.end_cycle(read_ok, true, now);
+            // The burst is `0x47` then GET Input `0x30` (Apple's R2, #251),
+            // stopping at the first failure: one verdict covers both halves.
+            self.link.end_cycle(read_ok, read_ok, now);
         }
         if ok {
             let first = !self.acquired;

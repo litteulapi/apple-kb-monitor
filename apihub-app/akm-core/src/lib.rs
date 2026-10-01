@@ -33,11 +33,15 @@
 //! * [`alias`]       validation of the user-chosen keyboard name (#141)
 //! * [`devname`]     name stored IN the keyboard (0x51-0x55): validation, frames,
 //!   backup, guarded write refused until proven (#248)
+//! * [`breaker_state`] the daemon's circuit breaker published in
+//!   `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` for the other emitters
+//!   (`akm-hid-control`, `akmctl`; #244, #251)
 
 pub mod alerts;
-pub mod apple_model;
 pub mod alias;
+pub mod apple_model;
 pub mod batteries;
+pub mod breaker_state;
 pub mod calibration;
 pub mod chemistry;
 pub mod config;
