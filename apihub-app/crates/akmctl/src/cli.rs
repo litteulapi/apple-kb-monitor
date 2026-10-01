@@ -273,11 +273,12 @@ pub enum KeymapCmd {
         #[arg(long, value_parser = crate::keymapcmd::parse_profile)]
         profile: Option<String>,
     },
-    /// Base preset of a profile: apple (Apple legend, fnmode=1), fkeys
-    /// (F1-F12 first, fnmode=2), linux-pc (Cmd<->Alt, swap_opt_cmd=1)
+    /// Preset of a profile (hid_apple parameters): apple (Apple legend,
+    /// fnmode=1 swap_opt_cmd=0), fkeys (F1-F12 first, fnmode=2), linux-pc
+    /// (Cmd<->Alt, swap_opt_cmd=1), none (parameters left as they are, the default)
     Preset {
         #[arg(value_parser = crate::keymapcmd::parse_preset)]
-        name: akm_core::keymap::Preset,
+        name: String,
         #[arg(long, value_parser = crate::keymapcmd::parse_profile)]
         profile: Option<String>,
     },
@@ -460,7 +461,7 @@ mod tests {
         ] {
             assert!(p(bad).is_err(), "{bad:?}");
         }
-        assert!(p(&["keymap", "preset", "linux-pc"]).is_ok() && p(&["keymap", "apply", "--dry-run"]).is_ok());
+        assert!(p(&["keymap", "preset", "linux-pc"]).is_ok() && p(&["keymap", "preset", "none"]).is_ok() && p(&["keymap", "apply", "--dry-run"]).is_ok());
         assert!(p(&["keymap", "reset"]).is_ok() && p(&["keymap", "rollback"]).is_ok() && p(&["keymap", "show", "--hwdb"]).is_ok());
         assert!(p(&["set", "param", "iso_layout", "-1", "--persist"]).is_ok());
     }

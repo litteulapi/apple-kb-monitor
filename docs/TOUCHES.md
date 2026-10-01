@@ -130,7 +130,7 @@ schema = 1
 active = "default"
 
 [profile.default]
-preset = "apple"                       # apple | fkeys | linux-pc
+preset = "apple"                       # apple | fkeys | linux-pc ; absent = paramètres inchangés
 models = ["05ac:0256"]                 # PID des claviers aluminium visés
 
 [profile.default.params]               # facultatif, par-dessus le préset
@@ -148,11 +148,14 @@ Touches nommées : `F1`…`F12`, `Eject`, `Fn`, `Esc`, `Backspace`, `Enter`, `Ca
 `0x7xxxx` ayant un code par défaut, `0xc00b8`, `0xff0003`). Cibles : noms `KEY_*` de
 `linux/input-event-codes.h` (les mêmes que ceux qu'accepte udev).
 
-Présets (paramètres `hid_apple` qu'ils fixent ; aucune touche remappée) :
+Présets (paramètres `hid_apple` qu'ils fixent ; aucune touche remappée). **Par défaut aucun
+préset** : `apply` ne touche à aucun paramètre (ni à `fnmode`, ni à `swap_opt_cmd`), quelle que soit
+leur valeur du moment.
 
 | Préset | Titre | Paramètres |
 |---|---|---|
-| `apple` (défaut) | Apple (légende des touches) | `fnmode=1 swap_opt_cmd=0` = l'état actuel |
+| `none` (défaut) | aucun | inchangés |
+| `apple` | Apple (légende des touches) | `fnmode=1 swap_opt_cmd=0` |
 | `fkeys` | F1-F12 classiques | `fnmode=2 swap_opt_cmd=0` |
 | `linux-pc` | Linux PC (Cmd↔Alt) | `fnmode=1 swap_opt_cmd=1` (ordre Ctrl Méta Alt d'un PC) |
 
@@ -162,7 +165,7 @@ Le préset « Apple complet » (F3 Mission Control, F4 Launchpad) = `apple` + `a
 akmctl keymap show [--hwdb]            # profils ; --hwdb : le fichier que `apply` installerait
 akmctl keymap set <touche> <KEY_…>     # [--profile NOM]
 akmctl keymap unset <touche>
-akmctl keymap preset apple|fkeys|linux-pc
+akmctl keymap preset apple|fkeys|linux-pc|none
 akmctl keymap use <profil>
 akmctl keymap apply [--dry-run]        # installe (mot de passe administrateur)
 akmctl keymap reset                    # retire le hwdb, mapping du noyau rétabli tout de suite

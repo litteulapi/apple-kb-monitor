@@ -46,7 +46,7 @@ fn tab() -> &'static Arc<Tab> {
     static T: OnceLock<Arc<Tab>> = OnceLock::new();
     T.get_or_init(|| {
         Arc::new(Tab {
-            state: Mutex::new(TabState { edit_key: "F6".into(), edit_preset: "apple".into(), ..Default::default() }),
+            state: Mutex::new(TabState { edit_key: "F6".into(), edit_preset: "none".into(), ..Default::default() }),
             inflight: AtomicBool::new(false),
         })
     })
@@ -209,7 +209,7 @@ pub fn show(ui: &mut egui::Ui) {
         pv("swap_opt_cmd"),
         pv("iso_layout"),
         table["profile"].as_str().unwrap_or("?"),
-        table["preset"].as_str().unwrap_or("?"),
+        table["preset"].as_str().unwrap_or("aucun"),
         if table["pending"].as_bool() == Some(true) { " · NON appliqué" } else { "" },
     ));
     if !s.kde_ok {
@@ -258,13 +258,14 @@ pub fn show(ui: &mut egui::Ui) {
     });
     ui.horizontal(|ui| {
         ui.label("Préset :");
-        let presets: Vec<(String, String)> = s
+        let presets: Vec<(String, String)> = std::iter::once(("none".to_string(), "Aucun (paramètres actuels conservés)".to_string()))
+            .chain(s
             .keymap
             .as_ref()
             .and_then(|k| k["presets"].as_array().cloned())
             .unwrap_or_default()
             .iter()
-            .map(|p| (p["name"].as_str().unwrap_or("").to_string(), p["title"].as_str().unwrap_or("").to_string()))
+            .map(|p| (p["name"].as_str().unwrap_or("").to_string(), p["title"].as_str().unwrap_or("").to_string())))
             .collect();
         let cur = presets.iter().find(|(n, _)| *n == s.edit_preset).map_or(s.edit_preset.clone(), |(_, t)| t.clone());
         egui::ComboBox::from_id_salt("keys-tab-preset").selected_text(cur).show_ui(ui, |ui| {

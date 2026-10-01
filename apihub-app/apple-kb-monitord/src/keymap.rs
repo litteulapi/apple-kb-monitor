@@ -8,7 +8,8 @@
 //! * `Keymap() -> s`: `keymap.toml` (profiles, presets, kernel parameters).
 //! * `SetKey(s profile, s key, s code) -> s`: `code` = `KEY_*`, `""` = unset;
 //!   `profile` `""` = the active one. Only edits `keymap.toml`.
-//! * `SetPreset(s profile, s preset) -> s`, `UseProfile(s profile) -> s`.
+//! * `SetPreset(s profile, s preset) -> s` (`apple`, `fkeys`, `linux-pc`, `""` /
+//!   `none` = parameters left alone), `UseProfile(s profile) -> s`.
 //! * `Apply() -> s`: installs the active profile (hwdb through
 //!   `pkexec akm-keymap-helper install|remove`, parameters through
 //!   `pkexec akm-helper set-params ... --persist`); one authentication at a
@@ -231,7 +232,11 @@ impl KeymapIface {
     }
 
     fn set_preset(&self, profile: &str, preset: &str) -> zbus::fdo::Result<String> {
-        let pr = Preset::parse(preset).map_err(|e| zbus::fdo::Error::InvalidArgs(e.to_string()))?;
+        // "" or "none" = no preset (parameters left as they are)
+        let pr = match preset {
+            "" | "none" => None,
+            p => Some(Preset::parse(p).map_err(|e| zbus::fdo::Error::InvalidArgs(e.to_string()))?),
+        };
         self.edit(profile, |p| {
             p.preset = pr;
             Ok(())

@@ -90,7 +90,7 @@ pub fn to_text(t: &Value, kde: &Kde, check: bool) -> String {
     o.push_str(&format!(
         "Profile:    {} (preset {}){}\n",
         t["profile"].as_str().unwrap_or("?"),
-        t["preset"].as_str().unwrap_or("?"),
+        t["preset"].as_str().unwrap_or("none"),
         if t["pending"].as_bool() == Some(true) { " - NOT applied yet: akmctl keymap apply" } else { "" }
     ));
     if let Err(e) = kde {

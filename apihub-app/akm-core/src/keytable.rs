@@ -97,7 +97,7 @@ pub fn table_json(pid: Option<u16>, p: &HidState, installed: &Result<Vec<HwdbRec
             Err(e) => json!({"path": keymap::HWDB_PATH, "error": e.to_string()}),
         },
         "profile": km.active,
-        "preset": prof.preset.name(),
+        "preset": prof.preset.map(|p| p.name()),
         "pending": plan(km, p, inst).map(|pl| !pl.is_empty()).unwrap_or(false),
         "rows": rows,
     })
@@ -114,7 +114,7 @@ pub fn keymap_json(km: &Keymap, path: &Path) -> Value {
             (
                 n.as_str(),
                 json!({
-                    "preset": p.preset.name(),
+                    "preset": p.preset.map(|p| p.name()),
                     "models": p.models.iter().map(|m| format!("05ac:{m:04x}")).collect::<Vec<_>>(),
                     "params": p.params,
                     "effective_params": p.effective_params(),
@@ -236,12 +236,15 @@ mod tests {
         assert_eq!(detect_pid_in(&d), None);
     }
 
-    /// Default keymap on today's system (fnmode 1, Mac modifiers, no file):
-    /// nothing to do.
+    /// Default keymap (no file): nothing to do whatever the current
+    /// parameters (measured 2026-10-01: swap_opt_cmd went 0 → 1 by hand).
     #[test]
     fn default_changes_nothing() {
         let km = Keymap::default();
         assert!(plan(&km, &cur(), &[]).unwrap().is_empty());
+        for s in [HidState { swap_opt_cmd: Some(1), ..cur() }, HidState { fnmode: Some(2), ..cur() }, HidState::default()] {
+            assert!(plan(&km, &s, &[]).unwrap().is_empty(), "{s:?}");
+        }
         let t = table_json(Some(0x0256), &cur(), &Ok(vec![]), &km, false);
         assert_eq!(t["pending"], false);
         assert_eq!(t["rows"][0]["plain"]["qt_name"], "Monitor Brightness Down");
@@ -267,11 +270,12 @@ mod tests {
         km.profile_mut("default").unwrap().keys.clear();
         assert!(plan(&km, &cur(), &inst).unwrap().remove_hwdb);
         // preset fkeys: fnmode 2 only
-        km.profile_mut("default").unwrap().preset = keymap::Preset::FKeys;
+        km.profile_mut("default").unwrap().preset = Some(keymap::Preset::FKeys);
         assert_eq!(plan(&km, &cur(), &[]).unwrap().params, vec![("fnmode".to_string(), 2)]);
         // unknown current value (module not loaded): set it
         let p = HidState::default();
-        assert_eq!(plan(&Keymap { active: "default".into(), profiles: BTreeMap::from([("default".into(), Profile::default())]) }, &p, &[]).unwrap().params.len(), 2);
+        let apple = Profile { preset: Some(keymap::Preset::Apple), ..Profile::default() };
+        assert_eq!(plan(&Keymap { active: "default".into(), profiles: BTreeMap::from([("default".into(), apple)]) }, &p, &[]).unwrap().params.len(), 2);
     }
 
     #[test]

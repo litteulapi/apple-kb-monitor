@@ -603,7 +603,8 @@ impl Preset {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
-    pub preset: Preset,
+    /// `None` (the default): the `hid_apple` parameters are left as they are.
+    pub preset: Option<Preset>,
     /// Product ids the key overrides apply to.
     pub models: Vec<u16>,
     /// Explicit parameters, on top of the preset's.
@@ -614,14 +615,15 @@ pub struct Profile {
 
 impl Default for Profile {
     fn default() -> Self {
-        Self { preset: Preset::Apple, models: vec![0x0256], params: BTreeMap::new(), keys: BTreeMap::new() }
+        Self { preset: None, models: vec![0x0256], params: BTreeMap::new(), keys: BTreeMap::new() }
     }
 }
 
 impl Profile {
     /// Preset parameters overlaid with the explicit ones.
     pub fn effective_params(&self) -> BTreeMap<String, i32> {
-        let mut m: BTreeMap<String, i32> = self.preset.params().iter().map(|&(n, v)| (n.to_string(), v)).collect();
+        let mut m: BTreeMap<String, i32> =
+            self.preset.map(Preset::params).unwrap_or(&[]).iter().map(|&(n, v)| (n.to_string(), v)).collect();
         m.extend(self.params.iter().map(|(k, v)| (k.clone(), *v)));
         m
     }
@@ -876,7 +878,7 @@ impl Keymap {
             .into_iter()
             .map(|(n, (preset, models, params, keys))| {
                 let d = Profile::default();
-                (n, Profile { preset: preset.unwrap_or(d.preset), models: models.unwrap_or(d.models), params, keys })
+                (n, Profile { preset, models: models.unwrap_or(d.models), params, keys })
             })
             .collect();
         let active = active.unwrap_or_else(|| "default".into());
@@ -899,7 +901,10 @@ impl Keymap {
         );
         o.push_str(&format!("schema = 1\nactive = \"{}\"\n", self.active));
         for (name, p) in &self.profiles {
-            o.push_str(&format!("\n[profile.{name}]\npreset = \"{}\"\n", p.preset.name()));
+            o.push_str(&format!("\n[profile.{name}]\n"));
+            if let Some(pr) = p.preset {
+                o.push_str(&format!("preset = \"{}\"\n", pr.name()));
+            }
             let models: Vec<String> = p.models.iter().map(|m| format!("\"05ac:{m:04x}\"")).collect();
             o.push_str(&format!("models = [{}]\n", models.join(", ")));
             if !p.params.is_empty() {
@@ -941,7 +946,7 @@ impl Keymap {
         self.profiles.get(&self.active).expect("parse guarantees the active profile exists")
     }
 
-    /// Profile to edit, created (preset apple) when missing.
+    /// Profile to edit, created (no preset, nothing remapped) when missing.
     pub fn profile_mut(&mut self, name: &str) -> Result<&mut Profile, KeymapError> {
         if !valid_profile_name(name) {
             return Err(KeymapError::new(format!("bad profile name {name:?} (a-z 0-9 - _, 1-32 characters)")));
@@ -1338,7 +1343,7 @@ mod tests {
         let k = Keymap::parse(SAMPLE).unwrap();
         assert_eq!(k.active, "work");
         let w = &k.profiles["work"];
-        assert_eq!(w.preset, Preset::LinuxPc);
+        assert_eq!(w.preset, Some(Preset::LinuxPc));
         assert_eq!(w.models, vec![0x0256, 0x0255]);
         assert_eq!(w.keys.get(&0x70039), Some(&29));
         assert_eq!(w.keys.get(&SC_EJECT), Some(&111));
@@ -1457,8 +1462,10 @@ evdev:input:b0005v05ACp0256*\n KEYBOARD_KEY_70039=leftctrl\n KEYBOARD_KEY_7003f=
     fn presets() {
         assert_eq!(Preset::parse("linux-pc"), Ok(Preset::LinuxPc));
         assert!(Preset::parse("Apple").is_err());
-        // the default profile asks for today's state: fnmode 1, Mac modifiers
-        assert_eq!(Profile::default().effective_params(), BTreeMap::from([("fnmode".into(), 1), ("swap_opt_cmd".into(), 0)]));
+        // the default profile asks for nothing: parameters left as they are
+        assert!(Profile::default().effective_params().is_empty());
+        let apple = Profile { preset: Some(Preset::Apple), ..Profile::default() };
+        assert_eq!(apple.effective_params(), BTreeMap::from([("fnmode".into(), 1), ("swap_opt_cmd".into(), 0)]));
         for p in Preset::ALL {
             for (n, v) in p.params() {
                 let kp = kernel_param(n).unwrap();

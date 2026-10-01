@@ -60,11 +60,23 @@ pub const BINDINGS: &[Binding] = &[Binding {
 
 type Keys = Vec<(Vec<i32>,)>;
 
-fn shortcut_keys(conn: &Connection, b: &Binding) -> Result<Keys, String> {
-    let id = vec![b.component.to_string(), b.action.to_string()];
+/// Full action id (component, action, component and action friendly names):
+/// KGlobalAccel answers `shortcutKeys` with nothing for a 2-entry id
+/// (measured on Plasma 6, 2026-10-01).
+fn action_id(conn: &Connection, b: &Binding) -> Result<Vec<String>, String> {
+    let reply = conn
+        .call_method(Some(DEST), PATH, Some(IFACE), "allActionsForComponent", &(vec![b.component.to_string()],))
+        .map_err(|e| format!("allActionsForComponent {}: {e}", b.component))?;
+    let all: Vec<Vec<String>> = reply.body().deserialize().map_err(|e| e.to_string())?;
+    all.into_iter()
+        .find(|id| id.len() >= 4 && id[0] == b.component && id[1] == b.action)
+        .ok_or_else(|| format!("{}/{} not registered in KGlobalAccel", b.component, b.action))
+}
+
+fn shortcut_keys(conn: &Connection, id: &[String]) -> Result<Keys, String> {
     let reply = conn
         .call_method(Some(DEST), PATH, Some(IFACE), "shortcutKeys", &(id,))
-        .map_err(|e| format!("shortcutKeys {}/{}: {e}", b.component, b.action))?;
+        .map_err(|e| format!("shortcutKeys {}/{}: {e}", id[0], id[1]))?;
     reply.body().deserialize::<Keys>().map_err(|e| e.to_string())
 }
 
@@ -85,7 +97,8 @@ pub enum Step {
 pub fn apply_missing(conn: &Connection, write: bool, undo: bool) -> Result<Vec<(Binding, Step)>, String> {
     let mut out = Vec::new();
     for b in BINDINGS {
-        let keys = shortcut_keys(conn, b)?;
+        let id = action_id(conn, b)?;
+        let keys = shortcut_keys(conn, &id)?;
         let ours = keys.iter().position(|(k,)| k.first() == Some(&b.qt_key) && k.iter().skip(1).all(|x| *x == 0));
         let step = if undo {
             match ours {
@@ -93,7 +106,7 @@ pub fn apply_missing(conn: &Connection, write: bool, undo: bool) -> Result<Vec<(
                     if write {
                         let mut k = keys.clone();
                         k.remove(i);
-                        set_keys(conn, b, k)?;
+                        set_keys(conn, &id, k)?;
                     }
                     Step::Removed
                 }
@@ -106,7 +119,7 @@ pub fn apply_missing(conn: &Connection, write: bool, undo: bool) -> Result<Vec<(
                     if write {
                         let mut k = keys.clone();
                         k.push((vec![b.qt_key],));
-                        set_keys(conn, b, k)?;
+                        set_keys(conn, &id, k)?;
                     }
                     Step::Add { existing: keys.len() }
                 }
@@ -117,9 +130,8 @@ pub fn apply_missing(conn: &Connection, write: bool, undo: bool) -> Result<Vec<(
     Ok(out)
 }
 
-fn set_keys(conn: &Connection, b: &Binding, keys: Keys) -> Result<(), String> {
-    let id = vec![b.component.to_string(), b.action.to_string()];
+fn set_keys(conn: &Connection, id: &[String], keys: Keys) -> Result<(), String> {
     conn.call_method(Some(DEST), PATH, Some(IFACE), "setForeignShortcutKeys", &(id, keys))
         .map(|_| ())
-        .map_err(|e| format!("setForeignShortcutKeys {}/{}: {e}", b.component, b.action))
+        .map_err(|e| format!("setForeignShortcutKeys {}/{}: {e}", id[0], id[1]))
 }

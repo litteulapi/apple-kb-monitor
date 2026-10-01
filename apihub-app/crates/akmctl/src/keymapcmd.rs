@@ -90,14 +90,13 @@ fn show(km: &Keymap, hwdb: bool) -> String {
     let mut o = format!("File:     {}\nActive:   {}\n", keymap::default_path().display(), km.active);
     for (n, p) in &km.profiles {
         o.push_str(&format!(
-            "\n[{n}]{} preset {} ({})\n  models: {}\n",
+            "\n[{n}]{} preset {}\n  models: {}\n",
             if *n == km.active { " *" } else { "" },
-            p.preset.name(),
-            p.preset.title(),
+            p.preset.map_or("none (hid_apple parameters left as they are)".to_string(), |pr| format!("{} ({})", pr.name(), pr.title())),
             p.models.iter().map(|m| format!("05ac:{m:04x}")).collect::<Vec<_>>().join(", ")
         ));
         let params: Vec<String> = p.effective_params().iter().map(|(k, v)| format!("{k}={v}")).collect();
-        o.push_str(&format!("  hid_apple: {}\n", params.join(" ")));
+        o.push_str(&format!("  hid_apple: {}\n", if params.is_empty() { "unchanged".to_string() } else { params.join(" ") }));
         if p.keys.is_empty() {
             o.push_str("  keys: none (kernel mapping)\n");
         }
@@ -134,9 +133,15 @@ pub fn run(cmd: KeymapCmd) -> u8 {
             None => Err(format!("{} is not remapped in this profile", keymap::scancode_label(key))),
         }),
         KeymapCmd::Preset { name, profile } => edit(profile, |p| {
-            p.preset = name;
-            let ps: Vec<String> = name.params().iter().map(|(n, v)| format!("{n}={v}")).collect();
-            Ok(format!("preset {} ({}): {}", name.name(), name.title(), ps.join(" ")))
+            let pr = if name == "none" { None } else { Some(Preset::parse(&name).map_err(|e| e.to_string())?) };
+            p.preset = pr;
+            Ok(match pr {
+                Some(pr) => {
+                    let ps: Vec<String> = pr.params().iter().map(|(n, v)| format!("{n}={v}")).collect();
+                    format!("preset {} ({}): {}", pr.name(), pr.title(), ps.join(" "))
+                }
+                None => "no preset: hid_apple parameters left as they are".into(),
+            })
         }),
         KeymapCmd::Use { profile } => {
             let mut km = match load() {
@@ -344,8 +349,12 @@ pub fn parse_code(s: &str) -> Result<u16, String> {
     keymap::parse_code(s).map_err(|e| e.to_string())
 }
 
-pub fn parse_preset(s: &str) -> Result<Preset, String> {
-    Preset::parse(s).map_err(|e| e.to_string())
+/// `apple`, `fkeys`, `linux-pc` or `none` (kept as text: `none` = no preset).
+pub fn parse_preset(s: &str) -> Result<String, String> {
+    if s == "none" {
+        return Ok(s.into());
+    }
+    Preset::parse(s).map(|p| p.name().to_string()).map_err(|e| format!("{e}, or none"))
 }
 
 pub fn parse_profile(s: &str) -> Result<String, String> {
@@ -377,8 +386,8 @@ mod tests {
     #[test]
     fn show_default() {
         let s = show(&Keymap::default(), true);
-        assert!(s.contains("[default] * preset apple"), "{s}");
+        assert!(s.contains("[default] * preset none"), "{s}");
         assert!(s.contains("keys: none (kernel mapping)") && s.contains("hwdb: nothing to install"));
-        assert!(s.contains("fnmode=1 swap_opt_cmd=0"));
+        assert!(s.contains("hid_apple: unchanged"));
     }
 }
