@@ -93,6 +93,14 @@ impl Snapshot {
             .and_then(|k| k.device.alias.as_deref())
             .filter(|a| !a.is_empty())
     }
+    /// Name the kernel registered the input device under (`HID_NAME`), if
+    /// known and non-empty. KWin and System Settings > Keyboard show this one.
+    pub fn kernel_name(&self) -> Option<&str> {
+        self.keyboard
+            .as_ref()
+            .and_then(|k| k.device.name.as_deref())
+            .filter(|n| !n.is_empty())
+    }
     /// Name to show for the keyboard: the user's alias, else the name the
     /// keyboard registered under (empty strings count as absent).
     pub fn display_name(&self) -> Option<&str> {

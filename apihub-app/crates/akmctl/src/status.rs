@@ -23,6 +23,9 @@ pub fn to_json(s: &Snapshot, fn_mode: Option<u8>, revision: Option<u64>) -> Valu
         "model": s.model(),
         "name": s.display_name(),
         "alias": s.alias(),
+        // Name the kernel registered the input device under (HID_NAME): what
+        // KWin and System Settings > Keyboard show (#248).
+        "kernel_name": s.kernel_name(),
         "mac": s.mac(),
         "battery_pct": s.battery_pct().map(|p| p.round().clamp(0.0, 100.0) as u32),
         "voltage": s.voltage().filter(|v| v.is_finite()),
@@ -86,6 +89,9 @@ pub fn to_text(s: &Snapshot, fn_mode: Option<u8>) -> String {
     let mut line = |k: &str, v: String| out.push_str(&format!("{k:<11}{v}\n"));
     line("Keyboard:", s.model().unwrap_or("n/a").to_string());
     line("Name:", s.display_name().unwrap_or("n/a").to_string());
+    if let Some(note) = kernel_name_note(s) {
+        line("Kernel:", note);
+    }
     line("MAC:", s.mac().unwrap_or("n/a").to_string());
     line("Connected:", if s.connected { "yes" } else { "no" }.into());
     line(
@@ -148,6 +154,22 @@ pub fn to_text(s: &Snapshot, fn_mode: Option<u8>) -> String {
     out
 }
 
+/// Explains why KDE shows two names (#248): the Bluetooth and Battery
+/// applets read the BlueZ alias, while KWin and System Settings > Keyboard
+/// read the kernel's input device name (`HID_NAME`), which only changes when
+/// the keyboard reconnects. `None` when both names are the same.
+pub fn kernel_name_note(s: &Snapshot) -> Option<String> {
+    let alias = s.alias()?;
+    let kernel = s.kernel_name()?;
+    (alias != kernel).then(|| {
+        format!(
+            "{kernel} - KWin and System Settings > Keyboard show this kernel name; \
+             Bluetooth and Battery show the alias \"{alias}\". The kernel name changes only \
+             after the keyboard reconnects (switch it off and on)."
+        )
+    })
+}
+
 pub fn absent_text(fn_mode: Option<u8>) -> String {
     format!(
         "Daemon:    not running (com.agenceapi.AppleKbMonitor1 absent on the session bus)\nFn mode:   {}\nShutdown:  {}\n",
@@ -181,6 +203,29 @@ mod tests {
         assert_eq!(v["fnmode"], 2);
         assert!(v["fnmode_label"].as_str().unwrap().starts_with("fkeysfirst"));
         assert!(v["last_error"].is_null());
+    }
+
+    #[test]
+    fn a_line_explains_two_names_only_when_they_differ() {
+        let mk = |alias: &str, name: &str| -> Snapshot {
+            let mut s: Snapshot = serde_json::from_str(SAMPLE).unwrap();
+            let d = &mut s.keyboard.as_mut().unwrap().device;
+            d.alias = Some(alias.into());
+            d.name = Some(name.into());
+            s
+        };
+        let s = mk("alex", "Clavier de maria #1");
+        let note = kernel_name_note(&s).expect("names differ");
+        assert!(note.starts_with("Clavier de maria #1") && note.contains("alex") && note.contains("reconnects"));
+        let text = to_text(&s, None);
+        assert!(text.contains("Kernel:") && text.contains("KWin"), "{text}");
+        assert_eq!(to_json(&s, None, None)["kernel_name"], "Clavier de maria #1");
+        let same = mk("Clavier de maria #1", "Clavier de maria #1");
+        assert!(kernel_name_note(&same).is_none());
+        assert!(!to_text(&same, None).contains("Kernel:"));
+        let mut no_alias = mk("x", "Clavier de maria #1");
+        no_alias.keyboard.as_mut().unwrap().device.alias = None;
+        assert!(kernel_name_note(&no_alias).is_none());
     }
 
     #[test]
