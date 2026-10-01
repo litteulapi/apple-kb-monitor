@@ -220,14 +220,27 @@ class TestConfigurationLivree(unittest.TestCase):
         mouse = kernel_name("0005:0000004C:00000269")
         self.assertTrue(any(fnmatch.fnmatchcase(mouse, p) for p in pats))
 
-    @unittest.expectedFailure  # #126
-    def test_keyd_ids_cover_supported_models(self):
+    def test_keyd_ids_cover_supported_models(self):  # #126
         conf = (ROOT / "keyd" / "apple-keyboard.conf").read_text()
         ids = conf.split("[ids]", 1)[1].split("[", 1)[0].split()
         for c in cases():
             if c["hid_id"] and c["expected_family"] and c["hid_id"].startswith("0005"):
                 vid, pid = parse_hid_id(c["hid_id"])
                 self.assertIn(f"{vid:04x}:{pid:04x}", ids, c["name"])
+
+    def test_keyd_f3_f6_symetriques_toutes_tables(self):  # #126
+        conf = (ROOT / "keyd" / "apple-keyboard.conf").read_text()
+        main = conf.split("[main]", 1)[1]
+        binds = dict(
+            (k.strip(), v.strip()) for k, v in
+            (l.split("=", 1) for l in main.splitlines() if "=" in l and not l.lstrip().startswith("#")))
+        groups = {"M-z": ("f3", "scale"),
+                  "M-g": ("f4", "dashboard", "search"),
+                  "M-l": ("f5", "kbdillumdown", "micmute"),
+                  "M-d": ("f6", "numlock", "kbdillumup", "sleep")}
+        for macro, keys in groups.items():
+            for k in keys:
+                self.assertEqual(binds.get(k), f"macro({macro})", k)
 
 
 def load_python_legacy():
