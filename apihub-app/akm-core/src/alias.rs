@@ -14,6 +14,8 @@ pub enum AliasError {
     TooLong,
     /// Control, line/paragraph separator or invisible formatting character.
     BadChar(char),
+    /// Starts with `-`: would be read as an option by external dialogs (#207).
+    LeadingDash,
 }
 
 impl std::fmt::Display for AliasError {
@@ -22,6 +24,7 @@ impl std::fmt::Display for AliasError {
             AliasError::TooLong => {
                 write!(f, "name too long (max {MAX_CHARS} characters, {MAX_BYTES} bytes)")
             }
+            AliasError::LeadingDash => f.write_str("name must not start with '-'"),
             AliasError::BadChar(c) => {
                 write!(f, "name contains a forbidden character (U+{:04X})", u32::from(*c))
             }
@@ -54,6 +57,9 @@ pub fn validate(input: &str) -> Result<String, AliasError> {
     if let Some(c) = name.chars().find(|c| c.is_control() || is_invisible(*c)) {
         return Err(AliasError::BadChar(c));
     }
+    if name.starts_with('-') {
+        return Err(AliasError::LeadingDash);
+    }
     if name.chars().count() > MAX_CHARS || name.len() > MAX_BYTES {
         return Err(AliasError::TooLong);
     }
@@ -81,6 +87,14 @@ mod tests {
         for bad in ["a\nb", "a\tb", "a\0b", "\u{7f}", "x\u{85}y", "a\u{202E}b", "a\u{200B}b", "a\u{2028}b", "\u{FEFF}a"] {
             assert!(matches!(validate(bad), Err(AliasError::BadChar(_))), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn rejects_leading_dash() {
+        for bad in ["--version", "-x", "  --textbox /etc/passwd"] {
+            assert_eq!(validate(bad), Err(AliasError::LeadingDash), "{bad:?}");
+        }
+        assert!(validate("a-b").is_ok());
     }
 
     #[test]

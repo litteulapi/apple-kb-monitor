@@ -304,13 +304,16 @@ fn inner() {
     fn_changed
         .recv_timeout(Duration::from_secs(5))
         .expect("FnMode PropertiesChanged");
-    call_i(&c, DEV, "SetIsoLayout", -1).unwrap();
-    call_i(&c, DEV, "SetSwapOptCmd", 1).unwrap();
+    // #203 : plus de methode d'ecriture sans action polkit.
+    for m in ["SetIsoLayout", "SetSwapOptCmd"] {
+        let e = call_i(&c, DEV, m, 1).unwrap_err();
+        assert!(e.to_string().contains("UnknownMethod"), "{m}: {e}");
+    }
     let e = call_i(&c, DEV, "SetFnMode", 9).unwrap_err();
     assert!(e.to_string().contains("InvalidArgs"), "{e}");
     assert_eq!(
         *fake.0.lock().unwrap(),
-        HashMap::from([("fnmode", 2), ("iso_layout", -1), ("swap_opt_cmd", 1)])
+        HashMap::from([("fnmode", 2)])
     );
 
     // Rename (#141): validated, delegated to the backend, nothing else.
@@ -423,14 +426,14 @@ fn inner() {
         .contains("A1314"));
 
     // Real backend without helper: explicit NotSupported, nothing executed.
-    std::env::set_var(
-        apple_kb_monitord::settings::HELPER_ENV,
-        "/nonexistent/akm-helper",
-    );
     let other = Connection::session().unwrap();
     let w2 = Arc::new(Watch::new());
     w2.publish(keyboard(50.0, now));
     let mut so = ServeOptions::new(w2, Mailbox::new(), None);
+    so.settings = Arc::new(apple_kb_monitord::settings::HelperBackend::with_paths(
+        "/usr/bin/pkexec",
+        "/nonexistent/akm-helper",
+    ));
     so.bus_name = "com.agenceapi.AppleKbMonitor1.Test".into();
     let shared = service::export_on(&other, &so).unwrap();
     devices::ensure_device(&other, &shared, MAC, "x", "").unwrap();

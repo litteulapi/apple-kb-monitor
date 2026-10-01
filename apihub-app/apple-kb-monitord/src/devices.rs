@@ -16,8 +16,10 @@
 //!
 //! Methods: `Refresh()`, `History(t since) -> s`, `BatterySets() -> s`,
 //! `SetAlias(s) -> s` (BlueZ alias, validated; "" = reset),
-//! `SetFnMode(i)`, `SetSwapOptCmd(i)`, `SetIsoLayout(i)` (validated, then
-//! delegated to the privileged helper; `NotSupported` without it).
+//! `SetFnMode(i)` (caller uid checked, validated, then delegated to the
+//! privileged helper through polkit; `NotSupported` without it, `LimitsExceeded`
+//! while another authentication is pending). `SwapOptCmd`/`IsoLayout` are
+//! read-only (no polkit action, #203).
 //!
 //! Signals: `BatteryLevelCrossed(u threshold, i battery, s urgency)`,
 //! `ConnectionChanged(b connected, i battery)`,
@@ -58,6 +60,29 @@ pub fn device_path(mac: &str) -> Option<OwnedObjectPath> {
     }
     let tail = mac.to_ascii_uppercase().replace(':', "_");
     OwnedObjectPath::try_from(format!("{DEVICES_PATH}/{tail}")).ok()
+}
+
+/// Unix uid of the D-Bus caller; refused unless it is the daemon's own uid
+/// (#203: the daemon opens a polkit dialog on behalf of its caller).
+pub async fn caller_uid(
+    conn: &zbus::Connection,
+    hdr: &zbus::message::Header<'_>,
+) -> zbus::fdo::Result<u32> {
+    let sender = hdr
+        .sender()
+        .ok_or_else(|| zbus::fdo::Error::AccessDenied("anonymous caller".into()))?;
+    let uid = zbus::fdo::DBusProxy::new(conn)
+        .await?
+        .get_connection_unix_user(sender.clone().into())
+        .await?;
+    // SAFETY: getuid(2) has no preconditions.
+    if uid != unsafe { libc::getuid() } {
+        tracing::warn!(uid, "D-Bus caller with another uid refused");
+        return Err(zbus::fdo::Error::AccessDenied(
+            "caller uid differs from the daemon's".into(),
+        ));
+    }
+    Ok(uid)
 }
 
 /// What every exported object shares.
@@ -293,30 +318,14 @@ impl Device {
     async fn set_fn_mode(
         &self,
         mode: i32,
+        #[zbus(header)] hdr: zbus::message::Header<'_>,
+        #[zbus(connection)] conn: &zbus::Connection,
         #[zbus(signal_context)] ctxt: SignalContext<'_>,
     ) -> zbus::fdo::Result<()> {
+        let uid = caller_uid(conn, &hdr).await?;
+        tracing::info!(uid, mode, sender = ?hdr.sender(), "SetFnMode requested");
         self.set(Param::FnMode, mode).await?;
         let _ = self.fn_mode_changed(&ctxt).await;
-        Ok(())
-    }
-
-    async fn set_swap_opt_cmd(
-        &self,
-        mode: i32,
-        #[zbus(signal_context)] ctxt: SignalContext<'_>,
-    ) -> zbus::fdo::Result<()> {
-        self.set(Param::SwapOptCmd, mode).await?;
-        let _ = self.swap_opt_cmd_changed(&ctxt).await;
-        Ok(())
-    }
-
-    async fn set_iso_layout(
-        &self,
-        layout: i32,
-        #[zbus(signal_context)] ctxt: SignalContext<'_>,
-    ) -> zbus::fdo::Result<()> {
-        self.set(Param::IsoLayout, layout).await?;
-        let _ = self.iso_layout_changed(&ctxt).await;
         Ok(())
     }
 

@@ -243,7 +243,7 @@ impl ServeOptions {
             mailbox,
             history,
             events: EventHub::new(),
-            settings: Arc::new(HelperBackend),
+            settings: Arc::new(HelperBackend::default()),
             alias: Arc::new(BluezAlias::default()),
             bus_name: BUS_NAME.to_string(),
         }
