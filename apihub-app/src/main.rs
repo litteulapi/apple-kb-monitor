@@ -785,7 +785,12 @@ fn main() {
     let (ui_tx, ui_rx) = mpsc::channel();
     let activate = {
         let (open, raise, tx) = (window_open.clone(), raise.clone(), Mutex::new(ui_tx.clone()));
-        move || {
+        move |token: Option<String>| {
+            // winit reads XDG_ACTIVATION_TOKEN when it maps a window: a token
+            // from the caller (tray click) lets a new window take focus on Wayland.
+            if let Some(t) = token {
+                std::env::set_var("XDG_ACTIVATION_TOKEN", t);
+            }
             if open.load(Ordering::Relaxed) {
                 raise.store(true, Ordering::Relaxed);
             } else {

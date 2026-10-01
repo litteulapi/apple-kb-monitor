@@ -11,9 +11,11 @@ use std::process::{Command, Stdio};
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
 
-/// Well-known name of the `apihub-app` window (`DBusActivatable=true`).
-pub const APP_NAME: &str = "com.agenceapi.ApiHub";
-pub const APP_PATH: &str = "/com/agenceapi/ApiHub";
+/// Well-known name of the `apihub-app` window (`DBusActivatable=true`); same
+/// value as `apihub_app::instance::{APP_ID, APP_PATH}` (the crates cannot
+/// depend on each other, `tests/` of the workspace checks both).
+pub const APP_NAME: &str = "com.agenceapi.AppleKbMonitor";
+pub const APP_PATH: &str = "/com/agenceapi/AppleKbMonitor";
 
 pub fn which(bin: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
@@ -62,8 +64,8 @@ pub fn launch(argv: &[&str], token: Option<&str>) -> std::io::Result<()> {
 }
 
 /// Open the window: `org.freedesktop.Application.Activate` on
-/// `com.agenceapi.ApiHub` (D-Bus activation, single instance), falling back to
-/// `apihub-app --show`.
+/// `com.agenceapi.AppleKbMonitor` (D-Bus activation, single instance), falling back to
+/// plain `apihub-app` (single instance + activation token via env).
 pub fn open_window(conn: &Connection, token: Option<String>) {
     let mut platform: HashMap<&str, Value<'_>> = HashMap::new();
     if let Some(t) = &token {
@@ -79,8 +81,8 @@ pub fn open_window(conn: &Connection, token: Option<String>) {
     ) {
         Ok(_) => tracing::info!("tray: window activated through {APP_NAME}"),
         Err(e) => {
-            tracing::debug!("tray: {APP_NAME} not activatable ({e}), running apihub-app --show");
-            if let Err(e) = launch(&["apihub-app", "--show"], token.as_deref()) {
+            tracing::debug!("tray: {APP_NAME} not activatable ({e}), running apihub-app");
+            if let Err(e) = launch(&["apihub-app"], token.as_deref()) {
                 tracing::warn!("tray: cannot start apihub-app: {e}");
             }
         }
@@ -245,6 +247,17 @@ mod tests {
         assert_eq!(z[0], "zenity");
         assert_eq!(z.last().map(String::as_str), Some("cur"));
         assert!(z.contains(&"--entry-text".to_string()));
+    }
+
+    /// The tray must target the name the window really claims (#148).
+    #[test]
+    fn app_name_matches_window_and_service_file() {
+        let window = include_str!("../../../src/instance.rs");
+        assert!(window.contains(&format!("APP_ID: &str = \"{APP_NAME}\"")));
+        assert!(window.contains(&format!("APP_PATH: &str = \"{APP_PATH}\"")));
+        let svc = include_str!("../../../../dbus/com.agenceapi.AppleKbMonitor.service");
+        assert!(svc.contains(&format!("Name={APP_NAME}\n")));
+        assert_eq!(APP_PATH, format!("/{}", APP_NAME.replace('.', "/")));
     }
 
     #[test]
