@@ -32,6 +32,11 @@ jobs:
           cargo build --locked --workspace
           cargo clippy --locked --workspace --all-targets -- -D warnings
           cargo test --locked --workspace
+      - name: Advisories (cargo deny, policy and justified ignores in apihub-app/deny.toml)
+        working-directory: apihub-app
+        run: |
+          cargo install cargo-deny --locked
+          cargo deny check advisories
 
   shell-c-udev:
     name: Version, shell, C, udev (no hardware)
@@ -41,7 +46,7 @@ jobs:
       - name: Install tools
         run: |
           apt-get update
-          apt-get install -y --no-install-recommends git ca-certificates nodejs \
+          apt-get install -y --no-install-recommends git ca-certificates nodejs python3 \
             shellcheck gcc libc6-dev udev
       - uses: actions/checkout@v4
       - name: Single version (Cargo workspace = PKGBUILD = .SRCINFO = CHANGELOG)
@@ -63,6 +68,11 @@ jobs:
             head -1 "$f" | grep -Eq '^#!.*(ba)?sh' && files="$files $f"
           done
           shellcheck -S warning $files
+      - name: Security files (unit hardening, polkit, rssi-helper group) and widget plain text
+        run: |
+          set -eu
+          sh tests/check-security-files.sh
+          python3 plasma/tests/check_plaintext.py
       - name: rssi-helper (gcc -Wall -Wextra -Werror)
         run: gcc -Wall -Wextra -Werror -o /tmp/rssi-helper rssi-helper.c
       - name: udevadm verify

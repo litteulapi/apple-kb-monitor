@@ -1,7 +1,9 @@
 // OPTIONAL, NOT installed by the package.
 // Lets members of the "wheel" group change the Fn mode without a password
 // (convenient for a single-user workstation; weaker than the shipped default,
-// auth_admin_keep). Copy to /etc/polkit-1/rules.d/49-apple-kb-monitor.rules to enable.
+// auth_admin). WARNING (#203): the subject polkit sees is the long-lived daemon,
+// so with this rule ANY application of the session can change the mode through
+// the D-Bus SetFnMode method without any dialog. Copy to /etc/polkit-1/rules.d/49-apple-kb-monitor.rules to enable.
 polkit.addRule(function(action, subject) {
     if (action.id == "com.agenceapi.AppleKbMonitor.set-fnmode" &&
         subject.local && subject.active && subject.isInGroup("wheel")) {

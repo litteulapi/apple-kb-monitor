@@ -14,9 +14,28 @@ Restart=on-failure
 RestartSec=10
 # Headless: needs neither Wayland nor X11 (#21).
 UnsetEnvironment=WAYLAND_DISPLAY DISPLAY
-# History in $XDG_STATE_HOME/apple-kb-monitor. No NoNewPrivileges=: it would
-# strip the file capability (cap_net_admin) of the RSSI helper.
+# History in $XDG_STATE_HOME/apple-kb-monitor.
 StateDirectory=apple-kb-monitor
+
+# Hardening (#211). The daemon starts two privileged helpers: rssi-helper (file
+# capability cap_net_admin) and pkexec (setuid root). Measured with
+# `systemd-run --user -p ...`:
+#   * NoNewPrivileges= and every seccomp-based option (SystemCallFilter=,
+#     RestrictAddressFamilies=, MemoryDenyWriteExecute=, LockPersonality=,
+#     RestrictRealtime=, SystemCallArchitectures=...) set NoNewPrivs=1: the
+#     file capability and the setuid bit stop working (RSSI and the fnmode
+#     change die silently);
+#   * ProtectSystem=, ProtectHome=, PrivateTmp= make a USER manager create a
+#     user namespace (uid_map "1000 1000 1"): root is unmapped, setuid and file
+#     capabilities are void as well.
+# Only options that need neither are used here. They are checked by
+# tests/check-security-files.sh.
+UMask=0077
+LimitCORE=0
+KeyringMode=private
+IPAddressDeny=any
+TasksMax=128
+MemoryMax=512M
 
 [Install]
 WantedBy=default.target
