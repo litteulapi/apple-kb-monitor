@@ -41,7 +41,14 @@ def connected():
     return "Connected: yes" in out
 
 
-def record(rid, data):
+def record(rid, data, rtype=None):
+    if rtype == "input" and rid == 0x01 and len(data) > 1:
+        # live boot-keyboard state = what the user is typing: never stored.
+        # Only the shape is kept (reserved byte, number of pressed keys).
+        return {"len": len(data), "keystate": True,
+                "mod_nonzero": data[1] != 0,
+                "reserved": data[2] if len(data) > 2 else None,
+                "nkeys": sum(1 for b in data[3:] if b)}
     if rid in SENSITIVE:
         r = {"len": len(data), "first": data[:2].hex(), "masked": True}
         # a hash of a short prefix (e.g. 9 bytes = 8 known + 1 secret) would be
@@ -90,7 +97,7 @@ def run_pass(args):
                        "lat_ms": round(dt * 1000, 1), "ts": round(time.time(), 3)}
                 if err is None:
                     row["ret"] = ret
-                    row.update(record(rid, bytes(buf[:ret])))
+                    row.update(record(rid, bytes(buf[:ret]), args.type))
                 else:
                     row["errno"] = errno.errorcode.get(err, err)
                 out.write(json.dumps(row) + "\n")
@@ -124,7 +131,9 @@ def summarize(paths):
             key = f"{r['type']}:{r['id']:02x}"
             c = cells.setdefault(key, {"by_len": {}, "lat_ms": []})
             c["lat_ms"].append(r["lat_ms"])
-            v = r.get("errno") or {k: r[k] for k in ("ret", "hex", "first", "sha256_8")
+            v = r.get("errno") or {k: r[k] for k in ("ret", "hex", "first", "sha256_8",
+                                                     "keystate", "mod_nonzero",
+                                                     "reserved", "nkeys")
                                    if k in r}
             c["by_len"][str(r["buflen"])] = v
     res = {"passes": passes, "answering": {}, "refused": {}}
