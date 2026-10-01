@@ -255,13 +255,19 @@ pub fn two_columns(width: f32) -> bool {
     width >= TWO_COLUMNS_MIN_WIDTH
 }
 
-/// History points that can be drawn: finite, percentage in 0..=100, voltage
-/// > 0, at or after `cutoff`, sorted by time.
+/// Width of the history chart (seconds).
+pub const CHART_WINDOW_S: f64 = 24.0 * 3600.0;
+/// Clock skew tolerated after "now" before a point counts as future (#236).
+pub const CLOCK_SLACK_S: f64 = 600.0;
+
+/// History points that can be drawn: finite, percentage in 0..=100, positive
+/// voltage, inside the 24 h window starting at `cutoff` (a point dated in the
+/// future would squash the real 24 h into a few pixels, #236), sorted by time.
 pub fn chart_points(pts: &[(f64, f64)], cutoff: f64, pct: bool) -> Vec<(f64, f64)> {
     let mut v: Vec<(f64, f64)> = pts
         .iter()
         .copied()
-        .filter(|(t, y)| t.is_finite() && y.is_finite() && *t >= cutoff)
+        .filter(|(t, y)| t.is_finite() && y.is_finite() && *t >= cutoff && *t <= cutoff + CHART_WINDOW_S + CLOCK_SLACK_S)
         .filter(|(_, y)| if pct { (0.0..=100.0).contains(y) } else { *y > 0.0 && *y < 10.0 })
         .collect();
     v.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -293,7 +299,7 @@ pub struct ChartModel {
 
 /// Why there is no chart: the text shown instead.
 pub fn chart_model(battery: &[(f64, f64)], voltage: &[(f64, f64)], now: f64) -> Result<ChartModel, String> {
-    let cutoff = now - 24.0 * 3600.0;
+    let cutoff = now - CHART_WINDOW_S;
     let batt = chart_points(battery, cutoff, true);
     if batt.is_empty() {
         return Err(if battery.is_empty() { "No history data yet.".into() } else { "No data in the last 24 h.".into() });
@@ -614,6 +620,12 @@ mod tests {
         // Absurd voltages are dropped, never formatted.
         let m = chart_model(&batt, &[(now - 10.0, f64::MAX), (now - 5.0, f64::MIN)], now).unwrap();
         assert_eq!(m.legend.len(), 1);
+        // A point dated in 30 days does not stretch the time axis (#236).
+        let mut fut = batt.to_vec();
+        fut.push((now + 30.0 * 86_400.0, 50.0));
+        let m = chart_model(&fut, &[], now).unwrap();
+        assert_eq!(m.t_max, now);
+        assert_eq!(m.summary, "3 points over 2.0 h");
     }
 
     #[test]

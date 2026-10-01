@@ -309,7 +309,6 @@ fn measure_history_costs_on_the_ui_thread() {
 /// #236 : un point daté dans le futur (horloge en avance, #166) ne doit pas
 /// être tracé comme appartenant aux « dernières 24 h ».
 #[test]
-#[ignore = "défaut ouvert #236"]
 fn future_points_are_not_drawn_as_last_24h() {
     let now = 1_790_000_000.0;
     let mut pts: Vec<(f64, f64)> = (0..200).map(|i| (now - 82_800.0 + f64::from(i) * 414.0, 90.0)).collect();
