@@ -1,0 +1,538 @@
+{
+ "_meta": {
+  "device": "A1314 ISO 05AC:0256 bcdDevice 0x0050, 04:DB:56:CA:42:EE, /dev/hidraw7, BlueZ 5.87, noyau 7.1.13",
+  "errno": "EINVAL longueur 1 = refus local du noyau (hidraw_get_report count<2, aucun trafic) ; EIO rapide = HANDSHAKE d'erreur du clavier (voir exhaustive_handshake_20261001.json)",
+  "masking": "0x4C : longueur + 2 premiers octets, SHA-256/8 seulement du rapport complet (20 o) ; Input 0x01 : forme seule (touches jamais conservées)",
+  "source": "tests/live/re/exhaustive_probe.py (HIDIOCG* seul, O_RDONLY, 11 longueurs de tampon, 30 ms entre requêtes)"
+ },
+ "answering": {
+  "input:01": {
+   "by_len": {
+    "1": "EINVAL",
+    "16": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 1,
+     "reserved": 0,
+     "ret": 9
+    },
+    "2": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 0,
+     "reserved": null,
+     "ret": 2
+    },
+    "20": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 1,
+     "reserved": 0,
+     "ret": 9
+    },
+    "256": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 0,
+     "reserved": 0,
+     "ret": 9
+    },
+    "3": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 0,
+     "reserved": 0,
+     "ret": 3
+    },
+    "32": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 0,
+     "reserved": 0,
+     "ret": 9
+    },
+    "4": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 1,
+     "reserved": 0,
+     "ret": 4
+    },
+    "64": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 1,
+     "reserved": 0,
+     "ret": 9
+    },
+    "8": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 1,
+     "reserved": 0,
+     "ret": 8
+    },
+    "9": {
+     "keystate": true,
+     "mod_nonzero": false,
+     "nkeys": 1,
+     "reserved": 0,
+     "ret": 9
+    }
+   },
+   "lat_ms_median": 7.8
+  },
+  "input:04": {
+   "by_len": {
+    "1": "EINVAL",
+    "16": {
+     "hex": "0400",
+     "ret": 2
+    },
+    "2": {
+     "hex": "0400",
+     "ret": 2
+    },
+    "20": {
+     "hex": "0400",
+     "ret": 2
+    },
+    "256": {
+     "hex": "0400",
+     "ret": 2
+    },
+    "3": {
+     "hex": "0400",
+     "ret": 2
+    },
+    "32": {
+     "hex": "0400",
+     "ret": 2
+    },
+    "4": {
+     "hex": "0400",
+     "ret": 2
+    },
+    "64": {
+     "hex": "0400",
+     "ret": 2
+    },
+    "8": {
+     "hex": "0400",
+     "ret": 2
+    },
+    "9": {
+     "hex": "0400",
+     "ret": 2
+    }
+   },
+   "lat_ms_median": 7.9
+  },
+  "input:05": {
+   "by_len": {
+    "1": "EINVAL",
+    "16": {
+     "hex": "0502",
+     "ret": 2
+    },
+    "2": {
+     "hex": "0502",
+     "ret": 2
+    },
+    "20": {
+     "hex": "0502",
+     "ret": 2
+    },
+    "256": {
+     "hex": "0502",
+     "ret": 2
+    },
+    "3": {
+     "hex": "0502",
+     "ret": 2
+    },
+    "32": {
+     "hex": "0502",
+     "ret": 2
+    },
+    "4": {
+     "hex": "0502",
+     "ret": 2
+    },
+    "64": {
+     "hex": "0502",
+     "ret": 2
+    },
+    "8": {
+     "hex": "0502",
+     "ret": 2
+    },
+    "9": {
+     "hex": "0502",
+     "ret": 2
+    }
+   },
+   "lat_ms_median": 7.8
+  },
+  "input:11": {
+   "by_len": {
+    "1": "EINVAL",
+    "16": {
+     "hex": "1100",
+     "ret": 2
+    },
+    "2": {
+     "hex": "1100",
+     "ret": 2
+    },
+    "20": {
+     "hex": "1100",
+     "ret": 2
+    },
+    "256": {
+     "hex": "1100",
+     "ret": 2
+    },
+    "3": {
+     "hex": "1100",
+     "ret": 2
+    },
+    "32": {
+     "hex": "1100",
+     "ret": 2
+    },
+    "4": {
+     "hex": "1100",
+     "ret": 2
+    },
+    "64": {
+     "hex": "1100",
+     "ret": 2
+    },
+    "8": {
+     "hex": "1100",
+     "ret": 2
+    },
+    "9": {
+     "hex": "1100",
+     "ret": 2
+    }
+   },
+   "lat_ms_median": 7.4
+  },
+  "input:30": {
+   "by_len": {
+    "1": "EINVAL",
+    "16": {
+     "hex": "3000",
+     "ret": 2
+    },
+    "2": {
+     "hex": "3000",
+     "ret": 2
+    },
+    "20": {
+     "hex": "3000",
+     "ret": 2
+    },
+    "256": {
+     "hex": "3000",
+     "ret": 2
+    },
+    "3": {
+     "hex": "3000",
+     "ret": 2
+    },
+    "32": {
+     "hex": "3000",
+     "ret": 2
+    },
+    "4": {
+     "hex": "3000",
+     "ret": 2
+    },
+    "64": {
+     "hex": "3000",
+     "ret": 2
+    },
+    "8": {
+     "hex": "3000",
+     "ret": 2
+    },
+    "9": {
+     "hex": "3000",
+     "ret": 2
+    }
+   },
+   "lat_ms_median": 8.9
+  }
+ },
+ "passes": [
+  {
+   "_pass": "input",
+   "abort": null,
+   "connected_after": true,
+   "dur_s": 112.8,
+   "requests": 2816,
+   "start": 1790849375.703
+  }
+ ],
+ "refused": {
+  "EINVAL/EIO": {
+   "count": 251,
+   "keys": [
+    "input:00",
+    "input:02",
+    "input:03",
+    "input:06",
+    "input:07",
+    "input:08",
+    "input:09",
+    "input:0a",
+    "input:0b",
+    "input:0c",
+    "input:0d",
+    "input:0e",
+    "input:0f",
+    "input:10",
+    "input:12",
+    "input:13",
+    "input:14",
+    "input:15",
+    "input:16",
+    "input:17",
+    "input:18",
+    "input:19",
+    "input:1a",
+    "input:1b",
+    "input:1c",
+    "input:1d",
+    "input:1e",
+    "input:1f",
+    "input:20",
+    "input:21",
+    "input:22",
+    "input:23",
+    "input:24",
+    "input:25",
+    "input:26",
+    "input:27",
+    "input:28",
+    "input:29",
+    "input:2a",
+    "input:2b",
+    "input:2c",
+    "input:2d",
+    "input:2e",
+    "input:2f",
+    "input:31",
+    "input:32",
+    "input:33",
+    "input:34",
+    "input:35",
+    "input:36",
+    "input:37",
+    "input:38",
+    "input:39",
+    "input:3a",
+    "input:3b",
+    "input:3c",
+    "input:3d",
+    "input:3e",
+    "input:3f",
+    "input:40",
+    "input:41",
+    "input:42",
+    "input:43",
+    "input:44",
+    "input:45",
+    "input:46",
+    "input:47",
+    "input:48",
+    "input:49",
+    "input:4a",
+    "input:4b",
+    "input:4c",
+    "input:4d",
+    "input:4e",
+    "input:4f",
+    "input:50",
+    "input:51",
+    "input:52",
+    "input:53",
+    "input:54",
+    "input:55",
+    "input:56",
+    "input:57",
+    "input:58",
+    "input:59",
+    "input:5a",
+    "input:5b",
+    "input:5c",
+    "input:5d",
+    "input:5e",
+    "input:5f",
+    "input:60",
+    "input:61",
+    "input:62",
+    "input:63",
+    "input:64",
+    "input:65",
+    "input:66",
+    "input:67",
+    "input:68",
+    "input:69",
+    "input:6a",
+    "input:6b",
+    "input:6c",
+    "input:6d",
+    "input:6e",
+    "input:6f",
+    "input:70",
+    "input:71",
+    "input:72",
+    "input:73",
+    "input:74",
+    "input:75",
+    "input:76",
+    "input:77",
+    "input:78",
+    "input:79",
+    "input:7a",
+    "input:7b",
+    "input:7c",
+    "input:7d",
+    "input:7e",
+    "input:7f",
+    "input:80",
+    "input:81",
+    "input:82",
+    "input:83",
+    "input:84",
+    "input:85",
+    "input:86",
+    "input:87",
+    "input:88",
+    "input:89",
+    "input:8a",
+    "input:8b",
+    "input:8c",
+    "input:8d",
+    "input:8e",
+    "input:8f",
+    "input:90",
+    "input:91",
+    "input:92",
+    "input:93",
+    "input:94",
+    "input:95",
+    "input:96",
+    "input:97",
+    "input:98",
+    "input:99",
+    "input:9a",
+    "input:9b",
+    "input:9c",
+    "input:9d",
+    "input:9e",
+    "input:9f",
+    "input:a0",
+    "input:a1",
+    "input:a2",
+    "input:a3",
+    "input:a4",
+    "input:a5",
+    "input:a6",
+    "input:a7",
+    "input:a8",
+    "input:a9",
+    "input:aa",
+    "input:ab",
+    "input:ac",
+    "input:ad",
+    "input:ae",
+    "input:af",
+    "input:b0",
+    "input:b1",
+    "input:b2",
+    "input:b3",
+    "input:b4",
+    "input:b5",
+    "input:b6",
+    "input:b7",
+    "input:b8",
+    "input:b9",
+    "input:ba",
+    "input:bb",
+    "input:bc",
+    "input:bd",
+    "input:be",
+    "input:bf",
+    "input:c0",
+    "input:c1",
+    "input:c2",
+    "input:c3",
+    "input:c4",
+    "input:c5",
+    "input:c6",
+    "input:c7",
+    "input:c8",
+    "input:c9",
+    "input:ca",
+    "input:cb",
+    "input:cc",
+    "input:cd",
+    "input:ce",
+    "input:cf",
+    "input:d0",
+    "input:d1",
+    "input:d2",
+    "input:d3",
+    "input:d4",
+    "input:d5",
+    "input:d6",
+    "input:d7",
+    "input:d8",
+    "input:d9",
+    "input:da",
+    "input:db",
+    "input:dc",
+    "input:dd",
+    "input:de",
+    "input:df",
+    "input:e0",
+    "input:e1",
+    "input:e2",
+    "input:e3",
+    "input:e4",
+    "input:e5",
+    "input:e6",
+    "input:e7",
+    "input:e8",
+    "input:e9",
+    "input:ea",
+    "input:eb",
+    "input:ec",
+    "input:ed",
+    "input:ee",
+    "input:ef",
+    "input:f0",
+    "input:f1",
+    "input:f2",
+    "input:f3",
+    "input:f4",
+    "input:f5",
+    "input:f6",
+    "input:f7",
+    "input:f8",
+    "input:f9",
+    "input:fa",
+    "input:fb",
+    "input:fc",
+    "input:fd",
+    "input:fe",
+    "input:ff"
+   ]
+  }
+ }
+}
