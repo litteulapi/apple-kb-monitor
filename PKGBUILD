@@ -33,6 +33,10 @@ build() {
     # apihub-app (Rust GUI)
     cd "$startdir/apihub-app"
     cargo build --release --target-dir target
+
+    # rssi-helper (C): the only binary carrying cap_net_admin (file capability
+    # applied by apple-kb-monitor.install, see post_install)
+    gcc $CFLAGS $LDFLAGS -Wall -Wextra -o "$startdir/rssi-helper" "$startdir/rssi-helper.c"
 }
 
 package() {
@@ -40,6 +44,10 @@ package() {
     install -Dm755 "$srcdir/apple-kb-monitor"                        "$pkgdir/usr/bin/apple-kb-monitor"
     install -Dm755 "$startdir/ddc-tool/target/release/ddc-tool"     "$pkgdir/usr/bin/ddc-tool"
     install -Dm755 "$startdir/apihub-app/target/release/apihub-app" "$pkgdir/usr/bin/apihub-app"
+
+    # ── RSSI helper (cap_net_admin set in post_install, not here: setcap is
+    #    not possible under fakeroot and xattrs are not reliably kept) ────
+    install -Dm755 "$startdir/rssi-helper"                          "$pkgdir/usr/lib/apple-kb-monitor/rssi-helper"
 
     # ── Config ──────────────────────────────────────────────────────────
     install -Dm644 "$srcdir/config.toml.example"               "$pkgdir/etc/apple-kb-monitor/config.toml.example"

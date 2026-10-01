@@ -1,14 +1,20 @@
 /*
- * rssi-helper — RSSI/TX Power via BlueZ MGMT API (modern interface).
+ * rssi-helper - RSSI/TX power of a connected BR/EDR device via BlueZ MGMT.
  *
- * Uses MGMT GET_CONN_INFO (opcode 0x0031) — the official BlueZ API
- * for radio diagnostics. No deprecated HCI raw access.
+ * MGMT GET_CONN_INFO (opcode 0x0031) is refused to unprivileged sockets
+ * (status 0x14 PERMISSION_DENIED), so this is the ONLY binary of the package
+ * that carries CAP_NET_ADMIN (file capability set by the .install script).
+ * The GUI (apihub-app) stays unprivileged and runs this helper as a child.
  *
- * Requires: CAP_NET_ADMIN (setcap cap_net_admin+ep rssi-helper)
- * Usage:    rssi-helper AA:BB:CC:DD:EE:FF
- * Output:   {"rssi":-5,"tx_power":4,"max_tx_power":4}
+ * Usage:   rssi-helper AA:BB:CC:DD:EE:FF [hci_index]
+ * Success: stdout = {"rssi":-5,"tx_power":4,"max_tx_power":4}, exit 0
+ * Failure: stdout empty, stderr = "rssi-helper: <reason>", exit code:
+ *            1 usage / bad argument      2 socket, bind or send error
+ *            3 MGMT status (stderr gives the hex status, 20 = 0x14 no CAP_NET_ADMIN,
+ *              0x0d not connected)       4 timeout, no reply
+ *            5 RSSI / TX power not available (127)
  *
- * Part of apple-kb-monitor — GPL-2.0-or-later
+ * Part of apple-kb-monitor - GPL-2.0-or-later
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +26,7 @@
 #include <time.h>
 #include <stdint.h>
 #include <errno.h>
+#include <string.h>
 
 #define BTPROTO_HCI         1
 #define HCI_CHANNEL_CONTROL 3
@@ -28,7 +35,6 @@
 #define MGMT_EV_CMD_STATUS    0x0002
 #define AF_BLUETOOTH_NUM    31
 #define MGMT_VALUE_INVALID  127   /* RSSI / TX power not available */
-#define NULL_JSON "{\"rssi\":null,\"tx_power\":null,\"max_tx_power\":null}\n"
 
 #pragma pack(push, 1)
 struct mgmt_hdr { uint16_t opcode, index, len; };
@@ -53,28 +59,40 @@ static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); 
 
 int main(int argc, char *argv[])
 {
-    if (argc != 2) { fprintf(stderr, "Usage: %s MAC\n", argv[0]); return 1; }
+    if (argc < 2 || argc > 3) { fprintf(stderr, "Usage: %s MAC [hci_index]\n", argv[0]); return 1; }
     unsigned int b[6];
     if (parse_mac(argv[1], b) != 0) {
-        fprintf(stderr, "Bad MAC\n"); return 1;
+        fprintf(stderr, "rssi-helper: bad MAC\n"); return 1;
+    }
+    unsigned long idx = 0;
+    if (argc == 3) {
+        char *end = NULL;
+        idx = strtoul(argv[2], &end, 10);
+        if (*argv[2] == '\0' || *end != '\0' || idx > 0xFFFE) {
+            fprintf(stderr, "rssi-helper: bad controller index\n"); return 1;
+        }
     }
 
     int fd = socket(AF_BLUETOOTH_NUM, SOCK_RAW | SOCK_CLOEXEC, BTPROTO_HCI);
-    if (fd < 0) { perror("socket"); return 1; }
+    if (fd < 0) { fprintf(stderr, "rssi-helper: socket: %s\n", strerror(errno)); return 2; }
 
     struct { sa_family_t f; uint16_t dev, ch; } sa = {AF_BLUETOOTH_NUM, 0xFFFF, HCI_CHANNEL_CONTROL};
-    if (bind(fd, (void*)&sa, sizeof(sa)) < 0) { perror("bind"); close(fd); return 1; }
+    if (bind(fd, (void*)&sa, sizeof(sa)) < 0) {
+        fprintf(stderr, "rssi-helper: bind: %s\n", strerror(errno)); close(fd); return 2;
+    }
 
     struct timeval tv = {.tv_sec = 0, .tv_usec = 200000};
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
     struct mgmt_cp cp = {.addr_type = 0};
     for (int i = 0; i < 6; i++) cp.addr[i] = (uint8_t)b[5-i];  /* LE byte order */
-    struct mgmt_hdr h = {MGMT_OP_GET_CONN_INFO, 0, sizeof(cp)};
+    struct mgmt_hdr h = {MGMT_OP_GET_CONN_INFO, (uint16_t)idx, sizeof(cp)};
 
     uint8_t buf[256];
     memcpy(buf, &h, sizeof(h)); memcpy(buf + sizeof(h), &cp, sizeof(cp));
-    if (send(fd, buf, sizeof(h) + sizeof(cp), 0) < 0) { perror("send"); close(fd); return 1; }
+    if (send(fd, buf, sizeof(h) + sizeof(cp), 0) < 0) {
+        fprintf(stderr, "rssi-helper: send: %s\n", strerror(errno)); close(fd); return 2;
+    }
 
     /* The control channel also carries unrelated events: read until the reply
      * to our own opcode arrives (bounded by a 400 ms deadline). */
@@ -82,30 +100,33 @@ int main(int argc, char *argv[])
     clock_gettime(CLOCK_MONOTONIC, &t0);
     for (;;) {
         ssize_t n = recv(fd, buf, sizeof(buf), 0);
-        if (n < 0) {
-            if (errno == EINTR) continue;
-            break;                                   /* timeout / error */
-        }
-        clock_gettime(CLOCK_MONOTONIC, &t1);
-        long ms = (t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_nsec - t0.tv_nsec) / 1000000;
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0) break;                            /* receive timeout / error */
         if (n >= 9) {
             uint16_t ev = rd16(buf), op = rd16(buf + 6);
             if ((ev == MGMT_EV_CMD_COMPLETE || ev == MGMT_EV_CMD_STATUS) &&
                 op == MGMT_OP_GET_CONN_INFO) {
-                if (ev == MGMT_EV_CMD_COMPLETE && buf[8] == 0 && n >= 19 &&
-                    (int8_t)buf[16] != MGMT_VALUE_INVALID &&
-                    (int8_t)buf[17] != MGMT_VALUE_INVALID) {
-                    close(fd);
-                    printf("{\"rssi\":%d,\"tx_power\":%d,\"max_tx_power\":%d}\n",
-                           (int8_t)buf[16], (int8_t)buf[17], (int8_t)buf[18]);
-                    return 0;
+                close(fd);
+                if (buf[8] != 0 || ev == MGMT_EV_CMD_STATUS || n < 19) {
+                    fprintf(stderr, "rssi-helper: MGMT status 0x%02x%s\n", buf[8],
+                            buf[8] == 0x14 ? " (permission denied: CAP_NET_ADMIN missing)" :
+                            buf[8] == 0x0d ? " (not connected)" : "");
+                    return 3;
                 }
-                break;                               /* our reply, but an error */
+                if ((int8_t)buf[16] == MGMT_VALUE_INVALID || (int8_t)buf[17] == MGMT_VALUE_INVALID) {
+                    fprintf(stderr, "rssi-helper: RSSI or TX power not available\n");
+                    return 5;
+                }
+                printf("{\"rssi\":%d,\"tx_power\":%d,\"max_tx_power\":%d}\n",
+                       (int8_t)buf[16], (int8_t)buf[17], (int8_t)buf[18]);
+                return 0;
             }
         }
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        long ms = (t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_nsec - t0.tv_nsec) / 1000000;
         if (ms > 400) break;
     }
     close(fd);
-    printf(NULL_JSON);
-    return 0;
+    fprintf(stderr, "rssi-helper: timeout, no reply from bluetoothd/kernel\n");
+    return 4;
 }

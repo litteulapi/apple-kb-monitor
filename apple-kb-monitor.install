@@ -9,6 +9,12 @@ post_install() {
     # Apply fnmode immediately (persistent via modprobe.d)
     echo 1 > /sys/module/hid_apple/parameters/fnmode 2>/dev/null || true
 
+    # RSSI helper: file capability so the GUI itself needs no privilege.
+    # Re-applied on every install/upgrade (pacman rewrites the file).
+    if ! setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper 2>/dev/null; then
+        echo ">>> WARNING: setcap failed, RSSI disabled. Run: sudo setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper"
+    fi
+
     # KDE Bluedevil patch (backup + apply)
     local qml="/usr/share/plasma/plasmoids/org.kde.plasma.bluetooth/contents/ui/DeviceItem.qml"
     if [ -f "$qml" ] && ! grep -q "model.Battery" "$qml" 2>/dev/null; then
