@@ -44,4 +44,21 @@
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-keymap-helper</annotate>
   </action>
+
+  <!-- #244: manual test of the sleep/wake HID_CONTROL byte (akmctl hid-control).
+       The helper takes only "suspend" or "exit-suspend", an optional MAC of a
+       connected Apple keyboard of the model table and "dry-run"; it can emit
+       0x13 or 0x14 and nothing else, once, on the HIDP control socket of
+       bluetoothd (duplicated with pidfd_getfd). The system units of the package
+       run it as root at every sleep/wake without polkit. -->
+  <action id="com.agenceapi.AppleKbMonitor.hid-control">
+    <description>Send HID_CONTROL SUSPEND or EXIT_SUSPEND to Apple Bluetooth keyboards</description>
+    <message>Authentication is required to send a sleep/wake control byte to the Apple keyboard through bluetoothd</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-hid-control</annotate>
+  </action>
 </policyconfig>

@@ -5,6 +5,7 @@ mod cli;
 mod doctor;
 mod dump;
 mod fnmode;
+mod hid_control;
 mod firmware;
 mod histcmd;
 mod info;
@@ -122,6 +123,7 @@ fn run(cmd: Command) -> u8 {
         Command::Repair { mac, force } => repair::run(mac.as_deref(), force),
         Command::Selftest(a) => selftest::run_selftest(a),
         Command::ShutdownNotify { only_if_stopping } => shutdown_notify::run(only_if_stopping),
+        Command::HidControl { op, mac, dry_run } => hid_control::run(op, mac.as_deref(), dry_run),
         Command::Completions { shell } => {
             let mut c = Cli::command();
             clap_complete::generate(clap_complete::Shell::from(shell), &mut c, "akmctl", &mut std::io::stdout());

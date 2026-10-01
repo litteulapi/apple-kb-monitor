@@ -1,0 +1,48 @@
+[Unit]
+Description=HID_CONTROL EXIT_SUSPEND (0x14) to the Apple Bluetooth keyboards when the computer wakes up (as macOS bluetoothd)
+Documentation=https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/src/branch/main/docs/VEILLE-HID.md
+# #244. Starts when the sleep target is reached again, i.e. after
+# systemd-suspend.service has returned. The user daemon keeps its HID reads
+# paused for RESUME_GRACE (4 s) after PrepareForSleep(false): this byte goes
+# first. If the link did not survive the sleep, nothing is found, nothing sent.
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+After=bluetooth.service
+ConditionPathIsDirectory=/sys/class/bluetooth
+
+[Service]
+Type=oneshot
+ExecStart=-/usr/lib/apple-kb-monitor/akm-hid-control exit-suspend
+TimeoutStartSec=3s
+# Hardening: root is needed only for pidfd_getfd() on bluetoothd (ptrace
+# "attach" check, Yama ptrace_scope 1 requires CAP_SYS_PTRACE) and for reading
+# /proc/<pid>/fd. No socket of its own except AF_UNIX (systemctl -> PID 1); the
+# Bluetooth socket is borrowed from bluetoothd, never created.
+# NoNewPrivileges=yes is compatible: it does not affect ptrace / pidfd_getfd.
+# pidfd_getfd is in @debug, not @system-service: added by name.
+User=root
+CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectProc=default
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service pidfd_getfd
+SystemCallErrorNumber=EPERM
+UMask=0077
+
+[Install]
+WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target

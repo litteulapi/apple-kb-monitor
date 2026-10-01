@@ -101,6 +101,22 @@ pub enum Command {
         #[arg(long)]
         only_if_stopping: bool,
     },
+    /// Send HID_CONTROL SUSPEND (0x13) or EXIT_SUSPEND (0x14) to the connected
+    /// Apple keyboards, as macOS bluetoothd does at sleep and wake (#244): one
+    /// byte on the HID control channel of bluetoothd, administrator
+    /// authentication. The system units send it by themselves at every
+    /// sleep/wake; this is the manual test. --dry-run writes nothing
+    HidControl {
+        #[arg(value_enum)]
+        op: crate::hid_control::HidControlOp,
+        /// Only this keyboard (must be a connected Apple keyboard)
+        #[arg(long, value_name = "MAC")]
+        mac: Option<String>,
+        /// Show the bluetoothd socket that would be used (pid, fd, MAC, PSM,
+        /// state) and send nothing
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Register map of the keyboard (every known HID report: name, size,
     /// safety class) with the values the daemon has cached, "never read"
     /// otherwise. Never reads the keyboard

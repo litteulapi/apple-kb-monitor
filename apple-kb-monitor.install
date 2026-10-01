@@ -31,6 +31,9 @@ post_upgrade() {
     if [ "$(vercmp "$2" 3.1.0-10)" -lt 0 ]; then
         _akm_keyd_notice
     fi
+    if [ "$(vercmp "$2" 3.1.0-11)" -lt 0 ]; then
+        _akm_hid_suspend_notice
+    fi
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
     # keyd: never reloaded nor restarted (#246).
@@ -82,6 +85,16 @@ _akm_setcap() {
     fi
 }
 
+# #244: system units apple-kb-monitor-{suspend,resume}.service, enabled through
+# the .wants symlinks of the package (pacman's systemd hook reloads the units).
+_akm_hid_suspend_notice() {
+    echo ">>> Sleep/wake as macOS (#244): before the computer sleeps each connected Apple"
+    echo "    keyboard receives HID_CONTROL SUSPEND (0x13), and EXIT_SUSPEND (0x14) at wake,"
+    echo "    one byte on the HID control channel of bluetoothd. Test: akmctl hid-control suspend --dry-run"
+    echo "    Turn off: enabled = false in /etc/apple-kb-monitor/hid-suspend.conf, or"
+    echo "      sudo systemctl mask apple-kb-monitor-suspend.service apple-kb-monitor-resume.service"
+}
+
 _akm_message() {
     echo ""
     echo ">>> apple-kb-monitor installed"
@@ -102,6 +115,8 @@ _akm_message() {
     echo "    login): result in ~/.local/state/apple-kb-monitor/selfcheck.json, a notification"
     echo "    on any new grave problem. Start now: systemctl --user daemon-reload &&"
     echo "    systemctl --user start apple-kb-monitor-selfcheck.timer ; opt out: ... mask ..."
+    echo ""
+    _akm_hid_suspend_notice
     echo ""
     echo ">>> Launch:"
     echo "      apihub-app                     # from terminal"

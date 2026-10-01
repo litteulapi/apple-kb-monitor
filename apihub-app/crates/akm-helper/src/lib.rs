@@ -3,9 +3,13 @@
 //! * `akm-helper` (polkit `com.agenceapi.AppleKbMonitor.set-fnmode`):
 //!   `hid_apple` parameters, sysfs + `/etc/modprobe.d/hid_apple.conf`;
 //! * `akm-keymap-helper` (polkit `com.agenceapi.AppleKbMonitor.install-keymap`):
-//!   the udev hwdb file of the manual key mapping (#247).
+//!   the udev hwdb file of the manual key mapping (#247);
+//! * `akm-hid-control` (polkit `com.agenceapi.AppleKbMonitor.hid-control`, and
+//!   the system units `apple-kb-monitor-{suspend,resume}.service`): one
+//!   HID_CONTROL byte, SUSPEND `0x13` / EXIT_SUSPEND `0x14`, on the HIDP control
+//!   socket of `bluetoothd` (#244, [`hidctl`]).
 //!
-//! Two programs because pkexec picks the polkit action from the program path
+//! Separate programs because pkexec picks the polkit action from the program path
 //! (`org.freedesktop.policykit.exec.path`): one path, one action.
 //!
 //! The whitelists are the very source files of `akm-core` (`keymap.rs`,
@@ -18,6 +22,10 @@ pub mod hid_params;
 pub mod keycodes;
 #[path = "../../../akm-core/src/keymap.rs"]
 pub mod keymap;
+#[path = "../../../akm-core/src/model.rs"]
+pub mod model;
+
+pub mod hidctl;
 
 pub mod fsutil {
     //! File primitives run as root: never follow a symlink, never inherit a

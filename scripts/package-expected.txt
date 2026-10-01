@@ -27,3 +27,13 @@ etc/modprobe.d/hid_apple.conf
 usr/lib/systemd/user/default.target.wants/apple-kb-monitor-shutdown.service
 usr/lib/systemd/user/timers.target.wants/apple-kb-monitor-selfcheck.timer
 usr/share/doc/apple-kb-monitor/TOUCHES.md
+usr/lib/apple-kb-monitor/akm-hid-control
+usr/lib/systemd/system/apple-kb-monitor-suspend.service
+usr/lib/systemd/system/apple-kb-monitor-resume.service
+usr/lib/systemd/system/sleep.target.wants/apple-kb-monitor-suspend.service
+usr/lib/systemd/system/suspend.target.wants/apple-kb-monitor-resume.service
+usr/lib/systemd/system/hibernate.target.wants/apple-kb-monitor-resume.service
+usr/lib/systemd/system/hybrid-sleep.target.wants/apple-kb-monitor-resume.service
+usr/lib/systemd/system/suspend-then-hibernate.target.wants/apple-kb-monitor-resume.service
+etc/apple-kb-monitor/hid-suspend.conf
+usr/share/doc/apple-kb-monitor/VEILLE-HID.md

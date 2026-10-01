@@ -26,6 +26,7 @@ pkgbase = apple-kb-monitor
 	optdepends = keyd: optional F3-F6 macros (example config in /usr/share/doc/apple-kb-monitor/examples/keyd)
 	options = !lto
 	backup = etc/modprobe.d/hid_apple.conf
+	backup = etc/apple-kb-monitor/hid-suspend.conf
 	source = com.agenceapi.AppleKbMonitor.desktop
 	sha256sums = SKIP
 
