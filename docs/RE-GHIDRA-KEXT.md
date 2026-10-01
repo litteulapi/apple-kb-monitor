@@ -200,7 +200,8 @@ kext arm64e (seulement remis à 0 par `handleStart` et par le filtre) : filtre *
 | `VirtualCableUnplug` | base | `15`, et marque la déconnexion comme attendue |
 | `SuspendSupported [n]` | base | rien ; pose le drapeau qui autorise le marquage de suspension (posé à vrai par `IOAppleBluetoothHIDDriver::handleStart`) |
 | `ForceReadDeviceName` | base | rien (`readDeviceName` vide) |
-| `ReleaseInterruptChannel`, `ReleaseControlChannel`, `ReleaseAllChannels` | base | fermeture L2CAP PSM 19 / 17 / les deux |
+| `ReleaseInterruptChannel`, `ReleaseControlChannel` | base | fermeture L2CAP PSM 19 / 17 |
+| `ReleaseAllChannels` | base | **`IOBluetoothDevice::closeConnection`** (coupe la connexion baseband), déconnexion marquée attendue (`+0x169`) |
 | `SuppressDisconnectNotifications` | base | rien ; drapeau « déconnexion attendue » (`+0x169`) |
 | `Verbose n`, `LogPackets n`, `DecodePackets n`, `ShowMTU`, `Identity`, `SetAuthenticated` | base | rien (journal, propriété `Authenticated`) |
 
