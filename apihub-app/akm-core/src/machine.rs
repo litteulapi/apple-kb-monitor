@@ -8,7 +8,10 @@
 use std::time::{Duration, Instant};
 
 /// Raw HID diagnostic reads (battery voltage, ...) are slow: piles last months.
-pub const SLOW_READ_PERIOD: Duration = Duration::from_secs(15 * 60);
+/// 4 h = the cadence macOS itself uses for its battery read (0x47 + 0x30,
+/// docs/RE-PILOTE-MACOS.md). The keyboard froze under bursts of reads three
+/// times (docs/RECONNEXION-PAIRAGE.md), so we never read more often than Apple.
+pub const SLOW_READ_PERIOD: Duration = Duration::from_secs(4 * 60 * 60);
 /// RSSI refresh while connected (the tracker expires a value after ~2 periods).
 pub const RSSI_PERIOD: Duration = Duration::from_secs(45);
 /// A measurement older than this is shown as absent.
