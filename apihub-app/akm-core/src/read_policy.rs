@@ -16,8 +16,17 @@
 //! * **one reader**: a process-wide mutex plus an advisory `flock` on
 //!   `$XDG_RUNTIME_DIR/apple-kb-monitor/hid.lock`, shared with the CLI and the
 //!   reverse-engineering tools — a busy lock skips the read;
-//! * **short**: at least [`MIN_GAP`] between two requests, [`BUDGET`] per read,
-//!   stop at the first failure of any kind (a HIDP timeout costs ~3.5 s).
+//! * **short**: at least [`MIN_GAP`] (1 s, like macOS 26.5's IOBluetooth
+//!   driver, #214) between two requests, [`BUDGET`] per read, stop at the first
+//!   failure of any kind (a HIDP timeout costs ~3.5 s);
+//! * **circuit breaker** (#214, same as macOS): after [`TRIP_AFTER`] failed
+//!   requests in a row nothing more is sent until the keyboard gives a sign of
+//!   life: a new connection ([`note_connection`]), or an input report
+//!   ([`note_input`]) which re-arms ONE probe request (success closes the
+//!   breaker, failure keeps it open);
+//! * **private lock** (#208): without `XDG_RUNTIME_DIR` the lock lives in a
+//!   `0700` directory named after the uid, ownership checked, never followed
+//!   through a symlink.
 //!
 //! The timestamp of the last input report is all that is kept (no content,
 //! no keylogging): [`note_input`] is called by the hidraw monitor.
@@ -39,7 +48,9 @@ pub const ALLOWED: [u8; 3] = [0x47, 0x46, 0x49];
 /// Reads happen only if a key was pressed this recently.
 pub const ACTIVE_WINDOW: Duration = Duration::from_secs(60);
 /// Minimum spacing between two requests.
-pub const MIN_GAP: Duration = Duration::from_millis(250);
+pub const MIN_GAP: Duration = Duration::from_millis(1000);
+/// Consecutive failed requests that open the circuit breaker.
+pub const TRIP_AFTER: u32 = 3;
 /// Time budget of one read; no request starts after it.
 pub const BUDGET: Duration = Duration::from_secs(2);
 /// Longest wait for the cross-process lock.
@@ -67,6 +78,7 @@ pub fn note_input() {
 fn note_input_at(t: Instant) {
     let ms = t.saturating_duration_since(epoch()).as_millis() as u64;
     LAST_INPUT.store(ms + 1, Ordering::Relaxed);
+    global_breaker().alive();
 }
 
 /// Age of the last input report, if any.
@@ -83,6 +95,8 @@ pub enum Gate {
     Idle,
     /// Another reader holds the lock.
     Busy,
+    /// Circuit breaker open: the keyboard stopped answering (#214).
+    Tripped,
 }
 
 pub fn gate(age: Option<Duration>) -> Gate {
@@ -92,16 +106,114 @@ pub fn gate(age: Option<Duration>) -> Gate {
     }
 }
 
+// ── circuit breaker (#214) ─────────────────────────────────────────────────
+
+/// Consecutive-failure breaker. Pure state, no clock: a keyboard that stops
+/// answering is left alone until it shows signs of life.
+#[derive(Debug, Default)]
+pub struct Breaker {
+    fails: u32,
+    probe: bool,
+}
+
+impl Breaker {
+    pub const fn new() -> Self {
+        Self {
+            fails: 0,
+            probe: false,
+        }
+    }
+    pub fn is_open(&self) -> bool {
+        self.fails >= TRIP_AFTER
+    }
+    /// May a request be sent? An open breaker lets exactly one probe through
+    /// after a sign of life; asking consumes it.
+    pub fn allow(&mut self) -> bool {
+        if !self.is_open() {
+            return true;
+        }
+        std::mem::take(&mut self.probe)
+    }
+    /// Would a request be allowed (without consuming the probe)?
+    pub fn would_allow(&self) -> bool {
+        !self.is_open() || self.probe
+    }
+    pub fn record(&mut self, ok: bool) {
+        if ok {
+            *self = Self::new();
+        } else {
+            self.fails = self.fails.saturating_add(1);
+        }
+    }
+    /// The keyboard sent an input report: re-arm one probe if tripped.
+    pub fn alive(&mut self) {
+        if self.is_open() {
+            self.probe = true;
+        }
+    }
+    /// New connection: the link was rebuilt, start afresh.
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+static BREAKER: Mutex<Breaker> = Mutex::new(Breaker::new());
+
+fn global_breaker() -> std::sync::MutexGuard<'static, Breaker> {
+    BREAKER.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// A new connection of the keyboard was announced: closes the breaker.
+pub fn note_connection() {
+    global_breaker().reset();
+}
+
+/// Is the global breaker open without a pending probe (reads are suspended)?
+pub fn tripped() -> bool {
+    !global_breaker().would_allow()
+}
+
 // ── single reader ──────────────────────────────────────────────────────────
 
 static IN_PROCESS: Mutex<()> = Mutex::new(());
 
-/// Path of the cross-process lock (also used by the CLI / RE tools).
+/// Path of the cross-process lock (also used by the CLI / RE tools):
+/// `$XDG_RUNTIME_DIR/apple-kb-monitor/hid.lock`, else (sudo, ssh without
+/// pam_systemd, cron) `<tmp>/apple-kb-monitor-<uid>/hid.lock`, a per-uid name
+/// whose directory [`try_lock`] only accepts if it is a private `0700`
+/// directory owned by us (#208).
 pub fn lock_path() -> PathBuf {
-    let base = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir);
-    base.join("apple-kb-monitor").join("hid.lock")
+    match std::env::var_os("XDG_RUNTIME_DIR").filter(|v| !v.is_empty()) {
+        Some(x) => PathBuf::from(x).join("apple-kb-monitor").join("hid.lock"),
+        None => {
+            // SAFETY: getuid(2) has no preconditions.
+            let uid = unsafe { libc::getuid() };
+            std::env::temp_dir()
+                .join(format!("apple-kb-monitor-{uid}"))
+                .join("hid.lock")
+        }
+    }
+}
+
+/// Create (0700) or verify the directory of the lock: a real directory (no
+/// symlink), owned by the current uid, no group/other access.
+fn ensure_private_dir(dir: &std::path::Path) -> io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    match std::fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
+    }
+    let md = std::fs::symlink_metadata(dir)?;
+    // SAFETY: geteuid(2) has no preconditions.
+    let me = unsafe { libc::geteuid() };
+    if !md.file_type().is_dir() || md.uid() != me || md.mode() & 0o077 != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("{} is not a private directory owned by uid {me}", dir.display()),
+        ));
+    }
+    Ok(())
 }
 
 /// Held for the duration of a read.
@@ -110,17 +222,19 @@ pub struct ReadLock {
     _guard: std::sync::MutexGuard<'static, ()>,
 }
 
-/// Take both locks, waiting at most `wait`; `None` if another reader is active.
+/// Take both locks, waiting at most `wait`; `None` if another reader is
+/// active or the lock directory is not trustworthy.
 pub fn try_lock(wait: Duration) -> Option<ReadLock> {
+    use std::os::unix::fs::OpenOptionsExt;
     let guard = IN_PROCESS.try_lock().ok()?;
     let p = lock_path();
-    if let Some(d) = p.parent() {
-        let _ = std::fs::create_dir_all(d);
-    }
+    ensure_private_dir(p.parent()?).ok()?;
     let file = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(&p)
         .ok()?;
     let end = Instant::now() + wait;
@@ -148,6 +262,15 @@ pub struct SafeSource<'a> {
     inner: &'a dyn HidSource,
     last: std::cell::Cell<Option<Instant>>,
     sent: std::cell::Cell<u32>,
+    /// `None` = the process-wide breaker.
+    breaker: Option<&'a Mutex<Breaker>>,
+}
+
+/// Time to wait before a request, given the previous one (pure, testable).
+pub fn wait_before(last: Option<Instant>, now: Instant) -> Duration {
+    last.map_or(Duration::ZERO, |l| {
+        MIN_GAP.saturating_sub(now.saturating_duration_since(l))
+    })
 }
 
 impl<'a> SafeSource<'a> {
@@ -156,6 +279,20 @@ impl<'a> SafeSource<'a> {
             inner,
             last: std::cell::Cell::new(None),
             sent: std::cell::Cell::new(0),
+            breaker: None,
+        }
+    }
+    /// Same with a private breaker (tests).
+    pub fn with_breaker(inner: &'a dyn HidSource, breaker: &'a Mutex<Breaker>) -> Self {
+        Self {
+            breaker: Some(breaker),
+            ..Self::new(inner)
+        }
+    }
+    fn breaker(&self) -> std::sync::MutexGuard<'_, Breaker> {
+        match self.breaker {
+            Some(b) => b.lock().unwrap_or_else(|e| e.into_inner()),
+            None => global_breaker(),
         }
     }
     /// Requests actually sent to the device.
@@ -172,15 +309,20 @@ impl HidSource for SafeSource<'_> {
                 format!("report {report_id:#04x} is not in the safe read list"),
             ));
         }
-        if let Some(l) = self.last.get() {
-            let e = l.elapsed();
-            if e < MIN_GAP {
-                std::thread::sleep(MIN_GAP - e);
-            }
+        if !self.breaker().allow() {
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "circuit breaker open: the keyboard stopped answering",
+            ));
+        }
+        let w = wait_before(self.last.get(), Instant::now());
+        if !w.is_zero() {
+            std::thread::sleep(w);
         }
         self.sent.set(self.sent.get() + 1);
         let r = self.inner.feature(report_id);
         self.last.set(Some(Instant::now()));
+        self.breaker().record(r.is_ok());
         r
     }
 }
@@ -202,7 +344,10 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Read the allowed reports into `report`. Stops at the first failure.
 pub fn read_safe(src: &dyn HidSource, report: &mut KbReport) -> SafeRead {
-    let safe = SafeSource::new(src);
+    read_with(SafeSource::new(src), report)
+}
+
+fn read_with(safe: SafeSource<'_>, report: &mut KbReport) -> SafeRead {
     let start = Instant::now();
     let mut complete = true;
     for id in [0x47u8, 0x46, 0x49] {
@@ -261,6 +406,7 @@ pub fn build_report_safe(
         return (report, SafeRead::Skipped(Gate::Allowed));
     }
     let outcome = match gate(last_input_age(now)) {
+        Gate::Allowed if tripped() => SafeRead::Skipped(Gate::Tripped),
         Gate::Allowed => match try_lock(LOCK_WAIT) {
             Some(_lock) => read_safe(src, &mut report),
             None => SafeRead::Skipped(Gate::Busy),
@@ -320,13 +466,128 @@ mod tests {
 
     #[test]
     fn requests_are_spaced() {
-        let f = fixture();
-        let safe = SafeSource::new(&f);
+        assert_eq!(MIN_GAP, Duration::from_millis(1000), "macOS 26.5 spacing");
         let t = Instant::now();
-        safe.feature(0x47).unwrap();
-        safe.feature(0x46).unwrap();
-        safe.feature(0x49).unwrap();
-        assert!(t.elapsed() >= MIN_GAP * 2);
+        assert_eq!(wait_before(None, t), Duration::ZERO);
+        assert_eq!(wait_before(Some(t), t), MIN_GAP);
+        assert_eq!(
+            wait_before(Some(t), t + Duration::from_millis(400)),
+            Duration::from_millis(600)
+        );
+        assert_eq!(wait_before(Some(t), t + MIN_GAP), Duration::ZERO);
+        assert_eq!(wait_before(Some(t), t + MIN_GAP * 5), Duration::ZERO);
+    }
+
+    /// Always times out (HIDP timeout), counting the requests that reach it.
+    struct Dead(std::cell::Cell<u32>);
+    impl HidSource for Dead {
+        fn feature(&self, _: u8) -> io::Result<Vec<u8>> {
+            self.0.set(self.0.get() + 1);
+            Err(io::Error::from(io::ErrorKind::TimedOut))
+        }
+    }
+
+    #[test]
+    fn breaker_trips_after_three_failures_and_needs_a_sign_of_life() {
+        let mut b = Breaker::new();
+        for _ in 0..TRIP_AFTER - 1 {
+            assert!(b.allow());
+            b.record(false);
+        }
+        assert!(!b.is_open());
+        assert!(b.allow());
+        b.record(false);
+        assert!(b.is_open());
+        // open: nothing goes out, however often it is asked
+        assert!((0..100).all(|_| !b.allow()));
+        // a keystroke re-arms exactly one probe
+        b.alive();
+        assert!(b.allow());
+        assert!(!b.allow());
+        b.record(false); // probe timed out: still open
+        assert!(b.is_open() && !b.would_allow());
+        b.alive();
+        assert!(b.allow());
+        b.record(true); // the keyboard answered: closed
+        assert!(!b.is_open() && b.allow());
+        // new connection closes it too
+        for _ in 0..TRIP_AFTER {
+            b.record(false);
+        }
+        assert!(b.is_open());
+        b.reset();
+        assert!(b.allow());
+        // a success in between resets the count
+        b.record(false);
+        b.record(false);
+        b.record(true);
+        b.record(false);
+        assert!(!b.is_open());
+        // input while closed does not arm anything
+        b.alive();
+        assert!(!b.is_open());
+    }
+
+    #[test]
+    fn dead_keyboard_gets_three_requests_then_silence() {
+        let br = Mutex::new(Breaker::new());
+        let dead = Dead(std::cell::Cell::new(0));
+        // each read stops at its first failure: 3 reads = 3 requests
+        for _ in 0..TRIP_AFTER {
+            let mut r = KbReport::default();
+            let s = SafeSource::with_breaker(&dead, &br);
+            assert_eq!(read_with(s, &mut r), SafeRead::Partial);
+        }
+        assert_eq!(dead.0.get(), TRIP_AFTER);
+        // breaker open: further reads send nothing
+        for _ in 0..10 {
+            let mut r = KbReport::default();
+            let s = SafeSource::with_breaker(&dead, &br);
+            assert_eq!(read_with(s, &mut r), SafeRead::Partial);
+        }
+        assert_eq!(dead.0.get(), TRIP_AFTER, "no request while open");
+        // sign of life -> one probe only
+        br.lock().unwrap().alive();
+        let mut r = KbReport::default();
+        read_with(SafeSource::with_breaker(&dead, &br), &mut r);
+        assert_eq!(dead.0.get(), TRIP_AFTER + 1);
+        read_with(SafeSource::with_breaker(&dead, &br), &mut r);
+        assert_eq!(dead.0.get(), TRIP_AFTER + 1);
+    }
+
+    #[test]
+    fn lock_dir_is_private_per_uid_and_refuses_foreign_or_linked_dirs() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let base = std::env::temp_dir().join(format!("akm-lock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        // fresh: created 0700
+        let d = base.join("ok");
+        ensure_private_dir(&d).unwrap();
+        assert_eq!(std::fs::metadata(&d).unwrap().permissions().mode() & 0o777, 0o700);
+        ensure_private_dir(&d).unwrap();
+        // group/other access: refused
+        std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(ensure_private_dir(&d).is_err());
+        // symlink to a directory: refused, target untouched
+        let target = base.join("target");
+        std::fs::create_dir(&target).unwrap();
+        let l = base.join("link");
+        symlink(&target, &l).unwrap();
+        assert!(ensure_private_dir(&l).is_err());
+        // symlinked lock file: O_NOFOLLOW
+        let sub = base.join("p");
+        ensure_private_dir(&sub).unwrap();
+        let victim = base.join("victim");
+        symlink(&victim, sub.join("hid.lock")).unwrap();
+        use std::os::unix::fs::OpenOptionsExt;
+        let r = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .custom_flags(libc::O_NOFOLLOW)
+            .open(sub.join("hid.lock"));
+        assert!(r.is_err() && !victim.exists());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

@@ -183,7 +183,11 @@ impl PassiveState {
 /// Is `lock` held by another reader (Feature requests in progress)? Probes
 /// with a shared non-blocking `flock` and releases it at once.
 pub fn lock_busy_at(lock: &Path) -> bool {
-    let Ok(f) = std::fs::OpenOptions::new().read(true).open(lock) else {
+    let Ok(f) = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(lock)
+    else {
         return false; // no lock file: nobody has ever read
     };
     // SAFETY: valid fd owned by `f`.

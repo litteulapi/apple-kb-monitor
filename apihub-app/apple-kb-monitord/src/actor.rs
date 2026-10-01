@@ -640,6 +640,9 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
         };
         match rx.recv_timeout(wait) {
             Ok(Msg::Bus(ev)) => {
+                if matches!(ev, Event::Connected(_)) && !machine.is_connected() {
+                    akm_core::read_policy::note_connection(); // #214
+                }
                 if machine.on_event(&ev, Instant::now()) == Some(Action::Clear) {
                     tracing::info!("keyboard disconnected");
                     actor.disconnected();

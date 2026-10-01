@@ -36,3 +36,35 @@ fn refresh_cannot_defeat_slow_read_period() {
         assert!(!m.due(t).contains(&Action::Acquire));
     }
 }
+
+/// #208 : sans XDG_RUNTIME_DIR, le verrou n'est plus dans un repertoire fixe
+/// partage : nom par uid, 0700, proprietaire verifie, O_NOFOLLOW. Un
+/// repertoire/lien prepare par un autre compte est refuse, rien n'est cree.
+#[test]
+fn lock_fallback_refuses_planted_directory_and_symlink() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    let base = std::env::temp_dir().join(format!("akm-sec2-lock-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    std::env::remove_var("XDG_RUNTIME_DIR");
+    std::env::set_var("TMPDIR", &base);
+    let p = akm_core::read_policy::lock_path();
+    let uid = unsafe { libc::getuid() };
+    assert_eq!(p, base.join(format!("apple-kb-monitor-{uid}/hid.lock")));
+    // Repertoire pre-cree par un tiers : ouvert a tous -> refuse.
+    let dir = p.parent().unwrap();
+    std::fs::create_dir(dir).unwrap();
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o777)).unwrap();
+    let victim = base.join("fichier-choisi-par-attaquant");
+    symlink(&victim, dir.join("hid.lock")).unwrap();
+    assert!(akm_core::read_policy::try_lock(Duration::from_millis(50)).is_none());
+    assert!(!victim.exists(), "le lien n'a pas ete suivi");
+    // Repertoire sain mais lien symbolique pose dedans : O_NOFOLLOW.
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(akm_core::read_policy::try_lock(Duration::from_millis(50)).is_none());
+    assert!(!victim.exists());
+    // Sain : verrou obtenu.
+    std::fs::remove_file(dir.join("hid.lock")).unwrap();
+    assert!(akm_core::read_policy::try_lock(Duration::from_millis(50)).is_some());
+    let _ = std::fs::remove_dir_all(&base);
+}
