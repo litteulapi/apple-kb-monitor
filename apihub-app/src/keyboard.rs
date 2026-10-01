@@ -2,6 +2,26 @@
 //!
 //! Pure Rust — reads HID Feature Reports via ioctl, no subprocess.
 //! Supports BCM2042-based keyboards (A1314 in ISO/ANSI/JIS variants).
+//!
+//! # Calibration contract (shared with the Python CLI `apple-kb-monitor`, #80)
+//!
+//! Report 0x5A carries 4 big-endian u16 thresholds in mV, bytes 1..9, for the
+//! battery levels [100 %, 75 %, 50 %, 25 %]. A curve is usable only if it is
+//! strictly decreasing and the last value is non-zero (`calibration_valid`);
+//! otherwise the default `[2900, 2450, 2350, 2000]` is used. Between two
+//! thresholds the percentage is interpolated linearly; at/above the first it is
+//! 100, below the 4th it decays linearly to 0 mV = 0 %; the voltage is
+//! `adc * 3.3 / 1023` from report 0xF5 (big-endian u16). The Python side must
+//! apply the same validation and fallback. This value is a diagnostic: the
+//! displayed battery percentage comes from the kernel (`power.rs`).
+//!
+//! # Wake monitor (#79)
+//!
+//! Input report 0x13 is a vendor wake event. A single process-wide monitor
+//! thread is started lazily (by `read_keyboard()` or `spawn_wake_monitor()`),
+//! also when no keyboard is present yet, and it re-locates the hidraw node
+//! forever. The result is exposed by `last_wake()` / `wake_count()` and in
+//! `KbReport::wake`.
 
 use std::sync::{Arc, Mutex};
 
@@ -34,23 +54,90 @@ pub const HID_DEVICE_STATE: u8 = 0x09;
 
 // ── Apple vendor/product IDs ──────────────────────────────────────────────
 
-/// Apple USB vendor ID (uppercase hex as it appears in sysfs uevent)
-pub const APPLE_VENDOR_ID: &str = "05AC";
+/// Apple USB vendor ID (`USB_VENDOR_ID_APPLE` in the kernel).
+pub const APPLE_USB_VID: u32 = 0x05ac;
+/// Apple Bluetooth SIG vendor ID (`BT_VENDOR_ID_APPLE`): Magic Keyboards
+/// announce themselves with this vendor over Bluetooth.
+pub const APPLE_BT_VID: u32 = 0x004c;
 
-/// All known Apple Wireless Keyboard product IDs (BT HID)
-pub const APPLE_PIDS: &[(&str, &str, &str)] = &[
-    // (PID, model, chip)
-    ("0220", "Apple Wireless Keyboard (A1016, white)", "BCM2042"),
-    ("0229", "Apple Wireless Keyboard (A1255, aluminum, ANSI)", "BCM2042"),
-    ("022C", "Apple Wireless Keyboard (A1255, aluminum, JIS)", "BCM2042"),
-    ("0255", "Apple Wireless Keyboard (A1314, aluminum, ANSI)", "BCM2042"),
-    ("0256", "Apple Wireless Keyboard (A1314, aluminum, ISO)", "BCM2042"),
-    ("0257", "Apple Wireless Keyboard (A1314, aluminum, JIS)", "BCM2042"),
-    ("024F", "Apple Magic Keyboard (A1644, ANSI)", "BCM20733"),
-    ("0250", "Apple Magic Keyboard (A1644, ISO)", "BCM20733"),
-    ("0267", "Apple Magic Keyboard with Touch ID (A2449, ANSI)", "BCM20733"),
-    ("026C", "Apple Magic Keyboard with Touch ID (A2449, ISO)", "BCM20733"),
+/// Hardware family, which decides what telemetry is safe to request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Family {
+    /// BCM2042 aluminium wireless keyboards (A1255, A1314 2009/2011): answer
+    /// the vendor Feature Reports (0xEA, 0xF5, ...).
+    Bcm2042,
+    /// Magic Keyboard 2015+ (BCM20733 / Apple silicon era): battery comes from
+    /// the kernel only, never poll undeclared reports.
+    MagicKeyboard,
+    Unknown,
+}
+
+/// One supported keyboard model.
+#[derive(Debug, Clone, Copy)]
+pub struct ModelInfo {
+    pub pid: u32,
+    pub model: &'static str,
+    pub chip: &'static str,
+    pub family: Family,
+}
+
+const fn m(pid: u32, model: &'static str, chip: &'static str, family: Family) -> ModelInfo {
+    ModelInfo { pid, model, chip, family }
+}
+
+/// Wireless Apple keyboards, checked against the kernel's
+/// `drivers/hid/hid-ids.h` and `hid-apple.c`. Wired models (ALU_ANSI 0x0220,
+/// ALU_REVB 0x024f..) and internal ones (GEYSER4 0x0229) are deliberately absent.
+pub const APPLE_MODELS: &[ModelInfo] = &[
+    m(0x022c, "Apple Wireless Keyboard (A1255, aluminum, ANSI)", "BCM2042", Family::Bcm2042),
+    m(0x022d, "Apple Wireless Keyboard (A1255, aluminum, ISO)", "BCM2042", Family::Bcm2042),
+    m(0x022e, "Apple Wireless Keyboard (A1255, aluminum, JIS)", "BCM2042", Family::Bcm2042),
+    m(0x0239, "Apple Wireless Keyboard (A1314, 2009, ANSI)", "BCM2042", Family::Bcm2042),
+    m(0x023a, "Apple Wireless Keyboard (A1314, 2009, ISO)", "BCM2042", Family::Bcm2042),
+    m(0x023b, "Apple Wireless Keyboard (A1314, 2009, JIS)", "BCM2042", Family::Bcm2042),
+    m(0x0255, "Apple Wireless Keyboard (A1314, aluminum, ANSI)", "BCM2042", Family::Bcm2042),
+    m(0x0256, "Apple Wireless Keyboard (A1314, aluminum, ISO)", "BCM2042", Family::Bcm2042),
+    m(0x0257, "Apple Wireless Keyboard (A1314, aluminum, JIS)", "BCM2042", Family::Bcm2042),
+    m(0x0267, "Apple Magic Keyboard 2015 (A1644)", "BCM20733", Family::MagicKeyboard),
+    m(0x026c, "Apple Magic Keyboard with Numeric Keypad 2015 (A1843)", "BCM20733", Family::MagicKeyboard),
+    m(0x029c, "Apple Magic Keyboard 2021 (A2450)", "Apple", Family::MagicKeyboard),
+    m(0x029a, "Apple Magic Keyboard with Touch ID 2021 (A2449)", "Apple", Family::MagicKeyboard),
+    m(0x029f, "Apple Magic Keyboard with Touch ID and Numeric Keypad 2021 (A2520)", "Apple", Family::MagicKeyboard),
+    m(0x0320, "Apple Magic Keyboard 2024", "Apple", Family::MagicKeyboard),
+    m(0x0321, "Apple Magic Keyboard with Touch ID 2024", "Apple", Family::MagicKeyboard),
+    m(0x0322, "Apple Magic Keyboard with Touch ID and Numeric Keypad 2024", "Apple", Family::MagicKeyboard),
 ];
+
+/// Look a (vendor, product) pair up. Both Apple vendors (USB 0x05AC and
+/// Bluetooth 0x004C) are accepted for every model.
+pub fn lookup_model(vid: u32, pid: u32) -> Option<&'static ModelInfo> {
+    if vid != APPLE_USB_VID && vid != APPLE_BT_VID {
+        return None;
+    }
+    APPLE_MODELS.iter().find(|mi| mi.pid == pid)
+}
+
+/// Family of a (vendor, product) pair; `Unknown` if not a supported keyboard.
+pub fn family(vid: u32, pid: u32) -> Family {
+    lookup_model(vid, pid).map_or(Family::Unknown, |mi| mi.family)
+}
+
+/// Parse `HID_ID=bus:vendor:product` out of a uevent (exact hex match on
+/// fields, never a substring of MAC / name / modalias).
+fn parse_hid_id(uevent: &str) -> Option<(u32, u32)> {
+    let line = uevent.lines().find_map(|l| l.strip_prefix("HID_ID="))?;
+    let mut parts = line.trim().split(':');
+    let _bus = parts.next()?;
+    let vid = u32::from_str_radix(parts.next()?, 16).ok()?;
+    let pid = u32::from_str_radix(parts.next()?, 16).ok()?;
+    Some((vid, pid))
+}
+
+/// Full model info of the keyboard described by a hidraw/HID uevent.
+pub fn model_from_uevent(uevent: &str) -> Option<&'static ModelInfo> {
+    let (vid, pid) = parse_hid_id(uevent)?;
+    lookup_model(vid, pid)
+}
 
 // ── ADC reference values ──────────────────────────────────────────────────
 
@@ -112,7 +199,17 @@ pub struct KbFirmware {
 }
 
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)] // exposed for main.rs / UI (#79)
+pub struct KbWake {
+    /// Seconds since the last wake event (input report 0x13), if any was seen.
+    pub last_age_s: Option<f64>,
+    /// Number of wake events since the app started.
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct KbReport {
+    pub wake: KbWake,
     pub device: KbDevice,
     pub battery: KbBattery,
     pub bluetooth: KbBluetooth,
@@ -134,24 +231,13 @@ pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> Option<Vec<u8>> {
 }
 
 /// Identify an Apple keyboard from the `HID_ID=bus:vendor:product` line of a
-/// hidraw uevent. Matches vendor and product exactly (hex), never as a
-/// substring of unrelated fields (MAC, name, modalias).
+/// hidraw uevent. Returns (model, chip).
 pub fn apple_model_from_uevent(uevent: &str) -> Option<(&'static str, &'static str)> {
-    let line = uevent.lines().find_map(|l| l.strip_prefix("HID_ID="))?;
-    let mut parts = line.trim().split(':');
-    let _bus = parts.next()?;
-    let vid = u32::from_str_radix(parts.next()?, 16).ok()?;
-    let pid = u32::from_str_radix(parts.next()?, 16).ok()?;
-    if vid != u32::from_str_radix(APPLE_VENDOR_ID, 16).ok()? {
-        return None;
-    }
-    APPLE_PIDS.iter()
-        .find(|(p, _, _)| u32::from_str_radix(p, 16).ok() == Some(pid))
-        .map(|&(_, model, chip)| (model, chip))
+    model_from_uevent(uevent).map(|mi| (mi.model, mi.chip))
 }
 
 /// Find the first Apple keyboard hidraw device by scanning sysfs uevent.
-/// Matches all 10 known Apple Wireless/Magic Keyboard PIDs.
+/// Matches every model of `APPLE_MODELS` (USB 05AC and Bluetooth 004C vendors).
 pub fn find_apple_hidraw() -> Option<String> {
     let rd = std::fs::read_dir("/sys/class/hidraw").ok()?;
     for entry in rd.flatten() {
@@ -233,13 +319,47 @@ fn get_hid_fd() -> Option<(libc::c_int, String)> {
     Some((raw_fd, path))
 }
 
+/// Real BT MAC from `HID_UNIQ=` (the 0x4C report holds an internal identity, not the MAC).
+fn mac_from_uevent(uevent: &str) -> Option<String> {
+    let mac = uevent.lines().find_map(|l| l.strip_prefix("HID_UNIQ="))?.trim().to_uppercase();
+    (mac.contains(':') && mac.len() >= 17).then_some(mac)
+}
+
 /// Read keyboard telemetry via HID Feature Reports.
 /// Uses persistent fd. Reads only essential reports to minimize BT traffic
 /// and avoid triggering HIDP timeouts that cause disconnections.
 pub fn read_keyboard() -> Option<KbReport> {
+    // Start the wake monitor even if the keyboard is absent right now.
+    let wake = ensure_wake_monitor();
     let (fd_val, path) = get_hid_fd()?;
 
     let mut report = KbReport::default();
+    report.wake = KbWake {
+        last_age_s: wake.last().map(|t| t.elapsed().as_secs_f64()),
+        count: wake.count(),
+    };
+
+    // Identify the model first: BCM2042 vendor reports (0xEA, 0xF5, ...) are
+    // undeclared in the HID descriptor and only exist on that family.
+    let uevent = std::fs::read_to_string(
+        std::path::Path::new("/sys/class/hidraw")
+            .join(path.trim_start_matches("/dev/"))
+            .join("device/uevent")
+    ).unwrap_or_default();
+    let info = model_from_uevent(&uevent);
+    let fam = parse_hid_id(&uevent).map_or(Family::Unknown, |(v, p)| family(v, p));
+    if let Some(mi) = info {
+        report.device.model = Some(mi.model.to_string());
+        report.device.chip = Some(mi.chip.to_string());
+    }
+    report.device.driver = Some("hid-apple".to_string());
+    report.device.mac = mac_from_uevent(&uevent);
+    if fam != Family::Bcm2042 {
+        // Magic Keyboard / unknown: no raw HID telemetry. The connection is
+        // implied by the open hidraw node; battery comes from the kernel.
+        report.bluetooth.connected = true;
+        return Some(report);
+    }
 
     // First: try battery precise (0xEA) as a connectivity probe.
     // If this fails, the keyboard is disconnected — don't hammer with more reads.
@@ -364,21 +484,6 @@ pub fn read_keyboard() -> Option<KbReport> {
         }
     }
 
-    // Real BT MAC from sysfs HID_UNIQ in uevent
-    // (0x4C identity report contains BCM2042 internal ID, not BT MAC)
-    let hidraw_name = path.trim_start_matches("/dev/");
-    let uevent_path = format!("/sys/class/hidraw/{}/device/uevent", hidraw_name);
-    if let Ok(uevent) = std::fs::read_to_string(&uevent_path) {
-        for line in uevent.lines() {
-            if let Some(mac) = line.strip_prefix("HID_UNIQ=") {
-                let mac = mac.trim().to_uppercase();
-                if mac.contains(':') && mac.len() >= 17 {
-                    report.device.mac = Some(mac);
-                }
-            }
-        }
-    }
-
     // Device state (0x09) — 1=OK, 0=LOW
     if let Some(buf) = hid_read_feature(fd_val, HID_DEVICE_STATE) {
         if buf.len() >= 2 && buf[1] == 0 {
@@ -389,47 +494,76 @@ pub fn read_keyboard() -> Option<KbReport> {
         }
     }
 
-    // Identify model from PID (via sysfs uevent)
-    let uevent = std::fs::read_to_string(
-        std::path::Path::new("/sys/class/hidraw")
-            .join(path.trim_start_matches("/dev/"))
-            .join("device/uevent")
-    ).unwrap_or_default();
-    let (model, chip) = apple_model_from_uevent(&uevent)
-        .unwrap_or(("Apple Wireless Keyboard", "BCM2042"));
-    report.device.model = Some(model.to_string());
-    report.device.chip = Some(chip.to_string());
-    report.device.driver = Some("hid-apple".to_string());
-
     // fd stays open (persistent) for next call
     Some(report)
 }
 
 // ── Wake event monitor (Input Report 0x13) ──────────────────────────────
 
-/// Spawn a thread that monitors HID Input Report 0x13 (vendor wake/connection events).
-/// Returns a shared timestamp of the last wake event.
-pub fn spawn_wake_monitor(hidraw_path: &str) -> Arc<Mutex<Option<std::time::Instant>>> {
-    let last_wake: Arc<Mutex<Option<std::time::Instant>>> = Arc::new(Mutex::new(None));
-    let lw = last_wake.clone();
-    let mut path = hidraw_path.to_string();
+/// Shared wake state: instant of the last event and a running counter.
+#[derive(Default)]
+struct WakeState {
+    last: Mutex<Option<std::time::Instant>>,
+    count: std::sync::atomic::AtomicU64,
+}
 
-    let spawned = std::thread::Builder::new()
-        .name("kb-wake-monitor".into())
-        .spawn(move || loop {
-            wake_loop(&path, &lw);
-            // Device gone (keyboard off / re-paired) or not openable yet:
-            // wait, then retry — the hidraw node number may have changed.
-            std::thread::sleep(std::time::Duration::from_secs(5));
-            if let Some(p) = find_apple_hidraw() {
-                path = p;
-            }
-        });
-    if let Err(e) = spawned {
-        eprintln!("[keyboard] cannot spawn wake monitor: {}", e);
+impl WakeState {
+    fn record(&self) {
+        if let Ok(mut l) = self.last.lock() {
+            *l = Some(std::time::Instant::now());
+        }
+        self.count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
+    fn last(&self) -> Option<std::time::Instant> {
+        self.last.lock().ok().and_then(|l| *l)
+    }
+    fn count(&self) -> u64 {
+        self.count.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
 
-    last_wake
+static WAKE: std::sync::OnceLock<Arc<WakeState>> = std::sync::OnceLock::new();
+
+/// Start the process-wide wake monitor (idempotent) and return its state.
+/// The thread keeps looking for the hidraw node, so it works when the keyboard
+/// is absent at launch and survives disconnect/reconnect (node number changes).
+fn ensure_wake_monitor() -> Arc<WakeState> {
+    WAKE.get_or_init(|| {
+        let st = Arc::new(WakeState::default());
+        let lw = st.clone();
+        let spawned = std::thread::Builder::new()
+            .name("kb-wake-monitor".into())
+            .spawn(move || loop {
+                if let Some(path) = find_apple_hidraw() {
+                    wake_loop(&path, &lw);
+                }
+                // Device gone (keyboard off / re-paired) or not present yet.
+                std::thread::sleep(std::time::Duration::from_secs(5));
+            });
+        if let Err(e) = spawned {
+            eprintln!("[keyboard] cannot spawn wake monitor: {}", e);
+        }
+        st
+    })
+    .clone()
+}
+
+/// Kept for callers that start the monitor explicitly; the path is no longer
+/// needed (the monitor discovers the node itself). Safe to call repeatedly.
+pub fn spawn_wake_monitor(_hidraw_path: &str) {
+    ensure_wake_monitor();
+}
+
+#[allow(dead_code)] // public API for main.rs (#79)
+/// Instant of the last wake event (input report 0x13), if one was seen.
+pub fn last_wake() -> Option<std::time::Instant> {
+    WAKE.get().and_then(|w| w.last())
+}
+
+#[allow(dead_code)] // public API for main.rs (#79)
+/// Number of wake events seen since the monitor started.
+pub fn wake_count() -> u64 {
+    WAKE.get().map_or(0, |w| w.count())
 }
 
 /// True if an input report is the vendor wake/connection event (report 0x13).
@@ -438,7 +572,7 @@ fn is_wake_report(report: &[u8]) -> bool {
 }
 
 /// Read input reports until the device disappears or errors. Closes the fd.
-fn wake_loop(path: &str, lw: &Arc<Mutex<Option<std::time::Instant>>>) {
+fn wake_loop(path: &str, lw: &WakeState) {
     let c_path = match std::ffi::CString::new(path) {
         Ok(p) => p,
         Err(_) => return,
@@ -470,9 +604,7 @@ fn wake_loop(path: &str, lw: &Arc<Mutex<Option<std::time::Instant>>>) {
         if n == 0 { break; }
 
         if is_wake_report(&buf[..n as usize]) {
-            if let Ok(mut lw) = lw.lock() {
-                *lw = Some(std::time::Instant::now());
-            }
+            lw.record();
         }
     }
     unsafe { libc::close(fd); }
@@ -586,6 +718,67 @@ mod tests {
     }
 
     #[test]
+    fn real_a1314_iso_uevent() {
+        let u = "DRIVER=hid-generic\nHID_ID=0005:000005AC:00000256\nHID_NAME=Clavier de maria #1\nHID_PHYS=44:af:28:00:00:01\nHID_UNIQ=04:db:56:ca:42:ee\n";
+        let mi = model_from_uevent(u).unwrap();
+        assert_eq!(mi.pid, 0x0256);
+        assert_eq!(mi.family, Family::Bcm2042);
+        assert!(mi.model.contains("A1314") && mi.model.contains("ISO"));
+        assert_eq!(mac_from_uevent(u).as_deref(), Some("04:DB:56:CA:42:EE"));
+    }
+
+    #[test]
+    fn magic_keyboard_bluetooth_vendor_004c() {
+        let mi = model_from_uevent("HID_ID=0005:0000004C:0000029C\n").unwrap();
+        assert_eq!(mi.family, Family::MagicKeyboard);
+        assert_eq!(family(0x004c, 0x0267), Family::MagicKeyboard);
+        assert_eq!(family(0x05ac, 0x0321), Family::MagicKeyboard);
+        // Touch ID 2021 is 0x029a, 2024 numpad is 0x0322
+        assert!(lookup_model(0x004c, 0x029a).unwrap().model.contains("Touch ID"));
+        assert!(lookup_model(0x004c, 0x0322).is_some());
+    }
+
+    #[test]
+    fn corrected_pids_match_kernel_hid_ids() {
+        // Previously wrong entries: wired / internal devices, not wireless keyboards.
+        for pid in [0x0220, 0x0229, 0x024f, 0x0250] {
+            assert!(lookup_model(APPLE_USB_VID, pid).is_none(), "{:#06x}", pid);
+        }
+        // 0x022c is the ANSI A1255 (not JIS); ISO 0x022d, JIS 0x022e.
+        assert!(lookup_model(APPLE_USB_VID, 0x022c).unwrap().model.contains("ANSI"));
+        assert!(lookup_model(APPLE_USB_VID, 0x022d).unwrap().model.contains("ISO"));
+        assert!(lookup_model(APPLE_USB_VID, 0x022e).unwrap().model.contains("JIS"));
+        // 0x0267 is the 2015 Magic Keyboard, 0x026c the numpad model.
+        assert!(lookup_model(APPLE_USB_VID, 0x0267).unwrap().model.contains("2015"));
+        assert!(lookup_model(APPLE_USB_VID, 0x026c).unwrap().model.contains("Numeric"));
+    }
+
+    #[test]
+    fn bcm2042_gating_by_family() {
+        let bcm: Vec<u32> = (0x022c..=0x022e).chain(0x0239..=0x023b).chain(0x0255..=0x0257).collect();
+        for mi in APPLE_MODELS {
+            assert_eq!(
+                mi.family == Family::Bcm2042,
+                bcm.contains(&mi.pid),
+                "{:#06x}",
+                mi.pid
+            );
+        }
+        for pid in &bcm {
+            assert_eq!(family(APPLE_USB_VID, *pid), Family::Bcm2042);
+        }
+        assert_eq!(family(0x046d, 0x0256), Family::Unknown);
+        assert_eq!(family(APPLE_USB_VID, 0x9999), Family::Unknown);
+    }
+
+    #[test]
+    fn model_table_has_no_duplicate_pid() {
+        for (i, a) in APPLE_MODELS.iter().enumerate() {
+            assert!(APPLE_MODELS[i + 1..].iter().all(|b| b.pid != a.pid), "{:#06x}", a.pid);
+        }
+    }
+
+    #[test]
     fn calibration_validation() {
         assert!(calibration_valid(&DEFAULT_CALIBRATION_MV));
         assert!(!calibration_valid(&[0, 0, 0, 0]));
@@ -625,6 +818,17 @@ mod tests {
         assert_eq!(detect_battery_type(3.2), "Lithium (fresh)");
         assert_eq!(detect_battery_type(2.9), "Alkaline (fresh)");
         assert_eq!(detect_battery_type(1.0), "Critical — replace");
+    }
+
+    #[test]
+    fn wake_state_records_events() {
+        let w = WakeState::default();
+        assert!(w.last().is_none());
+        assert_eq!(w.count(), 0);
+        w.record();
+        w.record();
+        assert_eq!(w.count(), 2);
+        assert!(w.last().unwrap().elapsed().as_secs() < 5);
     }
 
     #[test]
