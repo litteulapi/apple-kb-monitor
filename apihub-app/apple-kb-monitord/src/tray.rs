@@ -324,6 +324,7 @@ pub fn spawn_with(
                 hidden_by_user: false,
                 plasma_widget: false,
                 system: None,
+                upower_busy: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             };
             let mut delay = Duration::from_secs(2);
             loop {
@@ -395,6 +396,8 @@ struct Tray {
     hidden_by_user: bool,
     plasma_widget: bool,
     system: Option<Connection>,
+    /// A UPower query is pending (#234).
+    upower_busy: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// Per-connection state of one `run`.
@@ -616,8 +619,12 @@ impl Tray {
     fn apply(&mut self, snap: &Snapshot, conn: &Connection) {
         let charging = if snap.connected && snap.keyboard.is_some() {
             let mac = snap.mac().map(str::to_string);
+            // Bounded: a frozen UPower must not stop the tray loop (#234).
+            let busy = self.upower_busy.clone();
+            let last = self.charging;
             self.system_bus()
-                .is_some_and(|sys| actions::upower_charging(sys, mac.as_deref()))
+                .map(|sys| actions::upower_charging_bounded(sys, mac.as_deref(), &busy).unwrap_or(last))
+                .unwrap_or(false)
         } else {
             false
         };

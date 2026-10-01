@@ -199,6 +199,46 @@ pub fn copy_to_clipboard(conn: &Connection, text: &str) -> bool {
     false
 }
 
+/// Longest wait for UPower in the tray loop (#234).
+pub const UPOWER_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
+
+/// Run `f` on a worker thread, wait at most `timeout`. `None` when it does
+/// not answer in time, or when the previous call is still pending (`busy`):
+/// a frozen peer never blocks the caller nor piles up threads (#234).
+pub fn bounded_query<T: Send + 'static>(
+    busy: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+    timeout: std::time::Duration,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    use std::sync::atomic::Ordering;
+    if busy.swap(true, Ordering::AcqRel) {
+        return None;
+    }
+    let (tx, rx) = std::sync::mpsc::channel();
+    let flag = busy.clone();
+    let spawned = std::thread::Builder::new().name("tray-query".into()).spawn(move || {
+        let r = f();
+        flag.store(false, Ordering::Release);
+        let _ = tx.send(r);
+    });
+    if spawned.is_err() {
+        busy.store(false, Ordering::Release);
+        return None;
+    }
+    rx.recv_timeout(timeout).ok()
+}
+
+/// [`upower_charging`] bounded by [`UPOWER_TIMEOUT`]; `None` = unknown now
+/// (keep the last value).
+pub fn upower_charging_bounded(
+    sys: &Connection,
+    mac: Option<&str>,
+    busy: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> Option<bool> {
+    let (sys, mac) = (sys.clone(), mac.map(str::to_string));
+    bounded_query(busy, UPOWER_TIMEOUT, move || upower_charging(&sys, mac.as_deref()))
+}
+
 /// Charging state of the keyboard from UPower's cache (`State` 1 =
 /// charging). Read-only on the system bus; `false` when unknown.
 pub fn upower_charging(sys: &Connection, mac: Option<&str>) -> bool {
@@ -246,6 +286,28 @@ pub fn upower_charging(sys: &Connection, mac: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_frozen_upower_never_blocks_the_tray_loop() {
+        use std::sync::atomic::AtomicBool;
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let busy = Arc::new(AtomicBool::new(false));
+        let t = Instant::now();
+        let r = bounded_query(&busy, Duration::from_millis(200), || {
+            std::thread::sleep(Duration::from_secs(3600));
+            true
+        });
+        assert_eq!(r, None);
+        assert!(t.elapsed() < Duration::from_secs(1));
+        // Still pending: no second call, answer at once.
+        let t = Instant::now();
+        assert_eq!(bounded_query(&busy, Duration::from_secs(5), || unreachable!("second call")), None::<bool>);
+        assert!(t.elapsed() < Duration::from_millis(100));
+        let free = Arc::new(AtomicBool::new(false));
+        assert_eq!(bounded_query(&free, Duration::from_secs(5), || 7), Some(7));
+        assert!(!free.load(std::sync::atomic::Ordering::Acquire));
+    }
 
     #[test]
     fn dialog_argv_per_program() {
