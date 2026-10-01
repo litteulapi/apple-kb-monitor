@@ -347,6 +347,19 @@ fn sync_devices(
     prev: &mut HashMap<String, DevProps>,
 ) {
     if let Some(mac) = snap.mac() {
+        let existed = shared
+            .devices
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .any(|m| m.eq_ignore_ascii_case(mac));
+        if !existed {
+            // The object is born in its final state: compare it to the
+            // "absent keyboard" state so the first connection is signalled (#169).
+            prev.entry(mac.to_ascii_uppercase()).or_insert_with(|| {
+                DevProps::for_mac(&Snapshot::default(), mac, ("", ""))
+            });
+        }
         if let Err(e) = devices::ensure_device(
             conn,
             shared,

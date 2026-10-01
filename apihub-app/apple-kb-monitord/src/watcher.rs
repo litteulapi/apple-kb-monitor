@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use crate::actor::Msg;
 pub use akm_core::machine::*;
-use akm_core::model::{is_keyboard_device, is_keyboard_upower_path};
+use akm_core::model::{is_keyboard_device, upower_path_matches_mac};
 
 use zbus::blocking::{fdo::DBusProxy, Connection, MessageIterator};
 use zbus::zvariant::OwnedValue;
@@ -216,7 +216,10 @@ fn watch_once(tx: &Sender<Msg>) -> zbus::Result<()> {
                         return Ok(());
                     }
                 } else if path.starts_with("/org/freedesktop/UPower/devices/")
-                    && is_keyboard_upower_path(&path)
+                    && known
+                        .0
+                        .values()
+                        .any(|(mac, connected)| *connected && upower_path_matches_mac(&path, mac))
                     && changed.contains_key("Percentage")
                     && tx.send(Msg::Bus(Event::BatterySignal)).is_err()
                 {

@@ -101,7 +101,7 @@ impl KbReport {
     /// mirror > interpolated estimate. Every term is filtered on its own, so a
     /// NaN falls through to the next one. 0xEA is not a percentage source.
     pub fn battery_pct(&self) -> Option<f64> {
-        let ok = |p: Option<f64>| p.filter(|v| v.is_finite());
+        let ok = |p: Option<f64>| p.filter(|v| v.is_finite() && (0.0..=100.0).contains(v));
         ok(self.battery.percentage)
             .or(ok(self.battery.percentage_fine))
             .or(ok(self.battery.percentage_interpolated))
@@ -111,6 +111,16 @@ impl KbReport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn battery_pct_out_of_range_falls_through() {
+        // #163: raw probe byte 255 is not a percentage.
+        let mut r = KbReport::default();
+        r.battery.percentage_fine = Some(255.0);
+        assert_eq!(r.battery_pct(), None);
+        r.battery.percentage_interpolated = Some(60.0);
+        assert_eq!(r.battery_pct(), Some(60.0));
+    }
 
     #[test]
     fn battery_pct_priority_and_nan() {

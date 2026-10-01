@@ -467,6 +467,16 @@ mod tests {
         );
         assert_eq!(o.remaining_s(0), -1);
         assert_eq!(remaining_seconds(&Snapshot::default(), 0), -1);
+        // #168: asleep keyboard (stale report kept): v2 agrees with v1.
+        let off = Snapshot {
+            connected: false,
+            last_update: 777,
+            ..s.clone()
+        };
+        let q = DevProps::for_mac(&off, "04:DB:56:CA:42:EE", ("", ""));
+        assert_eq!((q.base.battery, q.base.connected), (70, false));
+        assert_eq!((q.empty_at, q.installed_at, q.base.last_update), (5_000, 42, 777));
+        assert_eq!(q.remaining_s(1_000), remaining_seconds(&off, 1_000));
     }
 
     #[test]

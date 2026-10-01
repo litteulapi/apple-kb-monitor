@@ -13,7 +13,8 @@
 //! ```
 //!
 //! Only this small TOML subset is read (sections, integers, floats, booleans,
-//! arrays of integers): no dependency for a five-key file. Unknown keys and
+//! arrays of integers, possibly spread over several lines; an UTF-8 BOM is
+//! skipped; `#` inside a quoted string is not a comment). Unknown keys and
 //! malformed lines are reported as warnings and otherwise ignored; a missing
 //! file means the defaults.
 
@@ -91,6 +92,19 @@ fn parse_value(v: &str) -> Option<Val> {
     })
 }
 
+/// `line` without its trailing `#` comment; a `#` inside a `"..."` string stays.
+fn strip_comment(line: &str) -> &str {
+    let mut in_str = false;
+    for (i, c) in line.char_indices() {
+        match c {
+            '"' => in_str = !in_str,
+            '#' if !in_str => return &line[..i],
+            _ => {}
+        }
+    }
+    line
+}
+
 /// Parse the file content. Returns the config and human-readable warnings.
 pub fn parse(content: &str) -> (Config, Vec<String>) {
     let mut cfg = Config::default();
@@ -99,15 +113,33 @@ pub fn parse(content: &str) -> (Config, Vec<String>) {
     let mut thresholds: Option<Vec<u8>> = None;
     let mut hysteresis = DEFAULT_HYSTERESIS;
     let mut critical = 5u8;
-    for (n, raw) in content.lines().enumerate() {
-        let line = match raw.find('#') {
-            Some(i) if !raw[..i].contains('"') => &raw[..i],
-            _ => raw,
-        }
-        .trim();
+    let content = content.trim_start_matches('\u{feff}');
+    let mut lines = content.lines().enumerate();
+    while let Some((n, raw)) = lines.next() {
+        let mut line = strip_comment(raw).trim().to_string();
         if line.is_empty() {
             continue;
         }
+        // Multi-line array: accumulate until the closing bracket.
+        if line.split_once('=').is_some_and(|(_, v)| {
+            let v = v.trim();
+            v.starts_with('[') && !v.ends_with(']')
+        }) {
+            let mut closed = false;
+            for (_, more) in lines.by_ref() {
+                line.push(' ');
+                line.push_str(strip_comment(more).trim());
+                if line.ends_with(']') {
+                    closed = true;
+                    break;
+                }
+            }
+            if !closed {
+                warn.push(format!("line {}: unterminated array", n + 1));
+                continue;
+            }
+        }
+        let line = line.as_str();
         if let Some(name) = line.strip_prefix('[').and_then(|r| r.strip_suffix(']')) {
             section = name.trim().to_string();
             continue;
@@ -127,6 +159,12 @@ pub fn parse(content: &str) -> (Config, Vec<String>) {
                 let ok: Vec<u8> = v.iter().filter_map(|&x| pct(x)).collect();
                 if ok.len() != v.len() {
                     warn.push(format!("line {}: thresholds must be in 1..=99", n + 1));
+                }
+                if ok.is_empty() {
+                    warn.push(format!(
+                        "line {}: thresholds is empty: no battery alert will be sent",
+                        n + 1
+                    ));
                 }
                 thresholds = Some(ok);
             }
@@ -198,6 +236,32 @@ mod tests {
         let (c, w) = parse("[alerts]\nthresholds = [30, 150]\n");
         assert_eq!(w.len(), 1);
         assert_eq!(c.alerts.thresholds(), &[30]);
+    }
+
+    #[test]
+    fn multiline_array_bom_and_comments() {
+        // #167: canonical multi-line TOML array and BOM.
+        let (c, w) = parse("[alerts]\nthresholds = [\n  40,\n  20, # second\n]\n");
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(c.alerts.thresholds(), &[40, 20]);
+        let (c, w) = parse("\u{feff}[alerts]\nthresholds = [25]\nenabled = false\n");
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(c.alerts.thresholds(), &[25]);
+        assert!(!c.alerts_enabled);
+        // closing bracket on the last value's line, comment after a string with a quote
+        let (c, w) = parse("[alerts]\nthresholds = [\n40,\n20]\n");
+        assert!(w.is_empty() && c.alerts.thresholds() == [40, 20], "{w:?}");
+        assert_eq!(strip_comment("a = \"x#y\" # c"), "a = \"x#y\" ");
+        let (_, w) = parse("[alerts]\nthresholds = [\n40,\n");
+        assert_eq!(w, vec!["line 2: unterminated array".to_string()]);
+    }
+
+    #[test]
+    fn empty_thresholds_warns() {
+        let (c, w) = parse("[alerts]\nthresholds = []\n");
+        assert!(c.alerts.thresholds().is_empty());
+        assert_eq!(w.len(), 1, "{w:?}");
+        assert!(w[0].contains("empty"));
     }
 
     #[test]

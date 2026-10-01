@@ -298,20 +298,80 @@ struct Worker {
 
 type ManagedObjects = HashMap<OwnedObjectPath, HashMap<String, HashMap<String, OwnedValue>>>;
 
-fn run_provider(rx: mpsc::Receiver<Cmd>) {
-    let conn = match zbus::blocking::connection::Builder::system()
+/// Open the system-bus connection that serves the provider's ObjectManager.
+fn connect_system() -> zbus::Result<Connection> {
+    zbus::blocking::connection::Builder::system()
         .and_then(|b| b.serve_at(PROVIDER_ROOT, zbus::fdo::ObjectManager))
         .and_then(|b| b.build())
-    {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::warn!("D-Bus setup failed: {}", e);
-            return;
+}
+
+/// Why [`serve`] returned.
+enum Exit {
+    Stop,
+    /// The bus connection died (dbus-daemon / dbus-broker restarted).
+    ConnectionLost,
+}
+
+fn run_provider(rx: mpsc::Receiver<Cmd>) {
+    run_provider_with(rx, connect_system, retry_delay);
+}
+
+/// The provider thread never ends before `Stop`: a failed set-up or a lost
+/// bus connection is retried with a backoff, the desired state kept (#170).
+fn run_provider_with(
+    rx: mpsc::Receiver<Cmd>,
+    mut connect: impl FnMut() -> zbus::Result<Connection>,
+    backoff: impl Fn(u32) -> Duration,
+) {
+    let mut desired: BTreeMap<String, u8> = BTreeMap::new();
+    let mut failures = 0u32;
+    loop {
+        match connect() {
+            Ok(conn) => {
+                failures = 0;
+                let (exit, d) = serve(conn, std::mem::take(&mut desired), &rx);
+                desired = d;
+                match exit {
+                    Exit::Stop => return,
+                    Exit::ConnectionLost => {
+                        tracing::warn!("system bus connection lost, reconnecting");
+                    }
+                }
+            }
+            Err(e) => {
+                failures = failures.saturating_add(1);
+                if should_log_failure(failures) {
+                    tracing::warn!("D-Bus setup failed (attempt {failures}): {e}");
+                }
+            }
         }
-    };
+        // Wait before the next attempt, still taking commands.
+        let until = Instant::now() + backoff(failures.max(1));
+        while Instant::now() < until {
+            match rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(Cmd::Set(mac, pct)) => {
+                    desired.insert(mac, pct);
+                }
+                Ok(Cmd::Remove(mac)) => {
+                    desired.remove(&mac);
+                }
+                Ok(Cmd::Stop) | Err(RecvTimeoutError::Disconnected) => return,
+                Err(RecvTimeoutError::Timeout) => {}
+            }
+        }
+    }
+}
+
+/// Serve one connection until `Stop` or until the bus goes away; returns the
+/// desired state so the next connection exports it again.
+fn serve(
+    conn: Connection,
+    desired: BTreeMap<String, u8>,
+    rx: &mpsc::Receiver<Cmd>,
+) -> (Exit, BTreeMap<String, u8>) {
     let mut w = Worker {
         conn,
-        desired: BTreeMap::new(),
+        desired,
         exported: BTreeMap::new(),
         reg: Reg::Unregistered,
         failures: 0,
@@ -319,19 +379,25 @@ fn run_provider(rx: mpsc::Receiver<Cmd>) {
     };
 
     let mut next_watch = Instant::now();
-    loop {
+    let exit = loop {
         match rx.recv_timeout(Duration::from_millis(500)) {
             Ok(Cmd::Set(mac, pct)) => w.apply_set(&mac, pct),
             Ok(Cmd::Remove(mac)) => w.apply_remove(&mac),
-            Ok(Cmd::Stop) | Err(RecvTimeoutError::Disconnected) => break,
+            Ok(Cmd::Stop) | Err(RecvTimeoutError::Disconnected) => break Exit::Stop,
             Err(RecvTimeoutError::Timeout) => {}
         }
         if Instant::now() >= next_watch {
+            if !w.bus_alive() {
+                break Exit::ConnectionLost;
+            }
             w.watch();
             next_watch = Instant::now() + WATCH_PERIOD;
         }
+    };
+    if matches!(exit, Exit::Stop) {
+        w.shutdown();
     }
-    w.shutdown();
+    (exit, std::mem::take(&mut w.desired))
 }
 
 impl Worker {
@@ -401,6 +467,19 @@ impl Worker {
                 tracing::warn!("PropertiesChanged failed: {}", e);
             }
         }
+    }
+
+    /// Is our connection to the bus still usable?
+    fn bus_alive(&self) -> bool {
+        self.conn
+            .call_method(
+                Some("org.freedesktop.DBus"),
+                "/org/freedesktop/DBus",
+                Some("org.freedesktop.DBus"),
+                "GetId",
+                &(),
+            )
+            .is_ok()
     }
 
     /// Observe BlueZ and converge the registration state.
@@ -527,6 +606,95 @@ impl Worker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn private_bus() -> Option<(std::process::Child, String)> {
+        use std::io::{BufRead, BufReader};
+        let mut child = std::process::Command::new("dbus-daemon")
+            .args(["--session", "--nofork", "--print-address"])
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .ok()?;
+        let mut addr = String::new();
+        BufReader::new(child.stdout.take()?)
+            .read_line(&mut addr)
+            .ok()?;
+        Some((child, addr.trim().to_string()))
+    }
+
+    fn connect_to(addr: &str) -> zbus::Result<Connection> {
+        zbus::blocking::connection::Builder::address(addr)
+            .and_then(|b| b.serve_at(PROVIDER_ROOT, zbus::fdo::ObjectManager))
+            .and_then(|b| b.build())
+    }
+
+    #[test]
+    fn provider_thread_retries_after_failed_setup() {
+        // #170: a failed initialisation must not end the thread.
+        let (tx, rx) = mpsc::channel();
+        let tries = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let t = tries.clone();
+        let h = thread::spawn(move || {
+            run_provider_with(
+                rx,
+                move || {
+                    t.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    Err(zbus::Error::Failure("no bus".into()))
+                },
+                |_| Duration::from_millis(50),
+            )
+        });
+        thread::sleep(Duration::from_millis(600));
+        assert!(!h.is_finished(), "thread ended after a failed set-up");
+        assert!(tries.load(std::sync::atomic::Ordering::SeqCst) >= 3);
+        tx.send(Cmd::Stop).unwrap();
+        h.join().unwrap();
+    }
+
+    #[test]
+    fn provider_reconnects_after_the_bus_restarts() {
+        // #170: the daemon of the bus is killed; the provider reconnects.
+        let Some((mut a, addr_a)) = private_bus() else {
+            eprintln!("SKIP: dbus-daemon not installed");
+            return;
+        };
+        let Some((mut b, addr_b)) = private_bus() else {
+            let _ = a.kill();
+            return;
+        };
+        let (tx, rx) = mpsc::channel();
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let c = calls.clone();
+        let h = thread::spawn(move || {
+            run_provider_with(
+                rx,
+                move || {
+                    let n = c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    connect_to(if n == 0 { &addr_a } else { &addr_b })
+                },
+                |_| Duration::from_millis(50),
+            )
+        });
+        tx.send(Cmd::Set("04:DB:56:CA:42:EE".into(), 50)).unwrap();
+        thread::sleep(Duration::from_millis(800));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let _ = a.kill();
+        let _ = a.wait();
+        // Detected within one WATCH_PERIOD, then reconnected.
+        let t0 = Instant::now();
+        while calls.load(std::sync::atomic::Ordering::SeqCst) < 2 && t0.elapsed() < Duration::from_secs(20)
+        {
+            thread::sleep(Duration::from_millis(100));
+        }
+        assert!(
+            calls.load(std::sync::atomic::Ordering::SeqCst) >= 2,
+            "provider never reconnected"
+        );
+        assert!(!h.is_finished());
+        tx.send(Cmd::Stop).unwrap();
+        h.join().unwrap();
+        let _ = b.kill();
+        let _ = b.wait();
+    }
 
     #[test]
     fn mac_normalised_to_upper() {
