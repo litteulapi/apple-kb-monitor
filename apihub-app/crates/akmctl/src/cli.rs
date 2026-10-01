@@ -1,8 +1,9 @@
 //! Command-line definition.
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::fnmode::parse_mode;
+use crate::ledcmd::{LedName, LedState};
 
 /// Clap value parser of a keyboard name: validated, trimmed, never empty
 /// (use `--reset` to restore the original name).
@@ -71,6 +72,33 @@ pub enum Command {
     },
     /// Follow StateChanged signals: one JSON line per change, until interrupted
     Watch,
+    /// Battery history (single store: $XDG_STATE_HOME/apple-kb-monitor/history.jsonl)
+    History(HistoryArgs),
+    /// Terminal chart of the battery (percentage and voltage) over 24 h or 7 days
+    Graph {
+        /// Time window
+        #[arg(long, value_enum, default_value = "24h")]
+        span: Span,
+    },
+    /// JSON for a waybar/polybar custom module (classes: good, warning, critical, disconnected)
+    Waybar,
+    /// Prometheus text exposition of the keyboard state (one page)
+    Metrics,
+    /// Switch a keyboard LED (NumLock can only be switched off)
+    Led {
+        #[arg(value_enum, ignore_case = true)]
+        name: LedName,
+        #[arg(value_enum, ignore_case = true)]
+        state: LedState,
+    },
+    /// Read the 3 allowed HID reports (0x47, 0x46, 0x49) with the safe read
+    /// policy: no scan, never 0x4C / 0xFE / 0x01. Press a key first (an idle
+    /// keyboard is left alone)
+    Dump {
+        /// Machine-readable JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Diagnose the Bluetooth link in one command (BlueZ, pairing, adapter
     /// power management, BlueZ/UPower configuration, journal, hidraw, daemon).
     /// Read-only; run with sudo to also compare the stored and kernel link keys
@@ -96,6 +124,67 @@ pub enum Command {
     Completions { shell: Shell },
     /// Print the manual page (roff) on stdout
     Man,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Span {
+    #[value(name = "24h")]
+    Day,
+    #[value(name = "7d")]
+    Week,
+}
+
+impl Span {
+    pub fn seconds(self) -> u64 {
+        match self {
+            Span::Day => 24 * 3600,
+            Span::Week => 7 * 24 * 3600,
+        }
+    }
+}
+
+/// Date filters shared by `history` and `history export`.
+#[derive(Args, Debug, Clone)]
+pub struct Filter {
+    /// Oldest entry: 90m, 24h, 7d, 2w, YYYY-MM-DD or "YYYY-MM-DD HH:MM" (UTC)
+    #[arg(long, value_name = "WHEN")]
+    pub since: Option<String>,
+    /// Newest entry (same formats)
+    #[arg(long, value_name = "WHEN")]
+    pub until: Option<String>,
+    /// Keep only the last N entries
+    #[arg(long, value_name = "N")]
+    pub last: Option<usize>,
+}
+
+#[derive(Args, Debug)]
+pub struct HistoryArgs {
+    #[command(subcommand)]
+    pub cmd: Option<HistoryCmd>,
+    #[command(flatten)]
+    pub filter: Filter,
+    /// JSON array on one line instead of the table
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum HistoryCmd {
+    /// Export the history on stdout
+    Export {
+        /// CSV format (the only one; header included)
+        #[arg(long, required = true)]
+        csv: bool,
+        #[command(flatten)]
+        filter: Filter,
+    },
+    /// Import the former history files into the single store: the Python CLI
+    /// one ($XDG_RUNTIME_DIR/apple-kb-monitor/history.jsonl by default). The
+    /// source is not modified; existing lines are not duplicated
+    Import {
+        /// File to import (default: the Python CLI history)
+        file: Option<std::path::PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -192,5 +281,30 @@ mod tests {
         assert!(Cli::try_parse_from(["akmctl", "watch"]).is_ok());
         assert!(Cli::try_parse_from(["akmctl", "get", "nothing"]).is_err());
         assert!(Cli::try_parse_from(["akmctl"]).is_err());
+    }
+
+    #[test]
+    fn history_graph_waybar_metrics_led_dump_parse() {
+        let p = |a: &[&str]| Cli::try_parse_from([&["akmctl"], a].concat());
+        assert!(matches!(p(&["history"]).unwrap().command, Command::History(HistoryArgs { cmd: None, json: false, .. })));
+        match p(&["history", "--since", "7d", "--last", "5", "--json"]).unwrap().command {
+            Command::History(h) => assert_eq!((h.filter.since.as_deref(), h.filter.last, h.json), (Some("7d"), Some(5), true)),
+            _ => panic!(),
+        }
+        assert!(matches!(
+            p(&["history", "export", "--csv", "--until", "2026-10-01"]).unwrap().command,
+            Command::History(HistoryArgs { cmd: Some(HistoryCmd::Export { csv: true, .. }), .. })
+        ));
+        assert!(p(&["history", "export"]).is_err(), "--csv is required");
+        assert!(p(&["history", "import"]).is_ok());
+        assert!(matches!(p(&["graph"]).unwrap().command, Command::Graph { span: Span::Day }));
+        assert!(matches!(p(&["graph", "--span", "7d"]).unwrap().command, Command::Graph { span: Span::Week }));
+        assert!(p(&["graph", "--span", "3d"]).is_err());
+        assert!(p(&["waybar"]).is_ok() && p(&["metrics"]).is_ok());
+        assert!(matches!(p(&["dump", "--json"]).unwrap().command, Command::Dump { json: true }));
+        assert!(matches!(p(&["led", "caps", "on"]).unwrap().command, Command::Led { name: LedName::Caps, state: LedState::On }));
+        assert!(p(&["led", "CapsLock", "OFF"]).is_ok());
+        assert!(p(&["led", "caps"]).is_err() && p(&["led", "caps", "dim"]).is_err() && p(&["led", "shift", "on"]).is_err());
+        assert_eq!(Span::Week.seconds(), 604_800);
     }
 }

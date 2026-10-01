@@ -3,10 +3,16 @@
 mod bus;
 mod cli;
 mod doctor;
+mod dump;
 mod fnmode;
+mod histcmd;
+mod ledcmd;
+mod migrate;
 mod passive;
+mod render;
 mod repair;
 mod status;
+mod when;
 
 use std::io::Write;
 use std::process::{Command as Proc, ExitCode};
@@ -56,6 +62,28 @@ fn run(cmd: Command) -> u8 {
         Command::Set { what: SetCmd::Fnmode { mode, persist } } => cmd_set_fnmode(mode, persist),
         Command::Rename { name, reset: _, mac } => cmd_rename(name.as_deref().unwrap_or(""), mac),
         Command::Watch => cmd_watch(),
+        Command::History(h) => cmd_history(h),
+        Command::Graph { span } => cmd_graph(span),
+        Command::Waybar => cmd_waybar(),
+        Command::Metrics => cmd_metrics(),
+        Command::Led { name, state } => match ledcmd::run(name, state) {
+            Ok(msg) => {
+                println!("{msg}");
+                EXIT_OK
+            }
+            Err(e) => fail(&e),
+        },
+        Command::Dump { json } => match dump::run() {
+            Ok(d) => {
+                if json {
+                    println!("{}", dump::to_json(&d));
+                } else {
+                    print!("{}", dump::to_text(&d));
+                }
+                EXIT_OK
+            }
+            Err(e) => fail(&e),
+        },
         Command::Doctor { json, mac } => {
             let r = doctor::gather(mac.as_deref());
             if json {
@@ -119,6 +147,111 @@ fn cmd_status(json: bool) -> u8 {
             EXIT_ABSENT
         }
         Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// Snapshot of the daemon; `None` when it is not on the bus.
+fn daemon_snapshot() -> Result<Option<akm_core::Snapshot>, String> {
+    match bus::connect().map_err(|e| bus::BusError::Absent(e.to_string())).and_then(|c| bus::get_state(&c)) {
+        Ok(s) => Ok(Some(s)),
+        Err(bus::BusError::Absent(_)) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn cmd_waybar() -> u8 {
+    // Always valid JSON on stdout: a bar module must not show an error.
+    match daemon_snapshot() {
+        Ok(s) => println!("{}", render::waybar(s.as_ref())),
+        Err(e) => {
+            eprintln!("akmctl: {e}");
+            println!("{}", render::waybar(None));
+        }
+    }
+    EXIT_OK
+}
+
+fn cmd_metrics() -> u8 {
+    match daemon_snapshot() {
+        Ok(s) => {
+            print!("{}", render::metrics(s.as_ref(), fnmode::read().ok()));
+            if s.is_some() {
+                EXIT_OK
+            } else {
+                EXIT_ABSENT
+            }
+        }
+        Err(e) => fail(&e),
+    }
+}
+
+/// Entries of the single history store (nothing if the file is missing).
+fn load_history() -> Result<Vec<akm_core::history::HistoryEntry>, String> {
+    let h = akm_core::history::History::open_default();
+    if !h.path().exists() {
+        return Err(format!(
+            "no history at {} yet (the daemon writes it; `akmctl history import` brings in the old Python one)",
+            h.path().display()
+        ));
+    }
+    Ok(h.read())
+}
+
+fn bounds(f: &Filter, now: u64) -> Result<(Option<u64>, Option<u64>), String> {
+    let p = |v: &Option<String>| v.as_deref().map(|s| when::parse_when(s, now)).transpose();
+    Ok((p(&f.since)?, p(&f.until)?))
+}
+
+fn cmd_history(h: HistoryArgs) -> u8 {
+    let now = akm_core::history::Clock::now(&akm_core::history::SystemClock);
+    if let Some(HistoryCmd::Import { file }) = &h.cmd {
+        let src = file.clone().unwrap_or_else(migrate::python_path);
+        let dst = akm_core::history::default_path();
+        return match migrate::import_file(&dst, &src) {
+            Ok((added, ignored)) => {
+                println!("{added} entries imported from {} into {} ({ignored} lines ignored)", src.display(), dst.display());
+                EXIT_OK
+            }
+            Err(e) => fail(&format!("import from {}: {e}", src.display())),
+        };
+    }
+    let (filter, csv) = match &h.cmd {
+        Some(HistoryCmd::Export { filter, .. }) => (filter.clone(), true),
+        _ => (h.filter.clone(), false),
+    };
+    let entries = match load_history() {
+        Ok(e) => e,
+        Err(e) => return fail(&e),
+    };
+    let (since, until) = match bounds(&filter, now) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("akmctl: {e}");
+            return EXIT_USAGE;
+        }
+    };
+    let sel = histcmd::select(&entries, since, until, filter.last);
+    let out = if csv {
+        histcmd::to_csv(&sel)
+    } else if h.json {
+        format!("{}\n", histcmd::to_json(&sel))
+    } else {
+        histcmd::to_text(&sel)
+    };
+    if std::io::stdout().write_all(out.as_bytes()).is_err() {
+        return EXIT_OK; // closed pipe
+    }
+    EXIT_OK
+}
+
+fn cmd_graph(span: Span) -> u8 {
+    let now = akm_core::history::Clock::now(&akm_core::history::SystemClock);
+    match load_history() {
+        Ok(e) => {
+            print!("{}", histcmd::graph(&e, now, span.seconds()));
+            EXIT_OK
+        }
+        Err(e) => fail(&e),
     }
 }
 
