@@ -31,6 +31,8 @@
 //! * [`registry`]    register map of every known HID report + safety classes (#219)
 //! * [`firmware`]    firmware version check against the embedded table (#219)
 //! * [`alias`]       validation of the user-chosen keyboard name (#141)
+//! * [`devname`]     name stored IN the keyboard (0x51-0x55): validation, frames,
+//!   backup, guarded write refused until proven (#248)
 
 pub mod alerts;
 pub mod alias;
@@ -39,6 +41,7 @@ pub mod calibration;
 pub mod chemistry;
 pub mod config;
 pub mod decode;
+pub mod devname;
 pub mod discover;
 pub mod firmware;
 pub mod forecast;

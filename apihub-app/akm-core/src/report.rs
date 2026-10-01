@@ -16,6 +16,11 @@ pub struct KbDevice {
     pub mac: Option<String>,
     pub chip: Option<String>,
     pub driver: Option<String>,
+    /// Name stored IN the keyboard (`0x51`-`0x54`, read once per connection
+    /// by the daemon), distinct from `name` and `alias` (#248).
+    pub name_on_keyboard: Option<String>,
+    /// The same 32 bytes as hex (backup source of `akmctl rename --device-name`).
+    pub name_on_keyboard_hex: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -160,6 +165,9 @@ pub struct KbReport {
     /// 0x46, 0x49 and 0xFF are **not** LE link parameters nor a build number
     /// (#131, #132). 0x4C is never included (#123).
     pub raw: BTreeMap<String, String>,
+    /// The daemon's circuit breaker was open when this report was built
+    /// (pre-flight of the writes, #248).
+    pub breaker_open: bool,
     /// The vendor read stopped early (request timed out, device gone or time
     /// budget spent, #134): the fields above may be partial.
     pub incomplete: bool,

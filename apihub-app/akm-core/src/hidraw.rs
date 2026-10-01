@@ -55,23 +55,39 @@ pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> io::Result<Vec<u8>> {
     }
 }
 
-/// THE write to the hardware: one Feature report made of the id alone, only if
-/// the register map allows it (class `WriteAppleParity`, i.e. `0x40`
-/// `WillShutdown`, exactly what Apple's driver sends). Every byte handed to the
-/// kernel is logged first. Never retried (not even on EINTR): a command must
-/// not be sent twice. The "once per run" rule is in
-/// [`crate::registry::WriteSession`], applied by [`crate::parity::will_shutdown`].
-pub fn hid_write_feature(fd: libc::c_int, report: &[u8]) -> io::Result<()> {
-    let [id] = *report else {
+/// THE write to the hardware: one Feature report made of the id alone, only
+/// if the register map lets the named operation `op` write it (class
+/// `WriteApple`, id of `op`, exact length of `op`). This door is sized for one
+/// byte: an operation that carries data (`DeviceName`, 64 bytes) can never
+/// pass it, whatever the caller. Every byte handed to the kernel is logged
+/// first. Never retried (not even on EINTR): a command must not be sent
+/// twice. The "once per session" rule is in [`crate::registry::WriteSession`].
+pub fn hid_write_feature(
+    fd: libc::c_int,
+    op: crate::registry::WriteOp,
+    report: &[u8],
+) -> io::Result<()> {
+    let Some((&id, data)) = report.split_first() else {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            format!("write refused: {} bytes, Apple sends the report id alone", report.len()),
+            "write refused: empty report",
         ));
     };
-    crate::registry::check_write(id, crate::registry::Direction::Feature)?;
+    crate::registry::check_write_op(op, id, crate::registry::Direction::Feature)?;
+    if data.len() != op.payload_len() || !data.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "write refused: {} byte(s); this door sends one report id alone (operation {})",
+                report.len(),
+                op.as_str()
+            ),
+        ));
+    }
     let mut buf = [id];
     eprintln!(
-        "[hid-write] Feature report, {} byte(s) handed to the kernel: {} (Bluetooth wire: 53 {})",
+        "[hid-write] {} Feature report, {} byte(s) handed to the kernel: {} (Bluetooth wire: 53 {})",
+        op.as_str(),
         buf.len(),
         buf.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "),
         buf.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "),
@@ -92,8 +108,8 @@ fn note_write_done() {
 }
 
 impl crate::parity::FeatureSink for Hidraw {
-    fn set_feature(&self, report: &[u8]) -> io::Result<()> {
-        hid_write_feature(self.0, report)
+    fn set_feature(&self, op: crate::registry::WriteOp, report: &[u8]) -> io::Result<()> {
+        hid_write_feature(self.0, op, report)
     }
 }
 
@@ -117,7 +133,7 @@ pub fn send_will_shutdown(enabled: bool, connected: bool) -> crate::parity::Outc
         return Outcome::NotConnected;
     }
     let mut session = WRITE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
-    if session.is_used() {
+    if session.is_used_by(crate::registry::WriteOp::Shutdown) {
         return Outcome::AlreadySent;
     }
     let Some(_lock) = crate::read_policy::try_lock(WRITE_LOCK_WAIT) else {
@@ -135,6 +151,73 @@ pub fn send_will_shutdown(enabled: bool, connected: bool) -> crate::parity::Outc
         crate::read_policy::last_hw_access(),
         &mut std::thread::sleep,
     )
+}
+
+/// The keyboard's hidraw node opened by a short-lived command (`akmctl`)
+/// for ONE guarded write, under the cross-process lock shared with the
+/// daemon (released on drop). Every write still goes through
+/// [`hid_write_feature`] (register map, operation, length, one-byte door),
+/// after the 1 s spacing that follows the last hardware access, and is
+/// recorded by the circuit breaker. Opening it writes nothing.
+pub struct WriteDoor {
+    file: std::fs::File,
+    path: String,
+    _lock: crate::read_policy::ReadLock,
+}
+
+impl WriteDoor {
+    /// Open the BCM2042 node, or explain why not (nothing is written).
+    pub fn open() -> Result<Self, String> {
+        let dev = find_apple_hidraw().ok_or("no Apple keyboard found (hidraw)")?;
+        let uevent = std::fs::read_to_string(format!(
+            "/sys/class/hidraw/{}/device/uevent",
+            dev.trim_start_matches("/dev/")
+        ))
+        .unwrap_or_default();
+        if crate::model::family_from_uevent(&uevent) != crate::model::Family::Bcm2042 {
+            return Err(format!("{dev} is not a BCM2042 keyboard: nothing written"));
+        }
+        let lock = crate::read_policy::try_lock(WRITE_LOCK_WAIT)
+            .ok_or("another reader holds the HID lock (the daemon is reading): nothing written, retry in a moment")?;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&dev)
+            .map_err(|e| format!("cannot open {dev}: {e}"))?;
+        Ok(Self {
+            file,
+            path: dev,
+            _lock: lock,
+        })
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+}
+
+impl crate::parity::FeatureSink for WriteDoor {
+    fn set_feature(&self, op: crate::registry::WriteOp, report: &[u8]) -> io::Result<()> {
+        use std::os::fd::AsRawFd;
+        let allowed = crate::read_policy::breaker()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .allow();
+        if !allowed {
+            return Err(io::Error::other("circuit breaker open: nothing written"));
+        }
+        let wait =
+            crate::read_policy::wait_before(crate::read_policy::last_hw_access(), Instant::now());
+        if !wait.is_zero() {
+            std::thread::sleep(wait);
+        }
+        let r = hid_write_feature(self.file.as_raw_fd(), op, report);
+        crate::read_policy::breaker()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .record(r.is_ok());
+        r
+    }
 }
 
 /// A borrowed hidraw file descriptor as a [`HidSource`].
@@ -433,21 +516,41 @@ mod tests {
     }
 
     #[test]
-    fn only_the_apple_write_reaches_the_ioctl() {
-        // On an invalid fd the one allowed report fails in the ioctl (EBADF,
-        // nothing was sent anywhere); every other id is refused before it.
-        for id in 0..=255u8 {
-            let e = hid_write_feature(-1, &[id]).unwrap_err();
-            if id == 0x40 {
-                assert_eq!(e.raw_os_error(), Some(libc::EBADF));
-            } else {
-                assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{id:#04x}");
-                assert_eq!(e.raw_os_error(), None, "{id:#04x} must not reach the ioctl");
+    fn only_the_id_only_operations_reach_the_ioctl() {
+        // On an invalid fd an allowed report fails in the ioctl (EBADF,
+        // nothing was sent anywhere); every other (operation, id) is refused
+        // before it. The 256 ids, every named operation.
+        use crate::registry::WriteOp;
+        for op in WriteOp::ALL {
+            for id in 0..=255u8 {
+                let e = hid_write_feature(-1, op, &[id]).unwrap_err();
+                if op.ids().contains(&id) && op.payload_len() == 0 {
+                    assert_eq!(
+                        e.raw_os_error(),
+                        Some(libc::EBADF),
+                        "{} {id:#04x}",
+                        op.as_str()
+                    );
+                } else {
+                    assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{id:#04x}");
+                    assert_eq!(e.raw_os_error(), None, "{id:#04x} must not reach the ioctl");
+                }
             }
         }
-        // Never a report with data, nor an empty one.
-        for r in [&[][..], &[0x40, 0x03][..], &[0x40, 0, 0][..]] {
-            assert_eq!(hid_write_feature(-1, r).unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        // Never a report with data, nor an empty one; the 65-byte name frame
+        // of DeviceName can never pass this one-byte door.
+        let mut name = vec![0x55u8];
+        name.extend_from_slice(&[b'A'; 64]);
+        for (op, r) in [
+            (WriteOp::Shutdown, &[][..]),
+            (WriteOp::Shutdown, &[0x40, 0x03][..]),
+            (WriteOp::Shutdown, &[0x40, 0, 0][..]),
+            (WriteOp::DeviceName, &name[..]),
+            (WriteOp::DeviceName, &[0x55][..]),
+        ] {
+            let e = hid_write_feature(-1, op, r).unwrap_err();
+            assert_eq!(e.kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(e.raw_os_error(), None);
         }
     }
 

@@ -528,6 +528,24 @@ fn read_with(safe: SafeSource<'_>, report: &mut KbReport, with_once: bool) -> Sa
                 }
             }
         }
+        // Lower priority: out of time = left for the next burst, not a failure.
+        if complete {
+            for id in crate::registry::DAEMON_DEFERRED_ONCE_IDS {
+                if safe.conn().requested(id) {
+                    continue;
+                }
+                if phase.elapsed() >= ONCE_BUDGET {
+                    break;
+                }
+                match safe.feature(id) {
+                    Ok(b) => safe.conn().store(id, b),
+                    Err(_) => {
+                        complete = false;
+                        break;
+                    }
+                }
+            }
+        }
     }
     report.incomplete = !complete;
     if complete {
@@ -576,6 +594,15 @@ fn apply_frames(report: &mut KbReport, pid: Option<u32>, st: &ConnState) {
         .filter(|p| p.is_finite() && (0.0..=100.0).contains(p))
         .map(|p| crate::registry::apple_display_percent(p.round() as u8));
     crate::firmware::assess_report(pid, &mut report.firmware);
+    // Name stored in the keyboard (#248): only when the 4 fragments are cached.
+    let frags: Option<Vec<Vec<u8>>> = crate::devname::FRAGMENT_IDS
+        .iter()
+        .map(|&id| st.frame(id).map(<[u8]>::to_vec))
+        .collect();
+    if let Some(raw) = frags.as_deref().and_then(crate::devname::raw_from_frames) {
+        report.device.name_on_keyboard = crate::devname::name_from_raw(&raw);
+        report.device.name_on_keyboard_hex = Some(hex(&raw));
+    }
 }
 
 /// Full report for the daemon under the safe policy. The keyboard is present
@@ -603,6 +630,7 @@ pub fn build_report_safe(
         g => SafeRead::Skipped(g),
     };
     report.battery.percentage_fine = report.battery.percentage;
+    report.breaker_open = tripped();
     // Values read once in this connection survive the following reads.
     apply_cached(&mut report, crate::model::parse_hid_id(uevent).map(|(_, p)| p));
     (report, outcome)
@@ -715,7 +743,11 @@ mod tests {
     fn a_full_burst_reads_the_version_and_thresholds_once_then_serves_the_cache() {
         let f = fixture()
             .with(&[0x4F, 0x50, 0x00])
-            .with(&[0x60, 0x0b, 0x8a, 0x09, 0xca, 0x09, 0x64, 0x08, 0x06]);
+            .with(&[0x60, 0x0b, 0x8a, 0x09, 0xca, 0x09, 0x64, 0x08, 0x06])
+            .with(b"\x51Clavier ")
+            .with(b"\x52de maria")
+            .with(b"\x53 #1\0\0\0\0\0")
+            .with(&[0x54, 0, 0, 0, 0, 0, 0, 0, 0]);
         let spy = Spy {
             inner: &f,
             log: RefCell::new(Vec::new()),
@@ -724,9 +756,43 @@ mod tests {
         let conn = Mutex::new(ConnState::new());
         let mut r = KbReport::default();
         let out = read_with(SafeSource::with_parts(&spy, &breaker, &conn), &mut r, true);
-        assert_eq!(out, SafeRead::Complete);
-        assert_eq!(*spy.log.borrow(), vec![0x47, 0x46, 0x49, 0x4F, 0x60]);
+        assert_eq!(
+            out,
+            SafeRead::Complete,
+            "running out of time on the name is not a failure"
+        );
+        assert_eq!(spy.log.borrow()[..5], [0x47, 0x46, 0x49, 0x4F, 0x60]);
+        // The name fragments follow, in order, over one or more bursts, once each.
+        for _ in 0..4 {
+            if crate::registry::DAEMON_DEFERRED_ONCE_IDS
+                .iter()
+                .all(|&id| conn.lock().unwrap().requested(id))
+            {
+                break;
+            }
+            let mut rx = KbReport::default();
+            assert_eq!(
+                read_with(SafeSource::with_parts(&spy, &breaker, &conn), &mut rx, true),
+                SafeRead::Complete
+            );
+        }
+        let names: Vec<u8> = spy
+            .log
+            .borrow()
+            .iter()
+            .copied()
+            .filter(|id| (0x51..=0x54).contains(id))
+            .collect();
+        assert_eq!(names, vec![0x51, 0x52, 0x53, 0x54]);
         apply_frames(&mut r, Some(0x0256), &conn.lock().unwrap());
+        assert_eq!(
+            r.device.name_on_keyboard.as_deref(),
+            Some("Clavier de maria #1")
+        );
+        assert_eq!(
+            r.device.name_on_keyboard_hex.as_deref().map(str::len),
+            Some(64)
+        );
         assert_eq!(r.firmware.version.as_deref(), Some("0x0050"));
         assert_eq!(r.firmware.status, "up_to_date");
         assert_eq!(r.battery.thresholds.unwrap().as_array(), [2954, 2506, 2404, 2054]);

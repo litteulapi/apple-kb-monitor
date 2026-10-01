@@ -311,10 +311,20 @@ fn build_report_safe_paths() {
     let mut ans = full();
     ans.push((0x4F, vec![0x4F, 1, 2, 3, 4]));
     ans.push((0x60, vec![0x60, 5, 6]));
+    // puis le nom stocké dans le clavier 0x51-0x54, priorité basse (#248) :
+    // ce qui ne tient pas dans le budget attend la rafale suivante.
+    for id in [0x51u8, 0x52, 0x53, 0x54] {
+        ans.push((id, vec![id, b'a', 0, 0, 0, 0, 0, 0, 0]));
+    }
     let src = Src::new(0, ans);
     let (r, o) = build_report_safe(BCM, None, &src, wake.clone(), Instant::now());
     assert_eq!(o, SafeRead::Complete);
-    assert_eq!(src.ids(), vec![0x47, 0x46, 0x49, 0x4F, 0x60]);
+    let ids = src.ids();
+    assert_eq!(ids[..5], [0x47, 0x46, 0x49, 0x4F, 0x60]);
+    assert!(
+        [0x51u8, 0x52, 0x53, 0x54].starts_with(&ids[5..]),
+        "{ids:x?}"
+    );
     assert_eq!(r.battery.percentage, Some(80.0));
     assert_eq!(r.battery.percentage_fine, Some(80.0));
     assert_eq!(r.wake, wake);

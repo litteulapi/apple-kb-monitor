@@ -28,15 +28,16 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use crate::read_policy::{wait_before, Breaker};
-use crate::registry::{Direction, WriteSession};
+use crate::registry::{Direction, WriteOp, WriteSession};
 
 /// The only id written: `WillShutdown`.
 pub const WILL_SHUTDOWN_ID: u8 = 0x40;
 
 /// Where the report goes: the real hidraw node, or a spy in the tests.
-/// `report` is the exact buffer handed to the kernel (id first).
+/// `op` is the named operation the write belongs to (the door checks it
+/// again), `report` the exact buffer handed to the kernel (id first).
 pub trait FeatureSink {
-    fn set_feature(&self, report: &[u8]) -> io::Result<()>;
+    fn set_feature(&self, op: WriteOp, report: &[u8]) -> io::Result<()>;
 }
 
 /// What happened to a `WillShutdown` request.
@@ -99,7 +100,7 @@ pub fn will_shutdown(
     if !connected {
         return Outcome::NotConnected;
     }
-    if session.is_used() {
+    if session.is_used_by(WriteOp::Shutdown) {
         return Outcome::AlreadySent;
     }
     let allowed = breaker.lock().unwrap_or_else(|e| e.into_inner()).allow();
@@ -111,10 +112,11 @@ pub fn will_shutdown(
         sleep(wait);
     }
     // The id alone: no data, exactly what Apple's driver hands to the stack.
-    if let Err(e) = session.authorize(WILL_SHUTDOWN_ID, Direction::Feature, &[]) {
+    if let Err(e) = session.authorize(WriteOp::Shutdown, WILL_SHUTDOWN_ID, Direction::Feature, &[])
+    {
         return Outcome::Failed(e.to_string());
     }
-    let r = sink.set_feature(&[WILL_SHUTDOWN_ID]);
+    let r = sink.set_feature(WriteOp::Shutdown, &[WILL_SHUTDOWN_ID]);
     breaker
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -136,7 +138,8 @@ mod tests {
         fail: bool,
     }
     impl FeatureSink for Spy {
-        fn set_feature(&self, report: &[u8]) -> io::Result<()> {
+        fn set_feature(&self, op: WriteOp, report: &[u8]) -> io::Result<()> {
+            assert_eq!(op, WriteOp::Shutdown);
             self.log.borrow_mut().push(report.to_vec());
             if self.fail {
                 Err(io::Error::from_raw_os_error(libc::EIO))

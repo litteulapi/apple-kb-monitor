@@ -15,6 +15,12 @@ fn parse_name(s: &str) -> Result<String, String> {
     }
 }
 
+/// Clap value parser of the name stored IN the keyboard: exactly what would
+/// be written (nothing trimmed), [`akm_core::devname::validate`].
+fn parse_device_name(s: &str) -> Result<String, String> {
+    akm_core::devname::validate(s).map_err(|e| e.to_string())
+}
+
 /// Exit codes: 0 OK, 1 error, 2 daemon absent, 64 usage error.
 pub const EXIT_OK: u8 = 0;
 pub const EXIT_ERROR: u8 = 1;
@@ -58,10 +64,13 @@ pub enum Command {
         what: SetCmd,
     },
     /// Rename the keyboard on this computer (BlueZ alias; nothing is written
-    /// into the keyboard)
+    /// into the keyboard). With --device-name: the name stored IN the keyboard
+    #[command(
+        after_help = "TWO NAMES:\n  akmctl rename <name>                 alias of THIS computer (BlueZ Alias): default, no risk\n  akmctl rename --device-name <name>   name stored IN the keyboard (0x51-0x55): dry run by default;\n                                       --write-device-name writes after pre-flight, backup and typed\n                                       confirmation (REFUSED while the sequence is not proven)\n  akmctl rename --device-name --show   name stored in the keyboard, from the daemon's cache\n  akmctl rename --device-name --restore <backup.json> [--write-device-name]"
+    )]
     Rename {
-        /// New name (max 64 characters, no control characters)
-        #[arg(value_parser = parse_name, required_unless_present = "reset", conflicts_with = "reset")]
+        /// New alias (max 64 characters, no control characters)
+        #[arg(value_parser = parse_name, required_unless_present_any = ["reset", "device_name"], conflicts_with_all = ["reset", "device_name"])]
         name: Option<String>,
         /// Restore the keyboard's own name
         #[arg(long)]
@@ -69,6 +78,22 @@ pub enum Command {
         /// Keyboard to rename (default: the one the daemon reports)
         #[arg(long, value_name = "MAC")]
         mac: Option<String>,
+        /// Act on the name stored IN the keyboard (printable ASCII, 1-32
+        /// characters); without a value: with --show or --restore
+        #[arg(long, value_name = "NAME", num_args = 0..=1, value_parser = parse_device_name, conflicts_with = "reset")]
+        device_name: Option<Option<String>>,
+        /// Show the bytes that would be sent, write nothing (the default)
+        #[arg(long, requires = "device_name", conflicts_with_all = ["write_device_name", "name", "reset"])]
+        dry_run: bool,
+        /// Really write (interactive, after pre-flight, backup and the name typed again)
+        #[arg(long, requires = "device_name", conflicts_with_all = ["name", "reset"])]
+        write_device_name: bool,
+        /// Show the name stored in the keyboard (daemon cache, no hardware read)
+        #[arg(long, requires = "device_name", conflicts_with_all = ["restore", "dry_run", "write_device_name", "name", "reset"])]
+        show: bool,
+        /// Rewrite a backup made by a previous --device-name run
+        #[arg(long, value_name = "BACKUP", requires = "device_name", conflicts_with_all = ["name", "reset"])]
+        restore: Option<std::path::PathBuf>,
     },
     /// Follow StateChanged signals: one JSON line per change, until interrupted
     Watch,
@@ -398,8 +423,17 @@ mod tests {
     fn rename_arguments() {
         let c = |a: &[&str]| Cli::try_parse_from([&["akmctl", "rename"], a].concat());
         match c(&["  Bureau  "]).unwrap().command {
-            Command::Rename { name, reset, mac } => {
-                assert_eq!((name.as_deref(), reset, mac), (Some("Bureau"), false, None));
+            Command::Rename {
+                name,
+                reset,
+                mac,
+                device_name,
+                ..
+            } => {
+                assert_eq!(
+                    (name.as_deref(), reset, mac, device_name),
+                    (Some("Bureau"), false, None, None)
+                );
             }
             _ => panic!(),
         }
@@ -413,6 +447,73 @@ mod tests {
         assert!(c(&["   "]).is_err());
         assert!(c(&["a\nb"]).is_err());
         assert!(c(&[&"x".repeat(65)]).is_err());
+    }
+
+    #[test]
+    fn rename_device_name_arguments() {
+        let c = |a: &[&str]| Cli::try_parse_from([&["akmctl", "rename"], a].concat());
+        match c(&["--device-name", "Clavier de maria #1"])
+            .unwrap()
+            .command
+        {
+            Command::Rename {
+                name,
+                device_name,
+                dry_run,
+                write_device_name,
+                show,
+                restore,
+                ..
+            } => {
+                assert_eq!(name, None);
+                assert_eq!(device_name, Some(Some("Clavier de maria #1".into())));
+                assert!(!dry_run && !write_device_name && !show && restore.is_none());
+            }
+            _ => panic!(),
+        }
+        assert!(c(&["--device-name", "x", "--dry-run"]).is_ok());
+        assert!(c(&["--device-name", "x", "--write-device-name"]).is_ok());
+        assert!(c(&["--device-name", "x", "--dry-run", "--write-device-name"]).is_err());
+        assert!(matches!(
+            c(&["--device-name", "--show"]).unwrap().command,
+            Command::Rename {
+                device_name: Some(None),
+                show: true,
+                ..
+            }
+        ));
+        assert!(matches!(
+            c(&["--device-name", "--restore", "/x.json"])
+                .unwrap()
+                .command,
+            Command::Rename {
+                device_name: Some(None),
+                restore: Some(_),
+                ..
+            }
+        ));
+        // Never without --device-name; never mixed with the alias.
+        for bad in [
+            &["--write-device-name", "x"][..],
+            &["--show"][..],
+            &["--dry-run", "x"][..],
+            &["--restore", "/x"][..],
+            &["Bureau", "--device-name", "x"][..],
+            &["--reset", "--device-name", "x"][..],
+            &["--device-name", "--show", "--write-device-name"][..],
+            &["--device-name", " x"][..],
+            &["--device-name", "caf\u{e9}"][..],
+            &["--device-name", "a\\b"][..],
+            &["--reset", "--write-device-name"][..],
+            &["--reset", "--dry-run"][..],
+            &["--reset", "--show"][..],
+            &["--reset", "--restore", "/x"][..],
+            &["x", "--show"][..],
+        ] {
+            assert!(c(bad).is_err(), "{bad:?}");
+        }
+        assert!(c(&["--device-name", &"x".repeat(33)]).is_err());
+        assert!(c(&["--device-name", &"x".repeat(32)]).is_ok());
     }
 
     #[test]

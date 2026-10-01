@@ -21,6 +21,10 @@
 //!   = not read yet**), `FirmwareLatestKnown` s (latest public version in the
 //!   embedded table, empty = model not in the table), `FirmwareStatus` s
 //!   (`up_to_date` / `update_available` / `unknown`, never empty)
+//! * name stored in the keyboard (#248): `DeviceNameOnKeyboard` s (`0x51`-`0x54`
+//!   read once per connection, **empty = not read yet**). Read-only: no D-Bus
+//!   method writes the keyboard's name (only `akmctl rename --device-name`,
+//!   interactive, and refused until the sequence is proven)
 //!
 //! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `SetAlias(s mac, s name) -> s`
 //! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (JSON array of
@@ -76,6 +80,8 @@ pub struct Props {
     pub firmware_latest_known: String,
     /// `up_to_date` / `update_available` / `unknown`.
     pub firmware_status: String,
+    /// Name stored in the keyboard, `0x51`-`0x54` ("" = not read yet, #248).
+    pub device_name_on_keyboard: String,
 }
 
 impl Props {
@@ -99,6 +105,11 @@ impl Props {
                 .map(|f| f.status.clone())
                 .filter(|st| !st.is_empty())
                 .unwrap_or_else(|| "unknown".to_string()),
+            device_name_on_keyboard: s
+                .keyboard
+                .as_ref()
+                .and_then(|k| k.device.name_on_keyboard.clone())
+                .unwrap_or_default(),
         }
     }
 }
@@ -166,6 +177,11 @@ impl Monitor {
     #[zbus(property)]
     fn firmware_status(&self) -> String {
         self.props().firmware_status
+    }
+    /// Name stored in the keyboard (`0x51`-`0x54`), "" = not read yet. Read-only.
+    #[zbus(property)]
+    fn device_name_on_keyboard(&self) -> String {
+        self.props().device_name_on_keyboard
     }
     #[zbus(property)]
     fn revision(&self) -> u64 {
@@ -602,6 +618,9 @@ fn emit(
         if prev.firmware_status != now.firmware_status {
             m.firmware_status_changed(ctx).await?;
         }
+        if prev.device_name_on_keyboard != now.device_name_on_keyboard {
+            m.device_name_on_keyboard_changed(ctx).await?;
+        }
         if forecast_changed {
             m.remaining_seconds_changed(ctx).await?;
         }
@@ -667,5 +686,23 @@ mod tests {
         assert_eq!(p.firmware_version, "0x0050");
         assert_eq!(p.firmware_latest_known, "0x0050");
         assert_eq!(p.firmware_status, "up_to_date");
+    }
+
+    #[test]
+    fn device_name_on_keyboard_prop() {
+        assert_eq!(
+            Props::from_snapshot(&Snapshot::default()).device_name_on_keyboard,
+            ""
+        );
+        let mut k = KbReport::default();
+        k.device.name_on_keyboard = Some("Clavier de maria #1".into());
+        let s = Snapshot {
+            keyboard: Some(k),
+            ..Default::default()
+        };
+        assert_eq!(
+            Props::from_snapshot(&s).device_name_on_keyboard,
+            "Clavier de maria #1"
+        );
     }
 }

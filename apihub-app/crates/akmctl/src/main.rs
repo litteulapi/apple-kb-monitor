@@ -2,6 +2,7 @@
 
 mod bus;
 mod cli;
+mod devnamecmd;
 mod doctor;
 mod dump;
 mod fnmode;
@@ -81,7 +82,32 @@ fn run(cmd: Command) -> u8 {
         }
         Command::Keys { check, all, json } => keymapcmd::cmd_keys(check, all, json),
         Command::Keymap { cmd } => keymapcmd::run(cmd),
-        Command::Rename { name, reset: _, mac } => cmd_rename(name.as_deref().unwrap_or(""), mac),
+        Command::Rename {
+            device_name: Some(dn),
+            show,
+            restore,
+            write_device_name,
+            mac,
+            ..
+        } => {
+            let action = match (dn, show, restore) {
+                (_, true, _) => devnamecmd::Action::Show,
+                (_, _, Some(file)) => devnamecmd::Action::Restore {
+                    file,
+                    write: write_device_name,
+                },
+                (Some(name), _, None) => devnamecmd::Action::Rename {
+                    name,
+                    write: write_device_name,
+                },
+                (None, false, None) => {
+                    eprintln!("akmctl: --device-name needs a name, --show or --restore");
+                    return EXIT_USAGE;
+                }
+            };
+            devnamecmd::run(action, mac)
+        }
+        Command::Rename { name, mac, .. } => cmd_rename(name.as_deref().unwrap_or(""), mac),
         Command::Watch => cmd_watch(),
         Command::History(h) => cmd_history(h),
         Command::Graph { span } => cmd_graph(span),

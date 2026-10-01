@@ -23,6 +23,8 @@ pub fn to_json(s: &Snapshot, fn_mode: Option<u8>, revision: Option<u64>) -> Valu
         "model": s.model(),
         "name": s.display_name(),
         "alias": s.alias(),
+        // Name stored IN the keyboard, 0x51-0x54 read once per connection (#248).
+        "name_on_keyboard": s.keyboard.as_ref().and_then(|k| k.device.name_on_keyboard.clone()),
         "mac": s.mac(),
         "battery_pct": s.battery_pct().map(|p| p.round().clamp(0.0, 100.0) as u32),
         "voltage": s.voltage().filter(|v| v.is_finite()),
@@ -86,6 +88,17 @@ pub fn to_text(s: &Snapshot, fn_mode: Option<u8>) -> String {
     let mut line = |k: &str, v: String| out.push_str(&format!("{k:<11}{v}\n"));
     line("Keyboard:", s.model().unwrap_or("n/a").to_string());
     line("Name:", s.display_name().unwrap_or("n/a").to_string());
+    // Name stored IN the keyboard (0x51-0x54, daemon cache), not the alias (#248).
+    line(
+        "On kb:",
+        s.keyboard
+            .as_ref()
+            .and_then(|k| k.device.name_on_keyboard.clone())
+            .map_or_else(
+                || "n/a (not read yet)".into(),
+                |n| format!("{n} (name stored in the keyboard)"),
+            ),
+    );
     line("MAC:", s.mac().unwrap_or("n/a").to_string());
     line("Connected:", if s.connected { "yes" } else { "no" }.into());
     line(
@@ -252,6 +265,16 @@ mod tests {
         let v = to_json(&s, None, None);
         assert_eq!(v["firmware"]["version_hex"], "0x0050");
         assert_eq!(v["firmware"]["status"], "up_to_date");
+        assert!(v["name_on_keyboard"].is_null());
+        assert!(to_text(&s, None).contains("On kb:     n/a (not read yet)"));
+        let mut s2 = s.clone();
+        s2.keyboard.as_mut().unwrap().device.name_on_keyboard = Some("Clavier de maria #1".into());
+        assert_eq!(
+            to_json(&s2, None, None)["name_on_keyboard"],
+            "Clavier de maria #1"
+        );
+        assert!(to_text(&s2, None)
+            .contains("On kb:     Clavier de maria #1 (name stored in the keyboard)"));
         assert_eq!(v["firmware"]["latest_known"], "0x0050");
         assert_eq!(v["battery_apple_display_pct"], 100);
         assert_eq!(v["battery_thresholds"]["low_mv"], 2506);

@@ -13,19 +13,21 @@
 //! | [`Safety::PassiveInput`] | only listened to on the hidraw node, never requested |
 //! | [`Safety::ManualOnly`] | readable and harmless in principle, but never requested by the daemon (RE tools only) |
 //! | [`Safety::NeverRead`] | never requested (secret, or freezes the firmware) |
-//! | [`Safety::WriteAppleParity`] | the ONE write: Feature `0x40` (WillShutdown), 1 byte (the id), once per shutdown |
+//! | [`Safety::WriteApple`] | written only by a named Apple operation ([`WriteOp`]), with its own ids and exact length, once per session |
 //! | [`Safety::NeverWrite`] | write-only or command registers: no write path exists |
 //! | [`Safety::Unknown`] | not understood: neither read nor written |
 //!
 //! The allow-lists of [`crate::read_policy`] are **generated from this table**
 //! ([`SAFE_READ_IDS`], [`ONCE_PER_CONNECTION_IDS`]); the only function that
 //! reads the hardware ([`crate::hidraw::hid_read_feature`]) calls
-//! [`check_read`]. Writes: [`check_write`] accepts exactly one report, the
-//! Feature `0x40` `WillShutdown` that Apple's own driver sends at every
-//! shutdown or restart (class [`Safety::WriteAppleParity`], no data, one id
-//! byte on the wire `53 40`), and [`WriteSession`] allows it once per run;
-//! the only function that writes ([`crate::hidraw::hid_write_feature`]) calls
-//! both. Proof levels: `[mesuré]` observed on the A1314 ISO,
+//! [`check_read`]. Writes: [`check_write`] accepts only the Feature ids of
+//! class [`Safety::WriteApple`], and [`check_write_op`] only the ids of one
+//! named Apple operation ([`WriteOp`]): `Shutdown` = `0x40` `WillShutdown`
+//! (no data, wire `53 40`, sent by macOS at every shutdown), `DeviceName` =
+//! `0x55` `LongDeviceName` (64 data bytes, Lion's `setDeviceName:`; its real
+//! write stays refused until proven, [`crate::devname`]). [`WriteSession`]
+//! allows each id once per session; the only function that writes
+//! ([`crate::hidraw::hid_write_feature`]) calls both. Proof levels: `[mesuré]` observed on the A1314 ISO,
 //! `[plist]` Apple driver property list, `[désassemblage]` Apple binaries,
 //! `[source]` public document, `[hypothèse]` plausible, not proven.
 //!
@@ -63,9 +65,9 @@ pub enum Safety {
     PassiveInput,
     ManualOnly,
     NeverRead,
-    /// Written by Apple's own driver at every shutdown, with the same bytes
-    /// and in the same context: Feature `0x40` only (see [`check_write`]).
-    WriteAppleParity,
+    /// Written by Apple's own software, with the same bytes and in the same
+    /// context, by one named operation only ([`WriteOp`], [`check_write_op`]).
+    WriteApple,
     NeverWrite,
     Unknown,
 }
@@ -78,7 +80,7 @@ impl Safety {
             Self::PassiveInput => "PassiveInput",
             Self::ManualOnly => "ManualOnly",
             Self::NeverRead => "NeverRead",
-            Self::WriteAppleParity => "WriteAppleParity",
+            Self::WriteApple => "WriteApple",
             Self::NeverWrite => "NeverWrite",
             Self::Unknown => "Unknown",
         }
@@ -286,11 +288,15 @@ pub const TABLE: &[Entry] = &[
     r(0x35, F, None, None, "magic_kb_link_key",
       "Magic Keyboard only (CVE-2024-0230): link key; refused by the A1314", "-", E::None,
       D::Raw, P::Source, S::NeverRead, "RE-COMMANDES-VENDEUR §3.3"),
-    // ── WriteAppleParity: the only write, what Apple's driver sends ───────
+    // ── WriteApple: written only by a named Apple operation (WriteOp) ─────
     r(0x40, F, None, Some("WillShutdown"), "will_shutdown",
       "Command: the host is going to shut down (write-only; sent by macOS at each shutdown or restart, id only: wire `53 40`)",
-      "-", E::None, D::Raw, P::Disassembly, S::WriteAppleParity,
+      "-", E::None, D::Raw, P::Disassembly, S::WriteApple,
       "RE-PILOTE-MACOS §3 §5, RE-GHIDRA-KEXT, RE-GHIDRA-IOBLUETOOTH, #191"),
+    r(0x55, F, Some(65), Some("LongDeviceName"), "long_device_name",
+      "Long name, 64 bytes, write-only on this keyboard (GET refused 0x03); written by Lion's setDeviceName: (operation DeviceName, real write refused until proven)",
+      "text", E::None, D::Raw, P::Disassembly, S::WriteApple,
+      "RE-PILOTE-MACOS §3, RE-PILOTES-ANCIENS §5 L11, RENOMMER-CLAVIER, #192, #248"),
     // ── NeverWrite: command / write-only registers ────────────────────────
     r(0x01, O, Some(2), None, "led_output",
       "Keyboard LEDs (Caps Lock...): handled by the kernel through evdev, never by us", "bits",
@@ -313,9 +319,6 @@ pub const TABLE: &[Entry] = &[
     r(0x50, F, None, Some("DeviceNameChange"), "device_name_change",
       "Command: validate a name change (4 fragments)", "-", E::None, D::Raw, P::Disassembly,
       S::NeverWrite, "RE-PILOTES-ANCIENS §7"),
-    r(0x55, F, Some(65), Some("LongDeviceName"), "long_device_name",
-      "Long name, 64 bytes, write-only on this keyboard", "text", E::None, D::Raw, P::Disassembly,
-      S::NeverWrite, "RE-PILOTE-MACOS §3"),
     r(0xD0, F, None, None, "d0", "Unknown write-only register (maintenance range of the updater)", "-",
       E::None, D::Raw, P::Hypothesis, S::NeverWrite, "RE-COMMANDES-VENDEUR §1.3"),
     r(0xD4, F, None, None, "d4", "Unknown write-only register (maintenance range of the updater)", "-",
@@ -428,9 +431,13 @@ pub const SAFE_READ_IDS: [u8; N_SAFE] = ids(Safety::SafeRead, Direction::Feature
 pub const ONCE_PER_CONNECTION_IDS: [u8; N_ONCE] =
     ids(Safety::OncePerConnection, Direction::Feature);
 /// Of those, the ones the daemon actually requests (once per connection):
-/// firmware version and battery thresholds. The name fragments stay
-/// available to `akmctl info` but BlueZ already gives the name.
+/// firmware version and battery thresholds.
 pub const DAEMON_ONCE_IDS: [u8; 2] = [0x4F, 0x60];
+/// Then, with a lower priority (a burst that runs out of time leaves them for
+/// the next one without counting as incomplete): the name stored in the
+/// keyboard `0x51`-`0x54`, what Apple's `deviceNameFromHardware` reads; the
+/// cache behind `akmctl rename --device-name --show` and its backup (#248).
+pub const DAEMON_DEFERRED_ONCE_IDS: [u8; 4] = [0x51, 0x52, 0x53, 0x54];
 
 // ── lookup and classification ──────────────────────────────────────────────
 
@@ -497,19 +504,81 @@ pub fn check_read(id: u8) -> Result<Safety, Refusal> {
     }
 }
 
-/// May this report be written? **Only the Feature `0x40` `WillShutdown`**
-/// (class [`Safety::WriteAppleParity`]): the one command Apple's driver sends
-/// to this keyboard in production (`handleShutdown` / `handleRestart` ->
-/// `willShutdown` -> `setExtendedReport("WillShutdown", NULL, 0)`, wire
-/// `53 40`). Every other id and direction is refused, among them `0x44`,
-/// `0x4A`, `0x41`, `0x45`, `0x50`-`0x55`, `0xD0`-`0xFB`, `0x09` and `0xD5`.
-/// Stateless: [`WriteSession`] adds the "once" rule.
+/// A named write operation of Apple's software, with the only ids it may
+/// write and the exact length of each. The register map never lets an id
+/// be written outside its operation ([`check_write_op`]), and a new operation
+/// is a new variant here, with its own documented proof, never a new class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum WriteOp {
+    /// `WillShutdown` (`0x40`, id only): macOS 26.5 kernel driver, at every
+    /// shutdown or restart (`handleShutdown` -> `willShutdown`) [désassemblage].
+    Shutdown,
+    /// `LongDeviceName` (`0x55`, 64 data bytes): Lion 10.7
+    /// `-[AppleBluetoothHIDDevice setDeviceName:]` for a PID with
+    /// `LongDeviceName` (RE-PILOTES-ANCIENS §5 L11) [désassemblage]. The bytes
+    /// of the name field are not proven: [`crate::devname`] refuses the real
+    /// write (`NotProven`), and the hardware door has no 65-byte ioctl.
+    DeviceName,
+}
+
+impl WriteOp {
+    /// Every named operation (the sweep tests iterate this list).
+    pub const ALL: [WriteOp; 2] = [Self::Shutdown, Self::DeviceName];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Shutdown => "Shutdown",
+            Self::DeviceName => "DeviceName",
+        }
+    }
+
+    /// The only Feature ids this operation may write.
+    pub const fn ids(self) -> &'static [u8] {
+        match self {
+            Self::Shutdown => &[0x40],
+            Self::DeviceName => &[0x55],
+        }
+    }
+
+    /// Exact number of data bytes after the id (the same for every id of
+    /// the operation): 0 = the id alone.
+    pub const fn payload_len(self) -> usize {
+        match self {
+            Self::Shutdown => 0,
+            Self::DeviceName => 64,
+        }
+    }
+
+    /// The operation that owns this Feature id, if any.
+    pub fn of_id(id: u8) -> Option<WriteOp> {
+        Self::ALL.into_iter().find(|op| op.ids().contains(&id))
+    }
+}
+
+/// Every Feature id some named operation may write (sorted, no duplicate).
+pub fn writable_feature_ids() -> Vec<u8> {
+    let mut v: Vec<u8> = WriteOp::ALL
+        .iter()
+        .flat_map(|op| op.ids().iter().copied())
+        .collect();
+    v.sort_unstable();
+    v.dedup();
+    v
+}
+
+/// May this report be written by *some* named Apple operation? Only a
+/// Feature id of class [`Safety::WriteApple`] that a [`WriteOp`] lists:
+/// `0x40` (`Shutdown`) and `0x55` (`DeviceName`). Every other id and
+/// direction is refused, among them `0x44`, `0x45`, `0x41`, `0x4A`, `0x4C`,
+/// `0x50`-`0x54`, `0xD0`-`0xFB`, `0x09` and `0xD5`. Stateless:
+/// [`check_write_op`] binds the id to its operation, [`WriteSession`] adds
+/// the length and "once" rules.
 pub fn check_write(id: u8, dir: Direction) -> Result<(), Refusal> {
     let class = match dir {
         Direction::Feature => classify_feature(id),
         _ => lookup(id, dir).map_or(Safety::Unknown, |e| e.safety),
     };
-    if dir == Direction::Feature && class == Safety::WriteAppleParity {
+    if dir == Direction::Feature && class == Safety::WriteApple && WriteOp::of_id(id).is_some() {
         return Ok(());
     }
     Err(Refusal {
@@ -519,14 +588,26 @@ pub fn check_write(id: u8, dir: Direction) -> Result<(), Refusal> {
     })
 }
 
+/// May operation `op` write this report? [`check_write`], then the id must be
+/// one of `op`'s own ids (a `Shutdown` can never write `0x55`, and so on).
+pub fn check_write_op(op: WriteOp, id: u8, dir: Direction) -> Result<(), WriteRefusal> {
+    check_write(id, dir).map_err(WriteRefusal::Map)?;
+    if !op.ids().contains(&id) {
+        return Err(WriteRefusal::WrongOperation { op, id });
+    }
+    Ok(())
+}
+
 /// Why [`WriteSession::authorize`] refused a write that the register map allows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WriteRefusal {
     /// The register map refuses this id or direction.
     Map(Refusal),
-    /// The write carries data: Apple sends the id only.
-    Payload { id: u8, len: usize },
-    /// The one write of this session was already authorised.
+    /// The id belongs to another operation.
+    WrongOperation { op: WriteOp, id: u8 },
+    /// The data length is not the operation's exact length.
+    Payload { id: u8, len: usize, expected: usize },
+    /// This id was already written in this session.
     Repeated { id: u8 },
 }
 
@@ -534,9 +615,15 @@ impl fmt::Display for WriteRefusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Map(r) => r.fmt(f),
-            Self::Payload { id, len } => {
-                write!(f, "write of report {id:#04x} refused: {len} data byte(s), Apple sends the id only")
-            }
+            Self::WrongOperation { op, id } => write!(
+                f,
+                "write of report {id:#04x} refused: not an id of the operation {}",
+                op.as_str()
+            ),
+            Self::Payload { id, len, expected } => write!(
+                f,
+                "write of report {id:#04x} refused: {len} data byte(s), Apple sends exactly {expected}"
+            ),
             Self::Repeated { id } => {
                 write!(f, "write of report {id:#04x} refused: already sent in this session")
             }
@@ -552,36 +639,59 @@ impl From<WriteRefusal> for std::io::Error {
     }
 }
 
-/// The "once per shutdown" rule of the only write. A session authorises one
-/// write; the authorisation is consumed even if the write then fails (a
-/// failed `WillShutdown` is never retried). State is per value: the real
-/// sender keeps one process-wide session ([`crate::hidraw::send_will_shutdown`]).
-#[derive(Debug, Default)]
+/// The "once per session" rule of every write: each id is authorised at most
+/// once; the authorisation is consumed even if the write then fails (a
+/// failed command is never retried). State is per value: the daemon keeps one
+/// process-wide session ([`crate::hidraw::send_will_shutdown`]), `akmctl`
+/// one per command.
+#[derive(Debug)]
 pub struct WriteSession {
-    used: bool,
+    used: [bool; 256],
+}
+
+impl Default for WriteSession {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WriteSession {
     pub const fn new() -> Self {
-        Self { used: false }
+        Self { used: [false; 256] }
     }
 
-    /// Has the session's write been authorised already?
+    /// Has any write been authorised already?
     pub fn is_used(&self) -> bool {
-        self.used
+        self.used.iter().any(|&u| u)
     }
 
-    /// Authorise (and consume) the write of Feature `id` with `payload`
-    /// (the bytes after the id). Register map first, then no data, then once.
-    pub fn authorize(&mut self, id: u8, dir: Direction, payload: &[u8]) -> Result<(), WriteRefusal> {
-        check_write(id, dir).map_err(WriteRefusal::Map)?;
-        if !payload.is_empty() {
-            return Err(WriteRefusal::Payload { id, len: payload.len() });
+    /// Has one of `op`'s ids been authorised already?
+    pub fn is_used_by(&self, op: WriteOp) -> bool {
+        op.ids().iter().any(|&id| self.used[usize::from(id)])
+    }
+
+    /// Authorise (and consume) the write of Feature `id` by `op` with
+    /// `payload` (the bytes after the id): register map, then the
+    /// operation's own ids, then its exact length, then once.
+    pub fn authorize(
+        &mut self,
+        op: WriteOp,
+        id: u8,
+        dir: Direction,
+        payload: &[u8],
+    ) -> Result<(), WriteRefusal> {
+        check_write_op(op, id, dir)?;
+        if payload.len() != op.payload_len() {
+            return Err(WriteRefusal::Payload {
+                id,
+                len: payload.len(),
+                expected: op.payload_len(),
+            });
         }
-        if self.used {
+        if self.used[usize::from(id)] {
             return Err(WriteRefusal::Repeated { id });
         }
-        self.used = true;
+        self.used[usize::from(id)] = true;
         Ok(())
     }
 }
@@ -830,7 +940,7 @@ mod tests {
         let mut once = ONCE_PER_CONNECTION_IDS.to_vec();
         once.sort_unstable();
         assert_eq!(once, [0x4F, 0x51, 0x52, 0x53, 0x54, 0x60]);
-        for id in DAEMON_ONCE_IDS {
+        for id in DAEMON_ONCE_IDS.into_iter().chain(DAEMON_DEFERRED_ONCE_IDS) {
             assert!(ONCE_PER_CONNECTION_IDS.contains(&id));
         }
     }
@@ -847,10 +957,11 @@ mod tests {
         for id in [0xFE, 0x4C] {
             assert_eq!(class(id), Safety::NeverRead);
         }
-        for id in [0x44, 0x45, 0x41, 0x50, 0x55, 0xD0, 0xD4, 0xD5, 0xFA, 0xFB] {
+        for id in [0x44, 0x45, 0x41, 0x50, 0xD0, 0xD4, 0xD5, 0xFA, 0xFB] {
             assert_eq!(class(id), Safety::NeverWrite, "{id:#04x}");
         }
-        assert_eq!(class(0x40), Safety::WriteAppleParity);
+        assert_eq!(class(0x40), Safety::WriteApple);
+        assert_eq!(class(0x55), Safety::WriteApple);
         for id in [0x04, 0x05, 0x30, 0x13, 0x11, 0x12] {
             assert_eq!(lookup(id, Direction::Input).unwrap().safety, Safety::PassiveInput);
         }
@@ -882,9 +993,16 @@ mod tests {
         }
     }
 
+    /// Ids that must never be written, whatever the operation (manager's list).
+    const NEVER: [u8; 19] = [
+        0x44, 0x45, 0x41, 0x4A, 0x4C, 0x09, 0xD5, 0x50, 0x51, 0x52, 0x53, 0x54, 0xD0, 0xD4, 0xFB,
+        0xFA, 0x43, 0xC6, 0xDC,
+    ];
+
     #[test]
-    fn only_will_shutdown_is_writable() {
-        // The 256 ids in the three directions: exactly one pair is accepted.
+    fn only_the_ids_of_the_named_operations_are_writable() {
+        // The 256 ids in the three directions: exactly the Feature ids listed
+        // by the named operations are accepted, nothing else.
         let mut ok = Vec::new();
         for id in 0..=255u8 {
             for dir in [Direction::Feature, Direction::Input, Direction::Output] {
@@ -899,45 +1017,150 @@ mod tests {
                 }
             }
         }
-        assert_eq!(ok, vec![(0x40, Direction::Feature)]);
-        // The forbidden list of the manager, one by one.
-        for id in [0x44, 0x45, 0x41, 0x4A, 0x09, 0xD5, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0xD0, 0xFB, 0xFA, 0x43, 0xC6, 0xDC] {
+        let expected: Vec<(u8, Direction)> = writable_feature_ids()
+            .into_iter()
+            .map(|id| (id, Direction::Feature))
+            .collect();
+        assert_eq!(ok, expected);
+        assert_eq!(writable_feature_ids(), vec![0x40, 0x55]);
+        // The forbidden list of the manager, one by one, and for every operation.
+        for id in NEVER.into_iter().chain(0xD0..=0xFB) {
             assert!(check_write(id, Direction::Feature).is_err(), "{id:#04x}");
+            for op in WriteOp::ALL {
+                assert!(
+                    check_write_op(op, id, Direction::Feature).is_err(),
+                    "{id:#04x}"
+                );
+            }
         }
-        assert!(check_write(0x40, Direction::Input).is_err());
-        assert!(check_write(0x40, Direction::Output).is_err());
-        // Exactly one entry carries the class.
-        let n = TABLE.iter().filter(|e| e.safety == Safety::WriteAppleParity).count();
-        assert_eq!(n, 1);
-        assert_eq!(classify_feature(0x40), Safety::WriteAppleParity);
-        assert!(!Safety::WriteAppleParity.daemon_may_read(), "0x40 refuses GET");
-        assert!(check_read(0x40).is_err());
+        for id in writable_feature_ids() {
+            assert!(check_write(id, Direction::Input).is_err());
+            assert!(check_write(id, Direction::Output).is_err());
+            // Never readable: these registers refuse GET.
+            assert!(!classify_feature(id).daemon_may_read());
+            assert!(check_read(id).is_err());
+        }
+        // The class and the operations describe the same set.
+        let mut class_ids: Vec<u8> = TABLE
+            .iter()
+            .filter(|e| e.safety == Safety::WriteApple)
+            .map(|e| {
+                assert_eq!(e.dir, Direction::Feature);
+                e.id
+            })
+            .collect();
+        class_ids.sort_unstable();
+        assert_eq!(class_ids, writable_feature_ids());
     }
 
     #[test]
-    fn session_authorises_one_write_of_one_id_without_data() {
-        // Through the session, over the 256 ids: only 0x40 passes, and only once.
-        for id in 0..=255u8 {
-            let mut s = WriteSession::new();
-            let r = s.authorize(id, Direction::Feature, &[]);
-            assert_eq!(r.is_ok(), id == 0x40, "{id:#04x}");
-            assert_eq!(s.is_used(), id == 0x40, "a refused id must not consume the session");
+    fn each_id_belongs_to_one_operation_only() {
+        for op in WriteOp::ALL {
+            for id in 0..=255u8 {
+                let r = check_write_op(op, id, Direction::Feature);
+                assert_eq!(
+                    r.is_ok(),
+                    op.ids().contains(&id),
+                    "{} {id:#04x}",
+                    op.as_str()
+                );
+                if op.ids().contains(&id) {
+                    assert_eq!(WriteOp::of_id(id), Some(op));
+                }
+            }
         }
+        assert_eq!(
+            check_write_op(WriteOp::Shutdown, 0x55, Direction::Feature),
+            Err(WriteRefusal::WrongOperation {
+                op: WriteOp::Shutdown,
+                id: 0x55
+            })
+        );
+        assert!(
+            check_write_op(WriteOp::DeviceName, 0x40, Direction::Feature)
+                .unwrap_err()
+                .to_string()
+                .contains("DeviceName")
+        );
+    }
+
+    #[test]
+    fn session_authorises_each_id_once_with_its_exact_length() {
+        // Over the 256 ids and every operation: only the operation's ids with
+        // the exact length pass, and a refusal never consumes the session.
+        for op in WriteOp::ALL {
+            let data = vec![0u8; op.payload_len()];
+            for id in 0..=255u8 {
+                let mut s = WriteSession::new();
+                let r = s.authorize(op, id, Direction::Feature, &data);
+                assert_eq!(
+                    r.is_ok(),
+                    op.ids().contains(&id),
+                    "{} {id:#04x}",
+                    op.as_str()
+                );
+                assert_eq!(
+                    s.is_used(),
+                    r.is_ok(),
+                    "a refused id must not consume the session"
+                );
+                for dir in [Direction::Input, Direction::Output] {
+                    assert!(WriteSession::new().authorize(op, id, dir, &data).is_err());
+                }
+            }
+        }
+        // Shutdown: once, id only.
         let mut s = WriteSession::new();
-        assert!(s.authorize(0x40, Direction::Feature, &[]).is_ok());
-        let again = s.authorize(0x40, Direction::Feature, &[]).unwrap_err();
+        assert!(s
+            .authorize(WriteOp::Shutdown, 0x40, Direction::Feature, &[])
+            .is_ok());
+        assert!(s.is_used_by(WriteOp::Shutdown) && !s.is_used_by(WriteOp::DeviceName));
+        let again = s
+            .authorize(WriteOp::Shutdown, 0x40, Direction::Feature, &[])
+            .unwrap_err();
         assert_eq!(again, WriteRefusal::Repeated { id: 0x40 });
         assert!(again.to_string().contains("already sent"));
-        // A refused id after the use is still a map refusal, not "repeated".
-        assert!(matches!(s.authorize(0x44, Direction::Feature, &[]), Err(WriteRefusal::Map(_))));
-        // Data is refused, and does not consume the session.
+        assert!(matches!(
+            s.authorize(WriteOp::Shutdown, 0x44, Direction::Feature, &[]),
+            Err(WriteRefusal::Map(_))
+        ));
+        // DeviceName: exactly 64 bytes, once; independent of Shutdown.
+        let mut s = WriteSession::new();
+        for bad in [0usize, 1, 8, 32, 63, 65, 255] {
+            assert_eq!(
+                s.authorize(WriteOp::DeviceName, 0x55, Direction::Feature, &vec![0; bad])
+                    .unwrap_err(),
+                WriteRefusal::Payload {
+                    id: 0x55,
+                    len: bad,
+                    expected: 64
+                }
+            );
+        }
+        assert!(!s.is_used());
+        assert!(s
+            .authorize(WriteOp::DeviceName, 0x55, Direction::Feature, &[0x41; 64])
+            .is_ok());
+        assert_eq!(
+            s.authorize(WriteOp::DeviceName, 0x55, Direction::Feature, &[0x41; 64])
+                .unwrap_err(),
+            WriteRefusal::Repeated { id: 0x55 }
+        );
+        assert!(s
+            .authorize(WriteOp::Shutdown, 0x40, Direction::Feature, &[])
+            .is_ok());
+        // Data on Shutdown is refused and does not consume the session.
         let mut s = WriteSession::new();
         assert_eq!(
-            s.authorize(0x40, Direction::Feature, &[3]).unwrap_err(),
-            WriteRefusal::Payload { id: 0x40, len: 1 }
+            s.authorize(WriteOp::Shutdown, 0x40, Direction::Feature, &[3])
+                .unwrap_err(),
+            WriteRefusal::Payload {
+                id: 0x40,
+                len: 1,
+                expected: 0
+            }
         );
         assert!(!s.is_used());
-        assert!(s.authorize(0x40, Direction::Feature, &[]).is_ok());
         let e: std::io::Error = WriteRefusal::Repeated { id: 0x40 }.into();
         assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
     }
