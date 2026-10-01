@@ -991,6 +991,15 @@ pub fn parse_config(s: &str) -> Result<bool, String> {
     Ok(enabled.unwrap_or(true))
 }
 
+/// Largest `hid-suspend.conf` accepted.
+pub const CONFIG_MAX_LEN: u64 = 4096;
+
+/// Metadata of an acceptable `hid-suspend.conf` (pure, #261): regular file,
+/// owned by root, not group/world writable, at most [`CONFIG_MAX_LEN`] bytes.
+pub fn config_meta_ok(is_file: bool, uid: u32, mode: u32, len: u64) -> bool {
+    is_file && uid == 0 && mode & 0o022 == 0 && len <= CONFIG_MAX_LEN
+}
+
 /// Reads the configuration: absent = enabled; it must be a regular file owned
 /// by root, not group/world writable, else the feature stays OFF (fail closed).
 pub fn read_config(path: &Path) -> Result<bool, String> {
@@ -1005,7 +1014,7 @@ pub fn read_config(path: &Path) -> Result<bool, String> {
         Err(e) => return Err(format!("{}: {e}", path.display())),
     };
     let md = f.metadata().map_err(|e| e.to_string())?;
-    if !md.file_type().is_file() || md.uid() != 0 || md.mode() & 0o022 != 0 || md.len() > 4096 {
+    if !config_meta_ok(md.file_type().is_file(), md.uid(), md.mode(), md.len()) {
         return Err(format!(
             "{}: must be a regular file owned by root, not group/world writable, ≤ 4 KiB",
             path.display()

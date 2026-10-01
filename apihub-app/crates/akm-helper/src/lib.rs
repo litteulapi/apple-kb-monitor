@@ -523,11 +523,17 @@ mod install_tests {
     #[test]
     fn args_and_uid_are_strict() {
         assert_eq!(parse_args(&["install"]), Ok(Verb::Install));
+        assert_eq!(parse_args(&["remove"]), Ok(Verb::Remove));
+        assert_eq!(parse_args(&["rollback"]), Ok(Verb::Rollback));
         for bad in [&[][..], &["install", "/tmp/x"], &["install", "--force"], &["--help"], &["../install"]] {
             assert!(parse_args(bad).is_err(), "{bad:?}");
         }
         assert_eq!(parse_uid("1000"), Ok(1000));
-        for bad in ["", "01000", "-1", "1000 ", "abc", "99999999999"] {
+        // #261: exact bounds (one digit "0" = root, ten digits = u32::MAX)
+        assert_eq!(parse_uid("0"), Ok(0));
+        assert_eq!(parse_uid("7"), Ok(7));
+        assert_eq!(parse_uid("4294967295"), Ok(u32::MAX));
+        for bad in ["", "01000", "00", "-1", "1000 ", "abc", "99999999999", "4294967296", "04294967295"] {
             assert!(parse_uid(bad).is_err(), "{bad:?}");
         }
         assert_eq!(source_for_uid(1000), PathBuf::from("/run/user/1000/apple-kb-monitor/keymap.hwdb"));

@@ -1402,6 +1402,73 @@ evdev:input:b0005v05ACp0256*\n KEYBOARD_KEY_70039=leftctrl\n KEYBOARD_KEY_7003f=
         assert!(Profile::default().hwdb_records().is_empty(), "default = nothing installed");
     }
 
+    /// #261: mutants of parse_hwdb that survived: header, exact bounds
+    /// (16 KiB, 512 lines), PID of exactly 4 hex digits, and read_installed.
+    #[test]
+    fn hwdb_header_bounds_pid_and_read_installed() {
+        let h = HWDB_HEADER;
+        let rec = "evdev:input:b0005v05ACp0256*\n KEYBOARD_KEY_7003f=f6\n";
+        // a valid body under another first line is refused
+        assert!(parse_hwdb(&format!("# not our header\n{rec}")).is_err());
+        assert!(
+            parse_hwdb(&format!("{h} \n{rec}")).is_err(),
+            "header + trailing blank"
+        );
+        assert!(parse_hwdb(&format!("{h}\n{rec}")).is_ok());
+        // PID: exactly 4 upper-case hex digits
+        for pid in ["00256", "256", "0256 ", "025g", "025a"] {
+            let s = format!("{h}\nevdev:input:b0005v05ACp{pid}*\n KEYBOARD_KEY_7003f=f6\n");
+            assert!(parse_hwdb(&s).is_err(), "{pid:?}");
+        }
+        // size: exactly MAX_HWDB accepted, one more byte refused (lines ≤ 512)
+        let base = format!("{h}\n{rec}");
+        let fill = |total: usize| {
+            let mut s = base.clone();
+            while s.len() + 100 <= total {
+                s.push_str(&format!("#{}\n", "x".repeat(98)));
+            }
+            let rest = total - s.len();
+            if rest > 0 {
+                s.push_str(&format!("#{}\n", "y".repeat(rest - 2)));
+            }
+            assert_eq!(s.len(), total);
+            s
+        };
+        assert!(fill(MAX_HWDB).lines().count() <= 512);
+        assert!(
+            parse_hwdb(&fill(MAX_HWDB)).is_ok(),
+            "exactly MAX_HWDB bytes"
+        );
+        assert!(
+            parse_hwdb(&fill(MAX_HWDB + 1)).is_err(),
+            "MAX_HWDB + 1 bytes"
+        );
+        // lines: exactly 512 accepted, 513 refused (well under 16 KiB)
+        let lines = |n: usize| format!("{base}{}", "#\n".repeat(n - base.lines().count()));
+        assert_eq!(lines(512).lines().count(), 512);
+        assert!(parse_hwdb(&lines(512)).is_ok(), "512 lines");
+        assert!(parse_hwdb(&lines(513)).is_err(), "513 lines");
+        // read_installed: absent = nothing, valid = records, invalid / unreadable = error
+        let d = std::env::temp_dir().join(format!("akm-keymap-ri-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let p = d.join("90-apple-kb-monitor.hwdb");
+        assert_eq!(read_installed(&p).unwrap(), Vec::new());
+        std::fs::write(&p, format!("{h}\n{rec}")).unwrap();
+        let r = read_installed(&p).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].pid, 0x0256);
+        assert_eq!(r[0].keys.len(), 1);
+        std::fs::write(&p, "garbage\n").unwrap();
+        let e = read_installed(&p).unwrap_err().to_string();
+        assert!(e.contains("90-apple-kb-monitor.hwdb"), "{e}");
+        assert!(
+            read_installed(&d).is_err(),
+            "a directory is unreadable, not absent"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
     #[test]
     fn hwdb_whitelist_refuses_everything_else() {
         let ok = format!("{HWDB_HEADER}\n\nevdev:input:b0005v05ACp0256*\n KEYBOARD_KEY_7003f=f6\n");
