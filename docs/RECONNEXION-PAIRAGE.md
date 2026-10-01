@@ -107,34 +107,68 @@ Capture btmon passive (lecture seule, 11:37 → 12:27) **[mesuré]** :
   accompagnent des déconnexions, pendant des sessions de rétro-ingénierie **[mesuré]**. Lien de cause à
   effet non établi **[hypothèse]**.
 
-### 3.6 Veille système
+### 3.6 Perte de lien capturée en direct (2026-10-01 12:13)
+
+Pendant la capture btmon passive, le lien est tombé **[mesuré]** (`btmon1.snoop`, trames #31 516-31 561) :
+
+| Heure | Trame | Fait |
+|---|---|---|
+| 12:11:27-28 | — | un outil de rétro-ingénierie lit en rafale des rapports **d'entrée** `0xFC`-`0xFF` (`GET_REPORT` type Input, 4 à 14 fois chacun) |
+| 12:12:58 → 12:13:08 | — | échantillonneur RE : ~25 `GET_REPORT Feature` à 0,4 s d'intervalle (`0x46`, `0xFF`, `0x49` … `0xF6`, `0xF7`) ; chaque requête : *Exit Sniff* → *Mode Change Active* (~35 ms) → réponse `a3 …` → retour en sniff |
+| 12:13:08.797 | #31 532 | `GET_REPORT Feature 0xFE` envoyé ; acquitté en bande de base (*Number of Completed Packets* à .805) |
+| 12:13:08.799 | #31 534 | *Exit Sniff Mode* accepté par le contrôleur… mais **aucun *Mode Change*, aucune réponse, plus aucune trame du clavier** |
+| 12:13:12 / 12:13:25 | — | `HIDP GET_REPORT request timed out` (dont la lecture UPower `0x47` de 12:13:21) |
+| 12:13:28.823 | #31 538 | `Disconnect Complete`, raison **Connection Timeout (0x08)** : délai de supervision (20 s après la dernière trame), pas une déconnexion propre |
+| 12:13:30 → 12:16:34 | — | BlueZ (plugin *policy* puis profil HID) appelle 9 fois : `Page Timeout` à chaque fois ; puis plus rien |
+| ≥ 12:16 | — | adaptateur repassé en autosuspend USB (`usb_watch2.log`) |
+
+Lecture : le clavier est devenu **muet radio d'un coup**, au milieu d'une salve de lectures, et ne fait
+plus de *page scan* ensuite. Un clavier qui s'endort normalement envoie un *LMP detach* (raison *Remote*),
+il ne disparaît pas par délai de supervision. Même signature à 04:00:13 la nuit précédente (perte « en
+pleine salve » de l'échantillonneur, `docs/HARDWARE-RAPPORTS-HID.md` §5), retour seulement 13 min plus
+tard, et le 29/09 15:09-15:21 (expirations GET_REPORT puis déconnexions pendant la rétro-ingénierie)
+**[mesuré]**. **[hypothèse forte]** le firmware du clavier se bloque (ou redémarre) sous certaines
+rafales de `GET_REPORT` sur des rapports non documentés ; il ne reprend qu'après une touche… ou une
+extinction/rallumage. La même lecture de `0xFE` à 11:47:23 (balayage complet) n'avait rien cassé : ce
+n'est pas un rapport « tueur » isolé mais un état atteint pendant une rafale.
+
+### 3.7 Veille système
 
 Aucune entrée `PM: suspend entry` dans tout le journal conservé (27/09 → 01/10) **[mesuré]** : la veille
 du PC n'est pas à l'origine des épisodes observés. Elle est néanmoins gérée (§6).
 
 ## 4. Cause racine
 
-**Chaîne prouvée** :
+**Ce qui est prouvé** :
 
-1. L'hôte disparaît (redémarrage à froid à 11:02) → le clavier perd le lien et, faute d'hôte, s'endort.
-2. Au démarrage, BlueZ appelle le clavier : `Host is down` (page timeout) parce qu'un clavier endormi
-   n'écoute pas **[mesuré + source]**. BlueZ abandonne après 3 min au plus **[source]**, rien ne relance.
-3. La seule voie restante est la reconnexion **initiée par le clavier** (touche). Elle n'a pas abouti entre
-   11:06 et 11:32 (aucun nœud uhid, aucune ligne bluetoothd) **[mesuré]**, alors que la clé était bonne et
-   le clavier dans la liste d'acceptation.
-4. Le ré-appairage « répare » parce qu'il inverse le sens : clavier en mode découvrable (il écoute) et
-   **hôte** qui appelle, adaptateur réveillé par la recherche. La clé, elle, n'était pas en cause
-   (aucune trace d'échec d'authentification ; clé identique après coup).
+1. **Ce n'est pas le pairage.** Aucune trace d'échec d'authentification dans aucun incident ; clé noyau =
+   clé stockée ; `br-connection-create-socket` et `Host is down` = page timeout, pas clé refusée
+   (§2, §3.1).
+2. **Le lien tombe par silence radio du clavier, pas par veille propre** : délai de supervision
+   (raison 0x08) en pleine rafale de `GET_REPORT`, capturé trame par trame à 12:13 (§3.6), même
+   signature à 04:00 et le 29/09. Les rafales viennent des outils de rétro-ingénierie lancés sur ce
+   poste ces derniers jours ; le trafic de fond (UPower 2 req./30 s, démon 16 req./15 min) multiplie les
+   occasions (§3.5).
+3. **Ensuite le clavier n'écoute plus** (page timeout à chaque appel) et **BlueZ abandonne** au bout de
+   2 à 3 min (§3.3) ; personne ne relançait.
+4. **La reconnexion par la touche n'a pas abouti** dans les épisodes journalisés (11:06-11:32 : aucun nœud
+   uhid ni ligne bluetoothd) **[mesuré]** ; l'adaptateur était alors en autosuspend USB (§3.4).
+5. **Le ré-appairage « répare » pour une autre raison que la clé** : il impose d'éteindre/rallumer le
+   clavier (mode appairage), ce qui réinitialise un firmware bloqué, puis c'est l'**hôte** qui appelle un
+   clavier qui écoute. **[hypothèse forte, cohérente avec 1-4]** : un simple éteindre/rallumer, sans
+   désappairer, suffit.
 
-**Maillon non encore capturé (3)** : pendant toute cette fenêtre l'adaptateur était en autosuspend USB
-(§3.4). **[hypothèse principale]** la *Connection Request* du clavier (train de page de quelques secondes)
-n'est pas servie à temps quand l'AX201 doit d'abord réveiller le bus USB ; c'est le seul élément de
-l'hôte qui diffère entre « clavier connecté » (adaptateur actif, tout marche) et « clavier à reconnecter »
-(adaptateur suspendu, rien ne marche). Hypothèses écartées : clé désynchronisée (§3.1), clavier absent de
-la liste d'acceptation (§3.1), `pin_len` (§3.1), veille système (§3.6), écriture SET_REPORT (aucune dans
-le code, vérifié par recherche).
+**Cause racine retenue** : blocage (ou redémarrage) du firmware du clavier sous rafales de lectures HID,
+aggravé côté hôte par l'abandon de BlueZ après 3 min et par un adaptateur en autosuspend USB au moment où
+le clavier doit se reconnecter ; le ré-appairage n'était que la manipulation qui passait par un
+redémarrage du clavier.
 
-Le test contrôlé du §7 tranche ce maillon (capture btmon de la touche).
+Hypothèses écartées : clé désynchronisée (§3.1), clavier absent de la liste d'acceptation (§3.1),
+`pin_len` (§3.1), veille système (§3.7), écriture SET_REPORT (aucune dans le code, vérifié par recherche).
+
+Reste à confirmer sur le matériel (§7) : (a) après une perte de ce type, une **touche** suffit-elle, ou
+faut-il **éteindre/rallumer** ? (b) avec l'adaptateur **sans** autosuspend, la *Connect Request* du
+clavier arrive-t-elle ?
 
 ## 5. Correctifs
 
@@ -152,6 +186,17 @@ btusb et demande un rechargement du module) ; `Experimental = false` (sans lien 
 
 ### 5.2 Démon `apple-kb-monitord`
 
+* **Politique de lecture HID sûre** (`akm_core::read_policy`, #177) : le démon ne demande plus que
+  `0x47` (pourcentage, rapport déclaré), `0x46` (tension mV) et `0x49` (tension filtrée) — 3 requêtes au
+  lieu de 14, plus de sonde `0xEA`, jamais `0xFE` ni aucun rapport non déclaré, jamais de balayage ;
+  **seulement si une touche a été pressée dans la dernière minute** (clavier éveillé, lien actif ; seul
+  l'horodatage de la dernière frappe est conservé, jamais son contenu) ; un seul lecteur (mutex + `flock`
+  sur `$XDG_RUNTIME_DIR/apple-kb-monitor/hid.lock`, à utiliser aussi par les outils RE) ; 250 ms entre deux
+  requêtes, budget 2 s, arrêt à la première erreur. Clavier inactif : aucune requête, le pourcentage vient du
+  noyau.
+* Réconciliation avec BlueZ (#165) : le gardien de liaison pousse à la machine d'acquisition l'ensemble des
+  claviers réellement connectés (au démarrage, au retour de bluetoothd, au réveil, toutes les 5 min) ; la
+  sonde « BlueZ absent » est bornée à 12 essais.
 * `akm_core::recovery` — machine d'états pure, testée en temps simulé :
   `connected` · `dormant` (clavier endormi ou lien perdu depuis peu, pas d'alerte) · `unreachable`
   (après perte de lien / réveil / démarrage : aucune réponse depuis 10 min malgré ≥ 3 appels ; **une**
@@ -165,29 +210,39 @@ btusb et demande un rechargement du module) ; `Experimental = false` (sans lien 
   de la fin d'une lecture en cours (≤ 3 s) puis libération ; au réveil délai de grâce de 4 s puis reprise
   rapide.
 * État publié sur le bus de session : objet `/com/agenceapi/AppleKbMonitor1/Link`, interface
-  `com.agenceapi.AppleKbMonitor1.Link` (`Health`, `Since`, `Attempts`, `Failures`, `LastError`,
-  `LastReason`, méthode `Reconnect()`).
+  `com.agenceapi.AppleKbMonitor1.Link`, méthodes `Status()` (JSON : `mac`, `name`, `health`, `since`,
+  `attempts`, `failures`, `last_error`, `last_reason`, `updated`) et `Reconnect()` (soumis aux mêmes
+  20 s minimum). Vérifié en réel le 01/10 (instance de test) : `health = connected`, inhibiteur logind
+  `delay` actif.
 
 ### 5.3 Outils
 
 * `akmctl doctor` — une commande : état BlueZ, empreinte de la clé (jamais la clé), liste d'acceptation,
   autosuspend de l'adaptateur, `main.conf`, UPower, journaux bluetoothd classés, hidraw, santé du démon,
   verdict et action conseillée.
-* `akmctl repair` — ré-appairage guidé ; ne supprime jamais le pairage sans la saisie explicite de
-  `OUBLIER` ; refuse si la liaison est saine. Menu tray : « Réparer la liaison… ».
+* `akmctl repair` — d'abord sans rien casser : touche + appels espacés, puis **éteindre/rallumer le
+  clavier** + appels ; ré-appairage seulement ensuite, et seulement après la saisie de `OUBLIER` sur un
+  terminal ; refuse si la liaison est saine. Menu tray : « Réparer la liaison… ».
 
 ## 6. Veille du clavier et du PC : comportement attendu après correctifs
 
 | Situation | Avant | Après |
 |---|---|---|
+| Lectures du démon | 14 rapports / 15 min, clavier actif ou non | 3 rapports, seulement après une frappe récente |
 | Clavier inactif | jamais endormi (UPower 2 req./30 s) | s'endort si `NoPollBatteries` ; `dormant`, revient à la touche ; filet : appel toutes les 5 puis 15 min |
 | PC en veille | lectures HID possibles pendant la coupure, attente passive au réveil | lectures suspendues avant la coupure ; au réveil appels à +4 s, +24 s, +64 s… |
 | Redémarrage du PC | BlueZ abandonne en 3 min ; ré-appairage | adaptateur jamais suspendu ; appels espacés sans limite de durée ; alerte claire à 10 min |
 | Clé réellement refusée | indiscernable d'un clavier endormi | `auth-failed`, notification, `akmctl repair` |
+| Clavier muet après une rafale de lectures | ré-appairage | notification « appuyez sur une touche, sinon éteignez/rallumez » ; le pairage est conservé |
 
 ## 7. Test contrôlé sur le matériel (à faire avec le gérant)
 
-Pré-requis : le gérant est devant le clavier et un autre moyen de saisie est disponible.
+Pré-requis : le gérant est devant le clavier, un autre moyen de saisie est disponible, **aucun outil de
+rétro-ingénierie ne tourne**.
+
+Premier test, sans aucune commande (après une coupure comme celle de 12:13) : appuyer sur une touche ;
+si rien en 10 s, éteindre/rallumer le clavier **sans l'oublier** dans Plasma. S'il revient, le pairage
+n'était pas en cause (§4, point 5).
 
 ```sh
 tests/live/reconnect_probe.sh            # btmon passif + état USB + journal, puis :
@@ -196,18 +251,25 @@ tests/live/reconnect_probe.sh            # btmon passif + état USB + journal, p
 #   3. le script attend 120 s la reconnexion et classe ce qu'il voit
 ```
 
-Lecture du résultat : `Connection Request` du clavier reçu et accepté → la reconnexion par touche
-fonctionne dans cet état ; aucun `Connection Request` alors que l'adaptateur était `suspended` → maillon 3
-confirmé ; `Link Key Request Negative Reply` / `Authentication Failure` → clé en cause (alors
+Lecture du résultat : `Connect Request` du clavier reçu et accepté → la reconnexion par touche
+fonctionne dans cet état ; aucun `Connect Request` alors que l'adaptateur était `suspended` → rôle de
+l'autosuspend confirmé ; `Link Key Request Negative Reply` / `Authentication Failure` → clé en cause (alors
 `akmctl repair`).
 
 ## 8. Risques restants
 
-* Maillon 3 non capturé tant que le test du §7 n'a pas été fait ; la règle udev le neutralise quelle que
-  soit sa nature exacte côté USB, pas s'il venait du firmware radio.
+* Le blocage du firmware du clavier est déduit de trois coupures concordantes, pas démontré par une
+  reproduction volontaire (qui exigerait de marteler le clavier : exclu). La politique de lecture sûre en
+  supprime la cause côté démon ; UPower (2 lectures `0x47` / 30 s par le noyau) reste tant que
+  `NoPollBatteries` n'est pas appliqué.
+* Reconnexion par la touche avec l'adaptateur en autosuspend : non capturée tant que le test du §7 n'a pas
+  été fait ; la règle udev neutralise ce chemin quoi qu'il en soit.
 * Un clavier qui appaire **un autre hôte** (il n'en mémorise qu'un) se comportera exactement comme une clé
   refusée : seul `akmctl repair` le ramène.
-* Les sessions de rétro-ingénierie qui balaient tous les Report ID provoquent des rafales d'erreurs HIDP ;
-  à ne pas lancer pendant une mesure de stabilité.
+* Les sessions de rétro-ingénierie qui balaient les Report ID (y compris les rapports d'entrée, 12:11:27)
+  sont la cause la plus probable des coupures récentes : à ne lancer que sous le verrou `hid.lock`, jamais
+  pendant l'usage normal du clavier.
+* Le gérant a « oublié » puis ré-appairé le clavier à 11:32 et l'a de nouveau oublié à 12:24 (Plasma) :
+  chaque ré-appairage crée une nouvelle clé ; aucun ne corrigeait une clé fausse.
 * `~/.config/apple-kb-monitor/config.toml` contient la configuration de `mqtt-bridge` (avertissements
   `unknown key [mqtt]` au démarrage) : sans effet sur la liaison, à séparer.
