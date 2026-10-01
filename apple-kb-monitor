@@ -1743,189 +1743,6 @@ def print_metrics(devices):
 
 
 # ---------------------------------------------------------------------------
-# MQTT Home Assistant auto-discovery
-# ---------------------------------------------------------------------------
-
-def new_mqtt_client(mod, client_id):
-    """Build a paho Client on both 1.x and 2.x (2.x requires an API version)."""
-    api = getattr(mod, "CallbackAPIVersion", None)
-    if api is not None:
-        return mod.Client(api.VERSION1, client_id=client_id)
-    return mod.Client(client_id=client_id)
-
-
-def mqtt_publish(host, port, topic_prefix, devices, username=None, password=None):
-    """Publish telemetry to MQTT with Home Assistant auto-discovery."""
-    try:
-        import paho.mqtt.client as mqtt_client
-    except ImportError:
-        return _mqtt_publish_cli(host, port, topic_prefix, devices, username, password)
-
-    try:
-        client = new_mqtt_client(mqtt_client, "apple-kb-monitor")
-        if username:
-            client.username_pw_set(username, password)
-        client.connect(host, port, 10)
-    except Exception as e:
-        print(f"[mqtt] connection failed: {e}", file=sys.stderr)
-        return
-
-    client.loop_start()
-    infos = []
-
-    def _pub(topic, payload):
-        infos.append(client.publish(topic, payload, retain=True))
-
-    for dev in devices:
-        mac = dev["mac"]
-        if not mac:
-            continue
-        mac_id = mac.replace(":", "").lower()
-        reps = read_all_reports(dev["path"])
-        conn = get_conn_info(mac) if mac else None
-
-        pct = reps.get("battery_fine") or reps.get("battery_pct")
-        volts = reps.get("voltage")
-
-        # HA auto-discovery configs
-        ha_sensors = [
-            ("battery", "battery", "%", pct, "mdi:battery-bluetooth"),
-            ("voltage", None, "V", volts, "mdi:flash-triangle"),
-        ]
-        if conn and conn.get("rssi_dbm") is not None:
-            ha_sensors.append(("rssi", "signal_strength", "dBm", conn["rssi_dbm"], "mdi:bluetooth"))
-        if conn and conn.get("tx_power_dbm") is not None:
-            ha_sensors.append(("tx_power", None, "dBm", conn["tx_power_dbm"], "mdi:access-point"))
-
-        device_info = {
-            "identifiers": [f"apple_kb_{mac_id}"],
-            "name": dev["model"],
-            "manufacturer": "Apple",
-            "model": dev["model"],
-            "sw_version": reps.get("fw_version", ""),
-            "via_device": "apple-kb-monitor",
-        }
-
-        for sensor_id, dev_class, unit, value, icon in ha_sensors:
-            if value is None:
-                continue
-            config_topic = f"{topic_prefix}/sensor/apple_kb_{mac_id}/{sensor_id}/config"
-            state_topic = f"{topic_prefix}/sensor/apple_kb_{mac_id}/{sensor_id}/state"
-            config = {
-                "name": f"Apple KB {sensor_id.replace('_', ' ').title()}",
-                "unique_id": f"apple_kb_{mac_id}_{sensor_id}",
-                "state_topic": state_topic,
-                "unit_of_measurement": unit,
-                "icon": icon,
-                "device": device_info,
-            }
-            if dev_class:
-                config["device_class"] = dev_class
-            _pub(config_topic, json.dumps(config))
-            _pub(state_topic, str(value))
-
-    # Monitor DDC data
-    try:
-        mon_json = subprocess.run(["ddc-tool", "json", "6"],
-                                  capture_output=True, text=True, timeout=10)
-        if mon_json.returncode == 0:
-            mon = json.loads(mon_json.stdout)
-            mon_device = {
-                "identifiers": ["lg_34gn850"],
-                "name": "LG 34GN850",
-                "manufacturer": "LG Electronics",
-                "model": "34GN850",
-                "via_device": "apple-kb-monitor",
-            }
-            mon_sensors = [
-                ("brightness", None, "%", mon.get("brightness", {}).get("current"), "mdi:brightness-6"),
-                ("contrast", None, "%", mon.get("contrast", {}).get("current"), "mdi:contrast-box"),
-                ("volume", None, "%", mon.get("volume", {}).get("current"), "mdi:volume-high"),
-                ("color_temp", None, "K", mon.get("color_temp_kelvin", {}).get("current"), "mdi:thermometer"),
-                ("usage_hours", None, "h", mon.get("usage_hours", {}).get("current"), "mdi:clock-outline"),
-                ("freesync", None, "", 1 if mon.get("freesync", {}).get("current") == 1 else 0, "mdi:monitor"),
-                ("backlight_pwm", None, "", mon.get("backlight_pwm", {}).get("current"), "mdi:lightbulb"),
-            ]
-            for sensor_id, dev_class, unit, value, icon in mon_sensors:
-                if value is None:
-                    continue
-                config_topic = f"{topic_prefix}/sensor/lg_34gn850/{sensor_id}/config"
-                state_topic = f"{topic_prefix}/sensor/lg_34gn850/{sensor_id}/state"
-                config = {
-                    "name": f"LG {sensor_id.replace('_', ' ').title()}",
-                    "unique_id": f"lg_34gn850_{sensor_id}",
-                    "state_topic": state_topic,
-                    "unit_of_measurement": unit,
-                    "icon": icon,
-                    "device": mon_device,
-                }
-                if dev_class:
-                    config["device_class"] = dev_class
-                _pub(config_topic, json.dumps(config))
-                _pub(state_topic, str(value))
-
-            # Auto-brightness recommendation
-            auto_bri = auto_brightness_value()
-            _pub(f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/state", str(auto_bri))
-            _pub(f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/config", json.dumps({
-                "name": "LG Auto Brightness (Circadian)",
-                "unique_id": "lg_34gn850_auto_brightness",
-                "state_topic": f"{topic_prefix}/sensor/lg_34gn850/auto_brightness/state",
-                "unit_of_measurement": "%",
-                "icon": "mdi:weather-sunny",
-                "device": mon_device,
-            }))
-    except Exception as e:
-        print(f"[mqtt] monitor publish error: {e}", file=sys.stderr)
-
-    for info in infos:
-        try:
-            info.wait_for_publish(timeout=5)
-        except (RuntimeError, ValueError):
-            pass
-    client.loop_stop()
-    client.disconnect()
-    print(f"[mqtt] published {len(devices)} keyboard(s) + monitor to {host}:{port}", file=sys.stderr)
-
-
-def _mqtt_publish_cli(host, port, topic_prefix, devices, username=None, password=None):
-    """Fallback MQTT publish via mosquitto_pub."""
-    auth_args = []
-    if username:
-        auth_args = ["-u", username, "-P", password or ""]
-    for dev in devices:
-        if not dev["mac"]:
-            continue
-        mac_id = dev["mac"].replace(":", "").lower()
-        reps = read_all_reports(dev["path"])
-        conn = get_conn_info(dev["mac"])
-
-        state = {
-            "battery": reps.get("battery_fine") or reps.get("battery_pct"),
-            "voltage": reps.get("voltage"),
-        }
-        if conn:
-            state["rssi"] = conn.get("rssi_dbm")
-            state["tx_power"] = conn.get("tx_power_dbm")
-
-        topic = f"{topic_prefix}/sensor/apple_kb_{mac_id}/state"
-        try:
-            r = subprocess.run(
-                ["mosquitto_pub", "-h", host, "-p", str(port)] + auth_args +
-                ["-t", topic, "-m", json.dumps(state), "-r"],
-                capture_output=True, timeout=5,
-            )
-            if r.returncode != 0:
-                print(f"[mqtt] mosquitto_pub failed (rc={r.returncode})", file=sys.stderr)
-        except FileNotFoundError:
-            print("[mqtt] neither paho-mqtt nor mosquitto_pub available", file=sys.stderr)
-            return
-        except (subprocess.TimeoutExpired, OSError) as e:
-            print(f"[mqtt] mosquitto_pub error: {e}", file=sys.stderr)
-            return
-
-
-# ---------------------------------------------------------------------------
 # BlueZ Battery Provider
 # ---------------------------------------------------------------------------
 
@@ -2189,7 +2006,7 @@ def _poll_device(dev, provider, threshold):
         NOTIFIED_FILE.unlink(missing_ok=True)
 
 
-async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mqtt_port=1883, mqtt_topic="homeassistant", mqtt_user=None, mqtt_pass=None):
+async def daemon_loop(threshold, interval, no_provider=False):
     """Main async daemon: Battery Provider + telemetry monitor."""
     ensure_state_dir()
 
@@ -2389,16 +2206,6 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
                 except Exception as e:
                     print(f"[daemon] poll error for {dev.get('mac')}: {e}", file=sys.stderr)
 
-            # MQTT publish
-            if mqtt_host:
-                try:
-                    # blocking network/subprocess work: keep it off the event loop
-                    await asyncio.to_thread(
-                        lambda: mqtt_publish(mqtt_host, mqtt_port, mqtt_topic,
-                                             find_devices(), mqtt_user, mqtt_pass))
-                except Exception as e:
-                    print(f"[mqtt] error: {e}", file=sys.stderr)
-
             try:
                 await asyncio.wait_for(stop.wait(), timeout=interval)
                 break
@@ -2445,31 +2252,6 @@ async def watch_mode(watch_interval):
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Auto-brightness (circadian rhythm)
-# ---------------------------------------------------------------------------
-
-def auto_brightness_value():
-    """Calculate optimal brightness based on time of day."""
-    hour = datetime.now().hour
-    # Circadian curve: bright during day, dim at night
-    # 06:00-08:00: ramp up 30→80
-    # 08:00-18:00: 80 (work hours)
-    # 18:00-21:00: ramp down 80→40
-    # 21:00-23:00: ramp down 40→20
-    # 23:00-06:00: 20 (night)
-    if 6 <= hour < 8:
-        return 30 + (hour - 6) * 25  # 30→80
-    elif 8 <= hour < 18:
-        return 80
-    elif 18 <= hour < 21:
-        return 80 - (hour - 18) * 13  # 80→41
-    elif 21 <= hour < 23:
-        return 40 - (hour - 21) * 10  # 40→20
-    else:
-        return 20
-
 
 def positive_int(text):
     try:
@@ -2530,35 +2312,7 @@ license: GPL-2.0-or-later
     p.add_argument("--interval", type=positive_int, default=300, help="Daemon poll interval in seconds (default: 300)")
     p.add_argument("--watch-interval", type=positive_int, default=5, help="Watch refresh in seconds (default: 5)")
     p.add_argument("--no-provider", action="store_true", help="Disable BlueZ Battery Provider registration")
-    p.add_argument("--mqtt", metavar="HOST", help="Publish to MQTT broker (e.g. 192.168.8.3)")
-    p.add_argument("--mqtt-port", type=int, default=1883, help="MQTT broker port (default: 1883)")
-    p.add_argument("--mqtt-topic", default="homeassistant", help="MQTT topic prefix (default: homeassistant)")
-    p.add_argument("--mqtt-user", default=None, help="MQTT username")
-    p.add_argument("--mqtt-pass", default=None, help="MQTT password")
-    p.add_argument("--auto-brightness", action="store_true", help="Apply circadian brightness to monitor via DDC")
     args = p.parse_args()
-
-    # --- Auto-brightness mode ---
-    if args.auto_brightness:
-        target = auto_brightness_value()
-        print(f"Circadian brightness: {target}% (hour={datetime.now().hour})")
-        try:
-            r = subprocess.run(["ddc-tool", "write", "6", "16", str(target)],
-                               capture_output=True, timeout=5)
-        except (OSError, subprocess.TimeoutExpired) as e:
-            print(f"ddc-tool failed: {e}", file=sys.stderr)
-            sys.exit(1)
-        if r.returncode != 0:
-            print(f"ddc-tool write failed (rc={r.returncode})", file=sys.stderr)
-            sys.exit(1)
-        try:  # OSD is cosmetic: ignore a missing qdbus6
-            subprocess.run(["qdbus6", "org.kde.plasmashell", "/org/kde/osdService",
-                            "org.kde.osdService.brightnessChanged", str(target)],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           timeout=5)
-        except (OSError, subprocess.TimeoutExpired):
-            pass
-        return
 
     # --- Sync modes (no D-Bus needed) ---
 
@@ -2683,9 +2437,7 @@ license: GPL-2.0-or-later
         return
 
     # --- Default: daemon mode ---
-    asyncio.run(daemon_loop(args.threshold, args.interval, args.no_provider,
-                            args.mqtt, args.mqtt_port, args.mqtt_topic,
-                            args.mqtt_user, args.mqtt_pass))
+    asyncio.run(daemon_loop(args.threshold, args.interval, args.no_provider))
 
 
 if __name__ == "__main__":

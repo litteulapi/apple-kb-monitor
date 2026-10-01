@@ -22,9 +22,9 @@ UPower hides the BlueZ battery of keyboards whose kernel driver already publishe
 
 ## Python CLI `apple-kb-monitor` (legacy)
 
-Modes: `--once`, `--status`, `--dump`, `--watch`, `--json`, `--waybar`, `--history`, `--graph`, `--export-csv`, `--metrics` (Prometheus), `--led NAME STATE`. Daemon options: `--threshold`, `--interval`, `--watch-interval`, `--no-provider`. See `apple-kb-monitor --help` for the complete list: the script still carries MQTT and `ddc-tool` code paths from before the split, which are not documented here.
+Modes: `--once`, `--status`, `--dump`, `--watch`, `--json`, `--waybar`, `--history`, `--graph`, `--export-csv`, `--metrics` (Prometheus), `--led NAME STATE`. Daemon options: `--threshold`, `--interval`, `--watch-interval`, `--no-provider`. See `apple-kb-monitor --help` for the complete list.
 
-Also in the repository: `apihub-settings` (PySide6 GUI, legacy, not installed by the PKGBUILD) and `rssi-helper.c` (installed, see above).
+Also in the repository: `apihub-settings` (PySide6 keyboard-only GUI, legacy, not installed by the PKGBUILD) and `rssi-helper.c` (installed, see above).
 
 ## System integration files
 

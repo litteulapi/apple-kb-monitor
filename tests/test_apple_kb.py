@@ -652,30 +652,6 @@ class TestCliTypes(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
 
 
-class TestMqttClientFactory(unittest.TestCase):
-    def test_paho2_uses_callback_api_version(self):
-        mod = mock.Mock()
-        mod.CallbackAPIVersion.VERSION1 = "V1"
-        kb.new_mqtt_client(mod, "cid")
-        mod.Client.assert_called_once_with("V1", client_id="cid")
-
-    def test_paho1_plain_client(self):
-        class Mod:
-            Client = mock.Mock()
-
-        kb.new_mqtt_client(Mod, "cid")
-        Mod.Client.assert_called_once_with(client_id="cid")
-
-    def test_mosquitto_pub_timeout_is_handled(self):
-        dev = {"mac": "aa:bb:cc:dd:ee:ff", "path": "/dev/null"}
-        with mock.patch.object(kb, "read_all_reports", return_value={}), \
-                mock.patch.object(kb, "get_conn_info", return_value=None), \
-                mock.patch.object(kb.subprocess, "run",
-                                  side_effect=subprocess.TimeoutExpired("x", 5)), \
-                contextlib.redirect_stderr(io.StringIO()):
-            kb._mqtt_publish_cli("127.0.0.1", 1883, "t", [dev])  # must not raise
-
-
 class TestPollDevice(unittest.TestCase):
     def test_no_reading_is_a_noop(self):
         dev = {"mac": "aa:bb:cc:dd:ee:ff", "path": "/dev/null", "name": "kb"}
@@ -699,17 +675,6 @@ class TestPollDevice(unittest.TestCase):
             self.assertEqual(notify.call_count, 1)
 
 
-class TestAutoBrightness(unittest.TestCase):
-    def test_missing_ddc_tool_is_clean_error(self):
-        with mock.patch.object(sys, "argv", ["apple-kb-monitor", "--auto-brightness"]), \
-                mock.patch.object(kb.subprocess, "run", side_effect=FileNotFoundError), \
-                contextlib.redirect_stdout(io.StringIO()), \
-                contextlib.redirect_stderr(io.StringIO()):
-            with self.assertRaises(SystemExit) as cm:
-                kb.main()
-        self.assertEqual(cm.exception.code, 1)
-
-
 class TestApihubSettings(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -730,46 +695,16 @@ class TestApihubSettings(unittest.TestCase):
         self.assertEqual(self.ah._txt(0), "0")
 
     def test_update_survives_null_values(self):
-        with mock.patch.object(self.ah, "ddc_write"):
-            win = self.ah.ApiHubWindow()
-            kb_json = {
-                "battery": {"percentage": None, "voltage": None},
-                "radio": {}, "device": {"model": None, "mac": None, "driver": None},
-                "firmware": {"version": None}, "bluetooth": {"interval": None},
-                "analysis": {"battery_type": {}, "discharge": None},
-            }
-            mon = {"brightness": {"current": None}, "firmware": "x", "volume": {}}
-            win._update(mon, kb_json)
-            self.assertIn("Keyboard: OK", win.statusBar().currentMessage())
-            win._timer.stop()
-
-    def test_ddc_write_swallows_missing_binary(self):
-        import threading
-        done = threading.Event()
-
-        def boom(*a, **k):
-            done.set()
-            raise FileNotFoundError
-
-        with mock.patch.object(self.ah.subprocess, "run", side_effect=boom), \
-                contextlib.redirect_stderr(io.StringIO()) as err:
-            self.ah.ddc_write(16, 10)
-            self.assertTrue(done.wait(5))
-            time_left = 50
-            while "failed" not in err.getvalue() and time_left:
-                threading.Event().wait(0.02)
-                time_left -= 1
-        self.assertIn("failed", err.getvalue())
-
-    def test_slider_drag_is_debounced(self):
-        with mock.patch.object(self.ah, "ddc_write") as w:
-            s = self.ah.ValueSlider("Brightness", 16)
-            for v in (10, 20, 30, 40):
-                s.slider.setValue(v)
-            w.assert_not_called()
-            s._debounce.stop()
-            s._flush()
-            w.assert_called_once_with(16, 40)
+        win = self.ah.ApiHubWindow()
+        kb_json = {
+            "battery": {"percentage": None, "voltage": None},
+            "radio": {}, "device": {"model": None, "mac": None, "driver": None},
+            "firmware": {"version": None}, "bluetooth": {"interval": None},
+            "analysis": {"battery_type": {}, "discharge": None},
+        }
+        win._update(kb_json)
+        self.assertIn("Keyboard: OK", win.statusBar().currentMessage())
+        win._timer.stop()
 
 
 class TestAuditFixes(unittest.TestCase):
