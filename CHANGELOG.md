@@ -2,127 +2,84 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Issues: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues. One version source: `[workspace.package] version` in `apihub-app/Cargo.toml` = `pkgver` in `PKGBUILD` / `.SRCINFO` = the first entry below (checked by CI, #10).
 
-## [3.1.0] - Unreleased
+## [3.1.0] - 2026-10-01
 
-### Fixed (Apple's breaker reaches every emitter, #244 #251)
-- The daemon publishes its circuit breaker in `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` (`schema`, `mac`, `open`, `counter`, `written_unix`, `pid`; atomic rewrite on a change or every 20 s, removed at exit). `akm-hid-control` (root, system units at sleep / wake) reads `/run/user/<uid>/apple-kb-monitor/breaker.state` with the owner / symlink / size checks of the other root readers and sends **no** HID_CONTROL byte while the breaker is open, or while the state is older than 60 s or unreadable with the daemon running (exit 0, journal `NOT sent, breaker open…`); no state or a dead daemon = sent as before. One refusal from any user's daemon is enough.
-- `hidraw::WriteDoor` (`akmctl`: `0x41` forget, `0x55` name) refuses the write on the same verdict: the breaker that counts is the daemon's, not the fresh one of a short-lived process.
-- `akmctl repair` on a connected keyboard with the breaker open: `0x41` is not written (the keyboard is mute), the existing wake + reconnect step runs, the user is told; the pre-flight falls back to the published state when the daemon cannot be asked over D-Bus.
-- The CapsLock flash of the keyboard-driven critical alert (`passive.rs`) is blocked while the breaker is open, like the one of the percentage alert.
+Package `apple-kb-monitor` 3.1.0-15 (`main` @ `8cb044e`). This single entry replaces the two former "[3.1.0]" entries: the 2026-04-02 pre-release described a display / monitor scope that was removed with #59 and now lives in the private repository `lg-ddc-control` (this repository keeps the tag `archive/avec-ecran`); the "Unreleased" one accumulated the work below. Package revisions: -2 scope reduction, -4 daemon + `akmctl` + polkit helper, -6 single language, -7 group `akm`, -8 window fixes, -9 self-check, -10 keyd optional + Apple parity + key mapping, -11 KDE module + notifications + sleep/wake + forget + name + Apple model + French, -12 units enabled by the package, -13 config sections of other programs, -14 user unit without `IPAddressDeny`, -15 doctor journal window.
 
-### Added (GET Input 0x30 as Apple, #251 #189)
-- The battery read is now Apple's R2 in full: GET Feature `0x47`, then **GET Input `0x30`** (`HIDIOCGINPUT`, 1 s later, once per burst), then `0x46` / `0x49`; 60 s after the connection, then every 4 h (1 h after a failure). Register map: class `SafeReadInput` for Input `0x30` and nothing else (`check_read_input`, 256-id sweep; `hid_read_input` is the second GET door, same `ioctl` path). The state is decoded by the passive decoder and handed to the passive publisher (`passive::inject`): one state, one dedupe, the alerts of #189 never fire twice for the same report. A silent `0x30` counts for the breaker like a silent `0x47`. `KbBattery.state`, `akmctl dump` line `input 0x30`. Routine budget 2 s -> 3 s (four requests 1 s apart). [mesuré] the exhaustive pass read GET Input `0x30` (`30 00`) without incident (RE-HID-EXHAUSTIF §2.2).
+### Scope and architecture (#8, #59-#62, #66, #16)
+- Keyboard-only repository: the display, brightness, MQTT and Home Assistant code was removed (#59, #74); `apihub-app` keeps the keyboard tabs.
+- Cargo workspace with a hardware-free core `akm-core`, a headless daemon `apple-kb-monitord` (single owner of the keyboard, `systemd --user`, D-Bus `com.agenceapi.AppleKbMonitor1`, BlueZ provider, tray), thin clients over D-Bus (`akmctl`, `apihub-app`, Plasma widget), event-driven actor on BlueZ signals (#60, #61, #62, #66).
+- Rust is the only language of the driver: the interpreted CLI `apple-kb-monitor`, `apihub-settings`, their unit and tests were removed; `akmctl` covers `history` (+ `--since/--until/--last`, `export --csv`, `import`), `graph`, `waybar`, `metrics`, `led`, a safe `dump` (`0x47`/`0x46`/`0x49` only); one history file `$XDG_STATE_HOME/apple-kb-monitor/history.jsonl` (#16, #17, #22). The package no longer depends on an interpreter (3.1.0-6).
+- Daemon D-Bus API v2: per-device objects `/devices/<MAC>`, `.Input`, `.Link`, `.Keymap`, `.Tray` interfaces, `StateChanged` and per-device signals, `Json` property (#92, #93).
 
-### Added (clean forget like macOS, #217)
-- `akmctl repair`, keyboard still connected: pre-flight (connected, doctor link healthy, breaker closed, terminal), host-side backup `forget-backup-<UTC>.json` (0600, no link key), explanation + typed `OUBLIER`, then ONE SET Feature `0x41` `RecantConnection` (wire `53 41`, macOS 26.5 `bluetoothd`), the daemon mutes the disconnection (`ExpectDisconnect()`), 2000 ms, then only `RemoveDevice`; if `0x41` fails nothing is removed and the repair goes back to wake + reconnect. Registry operation `Forget` (`0x41` only, once per session), reachable from `repair` only. Effect on the keyboard not measured.
+### Battery (#65, #178-#180, #146, #213, #215, #189)
+- The kernel `power_supply` node (what UPower reads) is the source of the displayed percentage, shown as "keyboard indication" and never rewritten; raw HID reports are telemetry (#65).
+- Real voltages `0x46` / `0x49` in mV in the history (schema 2); the former constant pseudo-voltage is marked `voltage_valid: false` and ignored (#180).
+- Charge **estimate** by battery chemistry (`[battery] chemistry`: alkaline / NiMH / lithium / unknown) with a range, grace period after a battery change, time remaining; alerts computed on the estimate when there is one (#178). Battery-change detection and per-set log (#85). Forecast in days (#83).
+- The keyboard's percentage only steps down at reconnections: the age of the last reading is shown everywhere and a drop seen on the first reading after a reconnection raises no alert (#179).
+- "Apple display" percentage (IOBluetooth curve, `[display] apple_percent`) (#213); firmware thresholds Full / Low / Critical / Empty (`0x60`) read once per connection, margins shown (#215).
+- Keyboard-driven alerts from Input `0x30` ("battery low / critical (keyboard alert)"), `BatteryAlert` signal, CapsLock flash on critical, deduplicated with the percentage alerts (#189).
+- Multi-threshold alerts with hysteresis (default 30 / 15 / 5 %), connection notifications, PowerDevil dedupe (#82, #84, #254).
+- Read cost: the daemon follows the safe read policy; UPower's 30 s polling is documented and optionally removed (`bluetooth/akm-conf.py upower`) (#146).
 
-### Added (name stored in the keyboard, #248)
-- `akmctl rename --device-name <name> [--dry-run] [--write-device-name]`, `--show`, `--restore <backup>`: the keyboard's own name (`0x51`-`0x54` read, `0x55` `LongDeviceName` written by Lion 10.7), distinct from the alias of this computer (`akmctl rename <name>`, unchanged, still the default). Dry run by default: validation (printable ASCII, 1-32 characters, no edge space, no `\`), pre-flight, backup of the current name (`~/.local/state/apple-kb-monitor/devname-backup-<UTC>.json`, 0600, never overwritten), every byte with its level of proof. The real write is **refused** (`NotProven`): the bytes of the 64-byte name field are not established (docs/RENOMMER-CLAVIER.md §5). The daemon reads `0x51`-`0x54` once per connection (low priority); read-only D-Bus property `DeviceNameOnKeyboard`, `akmctl status` line `On kb:` and JSON `name_on_keyboard`. No D-Bus method, window or tray button writes it.
-- Register map: class `WriteAppleParity` becomes `WriteApple` with named operations (`registry::WriteOp`: `Shutdown` = `0x40`, `DeviceName` = `0x55`), each id once per session with the operation's exact length; the 1-byte hardware door now takes the operation.
+### Apple parity and register map (#227, #189-#191, #244, #251, #217, #248, #192)
+- Declarative register map `akm-core/src/registry.rs` of every known HID report (57 entries) with safety classes; read allow-lists generated from it; the hidraw doors ask it first; tests sweep the 256 ids in the three directions (#227).
+- Firmware version `0x4F` read once per connection and compared with an embedded, dated table; `akmctl firmware`, `akmctl info` (never reads the keyboard); D-Bus `Firmware*` properties (#227).
+- Pure model of Apple's macOS 26.5 driver (`apple_model.rs`, rules R1-R8 with sources): battery schedule 60 s then 4 h (1 h after a failure), GET Feature `0x47` then **GET Input `0x30`** then `0x46` / `0x49` 1 s apart, 3.5 s timeout, circuit breaker after 3 silences (2 after a sleep), a HANDSHAKE refusal resets the counter, BlueZ `Device1.Disconnect` after the third silence (`[apple] disconnect_on_breaker`), never `RemoveDevice` (#251; the full breaker asked by #243).
+- The breaker reaches every emitter: published in `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state`, read by `akm-hid-control` (root) and by the `akmctl` write door; CapsLock flash blocked while open (#244, #251).
+- `WillShutdown` (Feature `0x40`, id alone) sent once at shutdown / restart as macOS does, default on (`[apple] will_shutdown`): logind `PrepareForShutdown` inhibitor, `akmctl shutdown-notify`, user unit `apple-kb-monitor-shutdown.service` (#191).
+- Keyboard off (Input `0x13` bit 1 = 0) distinct from a link loss: `PoweredOff`, `KeyboardOff` signal, "switched off" notification (#190).
+- HID_CONTROL SUSPEND (`0x13`) before sleep and EXIT_SUSPEND (`0x14`) at wake, one byte on `bluetoothd`'s control socket (`pidfd_getfd`), root system units `apple-kb-monitor-suspend/resume.service`, `/etc/apple-kb-monitor/hid-suspend.conf`, `akmctl hid-control … --dry-run`, polkit action `hid-control` (#244).
+- Clean forget like macOS: `akmctl repair` on a connected keyboard sends SET Feature `0x41` `RecantConnection` after pre-flight, host-side backup and a typed `OUBLIER`, waits 2000 ms, then `RemoveDevice`; nothing removed if `0x41` fails (#217).
+- Name stored in the keyboard: `akmctl rename --device-name <name> [--dry-run] [--write-device-name] [--show] [--restore]`; the Lion `setDeviceName:` frame (SET Feature `0x55`, 65 bytes) established by disassembly; the real write behind **three locks** (`[apple] allow_device_name_write = true`, control-channel MTU ≥ 66 read by `akm-hid-control inspect`, name typed again); D-Bus `DeviceNameOnKeyboard`, `akmctl status` line `On kb:` (#192, #248).
+- Writes exist only as named operations (`Shutdown` `0x40`, `Forget` `0x41`, `DeviceName` `0x55`), each once per session with its exact length; one write function with two fixed sizes, every byte logged, never retried; a source scan fails on a second write path. Not implemented on purpose: `0x44` `FullFactoryDefault`, `0x4A` SCO notification (#216).
 
-### Added (firmware check and register map, #227)
-- `akm-core/src/registry.rs`: declarative register map of every known HID report (id, direction, size, Apple name, meaning, unit, endianness, decoder, proof, safety class). The read allow-lists are generated from it; the only function that reaches the hardware (`hid_read_feature`) asks it first; no write path exists (tests over the 256 ids and a source scan).
-- Firmware version (`0x4F`) and battery thresholds Full/Low/Critical/Empty (`0x60`) read once per connection (1 s spacing, circuit breaker), compared with an embedded, versioned table (`docs/FIRMWARE.md`). D-Bus `FirmwareVersion`/`FirmwareLatestKnown`/`FirmwareStatus`, JSON `firmware.*`, `akmctl firmware`, window, tray tooltip, Plasma widget. No network, never a flash offer.
-- `akmctl info`: the register map with the values cached by the daemon, "never read" otherwise; never reads the keyboard.
-- "Apple display" percentage (`[display] apple_percent`, #213) next to the keyboard indication; Input `0x30` BatteryState raises "low" / "critical" notifications driven by the keyboard (#189).
+### Link: reconnection, doctor, repair (#142, #143, #146, #206, #214)
+- Root cause of the "keyboard does not reconnect" episodes measured and documented (radio silence under request bursts, BlueZ paging given up, adapter USB autosuspend); recovery state machine (connected, dormant, unreachable, auth-failed, suspended), paging cadence, logind sleep inhibitor (#142).
+- `akmctl doctor [--json]`: adapter, pairing, link, link key (sudo), hidraw, adapter power management, BlueZ `FastConnectable` / `Reconnect*`, UPower `NoPollBatteries`, `bluetoothd` journal over the last 6 h plus the boot (3.1.0-15), daemon; every finding with its fix. `akmctl repair [--force]`: wake + reconnect first, re-pairing only after a typed confirmation.
+- `bluetooth/akm-conf.py {bluez,upower} [--apply]` and `udev/61-akm-bt-adapter-no-autosuspend.rules` (not installed by the package) (#143).
+- `0xFE` is never requested (two link losses), `0x4C` never requested; a read requires a key press in the last 60 s outside the daemon (link losses of #175).
+- `Refresh()` bounded to one per 5 min; 1 s between requests; circuit breaker (#206, #214).
 
-### Added (parity with what Apple sends to this keyboard, #189 #190 #191)
-- `WillShutdown` (Feature `0x40`, report id alone, wire `53 40`) sent once at shutdown / restart, as macOS does, **default on** (`[apple] will_shutdown`, shown by `akmctl status`). Conditions: option on, keyboard connected, once per run, circuit breaker, 1 s spacing. Triggers: logind `PrepareForShutdown` (second delay inhibitor, `sleep.rs`), D-Bus `NotifyShutdown`, `akmctl shutdown-notify [--only-if-stopping]` run by the user unit `apple-kb-monitor-shutdown.service`. It is the only write the software can make: register-map class `WriteAppleParity` (now `WriteApple`, operation `Shutdown`), `check_write` refuses the other 255 ids and every other direction, `WriteSession` refuses a second write, `hid_write_feature` (1-byte ioctl, every byte logged) is the single hardware door. Tests use a spy, never the keyboard.
-- Input `0x13` with bit 1 = 0 is `KeyboardOff` (the keyboard switches off), as in macOS: `PoweredOff` property and `KeyboardOff` signal on the `Input` interface; the disconnection that follows is `LinkEvent::PoweredOff` ("switched off"), not "disconnected". `13 01` is no longer a wake.
-- Keyboard-driven battery alerts (`0x30`) get explicit labels ("battery low / critical (keyboard alert)"), a `BatteryAlert` signal, the CapsLock flash when critical, and are deduplicated with the percentage alerts (`AlertDedupe`: the keyboard is authoritative, one alert per event).
-- Not implemented on purpose: HID_CONTROL SUSPEND / EXIT_SUSPEND (#244, see `docs/PARITE-APPLE.md`).
+### Security (#63, #69, #73, #155, #202-#212, #214, #209)
+- udev rule `70-apple-kb-hidraw.rules` tags the hidraw node `uaccess` (logind ACL for the active seat), no `input` group; narrowed to the 17 Bluetooth product ids of the model table, wired Apple keyboards no longer matched; the keylogger trade-off is documented (#63, #73, #155, #204).
+- `rssi-helper`: the only binary with `cap_net_admin`, applied by `post_install`; `root:akm 0750`, group `akm` created by sysusers (#69, #209).
+- `SetFnMode` runs `/usr/bin/pkexec akm-helper set-fnmode <n>` from constants, caller uid checked, one dialog at a time; polkit `auth_admin` without `_keep`; `SetSwapOptCmd` / `SetIsoLayout` D-Bus methods removed (#202, #203). Plain-text keyboard names in the widget and escaped tray tooltip; aliases cannot start with `-` (#205, #207). Private per-uid `hid.lock` directory, `O_NOFOLLOW` (#208). Systemd unit options compatible with pkexec and file capabilities (#211); `IPAddressDeny` removed from the user unit (3.1.0-14). Dependencies updated, `deny.toml` documents the remaining advisories (#212; the eframe 0.29 advisories stay tracked in #224). Real `0x4C` fingerprints removed from fixtures (#210).
+- Sensitive bytes of `0x4C` never published (#200, #201).
 
-### Security (audit 2, #202-#212, #214)
-- `Refresh()` (D-Bus, tray) is bounded: ignored within 5 min of the last read or accepted refresh; HID reads are 1 s apart and a circuit breaker stops them after 3 failed requests until the keyboard shows signs of life (#206, #214).
-- `SetFnMode` runs `/usr/bin/pkexec <helper> set-fnmode <n>` from constants (no `$PATH`, no `APPLE_KB_SETTINGS_HELPER`), checks the caller's uid, one dialog at a time, logged; `SetSwapOptCmd`/`SetIsoLayout` removed (no polkit action); polkit `auth_admin` without `_keep` (#202, #203).
-- Keyboard names are plain text in the Plasma widget and escaped in the tray tooltip; `--` before the alias in kdialog/zenity; aliases cannot start with `-` (#205, #207).
-- `hid.lock` fallback is a private per-uid `0700` directory, `O_NOFOLLOW` (#208).
-- `rssi-helper` is `root:akm 0750` (group created by sysusers; `usermod -aG akm $USER` once). Systemd unit: only options compatible with pkexec / file capabilities (#209, #211). `deny.toml` documents the remaining advisories; webbrowser, anyhow, event-listener, memmap2 updated (#212). Real 0x4C fingerprints removed from fixtures (#210). Residual hidraw descriptor risk documented (#204).
+### Keys (#246, #247, #125, #88)
+- keyd became optional: `keyd reload` crashes keyd 2.6.0 (reproduced, patch and bug report prepared), the package never reloads nor restarts it; the config is an example under `/usr/share/doc` (#246).
+- Special keys modelled from the kernel sources (udev hwdb → `hid_apple` → xkb / KDE): `akmctl keys [--check] [--all]`, Keys tab in the window, manual mapping without keyd (`keymap.toml` profiles and presets → validated udev hwdb installed by `pkexec akm-keymap-helper`, polkit action `install-keymap`), `akmctl keymap kde-apply` for F4 / Eject (#247).
+- `akmctl get/set fnmode|param` and `--persist` through `akm-helper`; Fn lock toggle from the tray (#88). LEDs through evdev, via keyd's virtual keyboard when keyd grabs the device (#125).
 
+### KDE Plasma 6 (#249, #250, #252-#254, #114, #115-#118, #121, #122, #86, #87, #21)
+- Tray in the daemon: StatusNotifierItem + dbusmenu, symbolic icons by level / charging / disconnected, rich tooltip and menu, re-registration when the watcher reappears (#115, #116, #86, #87). `apihub-app` single instance through D-Bus activation `com.agenceapi.AppleKbMonitor`, reverse-DNS desktop file, no autostart (#115, #121, #21).
+- Plasma widget `com.agenceapi.devicehub` driven by D-Bus signals, claims the notification area so there is one icon only; French catalogue (#117, #253, #114, #122).
+- Window integrated with the desktop: Wayland `app_id`, theme / accent / contrast, French (156 strings); vsync, bounded D-Bus calls, history off the UI thread, heartbeat file (#118, #230-#236).
+- KNotification events (`apple-kb-monitor.notifyrc`, 14 events, buttons Open / Repair… / Ignore, replacement per slot, FR/EN) (#249). PowerDevil dedupe: one `BatteryEstimate` reminder when KDE already warns (#254). Keyboard forgotten from Plasma removed at once, one `KeyboardRemoved` notification (#252). `akmctl status` explains the two names (BlueZ alias vs kernel name) (#248).
+- System Settings module "Apple Keyboard" (`kcm_applekeyboard`, C++ plugin + QML pages State, Keys, Notifications, Name, Diagnostics), no I/O on the GUI thread, writes `config.toml` atomically, uses the existing polkit actions and D-Bus methods only (#250).
+- Alias of the keyboard on this computer: `akmctl rename`, D-Bus `SetAlias`, tray, window, widget (#141).
 
-### Removed / Changed (single language: Rust, #16)
-- `akmctl` now covers the former Python CLI: `history` (+ `--since/--until/--last`, `export --csv`, `import`), `graph`, `waybar`, `metrics`, `led`, and a SAFE `dump` (reports 0x47/0x46/0x49 only) (#22).
-- Removed the Python script `apple-kb-monitor`, `apihub-settings`, `apple-kb-monitor.service`, `tests/test_apple_kb.py`; the package no longer depends on `python` / `python-dbus-fast` (pkgrel 6).
-- One battery history file, `$XDG_STATE_HOME/apple-kb-monitor/history.jsonl`; `akmctl history import` brings in the old Python one (#17).
+### Quality (#241, #9, #24, #10)
+- Local pipeline `scripts/ci-local.sh` (18 steps: versions, secrets, fmt, clippy, test, claims, redaction, deny, audit, udev, qml, shell, c, security, units, plasma, package, e2e), end-to-end tests of the window and daemon under Xvfb + bubblewrap with a simulated keyboard (11 scenarios + KCM), `akmctl selftest` every 15 min with notifications and optional Gitea issues, `.githooks/pre-push`, Gitea Actions CI with five jobs (#241, #9, #24).
+- Registry-backed claim check (`qa_checks.py claims`): documents and strings may not state the claims refuted by the counter-audit (tracks #228). Redaction check: no Apple binary or decompiled code committed.
+- Fixtures of the real A1314 ISO, synthetic reports, Lion frames, other models; `tests/live/check_keyboard.sh` read-only hardware harness; tooled audits (miri, udeps, fuzz, proptest) and adversarial reviews in `docs/`.
 
-Audit and debug pass (tracking issue #8), then scope reduction: the repository is now keyboard-only. Bugs are tracked one per Gitea issue (label `bug`); "Fixes #N" is in the commit messages of `617c3db..HEAD`. Single version source: `[workspace.package] version` in `apihub-app/Cargo.toml` = `pkgver` in `PKGBUILD`/`.SRCINFO` = first entry of this file (checked by CI, #10).
-
-### Removed (breaking)
-- **Display / DDC / MQTT / Home Assistant**: `ddc.rs`, `brightness.rs`, `mqtt.rs`, `ddc-tool`, `mqtt-bridge.py`, DDC tests, display docs, `config.toml.example`, KDE brightness shortcuts, the `i2c` group step, the `python-paho-mqtt` optional dependency (#59, #74). `apihub-app` now has two tabs: Keyboard and Diag. The code lives in the private repository `lg-ddc-control` (this repository keeps the tag `archive/avec-ecran`).
-- The previous `[3.1.0] - 2026-04-02` entry below describes that display feature set, which no longer exists in this repository.
-
-### Changed
-- **Permissions**: udev rule `70-apple-kb-hidraw.rules` tags Apple hidraw devices `uaccess` (logind ACL for the active seat user) instead of the `input` group. Matches Bluetooth vendors `05AC` and `004C` and wired Apple keyboards (`0003:05AC`). No `usermod -aG input` any more (#63, #73).
-- **Battery source**: the kernel `power_supply` node (`hid-<mac>-battery`, the one UPower reads) is the source of truth for the percentage; raw HID reports are diagnostics (#65, `power.rs`).
-- **RSSI**: read through a dedicated C helper `rssi-helper` installed in `/usr/lib/apple-kb-monitor/` with `cap_net_admin+ep` applied by `post_install` (`setcap`); the GUI stays unprivileged and runs it as a child process with a timeout and a 10 s cache (#69).
-- **BlueZ battery provider**: one `BatteryProvider1` object per keyboard under `/com/agenceapi/AppleKbMonitor`, zbus `ObjectManager`, adapter path resolved from BlueZ, automatic re-registration when bluetoothd restarts, no well-known D-Bus name requested (#67, #72, #81).
-- **Keyboard model table** rebuilt from `hid-ids.h` (17 models); vendors `05AC` and `004C` accepted; raw HID telemetry reserved for the BCM2042 family (#64).
-- Packaging: PKGBUILD uses local sources, `!lto`, `backup`, correct depends/optdepends (#2, #7); `.SRCINFO` regenerated (#3); desktop `Categories` and udev URL fixed, D-Bus policy restricted (#6); Plasma widget launches `apihub-app` (#5).
+### Packaging (#2, #3, #5, #6, #7, #14, #156)
+- PKGBUILD with local sources, `!lto`, `backup=` for `hid_apple.conf` and `hid-suspend.conf`, dependencies declared for the dlopen'ed Wayland / X11 / GL libraries and the KDE module (#2, #7, #14, #156); `.SRCINFO` regenerated (#3); desktop categories and D-Bus files fixed (#6); widget launches the window (#5).
+- The package enables its units itself (`systemctl --global enable` for the user units, `systemctl enable` for the sleep / wake units) and re-applies the group and the capability of `rssi-helper` on every install / upgrade (3.1.0-12). Completions and manual generated by `akmctl` at build time.
 
 ### Fixed
-- **keyboard**: leaking HID fd, wake-monitor busy loop at 100 % CPU after disconnect, unvalidated calibration, PID match by substring, NUL in device name, CapsLock LED (#52, #53); wake-monitor started on demand even when the keyboard is absent at launch, timestamp exposed (#79).
-- **power / sysfs**: `ps_path` without `-NN` suffix gave an empty sysfs block, `battery.percentage` was null without sysfs fallback when hidraw is unreadable (#70, #71).
-- **rssi**: MGMT reply matched to its request, 127 rejected, strict MAC (#56); poll keeps the last RSSI between HID re-reads (#31); Python MGMT fallback aligned (#77).
-- **bluez**: `PropertiesChanged` on `Percentage`, re-registration, validated MAC (#57); provider alive again after the D-Bus policy change (#72); no log flood on registration failure (#81).
-- **poll / tray / UI**: battery alerts re-armed, no 100 % / 0 V points, Remaining cleared (#31, #32); tray retries SNI registration and re-registers when the StatusNotifierWatcher reappears, scroll saturates (#38, #74); Quit closes the window, diag guard, UTF-8 safe slicing, tooltip `n/a` (#28 to #30, #35, #36); polling thread supervised (restart after panic).
-- **history**: invalid points (voltage <= 0, NaN) rejected on write and ignored in the estimate (#39).
-- **Python CLI / settings**: hardened HID/sysfs access, SDP parsing, history, daemon loop and `--json` serialisation (#40 to #51); no 0 % exported to BlueZ when the HID read fails (#78); calibration validated like the Rust side (#80).
-
-### Added
-- Rename the keyboard on this computer (BlueZ alias): `akmctl rename <name>|--reset`, D-Bus `SetAlias` + `Name` property, tray "Rename keyboard…", name field in the window and the Plasma widget, name in tooltips and JSON; research on the in-keyboard name in docs/RENOMMER-CLAVIER.md (#141).
-- `tests/live/check_keyboard.sh`: read-only checks on real hardware (sysfs vs UPower vs BlueZ vs CLI battery, hidraw rights, udev `uaccess`, keyd, services).
-- Fixtures for a real A1314 ISO under `tests/fixtures/` and CI in `.gitea/workflows/ci.yml` (cargo build/clippy/test, pytest, shellcheck, gcc on `rssi-helper.c`, `udevadm verify`) (#9, #24).
-- Adversarial review documents: `docs/REVUE-ARCHITECTURE-GLOBALE.md`, `docs/REVUE-ARCHITECTURE-CLAVIER.md`, `docs/REVUE-CORRECTIFS.md` (issues #72 to #81).
+- keyboard: HID fd leak, wake-monitor busy loop after disconnect, unvalidated calibration, PID substring match, NUL in device name, CapsLock LED (#52, #53, #79); `power_supply` path without `-NN` suffix, null percentage without sysfs fallback (#70, #71); RSSI reply matched to its request, 127 rejected, strict MAC (#56, #31, #77); BlueZ `PropertiesChanged`, re-registration, log flood (#57, #72, #81); alerts re-armed, no 100 % / 0 V points, tray SNI retries, UTF-8 safe slicing (#28-#32, #35, #36, #38, #74); invalid history points rejected (#39); no 0 % exported to BlueZ on a failed read (#78).
+- Daemon: no warning for the config sections of another program sharing `config.toml` (3.1.0-13).
 
 ### Documentation
-- README, ARCHITECTURE, FEATURES, CONFIGURATION, INSTALL, TROUBLESHOOTING, TESTING rewritten for the keyboard-only scope; Gitea wiki updated.
+- README, INSTALL, CONFIGURATION, FEATURES, TROUBLESHOOTING, ARCHITECTURE, TESTING rewritten for 3.1.0-15, `docs/INDEX.md` added, Gitea wiki updated (#13, #255). Reverse-engineering and audit documents (`docs/RE-*.md`, `HARDWARE-*.md`, `AUDIT-*.md`, `CONTRE-AUDIT.md`, `VERIF-BATTERIE.md`) are dated evidence and are not rewritten.
 
 ### Known open items
-- Not fixed by a commit in this range: #75 (RSSI carried over without age or MAC check), #76 (valid RSSI discarded when only the TX power is 127). Some of the fixes above (#25 to #27, #33, #34, #37, #54, #55, #58) concerned display code that was then removed with #59.
-- The Python CLI `apple-kb-monitor` and `apihub-settings` still contain MQTT / `ddc-tool` code paths from before the split; they are outside this documentation pass.
-- Architecture roadmap (workspace + testable core, headless daemon, thin clients): #60 to #62, #66, #68.
-
-## [3.1.0] - 2026-04-02
-
-Broad feature expansion: 10 keyboard models, system tray, battery analytics, App Presets, expanded MQTT entities, and DDC/CI improvements.
-
-### Added
-
-#### Keyboard
-- **10 Apple keyboard models** supported (was 3) -- A1016, A1255 ANSI/JIS, A1314 ISO/ANSI/JIS, A1644 ANSI/ISO, A2449 ANSI/ISO
-- **Wake event monitor** -- dedicated thread monitors HID Input Report 0x13 (vendor FF01 wake/connection events)
-- **LED state display** -- CapsLock and NumLock badges read from sysfs, shown in Keyboard tab
-- **Battery time remaining estimate** -- discharge rate calculation from history with time-to-empty prediction
-- **Battery history graph** -- painter-based 24h chart (battery % + voltage dual axis) rendered in the Keyboard tab
-
-#### Display / DDC
-- **Video Black Level RGB** -- 3 new writable VCPs discovered (0x6C, 0x6E, 0x70) with slider controls
-- **VCP 0x02 smart polling** -- reads New Control Value flag first; skips WARM tier VCPs when nothing changed on the monitor OSD
-- **Factory Reset buttons** -- VCP 0x04 (restore factory defaults), 0x05 (restore factory brightness/contrast), 0x08 (restore factory color) with confirmation dialog
-- **PBP mirror registers display** -- reads sub-display brightness, contrast, and color preset (0xE8, 0xE9, 0xEA) when split mode is active
-- **All Advanced VCPs brute-force verified** -- 7 corrections from hardware verification against LG 34GN850
-
-#### Desktop integration
-- **System tray** -- ksni-based KDE StatusNotifierItem (D-Bus protocol), scarab icon, battery tooltip, quit menu
-- **App Presets** -- automatic picture mode switching based on active window class (e.g., Firefox -> sRGB, Steam -> FPS 1)
-- **KWin D-Bus scripting** -- Wayland-native window class detection via `org.kde.kwin.Scripting` (replaces xdotool)
-
-#### MQTT / Home Assistant
-- **RSSI sensor** -- keyboard signal strength in dBm
-- **TX power sensor** -- keyboard transmit power in dBm
-- **Connected binary_sensor** -- keyboard connectivity state (ON/OFF)
-- **Volume number entity** -- bidirectional monitor volume control (0-100%)
-- **Picture mode select** -- 14 modes (Custom, Reader, Vivid, HDR Effect, Cinema, Color Weakness, FPS 1/2, RTS, sRGB, DCI-P3, EBU, Photo, Calibration), bidirectional
-- **Input source select** -- DisplayPort, HDMI 1, HDMI 2, bidirectional
-- Total: **15 HA entities** (was 4)
-
-### Changed
-- **Dependencies** -- removed `gtk`, `tray-icon`, `png` crates; added `ksni` for D-Bus native system tray
-- **LOC** -- apihub-app grew from 3030 to ~3900 LOC (main.rs 1477->2126, keyboard.rs 330->401, ddc.rs 340->355, mqtt.rs 240->339, history.rs 66->90)
-- **Polled VCPs** -- 34 VCPs across 4 tiers (HOT/WARM/COLD/PBP), up from flat polling
-- **Writable VCPs** -- 22 writable controls (was ~15)
+- Hardware validation of 16 of the 17 models (#23); multi-keyboard UI (#119, #94); Magic Keyboard battery report `0x90` (#95); the effect on the keyboard of `WillShutdown`, `0x41` and the sleep / wake bytes is not observable; the name write (`0x55`) was never exercised on hardware (#248). Open milestones: v3.2 backlog, v4.0 keyboard differentiation.
 
 ## [3.0.0] - 2025-04-03
 
