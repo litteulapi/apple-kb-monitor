@@ -146,6 +146,24 @@ pub fn last_input_age(now: Instant) -> Option<Duration> {
     (v != 0).then(|| now.saturating_duration_since(epoch() + Duration::from_millis(v - 1)))
 }
 
+// ── last hardware access (shared by reads and the one write) ───────────────
+
+/// Milliseconds since EPOCH of the last request sent to the keyboard, +1.
+static LAST_HW: AtomicU64 = AtomicU64::new(0);
+
+/// A request was just sent to the keyboard (read or the `WillShutdown` write):
+/// the next one waits [`MIN_GAP`] after it.
+pub fn note_hw_access() {
+    let ms = Instant::now().saturating_duration_since(epoch()).as_millis() as u64;
+    LAST_HW.store(ms + 1, Ordering::Relaxed);
+}
+
+/// Instant of the last request sent to the keyboard, if any.
+pub fn last_hw_access() -> Option<Instant> {
+    let v = LAST_HW.load(Ordering::Relaxed);
+    (v != 0).then(|| epoch() + Duration::from_millis(v - 1))
+}
+
 /// Why a read was or was not done.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Gate {
@@ -220,6 +238,11 @@ static BREAKER: Mutex<Breaker> = Mutex::new(Breaker::new());
 
 fn global_breaker() -> std::sync::MutexGuard<'static, Breaker> {
     BREAKER.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// The process-wide breaker, for the one write ([`crate::parity`]).
+pub fn breaker() -> &'static Mutex<Breaker> {
+    &BREAKER
 }
 
 /// A new connection of the keyboard was announced: closes the breaker.
@@ -423,6 +446,7 @@ impl HidSource for SafeSource<'_> {
         self.sent.set(self.sent.get() + 1);
         let r = self.inner.feature(report_id);
         self.last.set(Some(Instant::now()));
+        note_hw_access();
         self.breaker().record(r.is_ok());
         r
     }

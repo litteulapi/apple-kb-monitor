@@ -45,6 +45,7 @@ pub mod led;
 pub mod link;
 pub mod machine;
 pub mod model;
+pub mod parity;
 pub mod passive;
 pub mod power;
 pub mod read_policy;

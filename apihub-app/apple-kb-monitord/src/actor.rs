@@ -86,6 +86,8 @@ pub struct Options {
     pub chemistry: Chemistry,
     /// Publish the "Apple display" percentage (`[display] apple_percent`, #213).
     pub apple_percent: bool,
+    /// Send `WillShutdown` at shutdown (`[apple] will_shutdown`, #191).
+    pub will_shutdown: bool,
     /// Where detected events go (D-Bus device signals, tray...).
     pub events: Arc<EventHub>,
     /// Where the keyboard's alias is read (BlueZ).
@@ -104,6 +106,7 @@ impl Default for Options {
             notify_battery_replaced: true,
             chemistry: Chemistry::default(),
             apple_percent: true,
+            will_shutdown: true,
             events: EventHub::new(),
             alias: Arc::new(BluezAlias::default()),
         }
@@ -119,6 +122,7 @@ impl Options {
         self.notify_battery_replaced = c.notify_battery_replaced;
         self.chemistry = c.chemistry;
         self.apple_percent = c.apple_percent;
+        self.will_shutdown = c.will_shutdown;
     }
 }
 

@@ -16,6 +16,9 @@
 //!
 //! [display]
 //! apple_percent = true       # also show the percentage "as macOS shows it" (#213)
+//!
+//! [apple]
+//! will_shutdown = true       # tell the keyboard once, at shutdown / restart, what macOS tells it (#191)
 //! ```
 //!
 //! Only this small TOML subset is read (sections, integers, floats, booleans,
@@ -42,6 +45,10 @@ pub struct Config {
     /// Show the percentage as macOS displays it, labelled "Apple display"
     /// (#213). Pure host-side computation, default on.
     pub apple_percent: bool,
+    /// Send `WillShutdown` (Feature `0x40`, the id alone) to the keyboard when
+    /// the computer shuts down or restarts, as macOS does at every shutdown
+    /// (#191). Default **on**: it is what Apple sends; `false` sends nothing.
+    pub will_shutdown: bool,
 }
 
 impl Default for Config {
@@ -53,6 +60,7 @@ impl Default for Config {
             notify_battery_replaced: true,
             chemistry: Chemistry::default(),
             apple_percent: true,
+            will_shutdown: true,
         }
     }
 }
@@ -197,6 +205,7 @@ pub fn parse(content: &str) -> (Config, Vec<String>) {
                 )),
             },
             ("display", "apple_percent", Val::Bool(b)) => cfg.apple_percent = b,
+            ("apple", "will_shutdown", Val::Bool(b)) => cfg.will_shutdown = b,
             ("notifications", "connection", Val::Bool(b)) => cfg.notify_connection = b,
             ("notifications", "battery_replaced", Val::Bool(b)) => cfg.notify_battery_replaced = b,
             (s, k, _) => warn.push(format!("line {}: unknown or mistyped key [{s}] {k}", n + 1)),
@@ -246,6 +255,23 @@ mod tests {
         let (c, w) = parse("[display]\napple_percent = 3\n");
         assert_eq!(w.len(), 1);
         assert!(c.apple_percent, "a mistyped value keeps the default");
+    }
+
+    #[test]
+    fn will_shutdown_option_defaults_to_on() {
+        // #191: Apple sends WillShutdown at every shutdown, so the default is on.
+        assert!(Config::default().will_shutdown);
+        assert!(parse("").0.will_shutdown);
+        let (c, w) = parse("[apple]\nwill_shutdown = false  # keep the keyboard untouched\n");
+        assert!(w.is_empty(), "{w:?}");
+        assert!(!c.will_shutdown);
+        let (c, w) = parse("[apple]\nwill_shutdown = true\n");
+        assert!(w.is_empty() && c.will_shutdown);
+        let (c, w) = parse("[apple]\nwill_shutdown = \"no\"\n");
+        assert_eq!(w.len(), 1);
+        assert!(c.will_shutdown, "a mistyped value keeps the default");
+        let (_, w) = parse("[apple]\nwill_shutdown = true\nname_change = true\n");
+        assert_eq!(w.len(), 1, "no other [apple] key exists: {w:?}");
     }
 
     #[test]

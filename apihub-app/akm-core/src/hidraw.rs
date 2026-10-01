@@ -18,6 +18,11 @@ use crate::report::{KbReport, KbWake};
 /// HIDIOCGFEATURE = _IOWR('H', 0x07, 256) — read HID Feature Report
 const HIDIOCGFEATURE: libc::c_ulong = 0xC1004807;
 
+/// The write twin of the read ioctl, sized for ONE byte: _IOWR('H', 0x06, 1).
+/// The size is part of the request number, so the kernel can never send more
+/// than the single report id (`WillShutdown`, wire `53 40`).
+const HIDIOCSFEATURE_1: libc::c_ulong = 0xC001_4806;
+
 /// Retries of an ioctl interrupted by a signal (EINTR) before giving up.
 const EINTR_RETRIES: u32 = 3;
 
@@ -48,6 +53,88 @@ pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> io::Result<Vec<u8>> {
         }
         return Err(err);
     }
+}
+
+/// THE write to the hardware: one Feature report made of the id alone, only if
+/// the register map allows it (class `WriteAppleParity`, i.e. `0x40`
+/// `WillShutdown`, exactly what Apple's driver sends). Every byte handed to the
+/// kernel is logged first. Never retried (not even on EINTR): a command must
+/// not be sent twice. The "once per run" rule is in
+/// [`crate::registry::WriteSession`], applied by [`crate::parity::will_shutdown`].
+pub fn hid_write_feature(fd: libc::c_int, report: &[u8]) -> io::Result<()> {
+    let [id] = *report else {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("write refused: {} bytes, Apple sends the report id alone", report.len()),
+        ));
+    };
+    crate::registry::check_write(id, crate::registry::Direction::Feature)?;
+    let mut buf = [id];
+    eprintln!(
+        "[hid-write] Feature report, {} byte(s) handed to the kernel: {} (Bluetooth wire: 53 {})",
+        buf.len(),
+        buf.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "),
+        buf.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "),
+    );
+    // SAFETY: buf is 1 byte, the size encoded in the request number.
+    let ret = unsafe { libc::ioctl(fd, HIDIOCSFEATURE_1, buf.as_mut_ptr()) };
+    if ret < 0 {
+        let err = io::Error::last_os_error();
+        eprintln!("[hid-write] failed: {err}");
+        return Err(err);
+    }
+    note_write_done();
+    Ok(())
+}
+
+fn note_write_done() {
+    crate::read_policy::note_hw_access();
+}
+
+impl crate::parity::FeatureSink for Hidraw {
+    fn set_feature(&self, report: &[u8]) -> io::Result<()> {
+        hid_write_feature(self.0, report)
+    }
+}
+
+/// One write session for the whole process: `WillShutdown` goes out once per run.
+static WRITE_SESSION: Mutex<crate::registry::WriteSession> =
+    Mutex::new(crate::registry::WriteSession::new());
+
+/// How long the single reader lock may be awaited before the write is skipped.
+const WRITE_LOCK_WAIT: Duration = Duration::from_millis(1500);
+
+/// Tell the keyboard the host is shutting down (Feature `0x40`), once per run,
+/// on the persistent hidraw node, under the single-reader lock, the breaker and
+/// the 1 s spacing. `enabled` is `[apple] will_shutdown`, `connected` the
+/// daemon's view of the link.
+pub fn send_will_shutdown(enabled: bool, connected: bool) -> crate::parity::Outcome {
+    use crate::parity::Outcome;
+    if !enabled {
+        return Outcome::Disabled;
+    }
+    if !connected {
+        return Outcome::NotConnected;
+    }
+    let mut session = WRITE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+    if session.is_used() {
+        return Outcome::AlreadySent;
+    }
+    let Some(_lock) = crate::read_policy::try_lock(WRITE_LOCK_WAIT) else {
+        return Outcome::Busy;
+    };
+    let Some((fd, _)) = get_hid_fd() else {
+        return Outcome::NoNode;
+    };
+    crate::parity::will_shutdown(
+        enabled,
+        connected,
+        &Hidraw(fd),
+        &mut session,
+        crate::read_policy::breaker(),
+        crate::read_policy::last_hw_access(),
+        &mut std::thread::sleep,
+    )
 }
 
 /// A borrowed hidraw file descriptor as a [`HidSource`].
@@ -343,6 +430,31 @@ mod tests {
         w.record();
         assert_eq!(w.count(), 2);
         assert!(w.last().unwrap().elapsed().as_secs() < 5);
+    }
+
+    #[test]
+    fn only_the_apple_write_reaches_the_ioctl() {
+        // On an invalid fd the one allowed report fails in the ioctl (EBADF,
+        // nothing was sent anywhere); every other id is refused before it.
+        for id in 0..=255u8 {
+            let e = hid_write_feature(-1, &[id]).unwrap_err();
+            if id == 0x40 {
+                assert_eq!(e.raw_os_error(), Some(libc::EBADF));
+            } else {
+                assert_eq!(e.kind(), io::ErrorKind::PermissionDenied, "{id:#04x}");
+                assert_eq!(e.raw_os_error(), None, "{id:#04x} must not reach the ioctl");
+            }
+        }
+        // Never a report with data, nor an empty one.
+        for r in [&[][..], &[0x40, 0x03][..], &[0x40, 0, 0][..]] {
+            assert_eq!(hid_write_feature(-1, r).unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        }
+    }
+
+    #[test]
+    fn disabled_or_disconnected_never_touches_the_node() {
+        assert_eq!(send_will_shutdown(false, true), crate::parity::Outcome::Disabled);
+        assert_eq!(send_will_shutdown(true, false), crate::parity::Outcome::NotConnected);
     }
 
     #[test]

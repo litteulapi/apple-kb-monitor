@@ -154,6 +154,6 @@ fn read_gate_equals_class_for_all_ids() {
     for id in 0..=255u8 {
         let c = registry::classify_feature(id);
         assert_eq!(registry::check_read(id).is_ok(), matches!(c, Safety::SafeRead | Safety::OncePerConnection));
-        assert!(registry::check_write(id, registry::Direction::Feature).is_err());
+        assert_eq!(registry::check_write(id, registry::Direction::Feature).is_ok(), id == 0x40, "seule l'ecriture Apple 0x40 est permise");
     }
 }

@@ -13,14 +13,19 @@
 //! | [`Safety::PassiveInput`] | only listened to on the hidraw node, never requested |
 //! | [`Safety::ManualOnly`] | readable and harmless in principle, but never requested by the daemon (RE tools only) |
 //! | [`Safety::NeverRead`] | never requested (secret, or freezes the firmware) |
+//! | [`Safety::WriteAppleParity`] | the ONE write: Feature `0x40` (WillShutdown), 1 byte (the id), once per shutdown |
 //! | [`Safety::NeverWrite`] | write-only or command registers: no write path exists |
 //! | [`Safety::Unknown`] | not understood: neither read nor written |
 //!
 //! The allow-lists of [`crate::read_policy`] are **generated from this table**
 //! ([`SAFE_READ_IDS`], [`ONCE_PER_CONNECTION_IDS`]); the only function that
-//! talks to the hardware ([`crate::hidraw::hid_read_feature`]) calls
-//! [`check_read`], and no write function exists ([`check_write`] refuses
-//! everything). Proof levels: `[mesuré]` observed on the A1314 ISO,
+//! reads the hardware ([`crate::hidraw::hid_read_feature`]) calls
+//! [`check_read`]. Writes: [`check_write`] accepts exactly one report, the
+//! Feature `0x40` `WillShutdown` that Apple's own driver sends at every
+//! shutdown or restart (class [`Safety::WriteAppleParity`], no data, one id
+//! byte on the wire `53 40`), and [`WriteSession`] allows it once per run;
+//! the only function that writes ([`crate::hidraw::hid_write_feature`]) calls
+//! both. Proof levels: `[mesuré]` observed on the A1314 ISO,
 //! `[plist]` Apple driver property list, `[désassemblage]` Apple binaries,
 //! `[source]` public document, `[hypothèse]` plausible, not proven.
 //!
@@ -58,6 +63,9 @@ pub enum Safety {
     PassiveInput,
     ManualOnly,
     NeverRead,
+    /// Written by Apple's own driver at every shutdown, with the same bytes
+    /// and in the same context: Feature `0x40` only (see [`check_write`]).
+    WriteAppleParity,
     NeverWrite,
     Unknown,
 }
@@ -70,6 +78,7 @@ impl Safety {
             Self::PassiveInput => "PassiveInput",
             Self::ManualOnly => "ManualOnly",
             Self::NeverRead => "NeverRead",
+            Self::WriteAppleParity => "WriteAppleParity",
             Self::NeverWrite => "NeverWrite",
             Self::Unknown => "Unknown",
         }
@@ -277,13 +286,15 @@ pub const TABLE: &[Entry] = &[
     r(0x35, F, None, None, "magic_kb_link_key",
       "Magic Keyboard only (CVE-2024-0230): link key; refused by the A1314", "-", E::None,
       D::Raw, P::Source, S::NeverRead, "RE-COMMANDES-VENDEUR §3.3"),
+    // ── WriteAppleParity: the only write, what Apple's driver sends ───────
+    r(0x40, F, None, Some("WillShutdown"), "will_shutdown",
+      "Command: the host is going to shut down (write-only; sent by macOS at each shutdown or restart, id only: wire `53 40`)",
+      "-", E::None, D::Raw, P::Disassembly, S::WriteAppleParity,
+      "RE-PILOTE-MACOS §3 §5, RE-GHIDRA-KEXT, RE-GHIDRA-IOBLUETOOTH, #191"),
     // ── NeverWrite: command / write-only registers ────────────────────────
     r(0x01, O, Some(2), None, "led_output",
       "Keyboard LEDs (Caps Lock...): handled by the kernel through evdev, never by us", "bits",
       E::None, D::Raw, P::Disassembly, S::NeverWrite, "RE-PILOTES-ANCIENS §7"),
-    r(0x40, F, None, Some("WillShutdown"), "will_shutdown",
-      "Command: the host is going to shut down (write-only; sent by macOS at each shutdown)", "-",
-      E::None, D::Raw, P::Plist, S::NeverWrite, "RE-PILOTE-MACOS §3, #191"),
     r(0x41, F, None, Some("RecantConnection"), "recant_connection",
       "Command: give up the connection (Apple's virtual cable unplug); high risk", "-", E::None,
       D::Raw, P::Disassembly, S::NeverWrite, "RE-PILOTES-ANCIENS §7"),
@@ -486,19 +497,93 @@ pub fn check_read(id: u8) -> Result<Safety, Refusal> {
     }
 }
 
-/// May this report be written? **Never**: no class authorises a write in this
-/// version (the two Apple commands that could be, 0x44 and 0x4A, need the
-/// manager's explicit agreement, #216 / #217, and are not implemented).
+/// May this report be written? **Only the Feature `0x40` `WillShutdown`**
+/// (class [`Safety::WriteAppleParity`]): the one command Apple's driver sends
+/// to this keyboard in production (`handleShutdown` / `handleRestart` ->
+/// `willShutdown` -> `setExtendedReport("WillShutdown", NULL, 0)`, wire
+/// `53 40`). Every other id and direction is refused, among them `0x44`,
+/// `0x4A`, `0x41`, `0x45`, `0x50`-`0x55`, `0xD0`-`0xFB`, `0x09` and `0xD5`.
+/// Stateless: [`WriteSession`] adds the "once" rule.
 pub fn check_write(id: u8, dir: Direction) -> Result<(), Refusal> {
     let class = match dir {
         Direction::Feature => classify_feature(id),
         _ => lookup(id, dir).map_or(Safety::Unknown, |e| e.safety),
     };
+    if dir == Direction::Feature && class == Safety::WriteAppleParity {
+        return Ok(());
+    }
     Err(Refusal {
         id,
         class,
         write: true,
     })
+}
+
+/// Why [`WriteSession::authorize`] refused a write that the register map allows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WriteRefusal {
+    /// The register map refuses this id or direction.
+    Map(Refusal),
+    /// The write carries data: Apple sends the id only.
+    Payload { id: u8, len: usize },
+    /// The one write of this session was already authorised.
+    Repeated { id: u8 },
+}
+
+impl fmt::Display for WriteRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Map(r) => r.fmt(f),
+            Self::Payload { id, len } => {
+                write!(f, "write of report {id:#04x} refused: {len} data byte(s), Apple sends the id only")
+            }
+            Self::Repeated { id } => {
+                write!(f, "write of report {id:#04x} refused: already sent in this session")
+            }
+        }
+    }
+}
+
+impl std::error::Error for WriteRefusal {}
+
+impl From<WriteRefusal> for std::io::Error {
+    fn from(r: WriteRefusal) -> Self {
+        std::io::Error::new(std::io::ErrorKind::PermissionDenied, r)
+    }
+}
+
+/// The "once per shutdown" rule of the only write. A session authorises one
+/// write; the authorisation is consumed even if the write then fails (a
+/// failed `WillShutdown` is never retried). State is per value: the real
+/// sender keeps one process-wide session ([`crate::hidraw::send_will_shutdown`]).
+#[derive(Debug, Default)]
+pub struct WriteSession {
+    used: bool,
+}
+
+impl WriteSession {
+    pub const fn new() -> Self {
+        Self { used: false }
+    }
+
+    /// Has the session's write been authorised already?
+    pub fn is_used(&self) -> bool {
+        self.used
+    }
+
+    /// Authorise (and consume) the write of Feature `id` with `payload`
+    /// (the bytes after the id). Register map first, then no data, then once.
+    pub fn authorize(&mut self, id: u8, dir: Direction, payload: &[u8]) -> Result<(), WriteRefusal> {
+        check_write(id, dir).map_err(WriteRefusal::Map)?;
+        if !payload.is_empty() {
+            return Err(WriteRefusal::Payload { id, len: payload.len() });
+        }
+        if self.used {
+            return Err(WriteRefusal::Repeated { id });
+        }
+        self.used = true;
+        Ok(())
+    }
 }
 
 // ── decoders ───────────────────────────────────────────────────────────────
@@ -762,9 +847,10 @@ mod tests {
         for id in [0xFE, 0x4C] {
             assert_eq!(class(id), Safety::NeverRead);
         }
-        for id in [0x44, 0x45, 0x41, 0x40, 0x50, 0x55, 0xD0, 0xD4, 0xD5, 0xFA, 0xFB] {
+        for id in [0x44, 0x45, 0x41, 0x50, 0x55, 0xD0, 0xD4, 0xD5, 0xFA, 0xFB] {
             assert_eq!(class(id), Safety::NeverWrite, "{id:#04x}");
         }
+        assert_eq!(class(0x40), Safety::WriteAppleParity);
         for id in [0x04, 0x05, 0x30, 0x13, 0x11, 0x12] {
             assert_eq!(lookup(id, Direction::Input).unwrap().safety, Safety::PassiveInput);
         }
@@ -797,14 +883,63 @@ mod tests {
     }
 
     #[test]
-    fn nothing_is_ever_writable() {
+    fn only_will_shutdown_is_writable() {
+        // The 256 ids in the three directions: exactly one pair is accepted.
+        let mut ok = Vec::new();
         for id in 0..=255u8 {
             for dir in [Direction::Feature, Direction::Input, Direction::Output] {
-                let r = check_write(id, dir).unwrap_err();
-                assert!(r.write);
-                assert!(r.to_string().contains("refused"));
+                match check_write(id, dir) {
+                    Ok(()) => ok.push((id, dir)),
+                    Err(r) => {
+                        assert!(r.write);
+                        assert!(r.to_string().contains("refused"));
+                        let e: std::io::Error = r.into();
+                        assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
+                    }
+                }
             }
         }
+        assert_eq!(ok, vec![(0x40, Direction::Feature)]);
+        // The forbidden list of the manager, one by one.
+        for id in [0x44, 0x45, 0x41, 0x4A, 0x09, 0xD5, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0xD0, 0xFB, 0xFA, 0x43, 0xC6, 0xDC] {
+            assert!(check_write(id, Direction::Feature).is_err(), "{id:#04x}");
+        }
+        assert!(check_write(0x40, Direction::Input).is_err());
+        assert!(check_write(0x40, Direction::Output).is_err());
+        // Exactly one entry carries the class.
+        let n = TABLE.iter().filter(|e| e.safety == Safety::WriteAppleParity).count();
+        assert_eq!(n, 1);
+        assert_eq!(classify_feature(0x40), Safety::WriteAppleParity);
+        assert!(!Safety::WriteAppleParity.daemon_may_read(), "0x40 refuses GET");
+        assert!(check_read(0x40).is_err());
+    }
+
+    #[test]
+    fn session_authorises_one_write_of_one_id_without_data() {
+        // Through the session, over the 256 ids: only 0x40 passes, and only once.
+        for id in 0..=255u8 {
+            let mut s = WriteSession::new();
+            let r = s.authorize(id, Direction::Feature, &[]);
+            assert_eq!(r.is_ok(), id == 0x40, "{id:#04x}");
+            assert_eq!(s.is_used(), id == 0x40, "a refused id must not consume the session");
+        }
+        let mut s = WriteSession::new();
+        assert!(s.authorize(0x40, Direction::Feature, &[]).is_ok());
+        let again = s.authorize(0x40, Direction::Feature, &[]).unwrap_err();
+        assert_eq!(again, WriteRefusal::Repeated { id: 0x40 });
+        assert!(again.to_string().contains("already sent"));
+        // A refused id after the use is still a map refusal, not "repeated".
+        assert!(matches!(s.authorize(0x44, Direction::Feature, &[]), Err(WriteRefusal::Map(_))));
+        // Data is refused, and does not consume the session.
+        let mut s = WriteSession::new();
+        assert_eq!(
+            s.authorize(0x40, Direction::Feature, &[3]).unwrap_err(),
+            WriteRefusal::Payload { id: 0x40, len: 1 }
+        );
+        assert!(!s.is_used());
+        assert!(s.authorize(0x40, Direction::Feature, &[]).is_ok());
+        let e: std::io::Error = WriteRefusal::Repeated { id: 0x40 }.into();
+        assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied);
     }
 
     #[test]
@@ -907,29 +1042,39 @@ mod tests {
     }
 
     #[test]
-    fn this_build_has_no_write_path() {
-        // No source file of the workspace may issue a SET_REPORT: the only
-        // ioctl is HIDIOCGFEATURE.
+    fn this_build_has_one_write_path() {
+        // The only source file that may name the write ioctl is hidraw.rs, the
+        // single hardware door; no other write ioctl exists anywhere.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let mut files = Vec::new();
         for d in ["akm-core/src", "apple-kb-monitord/src", "crates/akmctl/src", "crates/akm-helper/src", "src"] {
             collect_rs(&root.join(d), &mut files);
         }
         assert!(files.len() > 20);
-        let banned = ["HIDIOCSFEATURE", "HIDIOCSOUTPUT", "HIDIOCSINPUT", "SET_REPORT", "0xC1004806"];
+        let banned = ["HIDIOCSOUTPUT", "HIDIOCSINPUT", "SET_REPORT", "0xC1004806"];
+        let mut writers = 0;
         for f in files {
             if f.ends_with("registry.rs") {
                 continue; // this test names the tokens it forbids
             }
             let text = std::fs::read_to_string(&f).unwrap();
+            let code = |l: &&str| !l.trim_start().starts_with("//");
             for b in banned {
                 assert!(
-                    !text.lines().any(|l| l.contains(b) && !l.trim_start().starts_with("//")),
+                    !text.lines().filter(code).any(|l| l.contains(b)),
                     "{} mentions {b} outside a comment",
                     f.display()
                 );
             }
+            let uses = text.lines().filter(code).filter(|l| l.contains("HIDIOCSFEATURE")).count();
+            if uses > 0 {
+                assert!(f.ends_with("akm-core/src/hidraw.rs"), "{} names HIDIOCSFEATURE", f.display());
+                // one definition + one ioctl call
+                assert_eq!(uses, 2, "{}", f.display());
+                writers += 1;
+            }
         }
+        assert_eq!(writers, 1);
     }
 
     fn collect_rs(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
