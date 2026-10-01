@@ -2,18 +2,12 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
-import org.kde.plasma.plasma5support as P5
-import org.kde.plasma.workspace.dbus as DBus
 import org.kde.kirigami as Kirigami
 
 // Event-driven view of the daemon apple-kb-monitord (session bus,
-// com.agenceapi.AppleKbMonitor1). No periodic timer: the applet re-reads
-// GetState (in-memory snapshot, read-only, never touches the keyboard) when
-// the daemon appears and each time it emits StateChanged.
-//
-// Plasma's QML D-Bus module has no signal API, so StateChanged is awaited by
-// a bounded one-shot dbus-monitor (killed at the first match) run through the
-// "executable" engine; its exit re-arms the listener (see armListener).
+// com.agenceapi.AppleKbMonitor1). No subprocess and no fast timer: DaemonLink
+// receives StateChanged through a native D-Bus signal watcher and the applet
+// re-reads GetState (in-memory snapshot, read-only, never touches the keyboard).
 PlasmoidItem {
     id: root
 
@@ -21,10 +15,13 @@ PlasmoidItem {
     readonly property string objectPath: "/com/agenceapi/AppleKbMonitor1"
 
     // ── State (battery -1 / voltage 0 / rssi NaN / "" = unknown) ──
-    readonly property bool daemonRunning: watcher.registered
+    readonly property bool daemonRunning: link.registered
     property bool connected: false
     property int batteryPercent: -1
+    // Measured battery voltage (V), reports 0x46/0xFF; 0 = unknown.
     property real voltage: 0
+    // Percentage interpolated on the unit's own discharge curve: an ESTIMATE, -1 = unknown.
+    property real curvePercent: -1
     property real rssi: NaN
     property string kbModel: ""
     // Name shown to the user: alias set on this computer, else own name (#141).
@@ -68,27 +65,40 @@ PlasmoidItem {
         : (daemonRunning ? i18n("Waiting for the Apple keyboard…")
                          : i18n("apple-kb-monitord is not on the session bus"))
 
-    DBus.DBusServiceWatcher {
-        id: watcher
-        busType: DBus.BusType.Session
-        watchedService: root.busName
+    DaemonLink {
+        id: link
+        busName: root.busName
+        objectPath: root.objectPath
         onRegisteredChanged: {
-            if (registered) {
-                root.fetchData();
-                root.armListener();
-            } else {
+            if (registered) root.fetchData(); else root.clear();
+        }
+        onStateReceived: function (json) {
+            try {
+                root.apply(json);
+            } catch (e) {
+                console.warn("apple-kb-monitor: bad GetState reply", e);
                 root.clear();
             }
+        }
+        onFailed: function (message) {
+            console.warn("apple-kb-monitor: GetState failed", message);
+            root.clear();
+        }
+        onAliasSet: function (name) {
+            root.kbName = name;
+            root.fetchData();
+        }
+        onAliasFailed: function (message) {
+            root.renameError = message;
+        }
+        onWindowFailed: function (message) {
+            root.windowHint = i18n("Could not open the ApiHub window.");
         }
     }
 
     Component.onCompleted: {
-        if (watcher.registered) {
-            fetchData();
-            armListener();
-        }
+        if (link.registered) fetchData();
     }
-    Component.onDestruction: listener.disconnectSource(listener.command)
 
     function batteryTypeOf(v) {
         if (v <= 0) return "";
@@ -112,12 +122,11 @@ PlasmoidItem {
         var d = JSON.parse(json);
         var kb = d.keyboard || null;
         var b = kb ? (kb.battery || {}) : {};
-        var pct = b.percentage_fine;
-        if (pct === null || pct === undefined) pct = b.percentage_interpolated;
-        if (pct === null || pct === undefined) pct = b.percentage;
+        var pct = b.percentage;
         root.connected = !!d.connected && kb !== null;
         root.batteryPercent = (pct === null || pct === undefined) ? -1 : Math.round(pct);
         root.voltage = b.voltage || 0;
+        root.curvePercent = (b.percentage_interpolated === null || b.percentage_interpolated === undefined) ? -1 : Number(b.percentage_interpolated);
         root.rssi = rssiOf(kb ? kb.radio : null);
         root.kbModel = (kb && kb.device && kb.device.model) ? kb.device.model : i18n("Apple Keyboard");
         root.kbName = d.name || ((kb && kb.device && (kb.device.alias || kb.device.name)) || "");
@@ -133,126 +142,33 @@ PlasmoidItem {
     function renameKeyboard(name) {
         if (root.kbMac === "") return;
         root.renameError = "";
-        DBus.SessionBus.asyncCall({
-            service: root.busName,
-            path: root.objectPath,
-            iface: root.busName,
-            member: "SetAlias",
-            arguments: [new DBus.string(root.kbMac), new DBus.string(name)],
-            signature: "ss"
-        }, function (reply) {
-            root.kbName = String(reply.value);
-            root.fetchData();
-        }, function (error) {
-            root.renameError = error && error.error ? String(error.error.message) : String(error);
-        });
+        link.setAlias(root.kbMac, name);
     }
 
     function clear() {
         root.connected = false;
         root.batteryPercent = -1;
         root.voltage = 0;
+        root.curvePercent = -1;
         root.rssi = NaN;
         root.remaining = "";
     }
 
     function fetchData() {
-        if (!watcher.registered) {
+        if (!link.registered) {
             clear();
             return;
         }
-        DBus.SessionBus.asyncCall({
-            service: root.busName,
-            path: root.objectPath,
-            iface: root.busName,
-            member: "GetState",
-            arguments: [],
-            signature: ""
-        }, function (reply) {
-            try {
-                root.apply(String(reply.value));
-            } catch (e) {
-                console.warn("apple-kb-monitor: bad GetState reply", e);
-                root.clear();
-            }
-        }, function (error) {
-            console.warn("apple-kb-monitor: GetState failed", error && error.error ? error.error.message : error);
-            root.clear();
-        });
+        link.fetch();
     }
 
-    // ── StateChanged listener ──
-    // Waits (max 10 min, then re-armed) for one StateChanged, then exits. A
-    // failing listener (no dbus-monitor) is throttled to one retry per 5 s.
-    function armListener() {
-        if (!watcher.registered) return;
-        listener.disconnectSource(listener.command);
-        listener.connectSource(listener.command);
-    }
-
-    P5.DataSource {
-        id: listener
-        engine: "executable"
-        readonly property string command: "s=$(date +%s); timeout 600 sh -c '"
-            + "stdbuf -oL dbus-monitor --session type=signal,sender=com.agenceapi.AppleKbMonitor1,member=StateChanged 2>/dev/null"
-            + " | { grep -m1 member=StateChanged >/dev/null; kill 0; }'; "
-            + "[ $(( $(date +%s) - s )) -ge 2 ] || sleep 5"
-        onNewData: function (source, data) {
-            disconnectSource(source);
-            if (root.daemonRunning) {
-                root.fetchData();
-                root.armListener();
-            }
-        }
-    }
-
-    // ── Open the existing apihub-app window (#121) ──
-    // apihub-app owns one tray item (org.kde.StatusNotifierItem-<pid>-N,
-    // Id "apihub-app"); its Activate() opens the window. Nothing is spawned,
-    // so no second tray icon can appear.
+    // ── Open the ApiHub window ──
+    // org.freedesktop.Application.Activate on com.agenceapi.AppleKbMonitor:
+    // the name is D-Bus activatable (dbus/com.agenceapi.AppleKbMonitor.service),
+    // so the window is started when closed and raised when open, whichever
+    // tray (daemon or apihub-app) is in use (#149).
     function openWindow() {
         root.windowHint = "";
-        DBus.SessionBus.asyncCall({
-            service: "org.freedesktop.DBus",
-            path: "/org/freedesktop/DBus",
-            iface: "org.freedesktop.DBus",
-            member: "ListNames",
-            arguments: [],
-            signature: ""
-        }, function (reply) {
-            var names = (reply.value || []).filter(function (n) {
-                return String(n).indexOf("org.kde.StatusNotifierItem-") === 0;
-            });
-            root.probeNext(names.map(String));
-        }, function () { root.windowHint = i18n("Cannot reach the session bus."); });
-    }
-
-    function probeNext(candidates) {
-        if (candidates.length === 0) {
-            windowHint = i18n("The ApiHub window is not running (apihub-app).");
-            return;
-        }
-        var svc = candidates[0];
-        var rest = candidates.slice(1);
-        DBus.SessionBus.asyncCall({
-            service: svc,
-            path: "/StatusNotifierItem",
-            iface: "org.freedesktop.DBus.Properties",
-            member: "Get",
-            arguments: [new DBus.string("org.kde.StatusNotifierItem"), new DBus.string("Id")],
-        }, function (reply) {
-            if (String(reply.value) === "apihub-app") {
-                DBus.SessionBus.asyncCall({
-                    service: svc,
-                    path: "/StatusNotifierItem",
-                    iface: "org.kde.StatusNotifierItem",
-                    member: "Activate",
-                    arguments: [new DBus.int32(0), new DBus.int32(0)],
-                }, function () {},
-                   function () { root.windowHint = i18n("Could not open the ApiHub window."); });
-            } else {
-                root.probeNext(rest);
-            }
-        }, function () { root.probeNext(rest); });
+        link.activateWindow();
     }
 }

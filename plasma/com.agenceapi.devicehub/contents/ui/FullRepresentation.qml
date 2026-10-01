@@ -97,10 +97,15 @@ PlasmaExtras.Representation {
 
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Voltage:")
-                    text: root.voltage > 0 ? i18n("%1 V", root.voltage.toFixed(3)) : "—"
+                    text: root.voltage > 0 ? i18n("%1 V", root.voltage.toFixed(2)) : "—"
                 }
                 PlasmaComponents3.Label {
-                    Kirigami.FormData.label: i18n("Battery type:")
+                    Kirigami.FormData.label: i18n("Curve estimate:")
+                    visible: root.curvePercent >= 0
+                    text: i18n("%1% (estimate)", root.curvePercent.toFixed(1))
+                }
+                PlasmaComponents3.Label {
+                    Kirigami.FormData.label: i18n("Battery type (estimate):")
                     visible: root.batteryType !== ""
                     text: root.batteryType
                 }

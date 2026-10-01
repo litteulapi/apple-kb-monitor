@@ -1,0 +1,29 @@
+#!/bin/sh
+# Widget tests on a PRIVATE session bus (dbus-run-session): fake daemon + fake
+# window, no real keyboard, no real service. Proves (#149, #150):
+#  - StateChanged is received natively and GetState is read (`percentage`);
+#  - the window opens through org.freedesktop.Application.Activate;
+#  - the widget spawns NO subprocess (no orphans: dbus-monitor/timeout/sh).
+# Needs: qml6, python3-dbus + gi, dbus-run-session.
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# Static guard: the widget must never go back to a subprocess engine (#150).
+if grep -rEn "plasma5support|dbus-monitor|engine: *\"executable\"" "$here/../com.agenceapi.devicehub/contents"; then
+  echo "FAIL: the widget starts subprocesses again" >&2; exit 1
+fi
+exec dbus-run-session -- sh -eu -c '
+  here="$1"
+  out=$(mktemp)
+  python3 "$here/fake_services.py" "$out" 2>"$out.err" & fake=$!
+  trap "kill $fake 2>/dev/null; rm -f $out" EXIT
+  sleep 1
+  QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 qml6 "$here/tst_link.qml" >"$out.log" 2>&1 & q=$!
+  sleep 2
+  kids=$(pgrep -P "$q" | wc -l)
+  stray=$(pgrep -x dbus-monitor | wc -l)
+  wait "$q" && rc=0 || rc=$?
+  grep -q PASS "$out.log" && grep -E "RESULT|PASS" "$out.log" || cat "$out.log"
+  echo "children of the widget process: $kids ; stray dbus-monitor: $stray ; Activate calls: $(grep -c activate "$out")"
+  cat "$out.err" | tail -5; rm -f "$out.log" "$out.err"
+  [ "$kids" -eq 0 ] && [ "$stray" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q "^activate 0" "$out" && grep -q "^alias AA:BB Mon clavier" "$out"
+' sh "$here"

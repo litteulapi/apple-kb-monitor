@@ -1,3 +1,4 @@
+mod fnmode_diag;
 mod instance;
 mod keyboard;
 mod portal;
@@ -219,16 +220,17 @@ impl ApiHubApp {
                         ui.add_space(4.0);
                         egui::Grid::new("bat_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(v) = kb.battery.voltage {
-                                // [hypothèse] adc * 3.3 / 1023: an estimate, not a measurement.
-                                ui.label(egui::RichText::new("Voltage (est.)").weak().size(16.0));
+                                // Measured: reports 0x46 / 0xFF, in mV (#139).
+                                ui.label(egui::RichText::new("Voltage").weak().size(16.0));
                                 ui.label(self.tint(
-                                    egui::RichText::new(format!("≈ {:.2} V", v)).strong().size(18.0),
+                                    egui::RichText::new(view::volts_text(v)).strong().size(18.0),
                                     view::voltage_level(v)));
                                 ui.end_row();
                             }
-                            if let Some(adc) = kb.battery.adc_raw {
-                                ui.label(egui::RichText::new("0xF5 (raw)").weak().size(16.0));
-                                ui.label(egui::RichText::new(format!("{}", adc)).size(16.0));
+                            if let Some(p) = kb.battery.percentage_interpolated {
+                                // Interpolated on the unit's curve: an estimate.
+                                ui.label(egui::RichText::new("Curve").weak().size(16.0));
+                                ui.label(egui::RichText::new(view::curve_text(p)).size(16.0));
                                 ui.end_row();
                             }
                             if let Some(ref rem) = snap.remaining_display {
@@ -664,10 +666,19 @@ impl ApiHubApp {
             out.push(DiagResult { label: "hidraw readable".into(), ok: hid_ok, detail: hid_detail });
 
             // keyd config
-            let keyd_ok = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
+            let keyd_conf = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
+            let keyd_running = Command::new("systemctl")
+                .args(["is-active", "--quiet", "keyd.service"])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
             out.push(DiagResult {
-                label: "keyd config".into(), ok: keyd_ok,
-                detail: if keyd_ok { "/etc/keyd/apple-keyboard.conf".into() } else { "NOT FOUND".into() },
+                label: "keyd config".into(), ok: keyd_conf && keyd_running,
+                detail: match (keyd_conf, keyd_running) {
+                    (true, true) => "/etc/keyd/apple-keyboard.conf, keyd.service active".into(),
+                    (true, false) => "/etc/keyd/apple-keyboard.conf present but keyd.service is NOT active".into(),
+                    (false, _) => "NOT FOUND".into(),
+                },
             });
 
             // udev rules
@@ -677,12 +688,9 @@ impl ApiHubApp {
                 detail: if udev_ok { "70-apple-kb-hidraw.rules installed".into() } else { "NOT FOUND".into() },
             });
 
-            // modprobe
-            let mod_ok = std::path::Path::new("/etc/modprobe.d/hid_apple.conf").exists();
-            out.push(DiagResult {
-                label: "hid_apple fnmode".into(), ok: mod_ok,
-                detail: if mod_ok { "fnmode=1 configured".into() } else { "NOT FOUND — media keys won't be default".into() },
-            });
+            // hid_apple fnmode: applied value (sysfs) vs configured (modprobe.d)
+            let (fn_ok, fn_detail) = fnmode_diag::diagnose();
+            out.push(DiagResult { label: "hid_apple fnmode".into(), ok: fn_ok, detail: fn_detail });
 
             // rssi-helper caps
             let rssi_ok = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper").exists();
@@ -785,7 +793,12 @@ fn main() {
     let (ui_tx, ui_rx) = mpsc::channel();
     let activate = {
         let (open, raise, tx) = (window_open.clone(), raise.clone(), Mutex::new(ui_tx.clone()));
-        move || {
+        move |token: Option<String>| {
+            // winit reads XDG_ACTIVATION_TOKEN when it maps a window: a token
+            // from the caller (tray click) lets a new window take focus on Wayland.
+            if let Some(t) = token {
+                std::env::set_var("XDG_ACTIVATION_TOKEN", t);
+            }
             if open.load(Ordering::Relaxed) {
                 raise.store(true, Ordering::Relaxed);
             } else {

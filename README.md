@@ -101,10 +101,15 @@ makepkg -si
 
 No group membership is needed: the udev rule `70-apple-kb-hidraw.rules` tags Apple hidraw devices `uaccess`, so logind grants an ACL to the user of the active seat. Reconnect the keyboard (or `sudo udevadm trigger --subsystem-match=hidraw`) after installing.
 
+Enable the daemon once (tray icon, low-battery notifications, history, Plasma widget data):
+
 ```bash
-# Optional: background monitor and BlueZ battery provider (legacy Python CLI)
-systemctl --user enable --now apple-kb-monitor.service
+systemctl --user enable --now apple-kb-monitord.service
 ```
+
+`apple-kb-monitord` is the single owner of the keyboard. The package does not enable it by itself: without this command it only starts on demand, when a client (`apihub-app`, the Plasma widget) calls `com.agenceapi.AppleKbMonitor1` on the session bus (D-Bus activation), so there is no tray icon nor low-battery alert until one of them has been opened.
+
+The legacy Python service `apple-kb-monitor.service` does the same acquisition and conflicts with the daemon (`Conflicts=`): do **not** enable both. Enable it only if you do not want the Rust daemon.
 
 ## Usage
 

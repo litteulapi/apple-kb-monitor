@@ -58,6 +58,16 @@ pub fn battery_level(p: Option<f64>) -> Level {
     }
 }
 
+/// Measured battery voltage, rounded to 0.01 V.
+pub fn volts_text(v: f64) -> String {
+    format!("{v:.2} V")
+}
+
+/// Percentage interpolated on the discharge curve: always marked as an estimate.
+pub fn curve_text(p: f64) -> String {
+    format!("{p:.0} % (estimation)")
+}
+
 pub fn voltage_level(v: f64) -> Level {
     if v > 2.8 {
         Level::Good
@@ -135,6 +145,13 @@ impl Palette {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn voltage_and_curve_texts() {
+        assert_eq!(volts_text(2.987), "2.99 V");
+        assert_eq!(volts_text(2.9), "2.90 V");
+        assert_eq!(curve_text(99.78), "100 % (estimation)");
+    }
 
     #[test]
     fn unknown_rssi_is_a_dash_never_127() {
