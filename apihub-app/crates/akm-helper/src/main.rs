@@ -1,27 +1,33 @@
-//! `akm-helper` — the only privileged piece of apple-kb-monitor.
+//! `akm-helper` — privileged writer of the `hid_apple` parameters.
 //!
 //! Installed at `/usr/lib/apple-kb-monitor/akm-helper` and started through
 //! `pkexec` (polkit action `com.agenceapi.AppleKbMonitor.set-fnmode`).
 //!
 //! ```text
 //! akm-helper set-fnmode <0|1|2|3> [--persist]
+//! akm-helper set-params NAME=VALUE [NAME=VALUE...] [--persist]
 //! ```
 //!
-//! * writes `/sys/module/hid_apple/parameters/fnmode` (root-only, mode 644);
-//! * `--persist` first rewrites the `fnmode=` token of `/etc/modprobe.d/hid_apple.conf`
-//!   (other options and comments kept; file forced to 0644 root:root, symlinks
-//!   refused, atomic rename) and then tolerates an unloaded module.
+//! * writes `/sys/module/hid_apple/parameters/<NAME>` (root-only, mode 644);
+//!   NAME/VALUE are checked against the whitelist of `akm-core`
+//!   (`keymap::KERNEL_PARAMS`: fnmode 0-4, iso_layout -1..1, swap_opt_cmd 0-2,
+//!   swap_ctrl_cmd 0-1, swap_fn_leftctrl 0-1 — the parameters `modinfo
+//!   hid_apple` lists); they apply to EVERY Apple keyboard;
+//! * `--persist` first rewrites the matching tokens of the `options hid_apple`
+//!   lines of `/etc/modprobe.d/hid_apple.conf` (other options and comments
+//!   kept; file forced to 0644 root:root, symlinks refused, atomic rename)
+//!   and then tolerates an unloaded module.
 //!
-//! Security stance: the argument list is a strict whitelist (one verb, one
-//! value in 0..=3, one optional flag); no path, no environment variable and
-//! no stdin is ever used to pick a file or a value.
+//! Security stance: the argument list is a strict whitelist (one verb,
+//! whitelisted names and values, one optional flag); no path, no environment
+//! variable and no stdin is ever used to pick a file or a value.
 
-use std::fs::{self, OpenOptions};
-use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
 
-const SYSFS_FNMODE: &str = "/sys/module/hid_apple/parameters/fnmode";
+use akm_helper::{fsutil, params};
+
+const SYSFS_DIR: &str = "/sys/module/hid_apple/parameters";
 const MODPROBE_CONF: &str = "/etc/modprobe.d/hid_apple.conf";
 
 /// Exit codes: 0 OK, 1 write error, 64 invalid usage (sysexits EX_USAGE).
@@ -29,157 +35,61 @@ const EX_USAGE: u8 = 64;
 
 #[derive(Debug, PartialEq, Eq)]
 struct Request {
-    mode: u8,
+    set: Vec<(&'static str, i32)>,
     persist: bool,
 }
 
-/// Strict parser: exactly `set-fnmode <0..=3> [--persist]`.
+const USAGE: &str = "usage: akm-helper set-fnmode <0-3> [--persist] | akm-helper set-params NAME=VALUE... [--persist]";
+
+/// Strict parser: `set-fnmode <0..=3> [--persist]` or
+/// `set-params NAME=VALUE [NAME=VALUE...] [--persist]` (1 to 5 distinct names).
 fn parse_args<S: AsRef<str>>(args: &[S]) -> Result<Request, String> {
     let a: Vec<&str> = args.iter().map(AsRef::as_ref).collect();
-    let (verb, val, flag) = match a.as_slice() {
-        [v, n] => (*v, *n, None),
-        [v, n, f] => (*v, *n, Some(*f)),
-        _ => return Err("usage: akm-helper set-fnmode <0-3> [--persist]".into()),
+    let (verb, rest) = a.split_first().ok_or(USAGE)?;
+    let (rest, persist) = match rest.split_last() {
+        Some((&"--persist", r)) => (r, true),
+        _ => (rest, false),
     };
-    if verb != "set-fnmode" {
-        return Err(format!("unknown command {verb:?}"));
+    if let Some(f) = rest.iter().find(|t| t.starts_with("--")) {
+        return Err(format!("unknown option {f:?}"));
     }
-    let persist = match flag {
-        None => false,
-        Some("--persist") => true,
-        Some(f) => return Err(format!("unknown option {f:?}")),
-    };
-    // Exactly one ASCII digit: rejects "", "+1", "01", " 1", "1\n", "٢", "10"...
-    let mode = match val.as_bytes() {
-        [d @ b'0'..=b'3'] => d - b'0',
-        _ => return Err(format!("invalid fnmode {val:?} (expected 0, 1, 2 or 3)")),
-    };
-    Ok(Request { mode, persist })
-}
-
-/// New content of the modprobe file: replaces the `fnmode=` token of every
-/// `options hid_apple ...` line, or appends one line. Other lines untouched.
-fn merge_fnmode(existing: &str, mode: u8) -> String {
-    let mut out = String::new();
-    let mut done = false;
-    for line in existing.lines() {
-        let mut toks = line.split_whitespace();
-        if toks.next() == Some("options") && toks.next() == Some("hid_apple") {
-            let mut replaced = false;
-            let mut parts: Vec<String> = Vec::new();
-            for t in line.split_whitespace() {
-                if t.starts_with("fnmode=") {
-                    if !replaced {
-                        parts.push(format!("fnmode={mode}"));
-                        replaced = true;
-                    }
-                } else {
-                    parts.push(t.to_string());
+    match *verb {
+        "set-fnmode" => {
+            let [val] = rest else { return Err(USAGE.into()) };
+            // Exactly one ASCII digit: rejects "", "+1", "01", " 1", "1\n", "٢", "10"...
+            let mode = match val.as_bytes() {
+                [d @ b'0'..=b'3'] => i32::from(d - b'0'),
+                _ => return Err(format!("invalid fnmode {val:?} (expected 0, 1, 2 or 3)")),
+            };
+            Ok(Request { set: vec![("fnmode", mode)], persist })
+        }
+        "set-params" => {
+            if rest.is_empty() || rest.len() > akm_helper::keymap::KERNEL_PARAMS.len() {
+                return Err(USAGE.into());
+            }
+            let mut set: Vec<(&'static str, i32)> = Vec::new();
+            for t in rest {
+                let (n, v) = params::parse_assignment(t)?;
+                if set.iter().any(|(m, _)| *m == n) {
+                    return Err(format!("parameter {n} given twice"));
                 }
+                set.push((n, v));
             }
-            if !replaced {
-                parts.push(format!("fnmode={mode}"));
-            }
-            out.push_str(&parts.join(" "));
-            done = true;
-        } else {
-            out.push_str(line);
+            Ok(Request { set, persist })
         }
-        out.push('\n');
+        v => Err(format!("unknown command {v:?}")),
     }
-    if !done {
-        out.push_str(&format!("options hid_apple fnmode={mode}\n"));
-    }
-    out
 }
 
-/// `O_NOFOLLOW` for the temp file and the read of the existing file.
-const O_NOFOLLOW: i32 = libc::O_NOFOLLOW;
-
-extern "C" {
-    fn umask(mask: u32) -> u32;
+/// `fnmode=` only (kept for the tests of the original verb).
+#[cfg(test)]
+fn merge_fnmode(existing: &str, mode: u8) -> String {
+    params::merge(existing, &[("fnmode", i32::from(mode))])
 }
 
-/// Called first thing in `main`: whatever umask `pkexec` inherited from the
-/// caller (an unprivileged process may pick 000), root-created files never
-/// start world-writable.
-fn lock_umask() {
-    // SAFETY: umask(2) only changes the process file-mode creation mask.
-    unsafe { umask(0o077) };
-}
-
-/// Reads the existing config without following a symlink and refuses
-/// anything that is not a regular file.
-fn read_existing(path: &Path) -> std::io::Result<String> {
-    use std::io::Read;
-    use std::os::unix::fs::OpenOptionsExt;
-    let mut f = match OpenOptions::new().read(true).custom_flags(O_NOFOLLOW).open(path) {
-        Ok(f) => f,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
-        Err(e) => return Err(std::io::Error::new(e.kind(), format!("{} (symlink refused?): {e}", path.display()))),
-    };
-    if !f.metadata()?.file_type().is_file() {
-        return Err(std::io::Error::other("not a regular file"));
-    }
-    let mut s = String::new();
-    f.read_to_string(&mut s)?;
-    Ok(s)
-}
-
-/// Atomic rewrite: temp file created `O_EXCL|O_NOFOLLOW` with mode 0600,
-/// forced to 0644 root:root (explicit chmod/chown, independent of umask),
-/// fsync, then `rename`. Refuses a symlink at the destination.
+#[cfg(test)]
 fn persist(path: &Path, mode: u8) -> std::io::Result<()> {
-    use std::os::fd::AsRawFd;
-    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-    if let Ok(md) = fs::symlink_metadata(path) {
-        if !md.file_type().is_file() {
-            return Err(std::io::Error::other(format!("{} is not a regular file (symlink?)", path.display())));
-        }
-    }
-    let new = merge_fnmode(&read_existing(path)?, mode);
-    let tmp = path.with_extension("conf.akm-tmp");
-    let open_tmp = || {
-        OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .custom_flags(O_NOFOLLOW)
-            .open(&tmp)
-    };
-    let mut f = open_tmp().or_else(|_| {
-        // stale temp from a crashed run (remove_file never follows a link)
-        let _ = fs::remove_file(&tmp);
-        open_tmp()
-    })?;
-    let res = (|| {
-        f.set_permissions(fs::Permissions::from_mode(0o644))?;
-        // SAFETY: plain fchown(2) on an fd we own.
-        let rc = unsafe { libc::fchown(f.as_raw_fd(), 0, 0) };
-        // As root this must succeed; unprivileged (unit tests) it cannot.
-        if rc != 0 && unsafe { libc::geteuid() } == 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        f.write_all(new.as_bytes())?;
-        f.sync_all()?;
-        fs::rename(&tmp, path)
-    })();
-    if res.is_err() {
-        let _ = fs::remove_file(&tmp);
-    }
-    res?;
-    if let Some(dir) = path.parent() {
-        if let Ok(d) = fs::File::open(dir) {
-            let _ = d.sync_all();
-        }
-    }
-    Ok(())
-}
-
-fn set_sysfs(path: &Path, mode: u8) -> std::io::Result<()> {
-    // No create: the parameter must exist (hid_apple loaded).
-    let mut f = OpenOptions::new().write(true).open(path)?;
-    f.write_all(format!("{mode}\n").as_bytes())
+    params::persist(path, &[("fnmode", i32::from(mode))])
 }
 
 /// Outcome of a request, for the exit code and the message.
@@ -193,24 +103,27 @@ enum Outcome {
 
 /// With `--persist` the config is written FIRST and independently of sysfs
 /// (module not loaded = parameter file absent is not an error then).
-fn run(req: &Request, sysfs: &Path, conf: &Path) -> Outcome {
+fn run(req: &Request, sysfs_dir: &Path, conf: &Path) -> Outcome {
     if req.persist {
-        if let Err(e) = persist(conf, req.mode) {
+        if let Err(e) = params::persist(conf, &req.set) {
             return Outcome::Failed(format!("{} not updated: {e}", conf.display()));
         }
     }
-    match set_sysfs(sysfs, req.mode) {
-        Ok(()) => Outcome::Applied,
-        Err(e) if req.persist && e.kind() == std::io::ErrorKind::NotFound => Outcome::PersistedOnly,
-        Err(e) if req.persist => {
-            Outcome::Failed(format!("{} updated but cannot write {}: {e}", conf.display(), sysfs.display()))
+    for &(name, v) in &req.set {
+        match params::write_sysfs(sysfs_dir, name, v) {
+            Ok(()) => {}
+            Err(e) if req.persist && e.kind() == std::io::ErrorKind::NotFound && !sysfs_dir.exists() => return Outcome::PersistedOnly,
+            Err(e) if req.persist => {
+                return Outcome::Failed(format!("{} updated but cannot write {}/{name}: {e}", conf.display(), sysfs_dir.display()))
+            }
+            Err(e) => return Outcome::Failed(format!("cannot write {}/{name}: {e}", sysfs_dir.display())),
         }
-        Err(e) => Outcome::Failed(format!("cannot write {}: {e}", sysfs.display())),
     }
+    Outcome::Applied
 }
 
 fn main() -> ExitCode {
-    lock_umask();
+    fsutil::lock_umask();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let req = match parse_args(&args) {
         Ok(r) => r,
@@ -219,10 +132,11 @@ fn main() -> ExitCode {
             return ExitCode::from(EX_USAGE);
         }
     };
-    match run(&req, Path::new(SYSFS_FNMODE), Path::new(MODPROBE_CONF)) {
+    match run(&req, Path::new(SYSFS_DIR), Path::new(MODPROBE_CONF)) {
         Outcome::Applied => ExitCode::SUCCESS,
         Outcome::PersistedOnly => {
-            eprintln!("akm-helper: hid_apple not loaded: fnmode={} saved, applied at next module load", req.mode);
+            let s: Vec<String> = req.set.iter().map(|(n, v)| format!("{n}={v}")).collect();
+            eprintln!("akm-helper: hid_apple not loaded: {} saved, applied at next module load", s.join(" "));
             ExitCode::SUCCESS
         }
         Outcome::Failed(m) => {
@@ -241,12 +155,12 @@ mod tests {
         for n in 0..=3u8 {
             assert_eq!(
                 parse_args(&["set-fnmode", &n.to_string()]),
-                Ok(Request { mode: n, persist: false })
+                Ok(Request { set: vec![("fnmode", i32::from(n))], persist: false })
             );
         }
         assert_eq!(
             parse_args(&["set-fnmode", "2", "--persist"]),
-            Ok(Request { mode: 2, persist: true })
+            Ok(Request { set: vec![("fnmode", 2)], persist: true })
         );
     }
 
@@ -283,6 +197,8 @@ mod tests {
         assert_eq!(merge_fnmode("# only comment\n", 1), "# only comment\noptions hid_apple fnmode=1\n");
     }
 
+    use std::fs::{self, OpenOptions};
+    use std::io::Write;
     use std::os::unix::fs::{symlink, PermissionsExt};
     use std::sync::Mutex;
 
@@ -313,15 +229,15 @@ mod tests {
         let _g = UMASK.lock().unwrap_or_else(|e| e.into_inner());
         let d = tmpdir("umask");
         // SAFETY: test-only, serialised by UMASK.
-        let old = unsafe { umask(0) };
+        let old = fsutil::set_umask(0);
         let legacy = d.join("legacy.conf");
         persist_legacy(&legacy, 1).unwrap();
         let fixed = d.join("hid_apple.conf");
         persist(&fixed, 1).unwrap();
-        unsafe { umask(0o077) };
+        fsutil::set_umask(0o077);
         let strict = d.join("strict.conf");
         persist(&strict, 1).unwrap();
-        unsafe { umask(old) };
+        fsutil::set_umask(old);
         assert_eq!(perm(&legacy), 0o666, "old code: world-writable under umask 000");
         assert_eq!(perm(&fixed), 0o644, "umask 000 must still give 0644");
         assert_eq!(perm(&strict), 0o644, "umask 077 must still give 0644");
@@ -381,13 +297,13 @@ mod tests {
     fn persist_without_module_loaded_still_persists() {
         let d = tmpdir("nomod");
         let conf = d.join("hid_apple.conf");
-        let sysfs = d.join("absent/fnmode");
-        let req = Request { mode: 2, persist: true };
+        let sysfs = d.join("absent");
+        let req = Request { set: vec![("fnmode", 2)], persist: true };
         assert_eq!(run(&req, &sysfs, &conf), Outcome::PersistedOnly);
         assert_eq!(fs::read_to_string(&conf).unwrap(), "options hid_apple fnmode=2\n");
         // without --persist a missing module stays an error and writes nothing
         let conf2 = d.join("other.conf");
-        let req = Request { mode: 2, persist: false };
+        let req = Request { set: vec![("fnmode", 2)], persist: false };
         assert!(matches!(run(&req, &sysfs, &conf2), Outcome::Failed(_)));
         assert!(!conf2.exists());
         fs::remove_dir_all(&d).unwrap();
@@ -397,12 +313,67 @@ mod tests {
     fn persist_with_module_loaded_writes_both() {
         let d = tmpdir("both");
         let conf = d.join("hid_apple.conf");
-        let sysfs = d.join("fnmode");
-        fs::write(&sysfs, "1\n").unwrap();
-        let req = Request { mode: 3, persist: true };
+        let sysfs = d.join("params");
+        fs::create_dir_all(&sysfs).unwrap();
+        fs::write(sysfs.join("fnmode"), "1\n").unwrap();
+        let req = Request { set: vec![("fnmode", 3)], persist: true };
         assert_eq!(run(&req, &sysfs, &conf), Outcome::Applied);
-        assert_eq!(fs::read_to_string(&sysfs).unwrap(), "3\n");
+        assert_eq!(fs::read_to_string(sysfs.join("fnmode")).unwrap(), "3\n");
         assert_eq!(fs::read_to_string(&conf).unwrap(), "options hid_apple fnmode=3\n");
+        fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn set_params_whitelist() {
+        assert_eq!(
+            parse_args(&["set-params", "swap_opt_cmd=1", "iso_layout=-1", "--persist"]),
+            Ok(Request { set: vec![("swap_opt_cmd", 1), ("iso_layout", -1)], persist: true })
+        );
+        assert_eq!(parse_args(&["set-params", "fnmode=4"]), Ok(Request { set: vec![("fnmode", 4)], persist: false }));
+        for bad in [
+            &["set-params"][..],
+            &["set-params", "fnmode=5"],
+            &["set-params", "fnmode=01"],
+            &["set-params", "fnmode= 1"],
+            &["set-params", "fnmode=1\n"],
+            &["set-params", "fnmode"],
+            &["set-params", "rightalt_as_rightctrl=1"],
+            &["set-params", "ejectcd_as_delete=1"],
+            &["set-params", "../../etc/passwd=1"],
+            &["set-params", "fnmode=1", "fnmode=2"],
+            &["set-params", "fnmode=1", "--force"],
+            &["set-params", "--persist", "fnmode=1"],
+            &["set-params", "a=1", "b=1", "c=1", "d=1", "e=1", "f=1"],
+        ] {
+            assert!(parse_args(bad).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn set_params_writes_each_parameter_and_persists() {
+        let d = tmpdir("params");
+        let sysfs = d.join("parameters");
+        fs::create_dir_all(&sysfs).unwrap();
+        for n in ["fnmode", "swap_opt_cmd"] {
+            fs::write(sysfs.join(n), "0\n").unwrap();
+        }
+        let conf = d.join("hid_apple.conf");
+        fs::write(&conf, "# keep\noptions hid_apple fnmode=1 iso_layout=0\n").unwrap();
+        let req = parse_args(&["set-params", "fnmode=2", "swap_opt_cmd=1", "--persist"]).unwrap();
+        assert_eq!(run(&req, &sysfs, &conf), Outcome::Applied);
+        assert_eq!(fs::read_to_string(sysfs.join("fnmode")).unwrap(), "2\n");
+        assert_eq!(fs::read_to_string(sysfs.join("swap_opt_cmd")).unwrap(), "1\n");
+        assert_eq!(fs::read_to_string(&conf).unwrap(), "# keep\noptions hid_apple fnmode=2 iso_layout=0 swap_opt_cmd=1\n");
+        // a parameter the running module lacks is an error, not ignored
+        let req = parse_args(&["set-params", "swap_ctrl_cmd=1"]).unwrap();
+        assert!(matches!(run(&req, &sysfs, &conf), Outcome::Failed(_)));
+        // a symlink in place of a parameter is never followed
+        let victim = d.join("victim");
+        fs::write(&victim, "keep\n").unwrap();
+        symlink(&victim, sysfs.join("swap_fn_leftctrl")).unwrap();
+        let req = parse_args(&["set-params", "swap_fn_leftctrl=1"]).unwrap();
+        assert!(matches!(run(&req, &sysfs, &conf), Outcome::Failed(_)));
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "keep\n");
         fs::remove_dir_all(&d).unwrap();
     }
 }
