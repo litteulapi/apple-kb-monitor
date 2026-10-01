@@ -1,0 +1,40 @@
+# Cibles cargo-fuzz (libFuzzer), hors workspace. Lancer (nightly) :
+#   cd apihub-app && cargo +nightly fuzz run --fuzz-dir audit-fuzz decode -- -max_total_time=60
+[package]
+name = "akm-audit-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+akm-core = { path = "../akm-core" }
+
+[[bin]]
+name = "decode"
+path = "fuzz_targets/decode.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "config"
+path = "fuzz_targets/config.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "history"
+path = "fuzz_targets/history.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "rdesc"
+path = "fuzz_targets/rdesc.rs"
+test = false
+doc = false
