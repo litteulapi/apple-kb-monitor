@@ -1,0 +1,26 @@
+# apple-kb-monitor — keep the Intel AX201 Bluetooth adapter (USB 8087:0026)
+# out of USB runtime autosuspend (#143, docs/RECONNEXION-PAIRAGE.md).
+#
+# Why: with btusb enable_autosuspend=Y and power/control=auto the adapter is
+# USB-suspended whenever no Bluetooth link is up, i.e. exactly while the
+# keyboard must page the host to reconnect (measured 2026-10-01: 430 s
+# suspended between boot and the forced re-pairing). The incoming Connection
+# Request then depends on USB remote wake-up; this rule removes that path.
+#
+# Order: MUST sort after 60-autosuspend.rules, which sets power/control=auto
+# for this very ID (hwdb 60-autosuspend-chromiumos.hwdb: usb:v8087p0026*).
+#
+# Scope: this adapter only (not every btusb device, unlike
+# `options btusb enable_autosuspend=0`). Cost on a desktop: ~0.1 W.
+#
+# Apply  : sudo install -m644 udev/61-akm-bt-adapter-no-autosuspend.rules /etc/udev/rules.d/
+#          sudo udevadm control --reload
+#          sudo udevadm trigger --action=add --subsystem-match=usb --attr-match=idVendor=8087 --attr-match=idProduct=0026
+# Check  : cat /sys/bus/usb/devices/*/power/control   (the 8087:0026 device must say "on")
+#          akmctl doctor
+# Revert : sudo rm /etc/udev/rules.d/61-akm-bt-adapter-no-autosuspend.rules
+#          sudo udevadm control --reload
+#          echo auto | sudo tee /sys/bus/usb/devices/<port>/power/control
+ACTION!="add|bind|change", GOTO="akm_bt_adapter_end"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="8087", ATTR{idProduct}=="0026", TEST=="power/control", ATTR{power/control}="on"
+LABEL="akm_bt_adapter_end"
