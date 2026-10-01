@@ -290,10 +290,9 @@ fn esc(s: &str) -> String {
 }
 
 fn info(id: i32, label: String, a11y: Option<String>) -> Entry {
-    let mut props = vec![
-        ("label", Prop::Str(esc(&label))),
-        ("enabled", Prop::Bool(false)),
-    ];
+    // Information rows stay ENABLED (readable, not greyed out): a disabled
+    // dbusmenu entry looks "locked" in Plasma. Clicking one does nothing.
+    let mut props = vec![("label", Prop::Str(esc(&label)))];
     if let Some(a) = a11y {
         props.push(("accessible-desc", Prop::Str(a)));
     }
