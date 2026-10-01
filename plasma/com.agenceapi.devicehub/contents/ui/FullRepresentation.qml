@@ -29,7 +29,7 @@ PlasmaExtras.Representation {
             }
             Kirigami.Heading {
                 level: 3
-                text: root.connected ? root.kbModel : i18n("ApiHub")
+                text: root.connected ? (root.kbName !== "" ? root.kbName : root.kbModel) : i18n("ApiHub")
                 elide: Text.ElideRight
                 Layout.fillWidth: true
             }
@@ -112,6 +112,44 @@ PlasmaExtras.Representation {
                     Kirigami.FormData.label: i18n("Estimated autonomy:")
                     visible: root.remaining !== ""
                     text: root.remaining
+                }
+                RowLayout {
+                    Kirigami.FormData.label: i18n("Name:")
+                    Layout.fillWidth: true
+                    PlasmaComponents3.TextField {
+                        id: nameField
+                        Layout.fillWidth: true
+                        maximumLength: 64
+                        placeholderText: i18n("Keyboard name")
+                        Accessible.name: i18n("Keyboard name")
+                        // Follow the daemon unless the user is typing.
+                        Binding on text {
+                            value: root.kbName
+                            when: !nameField.activeFocus
+                            restoreMode: Binding.RestoreNone
+                        }
+                        onAccepted: root.renameKeyboard(text.trim())
+                    }
+                    PlasmaComponents3.Button {
+                        icon.name: "edit-rename"
+                        text: i18n("Rename")
+                        enabled: nameField.text.trim() !== "" && nameField.text.trim() !== root.kbName
+                        onClicked: root.renameKeyboard(nameField.text.trim())
+                    }
+                    PlasmaComponents3.Button {
+                        icon.name: "edit-undo"
+                        text: i18n("Reset")
+                        Accessible.description: i18n("Restore the keyboard's own name")
+                        onClicked: root.renameKeyboard("")
+                    }
+                }
+                PlasmaComponents3.Label {
+                    Kirigami.FormData.label: ""
+                    visible: root.renameError !== ""
+                    text: root.renameError
+                    color: Kirigami.Theme.negativeTextColor
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
                 }
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Model:")

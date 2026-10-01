@@ -68,6 +68,20 @@ pub fn fetch_snapshot(conn: &Connection) -> zbus::Result<Snapshot> {
     serde_json::from_str(&s).map_err(|e| zbus::Error::Failure(format!("bad Json property: {e}")))
 }
 
+/// Rename keyboard `mac` through the daemon (`SetAlias`); `""` restores its
+/// own name. Returns the name now in effect.
+pub fn set_alias(conn: &Connection, mac: &str, name: &str) -> zbus::Result<String> {
+    conn.call_method(
+        Some(BUS_NAME),
+        OBJECT_PATH,
+        Some(INTERFACE),
+        "SetAlias",
+        &(mac, name),
+    )?
+    .body()
+    .deserialize()
+}
+
 /// History entries since `since` from the daemon.
 pub fn fetch_history(conn: &Connection, since: u64) -> zbus::Result<Vec<HistoryEntry>> {
     let s: String = conn
@@ -153,6 +167,7 @@ pub fn to_json(s: &Snapshot, src: Source) -> String {
             "battery_percent".into(),
             s.battery_pct().map(|p| p.round()).into(),
         );
+        o.insert("name".into(), s.display_name().into());
     }
     serde_json::to_string_pretty(&v).unwrap_or_default()
 }
@@ -178,5 +193,15 @@ mod tests {
         let v: serde_json::Value =
             serde_json::from_str(&to_json(&Snapshot::default(), Source::Direct)).unwrap();
         assert!(v["battery_percent"].is_null());
+        assert!(v["name"].is_null());
+        let mut k = akm_core::KbReport::default();
+        k.device.alias = Some("Bureau".into());
+        let s = Snapshot {
+            keyboard: Some(k),
+            ..Default::default()
+        };
+        let v: serde_json::Value = serde_json::from_str(&to_json(&s, Source::Direct)).unwrap();
+        assert_eq!(v["name"], "Bureau");
+        assert_eq!(v["keyboard"]["device"]["alias"], "Bureau");
     }
 }

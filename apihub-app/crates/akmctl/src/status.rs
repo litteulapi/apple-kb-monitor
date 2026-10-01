@@ -18,6 +18,8 @@ pub fn to_json(s: &Snapshot, fn_mode: Option<u8>, revision: Option<u64>) -> Valu
         "revision": revision.unwrap_or(s.version),
         "connected": s.connected,
         "model": s.model(),
+        "name": s.display_name(),
+        "alias": s.alias(),
         "mac": s.mac(),
         "battery_pct": s.battery_pct().map(|p| p.round().clamp(0.0, 100.0) as u32),
         "voltage": s.voltage().filter(|v| v.is_finite()),
@@ -49,6 +51,7 @@ pub fn to_text(s: &Snapshot, fn_mode: Option<u8>) -> String {
     let mut out = String::new();
     let mut line = |k: &str, v: String| out.push_str(&format!("{k:<11}{v}\n"));
     line("Keyboard:", s.model().unwrap_or("n/a").to_string());
+    line("Name:", s.display_name().unwrap_or("n/a").to_string());
     line("MAC:", s.mac().unwrap_or("n/a").to_string());
     line("Connected:", if s.connected { "yes" } else { "no" }.into());
     line("Battery:", opt(s.battery_pct().map(|p| p.round() as i64), " %"));
@@ -75,7 +78,7 @@ pub fn absent_text(fn_mode: Option<u8>) -> String {
 mod tests {
     use super::*;
 
-    const SAMPLE: &str = r#"{"schema":1,"version":28,"connected":true,"keyboard":{"device":{"model":"Apple Wireless Keyboard (A1314)","mac":"04:DB:56:CA:42:EE"},"battery":{"percentage":99.0,"voltage":2.9},"radio":{"rssi_dbm":0}},"last_update":1790000000}"#;
+    const SAMPLE: &str = r#"{"schema":1,"version":28,"connected":true,"keyboard":{"device":{"model":"Apple Wireless Keyboard (A1314)","mac":"04:DB:56:CA:42:EE","alias":"Clavier de maria #1"},"battery":{"percentage":99.0,"voltage":2.9},"radio":{"rssi_dbm":0}},"last_update":1790000000}"#;
 
     #[test]
     fn json_fields_and_nulls() {
@@ -87,6 +90,8 @@ mod tests {
         assert_eq!(v["battery_pct"], 99);
         assert_eq!(v["rssi_dbm"], 0);
         assert_eq!(v["mac"], "04:DB:56:CA:42:EE");
+        assert_eq!(v["name"], "Clavier de maria #1");
+        assert_eq!(v["alias"], "Clavier de maria #1");
         assert_eq!(v["fnmode"], 2);
         assert!(v["fnmode_label"].as_str().unwrap().starts_with("fkeysfirst"));
         assert!(v["last_error"].is_null());
@@ -97,6 +102,7 @@ mod tests {
         let v = to_json(&Snapshot::default(), None, None);
         assert_eq!(v["connected"], false);
         assert!(v["battery_pct"].is_null());
+        assert!(v["name"].is_null() && v["alias"].is_null());
         assert!(v["voltage"].is_null());
         assert!(v["rssi_dbm"].is_null());
         assert!(v["fnmode"].is_null());
@@ -117,6 +123,7 @@ mod tests {
         let t = to_text(&s, Some(1));
         assert!(t.contains("Battery:   99 %"));
         assert!(t.contains("Connected: yes"));
+        assert!(t.contains("Name:      Clavier de maria #1"));
         assert!(t.contains("Fn mode:   1 - fkeyslast"));
         assert!(to_text(&Snapshot::default(), None).contains("Battery:   n/a"));
     }

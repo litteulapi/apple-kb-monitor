@@ -15,6 +15,7 @@ use akm_core::hid_params::Param;
 use akm_core::history::{History, SystemClock};
 use akm_core::{KbReport, Snapshot, Watch};
 use apple_kb_monitord::actor::Mailbox;
+use apple_kb_monitord::alias::AliasBackend;
 use apple_kb_monitord::devices::{self, DEVICE_INTERFACE};
 use apple_kb_monitord::events::{DeviceEvent, EventHub};
 use apple_kb_monitord::service::{self, ServeOptions};
@@ -35,6 +36,18 @@ impl SettingsBackend for FakeSettings {
     }
     fn apply(&self, p: Param, v: i32) -> Result<(), SetError> {
         self.0.lock().unwrap().insert(p.name(), v);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+struct FakeAlias(Mutex<Vec<(String, String)>>);
+impl AliasBackend for FakeAlias {
+    fn get(&self, _: &str) -> Option<String> {
+        self.0.lock().unwrap().last().map(|(_, a)| a.clone())
+    }
+    fn set(&self, mac: &str, alias: &str) -> Result<(), SetError> {
+        self.0.lock().unwrap().push((mac.into(), alias.into()));
         Ok(())
     }
 }
@@ -82,6 +95,26 @@ fn call0(c: &Connection, path: &str, method: &str) -> zbus::Result<zbus::Message
         Some(DEVICE_INTERFACE),
         method,
         &(),
+    )
+}
+
+fn set_alias_dev(c: &Connection, name: &str) -> zbus::Result<zbus::Message> {
+    c.call_method(
+        Some(service::BUS_NAME),
+        DEV,
+        Some(DEVICE_INTERFACE),
+        "SetAlias",
+        &(name,),
+    )
+}
+
+fn set_alias_root(c: &Connection, mac: &str, name: &str) -> zbus::Result<zbus::Message> {
+    c.call_method(
+        Some(service::BUS_NAME),
+        service::OBJECT_PATH,
+        Some(service::INTERFACE),
+        "SetAlias",
+        &(mac, name),
     )
 }
 
@@ -154,6 +187,8 @@ fn inner() {
     );
     so.events = events.clone();
     so.settings = fake.clone();
+    let fake_alias = Arc::new(FakeAlias::default());
+    so.alias = fake_alias.clone();
     let _server = service::serve_with(so).expect("serve");
 
     let c = Connection::session().unwrap();
@@ -278,6 +313,47 @@ fn inner() {
         HashMap::from([("fnmode", 2), ("iso_layout", -1), ("swap_opt_cmd", 1)])
     );
 
+    // Rename (#141): validated, delegated to the backend, nothing else.
+    let r: String = set_alias_dev(&c, "  Bureau  ")
+        .unwrap()
+        .body()
+        .deserialize()
+        .unwrap();
+    assert_eq!(r, "Bureau");
+    let r: String = set_alias_root(&c, MAC, "")
+        .unwrap()
+        .body()
+        .deserialize()
+        .unwrap();
+    assert_eq!(r, "", "reset reaches the backend as an empty alias");
+    for bad in ["a\nb", "x\u{202E}y", &"z".repeat(65)] {
+        let e = set_alias_dev(&c, bad).unwrap_err();
+        assert!(e.to_string().contains("InvalidArgs"), "{bad:?}: {e}");
+    }
+    let e = set_alias_root(&c, "zz", "x").unwrap_err();
+    assert!(e.to_string().contains("InvalidArgs"), "{e}");
+    assert_eq!(
+        *fake_alias.0.lock().unwrap(),
+        vec![(MAC.to_string(), "Bureau".to_string()), (MAC.to_string(), String::new())]
+    );
+    // The published name follows the snapshot (alias wins over the own name).
+    assert_eq!(String::try_from(get(&c, DEV, DEVICE_INTERFACE, "Name")).unwrap(), "");
+    let mut named = keyboard(90.0, now);
+    named.keyboard.as_mut().unwrap().device.alias = Some("Bureau".into());
+    watch.publish(named);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while String::try_from(get(&c, service::OBJECT_PATH, service::INTERFACE, "Name")).unwrap()
+        != "Bureau"
+    {
+        assert!(Instant::now() < deadline, "Name not published");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        String::try_from(get(&c, DEV, DEVICE_INTERFACE, "Name")).unwrap(),
+        "Bureau"
+    );
+    watch.publish(keyboard(90.0, now));
+
     // Event signals.
     let it = subscribe(DEV);
     let got = Arc::new(Mutex::new(Vec::<String>::new()));
@@ -357,7 +433,7 @@ fn inner() {
     let mut so = ServeOptions::new(w2, Mailbox::new(), None);
     so.bus_name = "com.agenceapi.AppleKbMonitor1.Test".into();
     let shared = service::export_on(&other, &so).unwrap();
-    devices::ensure_device(&other, &shared, MAC, "x").unwrap();
+    devices::ensure_device(&other, &shared, MAC, "x", "").unwrap();
     let e = c
         .call_method(
             Some("com.agenceapi.AppleKbMonitor1.Test"),

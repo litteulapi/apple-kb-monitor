@@ -24,6 +24,7 @@ use akm_core::machine::{Action, Event, Machine, RSSI_MAX_AGE};
 use akm_core::rssi::{self, RssiTracker};
 use akm_core::{discover, hidraw, led, power, KbReport, Snapshot, Watch};
 
+use crate::alias::{AliasBackend, BluezAlias};
 use crate::events::{DeviceEvent, EventHub};
 use crate::{bluez, notify, watcher};
 
@@ -34,6 +35,8 @@ pub enum Msg {
     Bus(Event),
     /// Explicit refresh (D-Bus `Refresh()`).
     Refresh,
+    /// The BlueZ alias of a keyboard is now this (`None` = unknown).
+    Alias(String, Option<String>),
     /// Stop the actor.
     Quit,
 }
@@ -80,6 +83,8 @@ pub struct Options {
     pub notify_battery_replaced: bool,
     /// Where detected events go (D-Bus device signals, tray...).
     pub events: Arc<EventHub>,
+    /// Where the keyboard's alias is read (BlueZ).
+    pub alias: Arc<dyn AliasBackend>,
 }
 
 impl Default for Options {
@@ -93,6 +98,7 @@ impl Default for Options {
             notify_connection: true,
             notify_battery_replaced: true,
             events: EventHub::new(),
+            alias: Arc::new(BluezAlias::default()),
         }
     }
 }
@@ -199,9 +205,10 @@ impl Actor {
         self.last_error = err;
         gate_wake_monitor(report.as_ref(), mac);
         match report {
-            Some(k) => {
+            Some(mut k) => {
                 let mac = k.device.mac.clone();
                 let pct = k.battery_pct();
+                k.device.alias = mac.as_deref().and_then(|m| self.opts.alias.get(m));
                 self.kb = Some(k);
                 self.last_update = unix_now();
                 self.after_battery_update(true);
@@ -213,6 +220,15 @@ impl Actor {
             None => {
                 self.kb = None;
                 false
+            }
+        }
+    }
+
+    /// The BlueZ alias changed (rename, `bluetoothctl`, system settings).
+    fn set_alias(&mut self, mac: &str, alias: Option<String>) {
+        if let Some(k) = self.kb.as_mut() {
+            if k.device.mac.as_deref().is_some_and(|m| m.eq_ignore_ascii_case(mac)) {
+                k.device.alias = alias;
             }
         }
     }
@@ -530,6 +546,7 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
                 }
             }
             Ok(Msg::Refresh) => machine.force_refresh(Instant::now()),
+            Ok(Msg::Alias(mac, alias)) => actor.set_alias(&mac, alias),
             Ok(Msg::Quit) => break,
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,

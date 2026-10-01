@@ -1,6 +1,7 @@
 mod instance;
 mod keyboard;
 mod portal;
+mod rename;
 mod source;
 mod tray;
 mod view;
@@ -52,6 +53,10 @@ struct ApiHubApp {
     // Battery history graph
     battery_history: Vec<(f64, f64)>,    // (timestamp, percentage)
     voltage_history: Vec<(f64, f64)>,    // (timestamp, voltage)
+    // Rename field (#141)
+    rename_buf: String,
+    rename_loaded: Option<String>,
+    rename_status: rename::Status,
 }
 
 impl ApiHubApp {
@@ -87,6 +92,9 @@ impl ApiHubApp {
             palette: Palette::new(cc.egui_ctx.style().visuals.dark_mode),
             battery_history,
             voltage_history,
+            rename_buf: String::new(),
+            rename_loaded: None,
+            rename_status: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -288,8 +296,13 @@ impl ApiHubApp {
                                 ui.end_row();
                             }
                             if let Some(ref name) = kb.device.name {
-                                ui.label(egui::RichText::new("Name").weak().size(16.0));
+                                ui.label(egui::RichText::new("Own name").weak().size(16.0));
                                 ui.label(egui::RichText::new(name).size(16.0));
+                                ui.end_row();
+                            }
+                            if let Some(ref mac) = kb.device.mac {
+                                ui.label(egui::RichText::new("Name").weak().size(16.0));
+                                self.rename_row(ui, mac, snap.display_name());
                                 ui.end_row();
                             }
                             if let Some(ref mac) = kb.device.mac {
@@ -347,6 +360,46 @@ impl ApiHubApp {
             }
         }
         }); // ScrollArea
+    }
+
+    /// Editable name of the keyboard: text field + Rename / Reset (BlueZ alias).
+    fn rename_row(&mut self, ui: &mut egui::Ui, mac: &str, current: Option<&str>) {
+        let current = current.unwrap_or_default().to_string();
+        ui.vertical(|ui| {
+            let mut submit: Option<String> = None;
+            ui.horizontal(|ui| {
+                let edit = ui.add(
+                    egui::TextEdit::singleline(&mut self.rename_buf)
+                        .desired_width(220.0)
+                        .char_limit(akm_core::alias::MAX_CHARS)
+                        .hint_text("Keyboard name"),
+                );
+                // Follow the daemon's name unless the user is typing.
+                if self.rename_loaded.as_deref() != Some(current.as_str()) && !edit.has_focus() {
+                    self.rename_buf = current.clone();
+                    self.rename_loaded = Some(current.clone());
+                }
+                let changed = self.rename_buf.trim() != current;
+                let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                if (ui.add_enabled(changed, egui::Button::new("Rename")).clicked() || enter) && changed {
+                    submit = Some(self.rename_buf.clone());
+                }
+                if ui.button("Reset").on_hover_text("Restore the keyboard's own name").clicked() {
+                    submit = Some(String::new());
+                }
+            });
+            if let Some(text) = submit {
+                *self.rename_status.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                match rename::check(&text) {
+                    Ok(name) => rename::submit(mac.to_string(), name, self.rename_status.clone(), ui.ctx().clone()),
+                    Err(e) => *self.rename_status.lock().unwrap_or_else(|e| e.into_inner()) = Some((false, e)),
+                }
+            }
+            if let Some((ok, msg)) = self.rename_status.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+                let t = egui::RichText::new(msg).size(14.0);
+                ui.label(if ok { t.weak() } else { t.color(self.palette.bad) });
+            }
+        });
     }
 
     /// Draw battery + voltage history chart using egui painter.

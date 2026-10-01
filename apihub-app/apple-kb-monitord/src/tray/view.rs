@@ -37,7 +37,7 @@ impl Lang {
             Lang::En
         }
     }
-    fn t(self, fr: &'static str, en: &'static str) -> &'static str {
+    pub(crate) fn t(self, fr: &'static str, en: &'static str) -> &'static str {
         match self {
             Lang::Fr => fr,
             Lang::En => en,
@@ -225,12 +225,13 @@ pub mod id {
     pub const REFRESH: i32 = 12;
     pub const COPY: i32 = 13;
     pub const BLUETOOTH: i32 = 14;
+    pub const RENAME: i32 = 15;
     pub const SEP2: i32 = 20;
     pub const QUIT: i32 = 21;
     #[cfg(test)]
-    pub const ALL: [i32; 13] = [
+    pub const ALL: [i32; 14] = [
         HEADER, BATTERY, CONNECTION, SIGNAL, AUTONOMY, CAPS, SEP1, OPEN, REFRESH, COPY, BLUETOOTH,
-        SEP2, QUIT,
+        RENAME, SEP2, QUIT,
     ];
 }
 
@@ -327,11 +328,9 @@ impl View {
             .filter(|m| !m.is_empty())
             .unwrap_or_else(|| lang.t("Clavier Apple", "Apple keyboard").into());
         let model = short_model(&model_full).to_string();
-        let name = snap
-            .keyboard
-            .as_ref()
-            .and_then(|k| k.device.name.clone())
-            .filter(|n| !n.is_empty());
+        // The user's alias (#141), else the name the keyboard registered under.
+        let name = snap.display_name().map(str::to_string);
+        let title_name = name.clone().unwrap_or_else(|| model.clone());
 
         let status = match (snap.connected, pct) {
             (true, Some(p)) if p <= CRITICAL_PCT && !charging => Status::NeedsAttention,
@@ -389,9 +388,11 @@ impl View {
 
         // Tooltip
         let tooltip_title = match (snap.connected, pct, snap.keyboard.is_some()) {
-            (true, Some(p), _) => format!("{model} \u{2014} {}", lang.pct(p)),
-            (true, None, _) => model.clone(),
-            (false, _, true) => format!("{model} \u{2014} {}", lang.t("hors ligne", "offline")),
+            (true, Some(p), _) => format!("{title_name} \u{2014} {}", lang.pct(p)),
+            (true, None, _) => title_name.clone(),
+            (false, _, true) => {
+                format!("{title_name} \u{2014} {}", lang.t("hors ligne", "offline"))
+            }
             (false, _, false) => lang.t("Clavier Apple", "Apple keyboard").into(),
         };
         let mut tooltip_lines = Vec::new();
@@ -427,7 +428,11 @@ impl View {
             Some(p) if snap.connected && p <= LOW_PCT && !charging => Some("warning"),
             _ => None,
         };
-        let mut header = info(id::HEADER, model_full.clone(), None);
+        let mut header = info(
+            id::HEADER,
+            name.clone().unwrap_or_else(|| model_full.clone()),
+            None,
+        );
         header
             .props
             .push(("icon-name", Prop::Str("input-keyboard-symbolic".into())));
@@ -480,6 +485,12 @@ impl View {
                 lang.t("Paramètres _Bluetooth…", "_Bluetooth settings…"),
                 "preferences-system-bluetooth-symbolic",
                 true,
+            ),
+            action(
+                id::RENAME,
+                lang.t("Re_nommer le clavier…", "Re_name keyboard…"),
+                "edit-rename-symbolic",
+                snap.mac().is_some(),
             ),
             sep(id::SEP2),
             action(
@@ -738,7 +749,7 @@ mod tests {
         let v = View::build(&s, false, None, Lang::Fr);
         assert_eq!(
             v.tooltip_title,
-            "Apple Wireless Keyboard \u{2014} 99\u{a0}%"
+            "Clavier_test \u{2014} 99\u{a0}%"
         );
         let body = v.tooltip_body(Lang::Fr, 1_012, true);
         let lines: Vec<&str> = body.lines().collect();
@@ -765,7 +776,7 @@ mod tests {
         let v = View::build(&snap(Some(64.0), false, Some(-3)), false, None, Lang::Fr);
         assert_eq!(
             v.tooltip_title,
-            "Apple Wireless Keyboard \u{2014} hors ligne"
+            "Clavier_test \u{2014} hors ligne"
         );
         let body = v.tooltip_body(Lang::Fr, 1_000, true);
         assert!(body.contains("Dernière valeur : 64\u{a0}%"));
@@ -814,9 +825,7 @@ mod tests {
         // Data underscores are escaped (mnemonics), actions carry one.
         assert_eq!(
             v.entry(id::HEADER).unwrap().get("label"),
-            Some(&Prop::Str(
-                "Apple Wireless Keyboard (A1314, aluminum, ISO)".into()
-            ))
+            Some(&Prop::Str("Clavier__test".into()))
         );
         assert!(v
             .entry(id::BATTERY)
@@ -833,11 +842,32 @@ mod tests {
     #[test]
     fn clipboard_block() {
         let t = clipboard_text(&snap(Some(99.0), true, Some(-3)), false, Lang::En, 1_030);
-        assert!(t.starts_with("Apple Wireless Keyboard \u{2014} 99%"), "{t}");
+        assert!(t.starts_with("Clavier_test \u{2014} 99%"), "{t}");
         assert!(t.contains("MAC: 04:DB:56:CA:42:EE"), "{t}");
         assert!(t.contains("Updated 30\u{a0}s ago"), "{t}");
         let t = clipboard_text(&snap(Some(99.0), true, None), false, Lang::Fr, 1_030);
         assert!(t.contains("MAC\u{a0}: 04:DB:56:CA:42:EE"), "{t}");
         assert!(!t.contains("127"));
+    }
+
+    #[test]
+    fn alias_wins_everywhere_and_rename_is_offered() {
+        let mut s = snap(Some(99.0), true, Some(-3));
+        s.keyboard.as_mut().unwrap().device.alias = Some("Clavier de maria #1".into());
+        let v = View::build(&s, false, None, Lang::En);
+        assert_eq!(v.tooltip_title, "Clavier de maria #1 \u{2014} 99%");
+        assert_eq!(
+            v.tooltip_lines[0],
+            "Apple Wireless Keyboard (A1314, aluminum, ISO) \u{b7} Clavier de maria #1"
+        );
+        assert_eq!(
+            v.entry(id::HEADER).unwrap().get("label"),
+            Some(&Prop::Str("Clavier de maria #1".into()))
+        );
+        let r = v.entry(id::RENAME).unwrap();
+        assert_eq!(r.get("label"), Some(&Prop::Str("Re_name keyboard\u{2026}".into())));
+        assert_eq!(r.get("enabled"), None, "enabled while a keyboard is known");
+        let none = View::build(&Snapshot::default(), false, None, Lang::Fr);
+        assert_eq!(none.entry(id::RENAME).unwrap().get("enabled"), Some(&Prop::Bool(false)));
     }
 }

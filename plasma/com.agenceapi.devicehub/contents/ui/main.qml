@@ -27,6 +27,10 @@ PlasmoidItem {
     property real voltage: 0
     property real rssi: NaN
     property string kbModel: ""
+    // Name shown to the user: alias set on this computer, else own name (#141).
+    property string kbName: ""
+    property string kbMac: ""
+    property string renameError: ""
     property string fwVersion: ""
     property string batteryType: ""
     property string remaining: ""
@@ -55,7 +59,7 @@ PlasmoidItem {
     compactRepresentation: CompactRepresentation {}
     fullRepresentation: FullRepresentation {}
 
-    toolTipMainText: connected ? kbModel : stateText
+    toolTipMainText: connected ? (kbName !== "" ? kbName : kbModel) : stateText
     toolTipSubText: connected
         ? [hasBattery ? i18n("Battery %1", batteryText) : "",
            voltage > 0 ? i18n("%1 V", voltage.toFixed(2)) : "",
@@ -116,10 +120,32 @@ PlasmoidItem {
         root.voltage = b.voltage || 0;
         root.rssi = rssiOf(kb ? kb.radio : null);
         root.kbModel = (kb && kb.device && kb.device.model) ? kb.device.model : i18n("Apple Keyboard");
+        root.kbName = d.name || ((kb && kb.device && (kb.device.alias || kb.device.name)) || "");
+        root.kbMac = (kb && kb.device && kb.device.mac) ? kb.device.mac : "";
         root.fwVersion = (kb && kb.firmware && kb.firmware.version) ? kb.firmware.version : "";
         root.batteryType = batteryTypeOf(root.voltage);
         root.remaining = d.remaining_display || "";
         root.lastError = d.last_error || "";
+    }
+
+    // Rename on this computer (BlueZ alias, nothing is written into the
+    // keyboard). An empty name restores the keyboard's own name.
+    function renameKeyboard(name) {
+        if (root.kbMac === "") return;
+        root.renameError = "";
+        DBus.SessionBus.asyncCall({
+            service: root.busName,
+            path: root.objectPath,
+            iface: root.busName,
+            member: "SetAlias",
+            arguments: [new DBus.string(root.kbMac), new DBus.string(name)],
+            signature: "ss"
+        }, function (reply) {
+            root.kbName = String(reply.value);
+            root.fetchData();
+        }, function (error) {
+            root.renameError = error && error.error ? String(error.error.message) : String(error);
+        });
     }
 
     function clear() {

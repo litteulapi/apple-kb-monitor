@@ -20,8 +20,10 @@
 //! * [`link`]        connection / reconnection notification logic (#84)
 //! * [`config`]      `config.toml` (small TOML subset, no dependency)
 //! * [`hid_params`]  `hid_apple` parameters: read + whitelist
+//! * [`alias`]       validation of the user-chosen keyboard name (#141)
 
 pub mod alerts;
+pub mod alias;
 pub mod batteries;
 pub mod calibration;
 pub mod config;

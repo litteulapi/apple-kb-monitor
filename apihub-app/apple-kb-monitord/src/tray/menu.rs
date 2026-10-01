@@ -155,6 +155,7 @@ impl Menu {
             id::REFRESH => Action::Refresh,
             id::COPY => Action::Copy,
             id::BLUETOOTH => Action::Bluetooth,
+            id::RENAME => Action::Rename,
             id::QUIT => Action::Hide,
             _ => return,
         };

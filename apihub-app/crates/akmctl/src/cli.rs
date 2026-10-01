@@ -4,6 +4,16 @@ use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::fnmode::parse_mode;
 
+/// Clap value parser of a keyboard name: validated, trimmed, never empty
+/// (use `--reset` to restore the original name).
+fn parse_name(s: &str) -> Result<String, String> {
+    match akm_core::alias::validate(s) {
+        Ok(n) if n.is_empty() => Err("empty name (use --reset to restore the keyboard's own name)".into()),
+        Ok(n) => Ok(n),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 /// Exit codes: 0 OK, 1 error, 2 daemon absent, 64 usage error.
 pub const EXIT_OK: u8 = 0;
 pub const EXIT_ERROR: u8 = 1;
@@ -45,6 +55,19 @@ pub enum Command {
     Set {
         #[command(subcommand)]
         what: SetCmd,
+    },
+    /// Rename the keyboard on this computer (BlueZ alias; nothing is written
+    /// into the keyboard)
+    Rename {
+        /// New name (max 64 characters, no control characters)
+        #[arg(value_parser = parse_name, required_unless_present = "reset", conflicts_with = "reset")]
+        name: Option<String>,
+        /// Restore the keyboard's own name
+        #[arg(long)]
+        reset: bool,
+        /// Keyboard to rename (default: the one the daemon reports)
+        #[arg(long, value_name = "MAC")]
+        mac: Option<String>,
     },
     /// Follow StateChanged signals: one JSON line per change, until interrupted
     Watch,
@@ -115,6 +138,27 @@ mod tests {
             assert!(Cli::try_parse_from(["akmctl", "set", "fnmode", bad]).is_err(), "{bad:?}");
         }
         assert!(Cli::try_parse_from(["akmctl", "set", "fnmode"]).is_err());
+    }
+
+    #[test]
+    fn rename_arguments() {
+        let c = |a: &[&str]| Cli::try_parse_from([&["akmctl", "rename"], a].concat());
+        match c(&["  Bureau  "]).unwrap().command {
+            Command::Rename { name, reset, mac } => {
+                assert_eq!((name.as_deref(), reset, mac), (Some("Bureau"), false, None));
+            }
+            _ => panic!(),
+        }
+        assert!(matches!(
+            c(&["--reset"]).unwrap().command,
+            Command::Rename { name: None, reset: true, .. }
+        ));
+        assert!(c(&["--mac", "04:DB:56:CA:42:EE", "x"]).is_ok());
+        assert!(c(&[]).is_err(), "a name or --reset is required");
+        assert!(c(&["x", "--reset"]).is_err());
+        assert!(c(&["   "]).is_err());
+        assert!(c(&["a\nb"]).is_err());
+        assert!(c(&[&"x".repeat(65)]).is_err());
     }
 
     #[test]

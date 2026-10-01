@@ -80,6 +80,22 @@ impl Snapshot {
     pub fn mac(&self) -> Option<&str> {
         self.keyboard.as_ref().and_then(|k| k.device.mac.as_deref())
     }
+    /// The user's alias (BlueZ `Alias`), if known and non-empty.
+    pub fn alias(&self) -> Option<&str> {
+        self.keyboard
+            .as_ref()
+            .and_then(|k| k.device.alias.as_deref())
+            .filter(|a| !a.is_empty())
+    }
+    /// Name to show for the keyboard: the user's alias, else the name the
+    /// keyboard registered under (empty strings count as absent).
+    pub fn display_name(&self) -> Option<&str> {
+        let d = &self.keyboard.as_ref()?.device;
+        [d.alias.as_deref(), d.name.as_deref()]
+            .into_iter()
+            .flatten()
+            .find(|n| !n.is_empty())
+    }
 
     /// Age of the RSSI value at unix time `now`.
     pub fn rssi_age_s(&self, now: u64) -> Option<u64> {
@@ -100,7 +116,8 @@ impl Snapshot {
     /// [`Self::tooltip_text`] at a given unix time (testable).
     pub fn tooltip_text_at(&self, now: u64) -> String {
         let mut t = format!(
-            "Apple Keyboard \u{2014} Battery: {}",
+            "{} \u{2014} Battery: {}",
+            self.display_name().unwrap_or("Apple Keyboard"),
             self.battery_pct()
                 .map(|p| format!("{:.0}%", p))
                 .unwrap_or_else(|| "n/a".into())
@@ -191,6 +208,24 @@ mod tests {
         assert!(t.contains("n/a"));
         assert!(!t.contains("0%"));
         assert!(with_battery(90.0).tooltip_text().contains("90%"));
+    }
+
+    #[test]
+    fn display_name_prefers_alias_then_hid_name() {
+        assert_eq!(Snapshot::default().display_name(), None);
+        let mut s = with_battery(90.0);
+        assert_eq!(s.display_name(), None);
+        assert!(s.tooltip_text().starts_with("Apple Keyboard"));
+        let d = &mut s.keyboard.as_mut().unwrap().device;
+        d.name = Some("Clavier HID".into());
+        assert_eq!(s.display_name(), Some("Clavier HID"));
+        let d = &mut s.keyboard.as_mut().unwrap().device;
+        d.alias = Some("Bureau".into());
+        assert_eq!(s.display_name(), Some("Bureau"));
+        assert!(s.tooltip_text().starts_with("Bureau \u{2014} Battery: 90%"));
+        let d = &mut s.keyboard.as_mut().unwrap().device;
+        d.alias = Some(String::new());
+        assert_eq!(s.display_name(), Some("Clavier HID"));
     }
 
     #[test]
