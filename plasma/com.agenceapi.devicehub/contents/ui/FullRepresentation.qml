@@ -30,11 +30,13 @@ PlasmaExtras.Representation {
             Kirigami.Heading {
                 level: 3
                 text: root.connected ? (root.kbName !== "" ? root.kbName : root.kbModel) : i18n("ApiHub")
+                textFormat: Text.PlainText
                 elide: Text.ElideRight
                 Layout.fillWidth: true
             }
             PlasmaComponents3.Label {
                 text: root.stateText
+                textFormat: Text.PlainText
                 font: Kirigami.Theme.smallFont
                 color: root.connected ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
             }
@@ -77,6 +79,7 @@ PlasmaExtras.Representation {
                 PlasmaComponents3.Label {
                     id: bigPercent
                     text: root.batteryText
+                    textFormat: Text.PlainText
                     font.pixelSize: Kirigami.Units.gridUnit * 2
                     font.bold: true
                     color: full.levelColor
@@ -94,6 +97,7 @@ PlasmaExtras.Representation {
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
                 text: i18n("Keyboard indication (its own percentage, not a linear charge)")
+                textFormat: Text.PlainText
                 opacity: 0.7
                 wrapMode: Text.Wrap
             }
@@ -106,36 +110,43 @@ PlasmaExtras.Representation {
                     Kirigami.FormData.label: i18n("Estimate:")
                     visible: root.hasEstimate || root.newBatteries
                     text: root.estimateText
+                    textFormat: Text.PlainText
                     wrapMode: Text.Wrap
                 }
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Last reading:")
                     text: root.updatedText
+                    textFormat: Text.PlainText
                     Accessible.description: i18n("The keyboard's percentage only goes down when it reconnects")
                 }
 
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Voltage:")
                     text: root.voltage > 0 ? i18n("%1 V", root.voltage.toFixed(2)) : "—"
+                    textFormat: Text.PlainText
                 }
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Curve estimate:")
                     visible: root.curvePercent >= 0
                     text: i18n("%1% (estimate)", root.curvePercent.toFixed(1))
+                    textFormat: Text.PlainText
                 }
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Battery type (estimate):")
                     visible: root.batteryType !== ""
                     text: root.batteryType
+                    textFormat: Text.PlainText
                 }
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Signal:")
                     text: root.rssiText
+                    textFormat: Text.PlainText
                 }
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Estimated autonomy:")
                     visible: root.remaining !== ""
                     text: root.remaining
+                    textFormat: Text.PlainText
                 }
                 RowLayout {
                     Kirigami.FormData.label: i18n("Name:")
@@ -171,6 +182,7 @@ PlasmaExtras.Representation {
                     Kirigami.FormData.label: ""
                     visible: root.renameError !== ""
                     text: root.renameError
+                    textFormat: Text.PlainText
                     color: Kirigami.Theme.negativeTextColor
                     wrapMode: Text.Wrap
                     Layout.fillWidth: true
@@ -178,12 +190,14 @@ PlasmaExtras.Representation {
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Model:")
                     text: root.kbModel
+                    textFormat: Text.PlainText
                     wrapMode: Text.Wrap
                 }
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Firmware:")
                     visible: root.fwVersion !== ""
                     text: root.fwVersion
+                    textFormat: Text.PlainText
                 }
             }
         }

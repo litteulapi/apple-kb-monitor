@@ -54,6 +54,7 @@ MouseArea {
             id: badgeLabel
             anchors.centerIn: parent
             text: root.batteryPercent
+            textFormat: Text.PlainText
             font.pixelSize: Math.max(compact.size * 0.3, Kirigami.Theme.smallFont.pixelSize)
             font.bold: true
             color: Kirigami.Theme.textColor

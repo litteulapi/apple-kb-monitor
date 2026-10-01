@@ -9,6 +9,23 @@ use zbus::message::Header;
 
 use super::{lock, now_unix, Action, Event, SharedRef};
 
+/// StatusNotifierItem tooltips are rich text (HTML subset): the keyboard name
+/// is data (BlueZ alias, writable by any account), so `<img src=http://...>`
+/// would make the shell fetch a URL (#205). Escape what the host would parse.
+pub fn escape_markup(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
 /// ToolTip wire type: (icon_name, icon_pixmap[], title, description).
 pub type ToolTip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
 
@@ -74,8 +91,8 @@ impl Item {
         (
             s.icon_name.clone(),
             Vec::new(),
-            s.view.tooltip_title.clone(),
-            s.view.tooltip_body(s.lang, now_unix(), s.has_keyboard),
+            escape_markup(&s.view.tooltip_title),
+            escape_markup(&s.view.tooltip_body(s.lang, now_unix(), s.has_keyboard)),
         )
     }
     #[zbus(property)]
@@ -164,5 +181,22 @@ impl Control {
     #[zbus(property)]
     fn mode(&self) -> String {
         lock(&self.shared).mode.as_str().to_string()
+    }
+}
+
+#[cfg(test)]
+mod escape_tests {
+    use super::escape_markup;
+
+    #[test]
+    fn html_in_a_name_is_neutralised() {
+        let evil = r#"<img src="http://127.0.0.1:9/x">Clavier & <b>co</b>"#;
+        let e = escape_markup(evil);
+        assert!(!e.contains('<') && !e.contains('>') && !e.contains('"'));
+        assert_eq!(
+            e,
+            "&lt;img src=&quot;http://127.0.0.1:9/x&quot;&gt;Clavier &amp; &lt;b&gt;co&lt;/b&gt;"
+        );
+        assert_eq!(escape_markup("Clavier de maria #1 \u{2014} 99%"), "Clavier de maria #1 \u{2014} 99%");
     }
 }

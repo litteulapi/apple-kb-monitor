@@ -117,9 +117,17 @@ pub fn open_bluetooth_settings() {
 /// Command line of a text-entry dialog (`kdialog` or `zenity`).
 pub fn rename_dialog_argv(prog: &str, title: &str, prompt: &str, current: &str) -> Vec<String> {
     let v: Vec<&str> = match prog {
-        "kdialog" => vec!["kdialog", "--title", title, "--inputbox", prompt, current],
-        _ => vec![
-            "zenity", "--entry", "--title", title, "--text", prompt, "--entry-text", current,
+        // `--` ends the options: the alias (data) is never parsed as one (#207).
+        "kdialog" => vec![
+            "kdialog", "--title", title, "--inputbox", prompt, "--", current,
+        ],
+        // `--opt=value`: GOption cannot take the value for another option.
+        _ => return vec![
+            "zenity".to_string(),
+            "--entry".to_string(),
+            format!("--title={title}"),
+            format!("--text={prompt}"),
+            format!("--entry-text={current}"),
         ],
     };
     v.into_iter().map(str::to_string).collect()
@@ -242,11 +250,24 @@ mod tests {
     #[test]
     fn dialog_argv_per_program() {
         let k = rename_dialog_argv("kdialog", "T", "P", "cur");
-        assert_eq!(k, ["kdialog", "--title", "T", "--inputbox", "P", "cur"]);
+        assert_eq!(k, ["kdialog", "--title", "T", "--inputbox", "P", "--", "cur"]);
         let z = rename_dialog_argv("zenity", "T", "P", "cur");
         assert_eq!(z[0], "zenity");
-        assert_eq!(z.last().map(String::as_str), Some("cur"));
-        assert!(z.contains(&"--entry-text".to_string()));
+        assert!(z.contains(&"--entry-text=cur".to_string()));
+    }
+
+    /// #207 : an alias is data, never an option of kdialog / zenity.
+    #[test]
+    fn alias_cannot_inject_options() {
+        for evil in ["--version", "--getopenfilename", "--textbox /etc/passwd", "-h"] {
+            let k = rename_dialog_argv("kdialog", "T", "P", evil);
+            let sep = k.iter().position(|a| a == "--").expect("separator");
+            assert_eq!(k[sep + 1..], [evil.to_string()]);
+            assert!(!k[..sep].iter().any(|a| a == evil));
+            let z = rename_dialog_argv("zenity", "T", "P", evil);
+            assert!(z.iter().all(|a| a != evil), "never a bare argument: {z:?}");
+            assert!(z.contains(&format!("--entry-text={evil}")));
+        }
     }
 
     /// The tray must target the name the window really claims (#148).

@@ -83,6 +83,7 @@ PlasmoidItem {
     compactRepresentation: CompactRepresentation {}
     fullRepresentation: FullRepresentation {}
 
+    toolTipTextFormat: Text.PlainText
     toolTipMainText: connected ? (kbName !== "" ? kbName : kbModel) : stateText
     toolTipSubText: connected
         ? [hasBattery ? i18n("Keyboard indication %1", batteryText) : "",

@@ -193,7 +193,7 @@ btusb et demande un rechargement du module) ; `Experimental = false` (sans lien 
   lieu de 14, plus de sonde `0xEA`, jamais `0xFE` ni aucun rapport non déclaré, jamais de balayage ;
   **seulement si une touche a été pressée dans la dernière minute** (clavier éveillé, lien actif ; seul
   l'horodatage de la dernière frappe est conservé, jamais son contenu) ; un seul lecteur (mutex + `flock`
-  sur `$XDG_RUNTIME_DIR/apple-kb-monitor/hid.lock`, à utiliser aussi par les outils RE) ; 250 ms entre deux
+  sur `$XDG_RUNTIME_DIR/apple-kb-monitor/hid.lock`, à utiliser aussi par les outils RE) ; 1 s entre deux
   requêtes, budget 2 s, arrêt à la première erreur. Clavier inactif : aucune requête, le pourcentage vient du
   noyau.
 * Réconciliation avec BlueZ (#165) : le gardien de liaison pousse à la machine d'acquisition l'ensemble des
