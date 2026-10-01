@@ -124,7 +124,11 @@ fn unix_now() -> u64 {
 
 struct Actor {
     opts: Options,
+    /// Last report acquired. Kept (stale) after a failed read or a
+    /// disconnection: `linked` tells whether it is current (#168).
     kb: Option<KbReport>,
+    /// A full acquisition succeeded since the last (re)connection.
+    linked: bool,
     rssi: RssiTracker,
     rssi_at: Option<u64>,
     provider: Option<bluez::BatteryProvider>,
@@ -163,6 +167,7 @@ impl Actor {
             installed_at: batteries::current_set_start(&past),
             opts,
             kb: None,
+            linked: false,
             rssi: RssiTracker::new(RSSI_MAX_AGE),
             rssi_at: None,
             provider: None,
@@ -210,6 +215,7 @@ impl Actor {
                 let pct = k.battery_pct();
                 k.device.alias = mac.as_deref().and_then(|m| self.opts.alias.get(m));
                 self.kb = Some(k);
+                self.linked = true;
                 self.last_update = unix_now();
                 self.after_battery_update(true);
                 if let Some(ev) = mac.and_then(|m| self.link.acquired(&m, pct)) {
@@ -217,8 +223,18 @@ impl Actor {
                 }
                 true
             }
+            // A failed read keeps the last value (and `linked`): `last_error`
+            // says why, `last_update` how old the value is.
             None => {
-                self.kb = None;
+                // Asked for another keyboard than the one kept: its value is
+                // not current for the one now followed.
+                if let (Some(want), Some(have)) =
+                    (mac, self.kb.as_ref().and_then(|k| k.device.mac.as_deref()))
+                {
+                    if !want.eq_ignore_ascii_case(have) {
+                        self.linked = false;
+                    }
+                }
                 false
             }
         }
@@ -235,7 +251,9 @@ impl Actor {
 
     /// Kernel power_supply capacity only (UPower signal).
     fn kernel_battery(&mut self) {
-        let Some(k) = self.kb.as_mut() else { return };
+        let Some(k) = self.kb.as_mut().filter(|_| self.linked) else {
+            return;
+        };
         if let Some(r) = k.device.mac.as_deref().and_then(power::kernel_battery) {
             k.battery.percentage_fine = Some(f64::from(r.percent));
             k.battery.percentage = Some(f64::from(r.percent));
@@ -260,8 +278,11 @@ impl Actor {
         self.opts.events.publish(DeviceEvent::Link(ev));
     }
 
+    /// The keyboard is gone: its last report stays as a stale value (offline
+    /// state of the tray, v2 forecast), the error text is brought up to date.
     fn clear(&mut self) {
-        self.kb = None;
+        self.linked = false;
+        self.last_error = None;
         hidraw::set_wake_monitor_enabled(false);
         self.rssi.clear();
         self.rssi_at = None;
@@ -422,7 +443,7 @@ impl Actor {
         self.refresh_remaining(now);
         let mut kb = self.kb.clone();
         let mut rssi_at = None;
-        if let Some(k) = kb.as_mut() {
+        if let Some(k) = kb.as_mut().filter(|_| self.linked) {
             // RSSI is exposed only while fresh and taken from this very MAC.
             let cur = k
                 .device
@@ -435,14 +456,20 @@ impl Actor {
             k.bluetooth.tx_power_dbus = None;
             rssi_at = cur.and(self.rssi_at);
         }
-        let (caps, num) = if kb.is_some() {
+        let (caps, num) = if self.linked {
             led::read_led_state()
         } else {
             (false, false)
         };
         Snapshot {
-            connected: kb.is_some(),
-            kb_error: kb.is_none().then(|| "Keyboard: not found".to_string()),
+            connected: self.linked,
+            kb_error: (!self.linked).then(|| {
+                if kb.is_some() {
+                    "Keyboard disconnected".to_string()
+                } else {
+                    "Keyboard: not found".to_string()
+                }
+            }),
             keyboard: kb,
             caps_lock: caps,
             num_lock: num,
@@ -613,6 +640,29 @@ mod tests {
         k.device.mac = Some("04:DB:56:CA:42:EE".into());
         k.device.model = Some("Apple Wireless Keyboard (A1314)".into());
         k
+    }
+
+    #[test]
+    fn disconnection_keeps_the_last_value_and_refreshes_errors() {
+        // #168
+        let mut a = quiet_actor();
+        a.kb = Some(report(42.0, Some(2.8)));
+        a.linked = true;
+        a.last_update = 1234;
+        a.last_error = Some("HID diagnostics unavailable (stale)".into());
+        let s = a.snapshot();
+        assert!(s.connected && s.kb_error.is_none());
+        a.disconnected();
+        let s = a.snapshot();
+        assert!(!s.connected);
+        assert_eq!(s.battery_pct(), Some(42.0), "last value kept");
+        assert_eq!(s.last_update, 1234, "its age is known");
+        assert_eq!(s.last_error, None);
+        assert_eq!(s.kb_error.as_deref(), Some("Keyboard disconnected"));
+        assert_eq!(s.mac(), Some("04:DB:56:CA:42:EE"));
+        // never seen: the old message
+        let mut b = quiet_actor();
+        assert_eq!(b.snapshot().kb_error.as_deref(), Some("Keyboard: not found"));
     }
 
     #[test]
