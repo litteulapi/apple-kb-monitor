@@ -1,6 +1,7 @@
 post_install() {
-    # Reload udev rules
+    # Reload udev rules and re-apply the uaccess ACL on already-connected keyboards
     udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
 
     # Reload keyd config
     systemctl restart keyd 2>/dev/null || true
@@ -20,7 +21,6 @@ post_install() {
     echo ">>> apple-kb-monitor v3.0.0 installed"
     echo ""
     echo ">>> First-time setup:"
-    echo "      sudo usermod -aG input \$USER"
     echo "      sudo usermod -aG i2c \$USER    # for DDC/CI monitor control"
     echo "      # Log out and back in"
     echo ""

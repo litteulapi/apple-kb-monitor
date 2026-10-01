@@ -2270,10 +2270,10 @@ impl ApiHubApp {
             });
 
             // udev rules
-            let udev_ok = std::path::Path::new("/usr/lib/udev/rules.d/99-apple-kb-hidraw.rules").exists();
+            let udev_ok = std::path::Path::new("/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules").exists();
             out.push(DiagResult {
                 label: "udev rules".into(), ok: udev_ok,
-                detail: if udev_ok { "99-apple-kb-hidraw.rules installed".into() } else { "NOT FOUND".into() },
+                detail: if udev_ok { "70-apple-kb-hidraw.rules installed".into() } else { "NOT FOUND".into() },
             });
 
             // modprobe

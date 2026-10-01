@@ -48,7 +48,7 @@ package() {
     install -Dm644 "$startdir/systemd/apple-kb-monitor.service"          "$pkgdir/usr/lib/systemd/user/apple-kb-monitor.service"
 
     # ── udev + keyd + modprobe ──────────────────────────────────────────
-    install -Dm644 "$startdir/udev/99-apple-kb-hidraw.rules"          "$pkgdir/usr/lib/udev/rules.d/99-apple-kb-hidraw.rules"
+    install -Dm644 "$startdir/udev/70-apple-kb-hidraw.rules"          "$pkgdir/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules"
     install -Dm644 "$startdir/keyd/apple-keyboard.conf"               "$pkgdir/etc/keyd/apple-keyboard.conf"
     install -Dm644 "$startdir/modprobe/hid_apple.conf"                    "$pkgdir/etc/modprobe.d/hid_apple.conf"
 
