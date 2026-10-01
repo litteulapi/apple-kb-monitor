@@ -4,14 +4,15 @@ mod keyboard;
 mod power;
 mod rssi;
 mod tray;
+mod watcher;
 
 use keyboard::*;
 
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eframe::egui;
 
@@ -24,6 +25,8 @@ pub(crate) struct SharedState {
     pub(crate) caps_lock: bool,
     pub(crate) num_lock: bool,
     pub(crate) remaining_display: Option<String>,
+    /// Age in seconds of the RSSI measurement shown (None = no fresh value).
+    pub(crate) rssi_age_s: Option<f64>,
 }
 
 type State = Arc<Mutex<SharedState>>;
@@ -41,191 +44,241 @@ fn tooltip_text(snap: &SharedState) -> String {
     )
 }
 
-// ── Background polling ──────────────────────────────────────────────────────
+// ── Keyboard actor (event-driven, #66) ─────────────────────────────────────
 
-/// Start the polling thread under a supervisor: if the worker panics, the
+/// Start the keyboard actor under a supervisor: if the worker panics, the
 /// shared-state poison is cleared and the worker is restarted (it used to die
 /// silently, freezing the UI and the tray on stale data).
 fn spawn_poll_thread(state: State, quit_flag: Arc<AtomicBool>) {
-    // Wake event monitor (Input Report 0x13)
-    let _wake_monitor = keyboard::find_apple_hidraw()
-        .map(|path| keyboard::spawn_wake_monitor(&path));
+    // Wake event monitor (Input Report 0x13): discovers the node itself, so it
+    // is started even if the keyboard is absent right now.
+    keyboard::spawn_wake_monitor("");
 
     thread::Builder::new()
-        .name("poll-supervisor".into())
+        .name("kb-supervisor".into())
         .spawn(move || {
             while !quit_flag.load(Ordering::Relaxed) {
                 let (st, qf) = (state.clone(), quit_flag.clone());
                 let worker = thread::Builder::new()
-                    .name("poll".into())
-                    .spawn(move || poll_loop(st, qf))
-                    .expect("failed to spawn poll thread");
+                    .name("kb-actor".into())
+                    .spawn(move || kb_actor(st, qf))
+                    .expect("failed to spawn kb-actor thread");
                 match worker.join() {
                     Ok(()) => break, // quit flag honoured
                     Err(_) => {
-                        eprintln!("[poll] worker panicked — restarting in 5s");
+                        eprintln!("[kb] actor panicked \u{2014} restarting in 5s");
                         state.clear_poison();
                         if let Ok(mut s) = state.lock() {
-                            s.kb_error = Some("Poll thread crashed — restarting".into());
+                            s.kb_error = Some("Keyboard thread crashed \u{2014} restarting".into());
                         }
                         thread::sleep(Duration::from_secs(5));
                     }
                 }
             }
         })
-        .expect("failed to spawn poll supervisor");
+        .expect("failed to spawn kb supervisor");
 }
 
-fn poll_loop(state: State, quit_flag: Arc<AtomicBool>) {
-    let mut cycle: u32 = 0;
-    let mut battery_notified = false;
+/// Everything the actor owns (never shared with the UI thread).
+struct Actor {
+    kb: Option<KbReport>,
+    kernel_pct: Option<u8>,
+    rssi: rssi::RssiTracker,
+    battery_provider: Option<bluez::BatteryProvider>,
+    provider_mac: Option<String>,
+    battery_notified: bool,
+    remaining: Option<String>,
+    remaining_at: Option<Instant>,
+}
 
-    // BlueZ Battery Provider — lazy init: created when keyboard is first found.
-    // This avoids None-forever if the keyboard is absent at startup (M6).
-    let mut battery_provider: Option<bluez::BatteryProvider> = None;
-    // MAC currently exported on the BlueZ provider (withdrawn on disconnection).
-    let mut provider_mac: Option<String> = None;
-    // Kernel power_supply percentage — source of truth when available.
-    let mut kernel_pct: Option<u8> = None;
-
-    loop {
-        // Check quit flag before each cycle
-        if quit_flag.load(Ordering::Relaxed) {
-            eprintln!("[poll] quit flag set, exiting poll thread");
-            break;
-        }
-        // ── Keyboard: direct HID ioctl — every 4th cycle (~40s) ──
-        let prev_kb = state.lock().ok().and_then(|s| s.keyboard.clone());
-        let mut kb = if cycle.is_multiple_of(4) {
-            let mut fresh = keyboard::read_keyboard();
-            // RSSI is only refreshed every 10th cycle: carry the last known
-            // values over a HID re-read so they don't flicker to "absent".
-            if let (Some(nk), Some(pk)) = (fresh.as_mut(), prev_kb.as_ref()) {
-                if nk.radio.rssi_dbm.is_none() { nk.radio.rssi_dbm = pk.radio.rssi_dbm; }
-                if nk.radio.tx_power_dbm.is_none() { nk.radio.tx_power_dbm = pk.radio.tx_power_dbm; }
-            }
-            fresh
-        } else {
-            prev_kb
-        };
-        let mut mac_for_rssi: Option<String> = None;
-
-        // Kernel battery (power_supply) every 3rd cycle (~30s, like UPower: each
-        // read triggers a HID GET_REPORT). It overrides the raw HID percentage.
-        let kb_mac = kb.as_ref().and_then(|k| k.device.mac.clone());
-        if kb.is_none() {
-            kernel_pct = None;
-        } else if cycle.is_multiple_of(3) {
-            kernel_pct = kb_mac.as_deref()
-                .and_then(power::kernel_battery)
-                .map(|r| r.percent);
-        }
-        if let (Some(k), Some(p)) = (kb.as_mut(), kernel_pct) {
-            k.battery.percentage_fine = Some(f64::from(p));
-        }
-
-        // Keyboard gone (or another one): withdraw the exported Battery1 so
-        // BlueZ/KDE do not keep showing a frozen value.
-        let connected_mac = kb.as_ref()
-            .filter(|k| k.bluetooth.connected)
-            .and_then(|k| k.device.mac.clone());
-        if let (Some(old), Some(bp)) = (provider_mac.as_ref(), battery_provider.as_ref()) {
-            if connected_mac.as_ref() != Some(old) {
-                bp.remove(old);
-                provider_mac = None;
-            }
-        }
-
-        // Battery low notification + BlueZ provider update + history
-        if let Some(ref k) = kb {
-            let pct_opt = k.battery.percentage_fine
-                .or(k.battery.percentage_interpolated)
-                .or(k.battery.percentage)
-                .filter(|p| p.is_finite());
-            let pct = pct_opt.unwrap_or(100.0);
-
-            // BlueZ Battery Provider: created lazily, then one object per keyboard.
-            if let (Some(mac), true) = (connected_mac.as_deref(), pct_opt.is_some()) {
-                if battery_provider.is_none() {
-                    battery_provider = bluez::BatteryProvider::spawn();
+impl Actor {
+    /// Full HID read. Returns true when a connected keyboard answered.
+    fn acquire(&mut self) -> bool {
+        match keyboard::read_keyboard() {
+            Some(mut k) if k.bluetooth.connected => {
+                self.kernel_pct = k.device.mac.as_deref()
+                    .and_then(power::kernel_battery)
+                    .map(|r| r.percent);
+                if let Some(p) = self.kernel_pct {
+                    k.battery.percentage_fine = Some(f64::from(p));
                 }
-                if let Some(bp) = battery_provider.as_ref() {
-                    bp.set_battery(mac, pct.round().clamp(0.0, 100.0) as u8);
-                    provider_mac = Some(mac.to_string());
+                // History: only real samples (no invented 100 % / 0 V points).
+                let pct = battery_pct(&k);
+                if let (Some(p), Some(v)) = (pct, k.battery.voltage) {
+                    history::append_history(p, v);
                 }
+                self.kb = Some(k);
+                self.after_battery_update();
+                true
             }
-
-            // Save MAC for RSSI read after this borrow ends
-            mac_for_rssi = k.device.mac.clone();
-
-            // History logging (every 30th cycle = ~15s)
-            if cycle.is_multiple_of(30) && pct_opt.is_some() {
-                // Only log real samples (no invented 100 % / 0 V points).
-                if let Some(voltage) = k.battery.voltage {
-                    history::append_history(pct, voltage);
-                }
-            }
-
-            // Re-arm the low-battery alert once the battery has recovered
-            if pct_opt.is_some() && pct >= 20.0 {
-                battery_notified = false;
-            }
-            // Low battery notification
-            if pct_opt.is_some() && !battery_notified && pct < 15.0 {
-                battery_notified = true;
-                let _ = notify_rust::Notification::new()
-                    .summary("Apple Keyboard — Low Battery")
-                    .body(&format!("Battery at {:.0}% — charge soon", pct))
-                    .icon("battery-caution")
-                    .show();
-                // Flash CapsLock LED 5 times as visual alert
-                keyboard::flash_capslock(5);
+            _ => {
+                self.kb = None;
+                false
             }
         }
+    }
 
-        // RSSI from BlueZ MGMT API (every 10th cycle — blocking socket)
-        if cycle.is_multiple_of(10) {
-            if let Some(ref mac) = mac_for_rssi {
-                if let Some((rssi, tx)) = rssi::read_rssi(mac) {
-                    if let Some(ref mut k) = kb {
-                        k.radio.rssi_dbm = Some(rssi as i32);
-                        k.radio.tx_power_dbm = Some(tx as i32);
-                    }
-                }
+    /// Kernel power_supply capacity only (UPower signal).
+    fn kernel_battery(&mut self) {
+        let Some(k) = self.kb.as_mut() else { return };
+        if let Some(r) = k.device.mac.as_deref().and_then(power::kernel_battery) {
+            self.kernel_pct = Some(r.percent);
+            k.battery.percentage_fine = Some(f64::from(r.percent));
+            self.after_battery_update();
+        }
+    }
+
+    fn clear(&mut self) {
+        self.kb = None;
+        self.kernel_pct = None;
+        self.rssi.clear();
+        if let (Some(old), Some(bp)) = (self.provider_mac.take(), self.battery_provider.as_ref()) {
+            bp.remove(&old);
+        }
+    }
+
+    /// BlueZ Battery1 export + low-battery alert.
+    fn after_battery_update(&mut self) {
+        let Some(k) = self.kb.as_ref() else { return };
+        let pct_opt = battery_pct(k);
+        let pct = pct_opt.unwrap_or(100.0);
+        let mac = k.device.mac.clone();
+        if let (Some(mac), true) = (mac.as_deref(), pct_opt.is_some()) {
+            if self.battery_provider.is_none() {
+                self.battery_provider = bluez::BatteryProvider::spawn();
+            }
+            if let Some(bp) = self.battery_provider.as_ref() {
+                bp.set_battery(mac, pct.round().clamp(0.0, 100.0) as u8);
+                self.provider_mac = Some(mac.to_string());
             }
         }
+        if pct_opt.is_some() && pct >= 20.0 {
+            self.battery_notified = false;
+        }
+        if pct_opt.is_some() && !self.battery_notified && pct < 15.0 {
+            self.battery_notified = true;
+            let _ = notify_rust::Notification::new()
+                .summary("Apple Keyboard \u{2014} Low Battery")
+                .body(&format!("Battery at {:.0}% \u{2014} charge soon", pct))
+                .icon("battery-caution")
+                .show();
+            keyboard::flash_capslock(5);
+        }
+    }
 
-        // LED state (sysfs, fast)
-        let (caps, num) = keyboard::read_led_state();
+    fn refresh_rssi(&mut self) {
+        let Some(mac) = self.kb.as_ref().and_then(|k| k.device.mac.clone()) else { return };
+        self.rssi.record(&mac, rssi::read_rssi(&mac), Instant::now());
+    }
 
-        // Battery remaining (every 30th cycle)
-        // Outer Option: "was recomputed this cycle"; inner: the estimate
-        // (None clears a stale value, e.g. after a recharge).
-        let remaining: Option<Option<String>> = if cycle.is_multiple_of(30) {
-            Some(history::estimate_remaining().map(|(rate, hours)| {
-                if hours < 24.0 {
-                    format!("{:.1}h ({:.1} mV/h)", hours, rate)
-                } else {
-                    format!("{:.1} days ({:.1} mV/h)", hours / 24.0, rate)
-                }
-            }))
-        } else {
-            None
-        };
+    /// Battery-time estimate: disk only, recomputed at most every 5 min.
+    fn refresh_remaining(&mut self, now: Instant) {
+        if self.remaining_at.is_some_and(|t| now.duration_since(t) < Duration::from_secs(300)) {
+            return;
+        }
+        self.remaining_at = Some(now);
+        self.remaining = history::estimate_remaining().map(|(rate, hours)| {
+            if hours < 24.0 {
+                format!("{:.1}h ({:.1} mV/h)", hours, rate)
+            } else {
+                format!("{:.1} days ({:.1} mV/h)", hours / 24.0, rate)
+            }
+        });
+    }
 
+    fn publish(&mut self, state: &State) {
+        let now = Instant::now();
+        self.refresh_remaining(now);
+        let mut kb = self.kb.clone();
+        let mut rssi_age = None;
+        if let Some(k) = kb.as_mut() {
+            // RSSI is exposed only while fresh and taken from this very MAC.
+            let cur = k.device.mac.as_deref().and_then(|m| self.rssi.current(m, now));
+            k.radio.rssi_dbm = cur.map(|c| c.0);
+            k.radio.tx_power_dbm = cur.and_then(|c| c.1);
+            k.bluetooth.rssi_dbus = None;
+            k.bluetooth.tx_power_dbus = None;
+            rssi_age = cur.map(|c| c.2.as_secs_f64());
+        }
+        // LED state (sysfs only; nothing to read while the keyboard is away).
+        let (caps, num) = if kb.is_some() { keyboard::read_led_state() } else { (false, false) };
         if let Ok(mut s) = state.lock() {
             s.kb_error = if kb.is_none() { Some("Keyboard: not found".into()) } else { None };
             s.keyboard = kb;
+            s.rssi_age_s = rssi_age;
             s.caps_lock = caps;
             s.num_lock = num;
-            if let Some(r) = remaining {
-                s.remaining_display = r;
+            s.remaining_display = self.remaining.clone();
+        }
+    }
+}
+
+fn battery_pct(k: &KbReport) -> Option<f64> {
+    k.battery.percentage_fine
+        .or(k.battery.percentage_interpolated)
+        .or(k.battery.percentage)
+        .filter(|p| p.is_finite())
+}
+
+/// Event loop. Sleeps until a BlueZ/UPower event or the next scheduled
+/// action; while the keyboard is disconnected nothing keyboard-related runs.
+fn kb_actor(state: State, quit_flag: Arc<AtomicBool>) {
+    let (tx, rx) = mpsc::channel::<watcher::Event>();
+    watcher::spawn_signal_watcher(tx);
+    let mut machine = watcher::Machine::new();
+    let mut actor = Actor {
+        kb: None,
+        kernel_pct: None,
+        rssi: rssi::RssiTracker::new(watcher::RSSI_MAX_AGE),
+        battery_provider: None,
+        provider_mac: None,
+        battery_notified: false,
+        remaining: None,
+        remaining_at: None,
+    };
+    actor.publish(&state);
+
+    // The UI-facing snapshot (LED, RSSI expiry) is refreshed at least this often.
+    const UI_TICK: Duration = Duration::from_secs(5);
+    loop {
+        if quit_flag.load(Ordering::Relaxed) {
+            eprintln!("[kb] quit flag set, exiting keyboard actor");
+            break;
+        }
+        let now = Instant::now();
+        let wait = machine
+            .next_deadline()
+            .map_or(UI_TICK, |d| d.saturating_duration_since(now).min(UI_TICK));
+        match rx.recv_timeout(wait) {
+            Ok(ev) => {
+                if machine.on_event(&ev, Instant::now()) == Some(watcher::Action::Clear) {
+                    eprintln!("[kb] disconnected");
+                    actor.clear();
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                eprintln!("[kb] watcher gone, exiting keyboard actor");
+                break;
             }
         }
-
-
-        cycle = cycle.wrapping_add(1);
-        thread::sleep(Duration::from_secs(10));
+        for action in machine.due(Instant::now()) {
+            match action {
+                watcher::Action::Acquire => {
+                    let ok = actor.acquire();
+                    machine.acquire_done(ok, Instant::now());
+                    if ok {
+                        let pct = actor.kb.as_ref().and_then(battery_pct);
+                        eprintln!("[kb] acquired {} battery={}", machine.mac().unwrap_or("?"),
+                            pct.map_or("n/a".into(), |p| format!("{p:.0}%")));
+                    }
+                }
+                watcher::Action::KernelBattery => actor.kernel_battery(),
+                watcher::Action::Rssi => actor.refresh_rssi(),
+                watcher::Action::Clear => actor.clear(),
+            }
+        }
+        actor.publish(&state);
     }
 }
 
@@ -443,7 +496,7 @@ impl ApiHubApp {
                         ui.label(egui::RichText::new("Radio").strong().size(18.0));
                         ui.add_space(4.0);
                         egui::Grid::new("radio_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                            let rssi = kb.radio.rssi_dbm.or(kb.bluetooth.rssi_dbus);
+                            let rssi = kb.radio.rssi_dbm;
                             if let Some(r) = rssi {
                                 ui.label(egui::RichText::new("RSSI").weak().size(16.0));
                                 let color = if r > -60 {
@@ -468,10 +521,13 @@ impl ApiHubApp {
                                 ui.horizontal(|ui| {
                                     ui.colored_label(color, egui::RichText::new(format!("{} dBm", r)).strong().size(18.0));
                                     ui.colored_label(color, egui::RichText::new(bars).size(18.0));
+                                    if let Some(age) = snap.rssi_age_s {
+                                        ui.label(egui::RichText::new(format!("({:.0}s ago)", age)).weak().size(12.0));
+                                    }
                                 });
                                 ui.end_row();
                             }
-                            if let Some(tx) = kb.radio.tx_power_dbm.or(kb.bluetooth.tx_power_dbus) {
+                            if let Some(tx) = kb.radio.tx_power_dbm {
                                 ui.label(egui::RichText::new("TX Power").weak().size(16.0));
                                 ui.label(egui::RichText::new(format!("{} dBm", tx)).size(16.0));
                                 ui.end_row();
