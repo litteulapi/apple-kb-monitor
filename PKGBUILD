@@ -1,14 +1,14 @@
 # Maintainer: Han <han@agenceapi.com>
 pkgname=apple-kb-monitor
 pkgver=3.1.0
-pkgrel=5
+pkgrel=6
 pkgdesc="Telemetry and key mapping for Apple Bluetooth keyboards (BCM2042/BCM20733): battery, voltage, RSSI, BlueZ battery provider, KDE integration"
 arch=('x86_64')
 url="https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
 license=('GPL-2.0-or-later')
 # apihub-app (eframe/winit) loads wayland/xkbcommon/EGL/GL/X11 with dlopen, so
 # ldd does not show them: declared by hand (#156). libcap = setcap in the .install.
-depends=('python' 'python-dbus-fast' 'bluez' 'keyd' 'polkit' 'dbus' 'systemd' 'libcap'
+depends=('bluez' 'keyd' 'polkit' 'dbus' 'systemd' 'libcap'
          'wayland' 'libxkbcommon' 'libxkbcommon-x11' 'libglvnd'
          'libx11' 'libxcursor' 'libxi' 'libxrandr')
 makedepends=('rust' 'gcc')
@@ -22,10 +22,9 @@ install=apple-kb-monitor.install
 # makepkg only resolves local sources by basename in $startdir, so files in
 # subdirectories (systemd/, udev/, ...) are installed directly from $startdir.
 source=(
-    'apple-kb-monitor'
     'com.agenceapi.AppleKbMonitor.desktop'
 )
-sha256sums=('SKIP' 'SKIP')
+sha256sums=('SKIP')
 
 build() {
     # apihub-app (Rust GUI)
@@ -39,7 +38,6 @@ build() {
 
 package() {
     # ── Binaries ────────────────────────────────────────────────────────
-    install -Dm755 "$srcdir/apple-kb-monitor"                        "$pkgdir/usr/bin/apple-kb-monitor"
     install -Dm755 "$startdir/apihub-app/target/release/apihub-app" "$pkgdir/usr/bin/apihub-app"
     install -Dm755 "$startdir/apihub-app/target/release/apple-kb-monitord" "$pkgdir/usr/bin/apple-kb-monitord"
     install -Dm755 "$startdir/apihub-app/target/release/akmctl"             "$pkgdir/usr/bin/akmctl"
@@ -58,10 +56,8 @@ package() {
     #    not possible under fakeroot and xattrs are not reliably kept) ────
     install -Dm755 "$startdir/rssi-helper"                          "$pkgdir/usr/lib/apple-kb-monitor/rssi-helper"
 
-    # ── systemd user services: apple-kb-monitord (single keyboard owner) and
-    #    the legacy Python daemon (Conflicts= with each other) ────────────
+    # ── systemd user service: apple-kb-monitord (single keyboard owner) ──
     install -Dm644 "$startdir/systemd/apple-kb-monitord.service"         "$pkgdir/usr/lib/systemd/user/apple-kb-monitord.service"
-    install -Dm644 "$startdir/systemd/apple-kb-monitor.service"          "$pkgdir/usr/lib/systemd/user/apple-kb-monitor.service"
     install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor1.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor1.service"
 
     # ── udev + keyd + modprobe ──────────────────────────────────────────

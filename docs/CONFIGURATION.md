@@ -60,9 +60,9 @@ On the classic Bluetooth link (BR/EDR) the RSSI is **not in dBm**: it is the gap
 | Item | Where | Notes |
 |---|---|---|
 | RSSI helper location | env `APPLE_KB_RSSI_HELPER` | Development/test override of `/usr/lib/apple-kb-monitor/rssi-helper` (`rssi.rs`). Not a privilege boundary: the helper itself carries the capability. |
-| Low-battery threshold, poll interval (Python CLI only) | Python CLI `--threshold` (default 15), `--interval` (default 300) | Set in `systemd/apple-kb-monitor.service` for the user daemon |
+| Low-battery thresholds, schedule | `~/.config/apple-kb-monitor/config.toml` | Read by `apple-kb-monitord` (see `akm-core/src/config.rs`) |
 | `fnmode` | `/etc/modprobe.d/hid_apple.conf` (`options hid_apple fnmode=1`) | Applied immediately by `post_install`. Change it with `akmctl set fnmode N --persist`. The Diag tab of `apihub-app` shows the applied value (`/sys/module/hid_apple/parameters/fnmode`) and the configured one (`/etc/modprobe.d`), and flags a difference |
-| Service to enable | `systemctl --user enable --now apple-kb-monitord.service` | The Rust daemon; the Python `apple-kb-monitor.service` conflicts with it, enable only one |
+| Service to enable | `systemctl --user enable --now apple-kb-monitord.service` | The only daemon (the Python CLI and its service were removed in 3.1.0-6) |
 | Special keys | `/etc/keyd/apple-keyboard.conf` (kept on upgrade, `backup=`) | Device `05ac:0256` |
 | uaccess rule | `/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules` | Override by placing a file of the same name in `/etc/udev/rules.d/` |
 

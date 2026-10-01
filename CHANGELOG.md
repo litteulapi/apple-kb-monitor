@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [3.1.0] - Unreleased
 
+### Removed / Changed (single language: Rust, #16)
+- `akmctl` now covers the former Python CLI: `history` (+ `--since/--until/--last`, `export --csv`, `import`), `graph`, `waybar`, `metrics`, `led`, and a SAFE `dump` (reports 0x47/0x46/0x49 only) (#22).
+- Removed the Python script `apple-kb-monitor`, `apihub-settings`, `apple-kb-monitor.service`, `tests/test_apple_kb.py`; the package no longer depends on `python` / `python-dbus-fast` (pkgrel 6).
+- One battery history file, `$XDG_STATE_HOME/apple-kb-monitor/history.jsonl`; `akmctl history import` brings in the old Python one (#17).
+
 Audit and debug pass (tracking issue #8), then scope reduction: the repository is now keyboard-only. Bugs are tracked one per Gitea issue (label `bug`); "Fixes #N" is in the commit messages of `617c3db..HEAD`. Single version source: `[workspace.package] version` in `apihub-app/Cargo.toml` = `pkgver` in `PKGBUILD`/`.SRCINFO` = first entry of this file (checked by CI, #10).
 
 ### Removed (breaking)

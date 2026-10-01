@@ -2,7 +2,7 @@
 # Vérification de bout en bout, EN LECTURE SEULE, du clavier Bluetooth Apple connecté.
 # Aucune écriture sur le clavier, aucun sudo, aucun service touché.
 #
-# Usage : tests/live/check_keyboard.sh [--mac AA:BB:..] [--tolerance N] [--strict] [--bin PATH] [--akmctl PATH] [--quiet]
+# Usage : tests/live/check_keyboard.sh [--mac AA:BB:..] [--tolerance N] [--strict] [--akmctl PATH] [--quiet]
 # Sans --mac : le premier clavier Apple Bluetooth vu dans /sys/class/hidraw (KB_MAC en variable).
 # Sortie : une ligne PASS/FAIL/WARN/SKIP par contrôle (--quiet : seulement FAIL/WARN + RESULT). Code retour : 0 si aucun FAIL
 # (avec --strict, WARN compte aussi comme échec) ; 1 sinon ; 2 erreur d'usage/clavier absent.
@@ -14,7 +14,6 @@ TOL="${KB_TOLERANCE:-5}"          # écart max toléré entre sources, en points
 STRICT=0
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-BIN="${KB_BIN:-$ROOT/apple-kb-monitor}"
 AKMCTL="${KB_AKMCTL:-}"
 UDEV_RULE="$ROOT/udev/70-apple-kb-hidraw.rules"
 NPASS=0; NFAIL=0; NWARN=0; NSKIP=0
@@ -24,7 +23,6 @@ while [ $# -gt 0 ]; do
     --mac) MAC="$2"; shift 2 ;;
     --tolerance) TOL="$2"; shift 2 ;;
     --strict) STRICT=1; shift ;;
-    --bin) BIN="$2"; shift 2 ;;
     --akmctl) AKMCTL="$2"; shift 2 ;;
     --quiet) QUIET=1; shift ;;
     -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
@@ -52,10 +50,9 @@ pass() { NPASS=$((NPASS+1)); [ "$QUIET" -eq 1 ] || printf 'PASS  %-28s %s\n' "$1
 fail() { NFAIL=$((NFAIL+1)); printf 'FAIL  %-28s %s\n' "$1" "${2:-}"; }
 warn() { NWARN=$((NWARN+1)); printf 'WARN  %-28s %s\n' "$1" "${2:-}"; }
 skip() { NSKIP=$((NSKIP+1)); [ "$QUIET" -eq 1 ] || printf 'SKIP  %-28s %s\n' "$1" "${2:-}"; }
-# Démon Rust (propriétaire unique du clavier) ou, à défaut, ancien service Python.
-daemon_state() { # -> rust | python | none
+# Démon Rust (propriétaire unique du clavier).
+daemon_state() { # -> rust | none
   if systemctl --user is-active --quiet apple-kb-monitord 2>/dev/null; then echo rust
-  elif systemctl --user is-active --quiet apple-kb-monitor 2>/dev/null || systemctl is-active --quiet apple-kb-monitor 2>/dev/null; then echo python
   else echo none; fi
 }
 DAEMON="$(daemon_state)"
@@ -120,7 +117,7 @@ if [ -n "$HIDRAW" ]; then
 fi
 
 # ---- 4. pourcentage batterie : sysfs / UPower / BlueZ / script / Rust ---
-SYS=""; UP=""; BZ=""; PYV=""
+SYS=""; UP=""; BZ=""
 [ -n "$PS" ] && SYS="$(cat "$PS/capacity" 2>/dev/null)"
 if is_num "$SYS"; then pass battery_sysfs "${SYS}% ($(cat "$PS/status" 2>/dev/null))"; else fail battery_sysfs "capacity illisible"; fi
 
@@ -138,44 +135,9 @@ case "$BZOUT" in
   *"No such interface"*)
     if [ "$DAEMON" != none ]; then
       fail battery_bluez "démon ($DAEMON) actif mais Battery1 non enregistré"
-    else warn battery_bluez "Battery1 absent (ni apple-kb-monitord ni apple-kb-monitor actif : fournisseur non enregistré)"; fi ;;
+    else warn battery_bluez "Battery1 absent (apple-kb-monitord inactif : fournisseur non enregistré)"; fi ;;
   *) warn battery_bluez "lecture D-Bus impossible: ${BZOUT:0:80}" ;;
 esac
-
-JSON=""
-if [ "$DAEMON" = rust ]; then
-  skip script_json "apple-kb-monitord est propriétaire unique du clavier (A2) : script Python non lancé"
-elif [ -x "$BIN" ] && command -v python3 >/dev/null 2>&1; then
-  JSON="$(timeout 30 "$BIN" --json 2>/dev/null)"
-  PYOUT="$(printf '%s' "$JSON" | python3 -c '
-import json,sys
-try: d=json.load(sys.stdin)
-except Exception as e: print("ERR json invalide: %s"%e); sys.exit()
-b=d.get("battery",{}) or {}
-print("PCT", b.get("percentage") if b.get("percentage") is not None else "null")
-print("SYSFS", len(d.get("sysfs") or {}))
-print("HIDRAW", (d.get("device") or {}).get("hidraw"))
-print("EVDEV", (d.get("device") or {}).get("evdev"))
-print("RSSI", (d.get("radio") or {}).get("rssi_dbm"))
-' 2>&1)"
-  case "$PYOUT" in
-    ERR*) fail script_json "$PYOUT" ;;
-    *)
-      PYV="$(printf '%s\n' "$PYOUT" | sed -n 's/^PCT //p')"
-      PYSYS="$(printf '%s\n' "$PYOUT" | sed -n 's/^SYSFS //p')"
-      PYHID="$(printf '%s\n' "$PYOUT" | sed -n 's/^HIDRAW //p')"
-      PYEV="$(printf '%s\n' "$PYOUT" | sed -n 's/^EVDEV //p')"
-      pass script_json "JSON valide"
-      [ "$PYHID" = "$HIDRAW" ] && pass script_hidraw_agrees "$PYHID" || fail script_hidraw_agrees "script=$PYHID attendu=$HIDRAW"
-      [ "$PYEV" = "$EVDEV" ] && pass script_evdev_agrees "$PYEV" || fail script_evdev_agrees "script=$PYEV attendu=$EVDEV"
-      if [ "${PYSYS:-0}" -gt 0 ] 2>/dev/null; then pass script_sysfs_populated "$PYSYS attributs"
-      else fail script_sysfs_populated "bloc sysfs vide alors que $PS existe (chemin ps_path sans suffixe -NN ?)"; fi
-      if is_num "$PYV"; then pass battery_script "${PYV}%"
-      else fail battery_script "battery.percentage=null (hidraw illisible et pas de repli sysfs ?)"; PYV=""; fi ;;
-  esac
-else
-  skip script_json "$BIN absent ou python3 manquant"
-fi
 
 # Démon Rust : akmctl status --json (lecture D-Bus session, aucune écriture).
 RS=""
@@ -214,7 +176,7 @@ cmp_src() { # nom valeur
   d=$(( $2 > SYS ? $2 - SYS : SYS - $2 ))
   if [ "$d" -le "$TOL" ]; then pass "agree_$1_vs_sysfs" "écart ${d} <= ${TOL}"; else fail "agree_$1_vs_sysfs" "$1=$2% sysfs=${SYS}% écart ${d} > ${TOL}"; fi
 }
-cmp_src upower "$UP"; cmp_src bluez "$BZ"; cmp_src script "$PYV"; cmp_src rust "$RS"
+cmp_src upower "$UP"; cmp_src bluez "$BZ"; cmp_src rust "$RS"
 
 # ---- 5. keyd, services --------------------------------------------------
 if command -v systemctl >/dev/null 2>&1; then
@@ -223,8 +185,7 @@ if command -v systemctl >/dev/null 2>&1; then
   systemctl is-active --quiet upower && pass upower_active || warn upower_active "upower inactif"
   case "$DAEMON" in
     rust) pass daemon_apple_kb_monitord "apple-kb-monitord actif (session)" ;;
-    python) pass daemon_apple_kb_monitor "ancien service Python actif (remplaçable par apple-kb-monitord)" ;;
-    *) warn daemon_apple_kb_monitord "ni apple-kb-monitord ni apple-kb-monitor actif (systemctl --user enable --now apple-kb-monitord)" ;;
+    *) warn daemon_apple_kb_monitord "apple-kb-monitord inactif (systemctl --user enable --now apple-kb-monitord)" ;;
   esac
 fi
 if [ -r /etc/keyd/apple-keyboard.conf ] || ls /etc/keyd/*.conf >/dev/null 2>&1; then

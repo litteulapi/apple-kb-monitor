@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white" alt="Python 3"></a>
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Rust-2021-DEA584?logo=rust&logoColor=black" alt="Rust"></a>
   <a href="https://kernel.org/"><img src="https://img.shields.io/badge/Platform-Linux-FCC624?logo=linux&logoColor=black" alt="Linux"></a>
   <a href="https://aur.archlinux.org/packages/apple-kb-monitor"><img src="https://img.shields.io/badge/AUR-apple--kb--monitor-1793D1?logo=archlinux&logoColor=white" alt="AUR"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--2.0--or--later-blue" alt="GPL-2.0-or-later"></a>
@@ -21,7 +21,7 @@ The Linux `hid-apple` driver only exposes basic battery percentage via the stand
 
 - **`apihub-app`** — Rust/egui desktop app (2 tabs: Keyboard and Diag, plus a tray icon): keyboard telemetry, battery history, BlueZ battery provider
 - **`rssi-helper`** — tiny C helper carrying `cap_net_admin`, the only privileged binary (RSSI / TX power)
-- **`apple-kb-monitor`** — legacy Python CLI (stdlib + dbus-fast): `--once`, `--json`, `--waybar`, `--metrics`…
+- **`apple-kb-monitord`** — the daemon, single owner of the keyboard; **`akmctl`** — the CLI: `status`, `watch`, `history`, `graph`, `waybar`, `metrics`, `led`, `dump`, `doctor`, `repair`
 - systemd user service, udev rule (`uaccess`), keyd config, Plasma widget, PKGBUILD, Gitea Actions CI
 
 Documentation: [docs/](docs/) (FEATURES, CONFIGURATION, INSTALL, ARCHITECTURE, TROUBLESHOOTING, TESTING, CHANGELOG) and the [wiki](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/wiki). Roadmap: [milestones](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/milestones).
@@ -109,33 +109,25 @@ systemctl --user enable --now apple-kb-monitord.service
 
 `apple-kb-monitord` is the single owner of the keyboard. The package does not enable it by itself: without this command it only starts on demand, when a client (`apihub-app`, the Plasma widget) calls `com.agenceapi.AppleKbMonitor1` on the session bus (D-Bus activation), so there is no tray icon nor low-battery alert until one of them has been opened.
 
-The legacy Python service `apple-kb-monitor.service` does the same acquisition and conflicts with the daemon (`Conflicts=`): do **not** enable both. Enable it only if you do not want the Rust daemon.
+The Python CLI (`apple-kb-monitor`, `apihub-settings`, `apple-kb-monitor.service`) was removed: Rust is the only language of the driver. Upgrading from it: see [docs/INSTALL.md](docs/INSTALL.md#upgrading-from-the-python-cli-before-310-6).
 
 ## Usage
 
 ```bash
-# Quick battery + voltage check
-apple-kb-monitor --once
-# Output: Apple Wireless Keyboard (A1314, aluminum, ISO)   100% (fine:98%)  2.981V
-
-# Full decoded device report
-apple-kb-monitor --status
-
-# Raw Feature Report dump (for reverse engineering)
-apple-kb-monitor --dump
-
-# Live dashboard with auto-refresh
-apple-kb-monitor --watch
-
-# JSON output (for scripts, widgets, Home Assistant, etc.)
-apple-kb-monitor --json
-
-# Battery/voltage history log
-apple-kb-monitor --history
-
-# Daemon mode with low-battery notifications
-apple-kb-monitor --threshold 15 --interval 300
+akmctl status                  # battery, voltage, link, Fn mode
+akmctl status --json           # JSON schema 1 (scripts, widgets, Home Assistant)
+akmctl watch                   # one JSON line per change
+akmctl history --since 7d      # battery history (UTC), --json available
+akmctl history export --csv    # CSV on stdout
+akmctl graph --span 7d         # terminal chart, 24h or 7d
+akmctl waybar                  # JSON for a waybar custom module
+akmctl metrics                 # Prometheus text format
+akmctl led caps on             # LED (NumLock can only be switched off)
+akmctl dump                    # the 3 safe reports only (0x47, 0x46, 0x49)
+akmctl doctor                  # Bluetooth link diagnosis
 ```
+
+Everything but `dump` and `led` reads the daemon over D-Bus: the CLI never talks to the keyboard on its own. `akmctl --help` and `man akmctl` list all options.
 
 ## Permissions
 
@@ -149,11 +141,10 @@ The rule matches Bluetooth HID devices connected via uhid (`KERNELS` `0005:05AC:
 
 ## Dependencies
 
-`apihub-app` is a compiled Rust binary; the Python CLI needs only `python-dbus-fast` (see [docs/INSTALL.md](docs/INSTALL.md)).
+Everything is compiled Rust (`apihub-app`, `apple-kb-monitord`, `akmctl`); no interpreter is needed at runtime (see [docs/INSTALL.md](docs/INSTALL.md)).
 
 | Dependency | Type | Purpose |
 |---|---|---|
-| `python`, `python-dbus-fast` | Runtime | Python CLI |
 | `bluez` | Runtime | Bluetooth stack, Battery Provider API |
 | `keyd` | Runtime | Apple special keys remapping |
 | `bluez-utils` | Optional | `bluetoothctl` for manual pairing |
@@ -166,7 +157,7 @@ The rule matches Bluetooth HID devices connected via uhid (`KERNELS` `0005:05AC:
 2. Reads the battery percentage from the kernel `power_supply` node of the keyboard (matched by MAC)
 3. Opens the `hidraw` device and sends `HIDIOCGFEATURE` ioctls for each known report ID (BCM2042 family), decoded from the reverse-engineered register map
 4. Runs `rssi-helper` for RSSI (BlueZ MGMT `GET_CONN_INFO`, opcode `0x0031`) and reads connection properties from BlueZ over D-Bus; exports the battery to BlueZ as `org.bluez.Battery1`
-5. In daemon mode, logs readings to `$XDG_RUNTIME_DIR/apple-kb-monitor/history.jsonl` and sends desktop notifications via `notify-send` when battery drops below threshold
+5. The daemon logs readings to `$XDG_STATE_HOME/apple-kb-monitor/history.jsonl` (default `~/.local/state/...`, the single history file) and sends desktop notifications when the battery drops below a threshold
 
 ## Reverse Engineering Notes
 
@@ -197,13 +188,11 @@ RSSI is read via BlueZ MGMT `GET_CONN_INFO` (opcode `0x0031`) by the `rssi-helpe
 ## Project Structure
 
 ```
-apihub-app/                 # Rust/egui GUI (src/: main, keyboard, power, bluez, rssi, history, tray)
+apihub-app/                 # Rust workspace: akm-core, apple-kb-monitord, crates/akmctl (CLI), crates/akm-helper, egui GUI (src/)
 rssi-helper.c               # C helper with cap_net_admin (RSSI / TX power)
-apple-kb-monitor            # Python CLI
-apihub-settings             # PySide6 settings window (legacy)
 udev/ systemd/ keyd/ modprobe/ dbus/             # system integration
 plasma/ kde/                # Plasma widget, Bluedevil panel patch
-tests/                      # pytest, fixtures/ (real A1314 capture), live/check_keyboard.sh
+tests/                      # fixtures/ (real A1314 capture), live/ (reverse-engineering tools + check_keyboard.sh)
 .gitea/workflows/ci.yml     # CI
 docs/                       # documentation
 PKGBUILD, .SRCINFO, apple-kb-monitor.install   # Arch Linux package

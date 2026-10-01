@@ -9,4 +9,3 @@ __pycache__/
 .pytest_cache/
 rssi-helper
 src/99-apple-kb-hidraw.rules
-src/apple-kb-monitor.service

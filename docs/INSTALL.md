@@ -34,7 +34,6 @@ The PKGBUILD compiles the Rust binary `apihub-app` and the C helper `rssi-helper
 
 | Package | Required | Purpose |
 |---------|----------|---------|
-| `python`, `python-dbus-fast` | yes | Python CLI |
 | `bluez` | yes | Bluetooth stack (Battery Provider API) |
 | `keyd` | yes | System-level key remapping (Wayland-compatible) |
 | `bluez-utils` | optional | `bluetoothctl` CLI for BT management |
@@ -92,16 +91,6 @@ Verify:
 systemctl --user status apple-kb-monitord.service
 busctl --user status com.agenceapi.AppleKbMonitor1
 akmctl status              # battery, voltage, link
-```
-
-### 6. Legacy Python service (alternative, exclusive)
-
-The Python `apple-kb-monitor.service` does the same acquisition (BlueZ Battery Provider, notifications) and **conflicts** with `apple-kb-monitord.service` (`Conflicts=`): starting one stops the other. Do not enable both; use it only instead of the daemon:
-
-```bash
-systemctl --user disable --now apple-kb-monitord.service
-systemctl --user enable --now apple-kb-monitor.service
-apple-kb-monitor --once    # quick battery check
 ```
 
 ### 6. keyd verification
@@ -176,7 +165,7 @@ sudo keyd list               # verify device detection
 ### BlueZ Battery Provider not showing in KDE
 
 ```bash
-journalctl --user -u apple-kb-monitord.service -f    # or apple-kb-monitor.service for the legacy Python service
+journalctl --user -u apple-kb-monitord.service -f
 busctl tree org.bluez        # verify Battery1 interface is registered
 ```
 
@@ -190,5 +179,17 @@ The post_remove hook restores the original Bluedevil QML and reloads udev rules.
 
 ```bash
 systemctl --user disable --now apple-kb-monitord.service
-systemctl --user disable apple-kb-monitor.service   # only if you had enabled the legacy service
 ```
+
+## Upgrading from the Python CLI (before 3.1.0-6)
+
+`apple-kb-monitor`, `apihub-settings` and `apple-kb-monitor.service` no longer exist; `python` and `python-dbus-fast` are no longer dependencies.
+
+```bash
+systemctl --user disable apple-kb-monitor.service   # if you had enabled it
+systemctl --user enable --now apple-kb-monitord.service
+akmctl history import                               # keeps the old volatile history, if still present
+```
+
+Equivalents: `--once/--status/--json` -> `akmctl status [--json]`, `--watch` -> `akmctl watch`, `--history` -> `akmctl history`, `--export-csv` -> `akmctl history export --csv`, `--graph` -> `akmctl graph`, `--waybar` -> `akmctl waybar`, `--metrics` -> `akmctl metrics`, `--led caps on` -> `akmctl led caps on`, `--dump` -> `akmctl dump` (3 safe reports only).
+The history now lives in one file, `$XDG_STATE_HOME/apple-kb-monitor/history.jsonl` (default `~/.local/state/...`), written only by the daemon. The former `~/.local/share/...` file is copied once by the daemon; `akmctl history import FILE` can import any other file.

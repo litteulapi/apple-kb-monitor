@@ -5,7 +5,7 @@ Vérifie à partir de fixtures (docs/HARDWARE-ENTREES-MODELES.md) :
 - ce que chaque famille déclare côté entrées (descripteurs HID de référence) ;
 - que la table des modèles Rust (akm-core/src/model.rs, lue en texte, non
   modifiée) correspond à hid-ids.h et classe chaque cas comme attendu ;
-- la couverture de la configuration livrée (udev, keyd) et du code Python hérité.
+- la couverture de la configuration livrée (udev, keyd).
 
 Les tests liés à un défaut corrigé portent le numéro d'issue Gitea (#124-#127).
 Lancement : python3 -m pytest tests/live/re -q   (ou python3 <ce fichier>)
@@ -14,7 +14,6 @@ import fnmatch
 import json
 import re
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -242,44 +241,6 @@ class TestConfigurationLivree(unittest.TestCase):
         for macro, keys in groups.items():
             for k in keys:
                 self.assertEqual(binds.get(k), f"macro({macro})", k)
-
-
-def load_python_legacy():
-    src = ROOT / "apple-kb-monitor"
-    g = {"__file__": str(src), "__name__": "apple_kb_monitor"}
-    code = src.read_text().split("\nif __name__")[0]
-    exec(compile(code, str(src), "exec"), g)  # noqa: S102 - project script
-    return g
-
-
-class TestPythonHerite(unittest.TestCase):
-    def test_python_legacy_table_matches_kernel(self):  # #127
-        g = load_python_legacy()
-        self.assertEqual(set(g["APPLE_PRODUCTS"]), set(kernel_keyboard_pids()))
-
-    def test_python_find_devices_rejects_mouse_and_sees_magic_keyboard(self):  # #127
-        g = load_python_legacy()
-        with tempfile.TemporaryDirectory() as tmp:
-            sysroot = Path(tmp)
-            entries = [("hidraw0", "0005:000005AC:0000030D", "aa:bb:cc:dd:ee:01"),   # Magic Mouse 1
-                       ("hidraw1", "0005:0000004C:0000029C", "aa:bb:cc:dd:ee:02")]   # Magic Keyboard 2021
-            for node, hid, mac in entries:
-                d = sysroot / "class" / "hidraw" / node / "device"
-                d.mkdir(parents=True)
-                (d / "uevent").write_text(f"HID_ID={hid}\nHID_NAME=x\nHID_UNIQ={mac}\n")
-            real_glob = g["glob"].glob
-
-            class Shim:
-                @staticmethod
-                def glob(p):
-                    if p.startswith("/sys/"):
-                        p = str(sysroot) + p[4:]
-                    return real_glob(p)
-
-                escape = staticmethod(g["glob"].escape)
-            g["glob"] = Shim
-            found = {d["pid"] for d in g["find_devices"]()}
-        self.assertEqual(found, {0x029C})
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ System layer
 
 Desktop layer
   KDE / UPower            kernel battery (and BlueZ Battery1 when no kernel node)
-  Plasma widget           apple-kb-monitor --json
+  Plasma widget           akmctl status --json / D-Bus com.agenceapi.AppleKbMonitor1
   Bluedevil patch         battery %, firmware in the BT panel
 ```
 
@@ -70,10 +70,10 @@ Desktop layer
 ## File layout
 
 ```
-/usr/bin/                         apihub-app, apple-kb-monitor
+/usr/bin/                         apihub-app, apple-kb-monitord, akmctl
 /usr/lib/apple-kb-monitor/        rssi-helper (cap_net_admin+ep)
 /usr/lib/udev/rules.d/            70-apple-kb-hidraw.rules
-/usr/lib/systemd/user/            apple-kb-monitor.service
+/usr/lib/systemd/user/            apple-kb-monitord.service
 /etc/keyd/                        apple-keyboard.conf (05ac:0256)
 /etc/modprobe.d/                  hid_apple.conf (fnmode=1)
 /etc/dbus-1/system.d/             com.agenceapi.AppleKbMonitor.conf

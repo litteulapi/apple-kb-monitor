@@ -2,8 +2,6 @@
 Description=Apple Wireless Keyboard monitor daemon (single owner of the keyboard, BlueZ battery provider)
 Documentation=https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor
 After=bluetooth.target dbus.socket
-# The Python monitor does the same acquisition: never run both (A2, #17).
-Conflicts=apple-kb-monitor.service
 
 [Service]
 # Ready when com.agenceapi.AppleKbMonitor1 is owned on the session bus;

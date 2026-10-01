@@ -18,6 +18,12 @@ post_install() {
 }
 
 post_upgrade() {
+    # 3.1.0-6 removed the Python CLI (apple-kb-monitor, apihub-settings) and its unit.
+    if [ "$(vercmp "$2" 3.1.0-6)" -lt 0 ]; then
+        echo ">>> The Python CLI is gone: use akmctl (status, history, graph, waybar, metrics, led, dump)."
+        echo "    If you had enabled its unit:  systemctl --user disable apple-kb-monitor.service"
+        echo "    Keep its volatile history:    akmctl history import"
+    fi
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
     _akm_keyd_reload
@@ -27,8 +33,8 @@ post_upgrade() {
 
 post_remove() {
     udevadm control --reload-rules 2>/dev/null || true
-    echo ">>> To disable the legacy CLI daemon:"
-    echo "      systemctl --user disable apple-kb-monitor.service"
+    echo ">>> To disable the daemon:"
+    echo "      systemctl --user disable apple-kb-monitord.service"
 }
 
 _akm_keyd_reload() {
