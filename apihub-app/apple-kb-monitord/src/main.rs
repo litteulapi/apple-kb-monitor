@@ -214,6 +214,7 @@ fn run(opts: actor::Options, bus_name: Option<String>) -> ExitCode {
     );
     tray::spawn(watch.clone(), mailbox.clone(), conn.clone());
     // Passive listening to the keyboard's own input reports (never a request).
+    apple_kb_monitord::passive::set_keyboard_alerts(opts.notify && opts.alerts_enabled);
     let _passive = conn.as_ref().and_then(|c| {
         apple_kb_monitord::passive::start_default(c.clone(), watch.clone())
             .map_err(|e| tracing::warn!("passive listener not started: {e}"))

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [3.1.0] - Unreleased
 
+### Added (firmware check and register map, #227)
+- `akm-core/src/registry.rs`: declarative register map of every known HID report (id, direction, size, Apple name, meaning, unit, endianness, decoder, proof, safety class). The read allow-lists are generated from it; the only function that reaches the hardware (`hid_read_feature`) asks it first; no write path exists (tests over the 256 ids and a source scan).
+- Firmware version (`0x4F`) and battery thresholds Full/Low/Critical/Empty (`0x60`) read once per connection (1 s spacing, circuit breaker), compared with an embedded, versioned table (`docs/FIRMWARE.md`). D-Bus `FirmwareVersion`/`FirmwareLatestKnown`/`FirmwareStatus`, JSON `firmware.*`, `akmctl firmware`, window, tray tooltip, Plasma widget. No network, never a flash offer.
+- `akmctl info`: the register map with the values cached by the daemon, "never read" otherwise; never reads the keyboard.
+- "Apple display" percentage (`[display] apple_percent`, #213) next to the keyboard indication; Input `0x30` BatteryState raises "low" / "critical" notifications driven by the keyboard (#189).
+
 ### Security (audit 2, #202-#212, #214)
 - `Refresh()` (D-Bus, tray) is bounded: ignored within 5 min of the last read or accepted refresh; HID reads are 1 s apart and a circuit breaker stops them after 3 failed requests until the keyboard shows signs of life (#206, #214).
 - `SetFnMode` runs `/usr/bin/pkexec <helper> set-fnmode <n>` from constants (no `$PATH`, no `APPLE_KB_SETTINGS_HELPER`), checks the caller's uid, one dialog at a time, logged; `SetSwapOptCmd`/`SetIsoLayout` removed (no polkit action); polkit `auth_admin` without `_keep` (#202, #203).

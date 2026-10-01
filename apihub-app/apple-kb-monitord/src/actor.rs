@@ -84,6 +84,8 @@ pub struct Options {
     pub notify_battery_replaced: bool,
     /// Declared battery chemistry (`[battery] chemistry`, #178).
     pub chemistry: Chemistry,
+    /// Publish the "Apple display" percentage (`[display] apple_percent`, #213).
+    pub apple_percent: bool,
     /// Where detected events go (D-Bus device signals, tray...).
     pub events: Arc<EventHub>,
     /// Where the keyboard's alias is read (BlueZ).
@@ -101,6 +103,7 @@ impl Default for Options {
             notify_connection: true,
             notify_battery_replaced: true,
             chemistry: Chemistry::default(),
+            apple_percent: true,
             events: EventHub::new(),
             alias: Arc::new(BluezAlias::default()),
         }
@@ -115,6 +118,7 @@ impl Options {
         self.notify_connection = c.notify_connection;
         self.notify_battery_replaced = c.notify_battery_replaced;
         self.chemistry = c.chemistry;
+        self.apple_percent = c.apple_percent;
     }
 }
 
@@ -240,6 +244,23 @@ impl Actor {
         match report {
             Some(mut k) => {
                 let mac = k.device.mac.clone();
+                // The firmware version and thresholds are read once per
+                // connection: a kernel-only fallback keeps what was learned.
+                if k.firmware.version.is_none() && k.battery.thresholds.is_none() {
+                    if let Some(prev) = self.kb.as_ref().filter(|p| p.device.mac == mac) {
+                        k.firmware = prev.firmware.clone();
+                        k.battery.thresholds = prev.battery.thresholds;
+                        k.battery.threshold_level = prev.battery.threshold_level.clone();
+                        k.battery.threshold_margins_mv = prev.battery.threshold_margins_mv;
+                        k.battery.apple_display_pct =
+                            prev.battery.apple_display_pct.and(k.battery.percentage).map(|p| {
+                                akm_core::registry::apple_display_percent(p.round().clamp(0.0, 100.0) as u8)
+                            });
+                    }
+                }
+                if !self.opts.apple_percent {
+                    k.battery.apple_display_pct = None;
+                }
                 let pct = k.battery_pct();
                 k.device.alias = mac.as_deref().and_then(|m| self.opts.alias.get(m));
                 self.kb = Some(k);
@@ -285,6 +306,9 @@ impl Actor {
         if let Some(r) = k.device.mac.as_deref().and_then(power::kernel_battery) {
             k.battery.percentage_fine = Some(f64::from(r.percent));
             k.battery.percentage = Some(f64::from(r.percent));
+            if k.battery.apple_display_pct.is_some() {
+                k.battery.apple_display_pct = Some(akm_core::registry::apple_display_percent(r.percent));
+            }
             self.last_update = unix_now();
             self.after_battery_update(false);
         }

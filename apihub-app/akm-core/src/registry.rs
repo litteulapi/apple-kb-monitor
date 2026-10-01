@@ -626,6 +626,12 @@ pub fn apple_display_percent(raw: u8) -> f64 {
     }
 }
 
+/// Does IOBluetooth apply [`apple_display_percent`] to this product id?
+/// (`0x239..=0x23B` and `0x255..=0x257`, mask `0x70000007` on `PID - 0x239`.)
+pub fn apple_display_applies(pid: u32) -> bool {
+    (0x0239..=0x023B).contains(&pid) || (0x0255..=0x0257).contains(&pid)
+}
+
 /// A decoded value, ready to display.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decoded {
@@ -855,6 +861,25 @@ mod tests {
         assert_eq!(apple_display_percent(21), 21.0);
         assert_eq!(apple_display_percent(20), 20.0);
         assert_eq!(apple_display_percent(0), 0.0);
+    }
+
+    #[test]
+    fn apple_curve_is_monotonic_bounded_and_applies_to_the_right_pids() {
+        let mut prev = -1.0;
+        for raw in 0..=255u8 {
+            let p = apple_display_percent(raw);
+            assert!((0.0..=100.0).contains(&p));
+            if raw <= 100 {
+                assert!(p >= prev - 1e-9 || raw == 0, "monotonic at {raw}");
+                prev = p;
+            }
+        }
+        for pid in [0x239, 0x23A, 0x23B, 0x255, 0x256, 0x257] {
+            assert!(apple_display_applies(pid));
+        }
+        for pid in [0x238, 0x23C, 0x254, 0x258, 0x22C, 0x29C, 0] {
+            assert!(!apple_display_applies(pid));
+        }
     }
 
     #[test]

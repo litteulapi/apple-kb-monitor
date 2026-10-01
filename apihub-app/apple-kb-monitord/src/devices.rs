@@ -267,6 +267,21 @@ impl Device {
     fn last_update(&self) -> u64 {
         self.props().base.last_update
     }
+    /// Firmware version (report 0x4F, once per connection), "" = not read.
+    #[zbus(property)]
+    fn firmware_version(&self) -> String {
+        self.props().base.firmware_version
+    }
+    /// Latest public firmware known for this model, "" = not in the table.
+    #[zbus(property)]
+    fn firmware_latest_known(&self) -> String {
+        self.props().base.firmware_latest_known
+    }
+    /// `up_to_date` / `update_available` / `unknown`.
+    #[zbus(property)]
+    fn firmware_status(&self) -> String {
+        self.props().base.firmware_status
+    }
     #[zbus(property)]
     fn remaining_seconds(&self) -> i64 {
         self.props().remaining_s(SystemClock.now())

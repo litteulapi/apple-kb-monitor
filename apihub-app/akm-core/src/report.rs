@@ -63,6 +63,9 @@ pub struct KbBattery {
     /// Where the filtered voltage (else the instantaneous one) sits against
     /// [`Self::thresholds`]: `ok` / `low` / `critical` / `empty`.
     pub threshold_level: Option<String>,
+    /// The percentage as macOS shows it ("Apple display", #213): IOBluetooth
+    /// remaps raw 0x47. Informative only: alerts and the estimate do not use it.
+    pub apple_display_pct: Option<f64>,
     /// Margins in mV above Full / Low / Critical / Empty (negative = below).
     pub threshold_margins_mv: Option<[i32; 4]>,
 }

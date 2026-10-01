@@ -84,6 +84,25 @@ pub fn decode(report: &[u8]) -> Option<PassiveEvent> {
     }
 }
 
+/// Alert to raise when the keyboard itself announces battery state `new`
+/// after `old` (`0x30`, #189): `Low` on a rise to 1, `Critical` on a rise to
+/// 2 or 3, nothing for a repeat, a de-escalation, a return to normal or an
+/// invalid byte. The keyboard decides, as in macOS.
+pub fn battery_state_alert(old: Option<u8>, new: u8) -> Option<crate::registry::BatteryState> {
+    use crate::registry::BatteryState as B;
+    let rank = |s: B| match s {
+        B::Normal => 0,
+        B::Low => 1,
+        B::Critical => 2,
+        B::Invalid(_) => 0,
+    };
+    let (o, n) = (old.map_or(0, |b| rank(B::from_byte(b))), B::from_byte(new));
+    match n {
+        B::Low | B::Critical if rank(n) > o => Some(n),
+        _ => None,
+    }
+}
+
 /// What the passive listener knows about the keyboard.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct PassiveState {
@@ -174,6 +193,16 @@ impl PassiveState {
             "fn_pressed": self.fn_pressed,
             "media_bits": self.media_bits,
             "battery_status": self.batt_stat,
+            "battery_state": self.batt_stat.map(|b| crate::registry::BatteryState::from_byte(b).as_str()),
+            "battery_low": self.batt_stat.map(|b| {
+                matches!(
+                    crate::registry::BatteryState::from_byte(b),
+                    crate::registry::BatteryState::Low | crate::registry::BatteryState::Critical
+                )
+            }),
+            "battery_critical": self
+                .batt_stat
+                .map(|b| crate::registry::BatteryState::from_byte(b) == crate::registry::BatteryState::Critical),
         })
     }
 }
@@ -770,5 +799,40 @@ mod tests {
         for id in [ID_SLEEP, ID_FUNC_LOCK, ID_BATT_STAT] {
             assert!(!r.has_input_report(id), "{id:#04x}");
         }
+    }
+
+    #[test]
+    fn keyboard_driven_battery_alerts() {
+        use crate::registry::BatteryState as B;
+        // synthetic frames 30 00 / 30 01 / 30 02 / 30 03
+        assert_eq!(decode(&[0x30, 1]), Some(PassiveEvent::BattStat { value: 1 }));
+        assert_eq!(battery_state_alert(None, 0), None);
+        assert_eq!(battery_state_alert(None, 1), Some(B::Low));
+        assert_eq!(battery_state_alert(Some(0), 1), Some(B::Low));
+        assert_eq!(battery_state_alert(Some(1), 1), None, "repeat");
+        assert_eq!(battery_state_alert(Some(1), 2), Some(B::Critical));
+        assert_eq!(battery_state_alert(Some(0), 3), Some(B::Critical));
+        assert_eq!(battery_state_alert(Some(2), 3), None, "repeat at the same level");
+        assert_eq!(battery_state_alert(Some(2), 1), None, "de-escalation");
+        assert_eq!(battery_state_alert(Some(2), 0), None, "back to normal");
+        for b in 4..=255u8 {
+            assert_eq!(battery_state_alert(Some(0), b), None, "invalid {b}");
+            assert_eq!(battery_state_alert(Some(b), 1), Some(B::Low), "invalid old counts as normal");
+        }
+    }
+
+    #[test]
+    fn battery_state_in_the_json() {
+        let mut s = PassiveState::default();
+        let j = s.to_json();
+        assert!(j["battery_state"].is_null() && j["battery_low"].is_null());
+        s.apply(PassiveEvent::BattStat { value: 1 }, 1);
+        let j = s.to_json();
+        assert_eq!(j["battery_state"], "low");
+        assert_eq!((j["battery_low"].as_bool(), j["battery_critical"].as_bool()), (Some(true), Some(false)));
+        s.apply(PassiveEvent::BattStat { value: 2 }, 2);
+        assert_eq!(s.to_json()["battery_critical"], true);
+        s.apply(PassiveEvent::BattStat { value: 0 }, 3);
+        assert_eq!(s.to_json()["battery_low"], false);
     }
 }

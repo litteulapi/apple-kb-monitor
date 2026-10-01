@@ -399,6 +399,18 @@ impl View {
             .as_ref()
             .filter(|_| pct.is_some() && !charging)
             .and_then(|k| estimate_text(lang, &k.battery));
+        // Percentage as macOS shows it (#213), labelled, next to the others.
+        let apple = snap
+            .keyboard
+            .as_ref()
+            .filter(|_| pct.is_some() && !charging)
+            .and_then(|k| k.battery.apple_display_pct)
+            .map(|p| format!("{} {}", lang.t("Affichage Apple :", "Apple display:"), lang.pct(p)));
+        // Firmware check (#227), one line.
+        let firmware = snap.keyboard.as_ref().and_then(|k| match lang {
+            Lang::Fr => akm_core::firmware::summary_fr(&k.firmware),
+            Lang::En => akm_core::firmware::summary_en(&k.firmware),
+        });
         let autonomy = snap
             .remaining_display
             .as_ref()
@@ -439,8 +451,10 @@ impl View {
         if snap.connected {
             tooltip_lines.extend(battery_line.clone());
             tooltip_lines.extend(estimate.clone());
+            tooltip_lines.extend(apple.clone());
             tooltip_lines.extend(rssi.clone());
             tooltip_lines.extend(autonomy.clone());
+            tooltip_lines.extend(firmware.clone());
             if snap.caps_lock {
                 tooltip_lines.push(lang.t("Verr. Maj active", "Caps Lock on").into());
             }
@@ -580,8 +594,12 @@ pub fn clipboard_text(snap: &Snapshot, charging: bool, lang: Lang, now: u64) -> 
         if let Some(m) = k.device.mac.as_deref().filter(|m| !m.is_empty()) {
             out.push(format!("{} {m}", lang.t("MAC\u{a0}:", "MAC:")));
         }
-        if let Some(fw) = k.firmware.version.as_deref() {
-            out.push(format!("{} {fw}", lang.t("Firmware :", "Firmware:")));
+        let fw = match lang {
+            Lang::Fr => akm_core::firmware::summary_fr(&k.firmware),
+            Lang::En => akm_core::firmware::summary_en(&k.firmware),
+        };
+        if let Some(fw) = fw {
+            out.push(fw);
         }
     }
     if snap.keyboard.is_some() {
@@ -952,5 +970,34 @@ mod tests {
         assert_eq!(r.get("enabled"), None, "enabled while a keyboard is known");
         let none = View::build(&Snapshot::default(), false, None, Lang::Fr);
         assert_eq!(none.entry(id::RENAME).unwrap().get("enabled"), Some(&Prop::Bool(false)));
+    }
+
+    #[test]
+    fn tooltip_has_one_firmware_line_and_the_labelled_apple_display() {
+        let mut s = snap(Some(62.0), true, Some(0));
+        {
+            let k = s.keyboard.as_mut().unwrap();
+            k.firmware.version = Some("0x0050".into());
+            akm_core::firmware::assess_report(Some(0x0256), &mut k.firmware);
+            k.battery.apple_display_pct = Some(100.0);
+        }
+        let fr = View::build(&s, false, None, Lang::Fr).tooltip_body(Lang::Fr, 1_012, true);
+        assert!(
+            fr.contains("Firmware : 0x0050 \u{2014} \u{e0} jour (derni\u{e8}re version publique connue d'Apple)"),
+            "{fr}"
+        );
+        assert_eq!(fr.matches("Firmware").count(), 1, "one line: {fr}");
+        assert!(fr.contains("Affichage Apple :"), "{fr}");
+        let en = View::build(&s, false, None, Lang::En).tooltip_body(Lang::En, 1_012, true);
+        assert!(en.contains("Firmware: 0x0050 - up to date"), "{en}");
+        assert!(en.contains("Apple display: 100%"), "{en}");
+        // The indication line is still there, and still first.
+        assert!(en.find("Keyboard indication").unwrap() < en.find("Apple display").unwrap());
+        // Not read yet / not applicable: nothing invented.
+        let none = View::build(&snap(Some(62.0), true, Some(0)), false, None, Lang::En)
+            .tooltip_body(Lang::En, 1_012, true);
+        assert!(!none.contains("Firmware") && !none.contains("Apple display"), "{none}");
+        // Clipboard text carries the same sentence.
+        assert!(clipboard_text(&s, false, Lang::Fr, 1_012).contains("\u{e0} jour"));
     }
 }

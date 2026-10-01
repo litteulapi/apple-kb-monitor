@@ -15,7 +15,12 @@ enabled = true
 [notifications]
 connection = true          # "disconnected" / "reconnected (N %)", low urgency
 battery_replaced = true    # "new batteries detected"
+
+[display]
+apple_percent = true       # also show the percentage "as macOS shows it", labelled "Apple display" (#213)
 ```
+
+`apple_percent` only adds a secondary figure (tray tooltip, window, widget, `akmctl status`): IOBluetooth remaps the raw `0x47` value (54..100 -> 100 %, 21..53 -> 21 + (raw - 21) x 2.4375, below 21 unchanged). Alerts and the estimate do not use it.
 
 ## Battery: what is shown and what the alerts use
 

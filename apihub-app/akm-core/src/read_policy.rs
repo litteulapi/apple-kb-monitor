@@ -532,6 +532,12 @@ fn apply_frames(report: &mut KbReport, pid: Option<u32>, st: &ConnState) {
         report.battery.threshold_level = Some(t.level(mv).as_str().to_string());
         report.battery.threshold_margins_mv = Some(t.margins(mv));
     }
+    // "Apple display" percentage (#213): only for the PIDs IOBluetooth remaps.
+    report.battery.apple_display_pct = pid
+        .filter(|&p| crate::registry::apple_display_applies(p))
+        .and(report.battery.percentage)
+        .filter(|p| p.is_finite() && (0.0..=100.0).contains(p))
+        .map(|p| crate::registry::apple_display_percent(p.round() as u8));
     crate::firmware::assess_report(pid, &mut report.firmware);
 }
 

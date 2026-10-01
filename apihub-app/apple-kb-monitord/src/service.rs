@@ -17,6 +17,10 @@
 //! * `Revision` t (snapshot counter), `Json` s (full snapshot, schema 1)
 //! * since API 2: `InterfaceVersion` u (= 2), `RemainingSeconds` x
 //!   (autonomy forecast, **-1 = unknown**, computed at read time)
+//! * firmware check (#227), additions: `FirmwareVersion` s (`0x0050`, **empty
+//!   = not read yet**), `FirmwareLatestKnown` s (latest public version in the
+//!   embedded table, empty = model not in the table), `FirmwareStatus` s
+//!   (`up_to_date` / `update_available` / `unknown`, never empty)
 //!
 //! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `SetAlias(s mac, s name) -> s`
 //! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (JSON array of
@@ -63,6 +67,12 @@ pub struct Props {
     pub mac: String,
     pub last_update: u64,
     pub last_error: String,
+    /// `0x4F` as `0x0050` ("" = not read yet).
+    pub firmware_version: String,
+    /// Latest public version known for the model ("" = not in the table).
+    pub firmware_latest_known: String,
+    /// `up_to_date` / `update_available` / `unknown`.
+    pub firmware_status: String,
 }
 
 impl Props {
@@ -79,6 +89,13 @@ impl Props {
             mac: s.mac().unwrap_or_default().to_string(),
             last_update: s.last_update,
             last_error: s.last_error.clone().unwrap_or_default(),
+            firmware_version: s.firmware().and_then(|f| f.version.clone()).unwrap_or_default(),
+            firmware_latest_known: s.firmware().and_then(|f| f.latest_known.clone()).unwrap_or_default(),
+            firmware_status: s
+                .firmware()
+                .map(|f| f.status.clone())
+                .filter(|st| !st.is_empty())
+                .unwrap_or_else(|| "unknown".to_string()),
         }
     }
 }
@@ -131,6 +148,21 @@ impl Monitor {
     #[zbus(property)]
     fn last_error(&self) -> String {
         self.props().last_error
+    }
+    /// Firmware version read from report 0x4F, once per connection ("" = not read).
+    #[zbus(property)]
+    fn firmware_version(&self) -> String {
+        self.props().firmware_version
+    }
+    /// Latest public firmware known for this model ("" = model not in the table).
+    #[zbus(property)]
+    fn firmware_latest_known(&self) -> String {
+        self.props().firmware_latest_known
+    }
+    /// `up_to_date` / `update_available` / `unknown`.
+    #[zbus(property)]
+    fn firmware_status(&self) -> String {
+        self.props().firmware_status
     }
     #[zbus(property)]
     fn revision(&self) -> u64 {
@@ -423,6 +455,15 @@ fn emit_device(conn: &Connection, mac: &str, old: &DevProps, now: &DevProps) -> 
         if o.last_update != n.last_update {
             d.last_update_changed(ctx).await?;
         }
+        if o.firmware_version != n.firmware_version {
+            d.firmware_version_changed(ctx).await?;
+        }
+        if o.firmware_latest_known != n.firmware_latest_known {
+            d.firmware_latest_known_changed(ctx).await?;
+        }
+        if o.firmware_status != n.firmware_status {
+            d.firmware_status_changed(ctx).await?;
+        }
         if old.empty_at != now.empty_at || old.rate_pct_per_day != now.rate_pct_per_day {
             d.empty_at_changed(ctx).await?;
             d.discharge_rate_changed(ctx).await?;
@@ -531,6 +572,15 @@ fn emit(
         if prev.last_error != now.last_error {
             m.last_error_changed(ctx).await?;
         }
+        if prev.firmware_version != now.firmware_version {
+            m.firmware_version_changed(ctx).await?;
+        }
+        if prev.firmware_latest_known != now.firmware_latest_known {
+            m.firmware_latest_known_changed(ctx).await?;
+        }
+        if prev.firmware_status != now.firmware_status {
+            m.firmware_status_changed(ctx).await?;
+        }
         if forecast_changed {
             m.remaining_seconds_changed(ctx).await?;
         }
@@ -576,5 +626,25 @@ mod tests {
         );
         assert_eq!(p.mac, "04:DB:56:CA:42:EE");
         assert_eq!(p.name, "Own name");
+    }
+
+    #[test]
+    fn firmware_props_use_documented_sentinels() {
+        let p = Props::from_snapshot(&Snapshot::default());
+        assert_eq!(
+            (p.firmware_version.as_str(), p.firmware_latest_known.as_str(), p.firmware_status.as_str()),
+            ("", "", "unknown")
+        );
+        let mut k = KbReport::default();
+        k.firmware.version = Some("0x0050".into());
+        akm_core::firmware::assess_report(Some(0x0256), &mut k.firmware);
+        let s = Snapshot {
+            keyboard: Some(k),
+            ..Default::default()
+        };
+        let p = Props::from_snapshot(&s);
+        assert_eq!(p.firmware_version, "0x0050");
+        assert_eq!(p.firmware_latest_known, "0x0050");
+        assert_eq!(p.firmware_status, "up_to_date");
     }
 }

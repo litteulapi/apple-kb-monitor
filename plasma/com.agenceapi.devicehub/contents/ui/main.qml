@@ -43,6 +43,17 @@ PlasmoidItem {
     property string kbMac: ""
     property string renameError: ""
     property string fwVersion: ""
+    // Firmware check against the table embedded in the daemon (#227):
+    // up_to_date / update_available / unknown, never a flash offer.
+    property string fwStatus: "unknown"
+    property string fwLatest: ""
+    // Percentage as macOS shows it (#213), -1 = not available.
+    property real applePct: -1
+    property string thresholdsText: ""
+    readonly property string fwText: fwVersion === "" ? "" : (
+        fwStatus === "up_to_date" ? i18n("%1 — up to date (latest public version known to Apple)", fwVersion)
+        : fwStatus === "update_available" ? i18n("%1 — update available from Apple (latest known: %2)", fwVersion, fwLatest)
+        : i18n("%1 — unknown (model or version not in the table)", fwVersion))
     property string batteryType: ""
     property string remaining: ""
     property string lastError: ""
@@ -88,9 +99,11 @@ PlasmoidItem {
     toolTipSubText: connected
         ? [hasBattery ? i18n("Keyboard indication %1", batteryText) : "",
            (hasEstimate || newBatteries) ? i18n("Estimate: %1", estimateText) : "",
+           applePct >= 0 ? i18n("Apple display: %1%", Math.round(applePct)) : "",
            voltage > 0 ? i18n("%1 V", voltage.toFixed(2)) : "",
            hasRssi ? i18n("Signal: %1", rssiText) : "",
-           remaining].filter(function (s) { return s !== ""; }).join("\n")
+           remaining,
+           fwText !== "" ? i18n("Firmware: %1", fwText) : ""].filter(function (s) { return s !== ""; }).join("\n")
         : (daemonRunning ? i18n("Waiting for the Apple keyboard…")
                          : i18n("apple-kb-monitord is not on the session bus"))
 
@@ -168,6 +181,11 @@ PlasmoidItem {
         root.kbName = d.name || ((kb && kb.device && (kb.device.alias || kb.device.name)) || "");
         root.kbMac = (kb && kb.device && kb.device.mac) ? kb.device.mac : "";
         root.fwVersion = (kb && kb.firmware && kb.firmware.version) ? kb.firmware.version : "";
+        root.fwStatus = (kb && kb.firmware && kb.firmware.status) ? String(kb.firmware.status) : "unknown";
+        root.fwLatest = (kb && kb.firmware && kb.firmware.latest_known) ? String(kb.firmware.latest_known) : "";
+        root.applePct = (b.apple_display_pct === null || b.apple_display_pct === undefined) ? -1 : Number(b.apple_display_pct);
+        var th = b.thresholds || null;
+        root.thresholdsText = th ? i18n("Full %1 / Low %2 / Critical %3 / Empty %4 mV", th.full_mv, th.low_mv, th.critical_mv, th.empty_mv) : "";
         root.batteryType = batteryTypeOf(root.voltage);
         root.remaining = d.remaining_display || "";
         root.lastError = d.last_error || "";
@@ -189,6 +207,7 @@ PlasmoidItem {
         root.rssi = NaN;
         root.rssiQuality = "";
         root.estimatePct = -1;
+        root.applePct = -1;
         root.newBatteries = false;
         root.remaining = "";
     }

@@ -91,6 +91,22 @@ pub enum Command {
         #[arg(value_enum, ignore_case = true)]
         state: LedState,
     },
+    /// Register map of the keyboard (every known HID report: name, size,
+    /// safety class) with the values the daemon has cached, "never read"
+    /// otherwise. Never reads the keyboard
+    Info {
+        /// Machine-readable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Firmware version of the keyboard against the embedded table of the
+    /// latest public versions (read once per connection by the daemon; no
+    /// network, never flashes)
+    Firmware {
+        /// Machine-readable JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Read the 3 allowed HID reports (0x47, 0x46, 0x49) with the safe read
     /// policy: no scan, never 0x4C / 0xFE / 0x01. Press a key first (an idle
     /// keyboard is left alone)
