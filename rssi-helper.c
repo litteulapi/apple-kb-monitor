@@ -113,12 +113,19 @@ int main(int argc, char *argv[])
                             buf[8] == 0x0d ? " (not connected)" : "");
                     return 3;
                 }
-                if ((int8_t)buf[16] == MGMT_VALUE_INVALID || (int8_t)buf[17] == MGMT_VALUE_INVALID) {
-                    fprintf(stderr, "rssi-helper: RSSI or TX power not available\n");
+                if ((int8_t)buf[16] == MGMT_VALUE_INVALID) {
+                    fprintf(stderr, "rssi-helper: RSSI not available\n");
                     return 5;
                 }
-                printf("{\"rssi\":%d,\"tx_power\":%d,\"max_tx_power\":%d}\n",
-                       (int8_t)buf[16], (int8_t)buf[17], (int8_t)buf[18]);
+                /* TX power / max TX power may legitimately be "not available"
+                 * (127): report null instead of discarding a valid RSSI. */
+                char tx[8], mtx[8];
+                if ((int8_t)buf[17] == MGMT_VALUE_INVALID) snprintf(tx, sizeof tx, "null");
+                else snprintf(tx, sizeof tx, "%d", (int8_t)buf[17]);
+                if ((int8_t)buf[18] == MGMT_VALUE_INVALID) snprintf(mtx, sizeof mtx, "null");
+                else snprintf(mtx, sizeof mtx, "%d", (int8_t)buf[18]);
+                printf("{\"rssi\":%d,\"tx_power\":%s,\"max_tx_power\":%s}\n",
+                       (int8_t)buf[16], tx, mtx);
                 return 0;
             }
         }
