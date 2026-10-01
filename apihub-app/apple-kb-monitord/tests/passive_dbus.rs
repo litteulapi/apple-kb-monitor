@@ -31,7 +31,9 @@ fn hex(s: &str) -> Vec<u8> {
         .collect()
 }
 
-fn get(c: &Connection, prop: &str) -> OwnedValue {
+/// Fallible read: the interface only appears once the daemon has registered
+/// it, so callers that wait (see `until`) must not panic before that (#219).
+fn try_get(c: &Connection, prop: &str) -> Option<OwnedValue> {
     c.call_method(
         Some(service::BUS_NAME),
         DEV,
@@ -39,10 +41,14 @@ fn get(c: &Connection, prop: &str) -> OwnedValue {
         "Get",
         &(INPUT_INTERFACE, prop),
     )
-    .unwrap_or_else(|e| panic!("Get {prop}: {e}"))
+    .ok()?
     .body()
     .deserialize()
-    .unwrap()
+    .ok()
+}
+
+fn get(c: &Connection, prop: &str) -> OwnedValue {
+    try_get(c, prop).unwrap_or_else(|| panic!("Get {prop}: unavailable"))
 }
 
 /// Poll `f` for 5 s.
@@ -112,7 +118,9 @@ fn inner() {
 
     let c = Connection::session().unwrap();
     until("listening", || {
-        bool::try_from(get(&c, "Listening")).unwrap_or(false)
+        try_get(&c, "Listening")
+            .and_then(|v| bool::try_from(v).ok())
+            .unwrap_or(false)
     });
     assert_eq!(i32::try_from(get(&c, "FnLock")).unwrap(), -1);
     assert_eq!(u64::try_from(get(&c, "WakeCount")).unwrap(), 0);
