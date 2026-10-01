@@ -74,7 +74,7 @@ Dernière requête de cette sonde : **12:11:28.493** (Input `0xFF`, tampon 256, 
    « `0xFE` seul » de « `0xF7` → `0xFE` ». Arrêt définitif au premier blocage. Une lecture `0xFE` présente un risque
    réel : un blocage peut obliger à remettre le clavier sous tension (#175, E8).
 
-### 0.3 Rapports à ne JAMAIS lire en production
+### 0.3 Rapports à ne JAMAIS lire en production (commentaires sur #175 et #177)
 
 | Rapport | Raison |
 |---|---|
@@ -112,7 +112,7 @@ par un seul lecteur. `0x5A`, `0x4F` et `0x51-0x54` au plus une fois par connexio
 
 ## 2. Résultats exhaustifs
 
-### 2.1 Feature (GET_REPORT type 3)
+### 2.1 Feature (GET_REPORT type 3) — suivi #181
 
 | Réponse du clavier | IDs | Nombre |
 |---|---|---|
@@ -229,7 +229,7 @@ Ce tableau ne liste que les ajouts et corrections ; pour le reste, voir `HARDWAR
 4. Output : non mesuré.
 5. La reconnexion : aucune lecture de comparaison avant/après n'a pu être faite.
 
-## 6. Plan d'expériences d'écriture, par paliers (NON EXÉCUTÉ)
+## 6. Plan d'expériences d'écriture, par paliers (NON EXÉCUTÉ, suivi #182)
 
 **Préalables à tout palier :**
 
