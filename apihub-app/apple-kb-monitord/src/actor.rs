@@ -94,6 +94,12 @@ pub struct Options {
     pub apple_percent: bool,
     /// Send `WillShutdown` at shutdown (`[apple] will_shutdown`, #191).
     pub will_shutdown: bool,
+    /// After Apple's breaker trips, ask BlueZ once to disconnect the keyboard
+    /// (`[apple] disconnect_on_breaker`, #251).
+    pub disconnect_on_breaker: bool,
+    /// How that disconnection is asked (BlueZ `Device1.Disconnect`; tests
+    /// replace it).
+    pub disconnect: fn(&str, Duration) -> Result<(), String>,
     /// Where detected events go (D-Bus device signals, tray...).
     pub events: Arc<EventHub>,
     /// Where the keyboard's alias is read (BlueZ).
@@ -115,6 +121,8 @@ impl Default for Options {
             chemistry: Chemistry::default(),
             apple_percent: true,
             will_shutdown: true,
+            disconnect_on_breaker: true,
+            disconnect: watcher::request_disconnect,
             events: EventHub::new(),
             alias: Arc::new(BluezAlias::default()),
         }
@@ -132,6 +140,7 @@ impl Options {
         self.chemistry = c.chemistry;
         self.apple_percent = c.apple_percent;
         self.will_shutdown = c.will_shutdown;
+        self.disconnect_on_breaker = c.disconnect_on_breaker;
     }
 }
 
@@ -304,6 +313,35 @@ impl Actor {
                 false
             }
         }
+    }
+
+    /// Apple's breaker tripped (3rd unanswered request in a row): nothing more
+    /// goes to the keyboard, and, like macOS asking bluetoothd
+    /// (`SetHIDDriverReady(false)`), BlueZ is asked once to disconnect it
+    /// (#251). Returns whether the disconnection was asked.
+    fn after_breaker(&mut self, mac: Option<&str>) -> bool {
+        if !akm_core::read_policy::take_disconnect_request() {
+            return false;
+        }
+        let kb_mac = self.kb.as_ref().and_then(|k| k.device.mac.clone());
+        let Some(mac) = mac.map(str::to_string).or(kb_mac) else {
+            tracing::warn!("circuit breaker open: keyboard address unknown, no disconnection asked");
+            return false;
+        };
+        if !self.opts.disconnect_on_breaker {
+            tracing::warn!(
+                "circuit breaker open: 3 unanswered requests, nothing more is sent to {mac}; left connected ([apple] disconnect_on_breaker = false)"
+            );
+            return false;
+        }
+        tracing::warn!(
+            "circuit breaker open: 3 unanswered requests, asking BlueZ to disconnect {mac} once (as macOS: SetHIDDriverReady(false))"
+        );
+        match (self.opts.disconnect)(&mac, akm_core::apple_model::APPLE.disconnect_call_timeout) {
+            Ok(()) => tracing::info!("disconnection of {mac} requested"),
+            Err(e) => tracing::warn!("disconnection of {mac} not done: {e} (not retried)"),
+        }
+        true
     }
 
     /// The BlueZ alias changed (rename, `bluetoothctl`, system settings).
@@ -499,7 +537,8 @@ impl Actor {
                             "low battery {alert_pct:.0}%: not shown, KDE PowerDevil already warns about this keyboard"
                         ),
                     }
-                    if c.urgency == Urgency::Critical {
+                    // Apple's breaker blocks every emission, LED included (#251).
+                    if c.urgency == Urgency::Critical && !akm_core::read_policy::tripped() {
                         led::flash_capslock_for(mac.clone(), 5);
                     }
                 }
@@ -705,6 +744,7 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
     watcher::spawn_signal_watcher(tx);
     let mut machine = Machine::new();
     let mut actor = Actor::new(opts);
+    let mut was_paused = false;
     watch.publish(actor.snapshot());
 
     loop {
@@ -721,12 +761,15 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
         };
         match rx.recv_timeout(wait) {
             Ok(Msg::Bus(ev)) => {
-                if matches!(ev, Event::Connected(_)) && !machine.is_connected() {
-                    akm_core::read_policy::note_connection(); // #214
-                }
+                let before = (machine.is_connected(), machine.mac().map(str::to_string));
                 if machine.on_event(&ev, Instant::now()) == Some(Action::Clear) {
                     tracing::info!("keyboard disconnected");
                     actor.disconnected();
+                }
+                // A keyboard newly followed: a new driver in Apple's terms
+                // (breaker closed, counter 0; #214, #251).
+                if machine.is_connected() && (!before.0 || machine.mac() != before.1.as_deref()) {
+                    akm_core::read_policy::note_connection();
                 }
             }
             Ok(Msg::Refresh) => {
@@ -740,6 +783,17 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
         // System sleep (#145): no hardware access; the sleep handler waits
         // for this guard before letting the system go down.
         let paused = crate::sleep::paused();
+        if paused != was_paused {
+            // Apple's handleSleep / handleWake (#251): timer stopped, breaker
+            // counter 1; battery read 60 s after the wake.
+            was_paused = paused;
+            if paused {
+                machine.on_sleep();
+                akm_core::read_policy::note_sleep();
+            } else {
+                machine.on_wake(Instant::now());
+            }
+        }
         let _io = (!paused).then(crate::sleep::io_guard);
         let due = if paused {
             Vec::new()
@@ -750,8 +804,13 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             match action {
                 Action::Acquire => {
                     let mac = machine.mac().map(str::to_string);
+                    // The Apple model decides whether vendor reports are read (#251).
+                    akm_core::read_policy::set_schedule(Some(machine.vendor_reads_due()));
                     let ok = actor.acquire(mac.as_deref());
-                    machine.acquire_done(ok, Instant::now());
+                    let read_ok = akm_core::read_policy::take_last_outcome()
+                        .is_some_and(akm_core::read_policy::SafeRead::is_success);
+                    machine.acquire_done_with(ok, Some(read_ok), Instant::now());
+                    actor.after_breaker(mac.as_deref());
                     if ok {
                         let pct = actor.kb.as_ref().and_then(KbReport::battery_pct);
                         tracing::info!(
@@ -1013,5 +1072,57 @@ mod tests {
         assert_eq!(rx.recv().unwrap(), Msg::Refresh);
         drop(rx);
         assert!(!mb.send(Msg::Refresh));
+    }
+
+    static ASKED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    fn fake_disconnect(mac: &str, t: Duration) -> Result<(), String> {
+        assert_eq!(t, akm_core::apple_model::APPLE.disconnect_call_timeout);
+        ASKED.lock().unwrap().push(mac.to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn a_tripped_breaker_asks_once_for_the_disconnection() {
+        // #251 (RE-GHIDRA-KEXT §2.2): 3 silences -> SetHIDDriverReady(false).
+        let mut a = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            disconnect: fake_disconnect,
+            ..Options::default()
+        });
+        let b = akm_core::read_policy::breaker();
+        b.lock().unwrap().reset();
+        assert!(!a.after_breaker(Some("04:DB:56:CA:42:EE")), "closed: nothing");
+        for _ in 0..akm_core::read_policy::TRIP_AFTER {
+            b.lock().unwrap().record(false);
+        }
+        assert!(a.after_breaker(Some("04:DB:56:CA:42:EE")));
+        assert!(!a.after_breaker(Some("04:DB:56:CA:42:EE")), "once per connection");
+        assert_eq!(*ASKED.lock().unwrap(), vec!["04:DB:56:CA:42:EE".to_string()]);
+        // disabled: the request is consumed, BlueZ is not called
+        b.lock().unwrap().reset();
+        a.opts.disconnect_on_breaker = false;
+        for _ in 0..akm_core::read_policy::TRIP_AFTER {
+            b.lock().unwrap().record(false);
+        }
+        assert!(!a.after_breaker(Some("04:DB:56:CA:42:EE")));
+        assert_eq!(ASKED.lock().unwrap().len(), 1);
+        // the MAC of the last report when the machine has none (NoBluez)
+        b.lock().unwrap().reset();
+        a.opts.disconnect_on_breaker = true;
+        a.kb = Some(report(50.0, None));
+        for _ in 0..akm_core::read_policy::TRIP_AFTER {
+            b.lock().unwrap().record(false);
+        }
+        assert!(a.after_breaker(None));
+        assert_eq!(ASKED.lock().unwrap().len(), 2);
+        b.lock().unwrap().reset();
+        // config
+        let (c, _) = akm_core::config::parse("[apple]\ndisconnect_on_breaker = false\n");
+        let mut o = Options::default();
+        assert!(o.disconnect_on_breaker);
+        o.apply_config(&c);
+        assert!(!o.disconnect_on_breaker);
     }
 }

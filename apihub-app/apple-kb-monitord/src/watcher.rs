@@ -231,3 +231,79 @@ fn watch_once(tx: &Sender<Msg>) -> zbus::Result<()> {
     }
     Err(zbus::Error::Failure("D-Bus message stream ended".into()))
 }
+
+// ── Disconnection asked by Apple's breaker (#251) ───────────────────────────
+
+/// The only call the breaker makes: `org.bluez.Device1.Disconnect`, Linux's
+/// equivalent of `SetHIDDriverReady(false)` -> bluetoothd disconnects
+/// (`docs/RE-GHIDRA-KEXT.md` §2.2). The pairing is kept: never the adapter's
+/// device removal.
+pub const DISCONNECT_CALL: (&str, &str) = ("org.bluez.Device1", "Disconnect");
+
+/// Ask BlueZ to disconnect the keyboard `mac`, waiting at most `timeout`
+/// (the call goes on in its own thread if BlueZ is slower). Called once per
+/// connection by the actor.
+pub fn request_disconnect(mac: &str, timeout: Duration) -> Result<(), String> {
+    bounded(timeout, mac.to_ascii_uppercase(), |mac| {
+        let conn = Connection::system().map_err(|e| e.to_string())?;
+        let dev = crate::repair::enumerate(&conn)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .find(|d| d.mac == mac)
+            .ok_or_else(|| format!("{mac} is unknown to BlueZ"))?;
+        conn.call_method(
+            Some("org.bluez"),
+            dev.path.as_str(),
+            Some(DISCONNECT_CALL.0),
+            DISCONNECT_CALL.1,
+            &(),
+        )
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+    })
+}
+
+/// Run `call(arg)` in a thread, wait at most `timeout` for its result.
+fn bounded(
+    timeout: Duration,
+    arg: String,
+    call: impl FnOnce(String) -> Result<(), String> + Send + 'static,
+) -> Result<(), String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("kb-disconnect".into())
+        .spawn(move || {
+            let _ = tx.send(call(arg));
+        })
+        .map_err(|e| e.to_string())?;
+    rx.recv_timeout(timeout)
+        .map_err(|_| format!("no answer from BlueZ within {} ms", timeout.as_millis()))?
+}
+
+#[cfg(test)]
+mod disconnect_tests {
+    use super::*;
+
+    #[test]
+    fn the_breaker_disconnects_and_never_removes_the_pairing() {
+        assert_eq!(DISCONNECT_CALL, ("org.bluez.Device1", "Disconnect"));
+        // No device removal anywhere in the actor or this watcher.
+        let removal = concat!("Remove", "Device");
+        for (name, src) in [("watcher.rs", include_str!("watcher.rs")), ("actor.rs", include_str!("actor.rs"))] {
+            assert!(!src.contains(removal), "{name} names {removal}");
+        }
+    }
+
+    #[test]
+    fn the_call_is_bounded_in_time() {
+        let t = std::time::Instant::now();
+        let r = bounded(Duration::from_millis(50), "AA".into(), |_| {
+            std::thread::sleep(Duration::from_millis(400));
+            Ok(())
+        });
+        assert!(r.unwrap_err().contains("within 50 ms"));
+        assert!(t.elapsed() < Duration::from_millis(300));
+        assert_eq!(bounded(Duration::from_secs(1), "AA".into(), |m| if m == "AA" { Ok(()) } else { Err(m) }), Ok(()));
+        assert_eq!(bounded(Duration::from_secs(1), "x".into(), Err), Err("x".into()));
+    }
+}

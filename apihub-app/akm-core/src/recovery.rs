@@ -25,6 +25,14 @@
 //!   needed (`akmctl repair`). Never acted upon automatically.
 //! * `Suspended` — the system is going to sleep / sleeping: no attempt.
 //!
+//! **Disconnection asked by the breaker** (#251, Apple's
+//! `SetHIDDriverReady(false)` after 3 silences, `crate::apple_model`): the
+//! daemon calls `Device1.Disconnect`, BlueZ reports reason *Local*, so the
+//! episode is `Quiet`: no page before [`DORMANT_GRACE`], then the slow
+//! cadence. Apple's `bluetoothd` does not page the keyboard after that either
+//! (its HID auto-connect runs at a power-state change, i.e. our resume); the
+//! keyboard comes back by itself on a key press, with a closed breaker.
+//!
 //! Never a tight loop: two attempts are at least [`MIN_SPACING`] apart, a
 //! *busy* answer (BlueZ already connecting) is retried after [`BUSY_RETRY`]
 //! without counting as a failure, and the cadence slows down to
@@ -620,6 +628,28 @@ pub fn classify_journal(msg: &str) -> Option<JournalKind> {
 
 #[cfg(test)]
 mod tests {
+
+    /// #251: the disconnection asked by the breaker (reason Local) is a quiet
+    /// episode: the keyboard that stopped answering is not paged right away.
+    #[test]
+    fn breaker_disconnection_is_a_quiet_episode() {
+        let t0 = Instant::now();
+        let mut r = Recovery::new();
+        r.on_connected(t0);
+        r.on_disconnected(DisconnectReason::Local, t0);
+        assert_eq!(r.health(), Health::Dormant);
+        assert_eq!(r.next_deadline(), Some(t0 + DORMANT_GRACE));
+        assert!(r.poll(t0 + DORMANT_GRACE - Duration::from_secs(1)).is_empty());
+        // the keyboard reconnects by itself: nothing left to do
+        r.on_connected(t0 + Duration::from_secs(30));
+        assert_eq!(r.health(), Health::Connected);
+        assert_eq!(r.next_deadline(), None);
+        // a resume (Apple: HID auto-connect at the power-state change) pages
+        r.on_disconnected(DisconnectReason::Local, t0 + Duration::from_secs(40));
+        r.on_sleep(t0 + Duration::from_secs(50));
+        r.on_resume(false, t0 + Duration::from_secs(60));
+        assert_eq!(r.next_deadline(), Some(t0 + Duration::from_secs(60) + RESUME_GRACE));
+    }
     use super::*;
 
     fn s(n: u64) -> Duration {

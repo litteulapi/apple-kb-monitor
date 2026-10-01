@@ -20,6 +20,7 @@
 //!
 //! [apple]
 //! will_shutdown = true       # tell the keyboard once, at shutdown / restart, what macOS tells it (#191)
+//! disconnect_on_breaker = true  # after 3 unanswered requests, have BlueZ disconnect it, as macOS (#251)
 //! ```
 //!
 //! Only this small TOML subset is read (sections, integers, floats, booleans,
@@ -54,6 +55,10 @@ pub struct Config {
     /// the computer shuts down or restarts, as macOS does at every shutdown
     /// (#191). Default **on**: it is what Apple sends; `false` sends nothing.
     pub will_shutdown: bool,
+    /// After the 3rd unanswered request in a row (Apple's breaker), ask BlueZ
+    /// once to disconnect the keyboard (`Device1.Disconnect`), as macOS asks
+    /// bluetoothd (#251). Default **on**; `false` only stops the requests.
+    pub disconnect_on_breaker: bool,
 }
 
 impl Default for Config {
@@ -67,6 +72,7 @@ impl Default for Config {
             chemistry: Chemistry::default(),
             apple_percent: true,
             will_shutdown: true,
+            disconnect_on_breaker: true,
         }
     }
 }
@@ -212,6 +218,7 @@ pub fn parse(content: &str) -> (Config, Vec<String>) {
             },
             ("display", "apple_percent", Val::Bool(b)) => cfg.apple_percent = b,
             ("apple", "will_shutdown", Val::Bool(b)) => cfg.will_shutdown = b,
+            ("apple", "disconnect_on_breaker", Val::Bool(b)) => cfg.disconnect_on_breaker = b,
             ("notifications", "connection", Val::Bool(b)) => cfg.notify_connection = b,
             ("notifications", "battery_replaced", Val::Bool(b)) => cfg.notify_battery_replaced = b,
             ("notifications", "defer_to_powerdevil", Val::Bool(b)) => cfg.defer_to_powerdevil = b,
@@ -289,6 +296,18 @@ mod tests {
         assert!(c.will_shutdown, "a mistyped value keeps the default");
         let (_, w) = parse("[apple]\nwill_shutdown = true\nname_change = true\n");
         assert_eq!(w.len(), 1, "no other [apple] key exists: {w:?}");
+    }
+
+    #[test]
+    fn disconnect_on_breaker_defaults_to_on() {
+        // #251: macOS has bluetoothd disconnect the keyboard after 3 timeouts.
+        assert!(Config::default().disconnect_on_breaker);
+        assert!(parse("[apple]\n").0.disconnect_on_breaker);
+        let (c, w) = parse("[apple]\ndisconnect_on_breaker = false\n");
+        assert!(w.is_empty() && !c.disconnect_on_breaker && c.will_shutdown);
+        let (c, w) = parse("[apple]\ndisconnect_on_breaker = 0\n");
+        assert_eq!(w.len(), 1);
+        assert!(c.disconnect_on_breaker, "a mistyped value keeps the default");
     }
 
     #[test]
