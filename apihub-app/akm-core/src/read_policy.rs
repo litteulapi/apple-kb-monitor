@@ -286,7 +286,21 @@ pub struct ReadLock {
 /// active or the lock directory is not trustworthy.
 pub fn try_lock(wait: Duration) -> Option<ReadLock> {
     use std::os::unix::fs::OpenOptionsExt;
-    let guard = IN_PROCESS.try_lock().ok()?;
+    let end = Instant::now() + wait;
+    // In-process lock: honour `wait` like the flock, and survive poisoning (a
+    // panic in a reader thread must not refuse every later read for good).
+    let guard = loop {
+        match IN_PROCESS.try_lock() {
+            Ok(g) => break g,
+            Err(std::sync::TryLockError::Poisoned(e)) => break e.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                if Instant::now() >= end {
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
+    };
     let p = lock_path();
     ensure_private_dir(p.parent()?).ok()?;
     let file = std::fs::OpenOptions::new()
@@ -297,7 +311,6 @@ pub fn try_lock(wait: Duration) -> Option<ReadLock> {
         .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
         .open(&p)
         .ok()?;
-    let end = Instant::now() + wait;
     loop {
         // SAFETY: valid fd owned by `file`.
         let r = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };

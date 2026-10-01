@@ -5,8 +5,9 @@
 use akm_core::decode::HidSource;
 use akm_core::read_policy::{
     build_report_safe, gate, is_allowed, last_input_age, lock_path, note_input, read_safe,
-    try_lock, Gate, SafeRead, SafeSource, ACTIVE_WINDOW, ALLOWED, BUDGET, LOCK_WAIT, MIN_GAP,
+    try_lock, Gate, SafeRead, SafeSource, ACTIVE_WINDOW, ALLOWED, TRIP_AFTER, BUDGET, LOCK_WAIT, MIN_GAP,
 };
+use akm_core::registry;
 use akm_core::report::{KbReport, KbWake};
 use std::cell::RefCell;
 use std::io;
@@ -59,11 +60,23 @@ const BCM: &str = "HID_ID=0005:000005AC:00000256\nHID_NAME=Kb\nHID_UNIQ=04:db:56
 fn constants_are_the_documented_policy() {
     assert_eq!(ALLOWED, [0x47, 0x46, 0x49]);
     assert_eq!(ACTIVE_WINDOW, Duration::from_secs(60));
-    assert_eq!(MIN_GAP, Duration::from_millis(250));
+    // Apple espace ses requêtes de 1 s et coupe après 3 expirations
+    // (docs/RE-MACOS-SILICON.md) : jamais en dessous.
+    assert_eq!(MIN_GAP, Duration::from_millis(1000));
+    assert_eq!(TRIP_AFTER, 3);
     assert_eq!(BUDGET, Duration::from_secs(2));
     assert_eq!(LOCK_WAIT, Duration::from_millis(500));
+    // Le registre est la source de vérité : routine = 0x47/0x46/0x49,
+    // une fois par connexion = 0x4F/0x51..0x54/0x60 ; rien d'autre.
+    assert_eq!(registry::SAFE_READ_IDS, [0x47, 0x46, 0x49]);
+    assert_eq!(registry::DAEMON_ONCE_IDS, [0x4F, 0x60]);
     for id in 0..=255u8 {
-        assert_eq!(is_allowed(id), matches!(id, 0x47 | 0x46 | 0x49), "{id:#x}");
+        let expected = matches!(id, 0x47 | 0x46 | 0x49 | 0x4F | 0x51..=0x54 | 0x60);
+        assert_eq!(is_allowed(id), expected, "{id:#x}");
+    }
+    // Jamais : 0xFE (bascule DFU/écriture), 0x4C, Input 0x01.
+    for id in [0xFEu8, 0x4C, 0x01] {
+        assert!(!is_allowed(id), "{id:#x} doit rester refusé");
     }
 }
 
@@ -114,7 +127,11 @@ fn lock_waits_then_gives_up_on_a_foreign_flock() {
     let _g = serial();
     let d = private_runtime_dir("flock");
     // Autre « processus » : description de fichier distincte, flock exclusif.
-    std::fs::create_dir_all(d.join("apple-kb-monitor")).unwrap();
+    // Le dossier du verrou doit être privé (0700, #208) sinon try_lock refuse.
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new().mode(0o700).create(d.join("apple-kb-monitor")).unwrap();
+    }
     let other = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -288,12 +305,16 @@ fn build_report_safe_paths() {
     assert!(r.bluetooth.connected);
     assert_eq!(r.wake, wake);
 
-    // BCM2042 actif : lecture complète, % fin = %.
+    // BCM2042 actif : lecture complète (routine + 0x4F/0x60 une seule fois
+    // par connexion), % fin = %.
     note_input();
-    let src = Src::new(0, full());
+    let mut ans = full();
+    ans.push((0x4F, vec![0x4F, 1, 2, 3, 4]));
+    ans.push((0x60, vec![0x60, 5, 6]));
+    let src = Src::new(0, ans);
     let (r, o) = build_report_safe(BCM, None, &src, wake.clone(), Instant::now());
     assert_eq!(o, SafeRead::Complete);
-    assert_eq!(src.ids(), vec![0x47, 0x46, 0x49]);
+    assert_eq!(src.ids(), vec![0x47, 0x46, 0x49, 0x4F, 0x60]);
     assert_eq!(r.battery.percentage, Some(80.0));
     assert_eq!(r.battery.percentage_fine, Some(80.0));
     assert_eq!(r.wake, wake);
@@ -313,5 +334,37 @@ fn build_report_safe_paths() {
     assert!(src.ids().is_empty());
     assert_eq!(r.battery.percentage_fine, r.battery.percentage);
     drop(held);
+    std::fs::remove_dir_all(&d).ok();
+}
+
+#[test]
+fn in_process_contention_honours_wait_and_survives_a_panicking_holder() {
+    let _g = serial();
+    let d = private_runtime_dir("inproc");
+    // Un lecteur du même processus libère pendant l'attente : on l'obtient.
+    let (tx, rx) = std::sync::mpsc::channel();
+    let h = std::thread::spawn(move || {
+        let first = try_lock(Duration::ZERO).expect("verrou libre");
+        tx.send(()).unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        drop(first);
+    });
+    rx.recv().unwrap();
+    assert!(try_lock(Duration::from_millis(1500)).is_some(), "wait ignoré en contention locale");
+    h.join().unwrap();
+    // Sans libération, l'attente est bornée.
+    let held = try_lock(Duration::ZERO).unwrap();
+    let t = Instant::now();
+    assert!(try_lock(Duration::from_millis(200)).is_none());
+    assert!(t.elapsed() >= Duration::from_millis(190) && t.elapsed() < Duration::from_millis(700));
+    drop(held);
+    // Un lecteur qui panique ne doit pas interdire toute lecture ultérieure.
+    let r = std::thread::spawn(|| {
+        let _l = try_lock(Duration::ZERO).unwrap();
+        panic!("lecteur en panne (attendu par le test)");
+    })
+    .join();
+    assert!(r.is_err());
+    assert!(try_lock(Duration::ZERO).is_some(), "verrou empoisonné = lectures refusées à jamais");
     std::fs::remove_dir_all(&d).ok();
 }
