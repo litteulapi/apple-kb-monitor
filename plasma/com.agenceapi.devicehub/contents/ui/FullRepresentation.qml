@@ -196,8 +196,23 @@ PlasmaExtras.Representation {
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Firmware:")
                     visible: root.fwVersion !== ""
-                    text: root.fwVersion
+                    text: root.fwText
                     textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    color: root.fwStatus === "update_available" ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.textColor
+                }
+                PlasmaComponents3.Label {
+                    Kirigami.FormData.label: i18n("Apple display:")
+                    visible: root.applePct >= 0
+                    text: i18n("%1% (macOS-style display)", Math.round(root.applePct))
+                    textFormat: Text.PlainText
+                }
+                PlasmaComponents3.Label {
+                    Kirigami.FormData.label: i18n("Thresholds:")
+                    visible: root.thresholdsText !== ""
+                    text: root.thresholdsText
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
                 }
             }
         }

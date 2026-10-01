@@ -39,6 +39,22 @@ pub fn to_json(s: &Snapshot, fn_mode: Option<u8>, revision: Option<u64>) -> Valu
         "battery_estimate_high": est.map(|e| e.high),
         "battery_chemistry": est.map(|e| e.chemistry.as_str()),
         "new_batteries": battery.map(|b| b.new_batteries),
+        // Percentage as macOS shows it (#213): a labelled secondary figure.
+        "battery_apple_display_pct": battery.and_then(|b| b.apple_display_pct).map(|p| p.round() as u32),
+        // Thresholds the keyboard reports (report 0x60, once per connection).
+        "battery_thresholds": battery.and_then(|b| b.thresholds).map(|t| json!({
+            "full_mv": t.full_mv, "low_mv": t.low_mv, "critical_mv": t.critical_mv, "empty_mv": t.empty_mv,
+            "level": battery.and_then(|b| b.threshold_level.clone()),
+            "margins_mv": battery.and_then(|b| b.threshold_margins_mv),
+        })),
+        // Firmware check against the embedded table (#227).
+        "firmware": s.firmware().map(|f| json!({
+            "version_hex": f.version_hex.clone().or_else(|| f.version.clone()),
+            "latest_known": f.latest_known,
+            "status": if f.status.is_empty() { "unknown" } else { f.status.as_str() },
+            "source": f.source,
+            "table_date": f.table_date,
+        })),
         "last_update": s.last_update,
         "last_error": s.last_error,
         "kb_error": s.kb_error,
@@ -91,6 +107,18 @@ pub fn to_text(s: &Snapshot, fn_mode: Option<u8>) -> String {
                 ),
             );
         }
+    }
+    if let Some(a) = s.keyboard.as_ref().and_then(|k| k.battery.apple_display_pct) {
+        line("Apple:", format!("{a:.0} % (macOS-style display)"));
+    }
+    if let Some(t) = s.keyboard.as_ref().and_then(|k| k.battery.thresholds) {
+        line(
+            "Limits:",
+            format!("Full {} / Low {} / Critical {} / Empty {} mV", t.full_mv, t.low_mv, t.critical_mv, t.empty_mv),
+        );
+    }
+    if let Some(fw) = s.firmware().and_then(akm_core::firmware::summary_en) {
+        line("Firmware:", fw.trim_start_matches("Firmware: ").to_string());
     }
     line("Voltage:", opt(s.voltage().map(|v| format!("{v:.2}")), " V"));
     // Relative BR/EDR value, no unit (#174).
@@ -203,5 +231,32 @@ mod tests {
         assert!(t.contains("Name:      Clavier de maria #1"));
         assert!(t.contains("Fn mode:   1 - fkeyslast"));
         assert!(to_text(&Snapshot::default(), None).contains("Battery:   n/a"));
+    }
+
+    #[test]
+    fn firmware_thresholds_and_apple_display_in_status() {
+        let mut s: Snapshot = serde_json::from_str(SAMPLE).unwrap();
+        let k = s.keyboard.as_mut().unwrap();
+        k.firmware.version = Some("0x0050".into());
+        akm_core::firmware::assess_report(Some(0x0256), &mut k.firmware);
+        k.battery.apple_display_pct = Some(100.0);
+        let t = akm_core::registry::Thresholds::parse(&[0x0b, 0x8a, 0x09, 0xca, 0x09, 0x64, 0x08, 0x06]).unwrap();
+        k.battery.thresholds = Some(t);
+        k.battery.threshold_level = Some("ok".into());
+        k.battery.threshold_margins_mv = Some(t.margins(2986));
+        let v = to_json(&s, None, None);
+        assert_eq!(v["firmware"]["version_hex"], "0x0050");
+        assert_eq!(v["firmware"]["status"], "up_to_date");
+        assert_eq!(v["firmware"]["latest_known"], "0x0050");
+        assert_eq!(v["battery_apple_display_pct"], 100);
+        assert_eq!(v["battery_thresholds"]["low_mv"], 2506);
+        assert_eq!(v["battery_thresholds"]["level"], "ok");
+        let txt = to_text(&s, None);
+        assert!(txt.contains("Firmware:  0x0050 - up to date"), "{txt}");
+        assert!(txt.contains("Apple:     100 % (macOS-style display)"), "{txt}");
+        assert!(txt.contains("Limits:    Full 2954"), "{txt}");
+        // Unknown firmware stays null / "unknown", never invented.
+        let v = to_json(&Snapshot::default(), None, None);
+        assert!(v["firmware"].is_null() && v["battery_thresholds"].is_null());
     }
 }

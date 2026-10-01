@@ -108,6 +108,8 @@ akmctl waybar                  # JSON for a waybar custom module
 akmctl metrics                 # Prometheus text format
 akmctl led caps on             # LED (NumLock can only be switched off)
 akmctl dump                    # the 3 safe reports only (0x47, 0x46, 0x49)
+akmctl firmware                # firmware version vs the embedded table of latest public versions
+akmctl info                    # register map of all known HID reports + cached values (never reads the keyboard)
 akmctl doctor                  # Bluetooth link diagnosis
 ```
 

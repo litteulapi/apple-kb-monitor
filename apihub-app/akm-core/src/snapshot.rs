@@ -70,6 +70,11 @@ impl Snapshot {
         self.keyboard.as_ref().and_then(|k| k.battery.voltage)
     }
     /// Relative BR/EDR RSSI in dB (0 = ideal range), not dBm (#174).
+    /// Firmware block of the keyboard report (#227).
+    pub fn firmware(&self) -> Option<&crate::report::KbFirmware> {
+        self.keyboard.as_ref().map(|k| &k.firmware)
+    }
+
     pub fn rssi(&self) -> Option<i32> {
         self.keyboard.as_ref().and_then(|k| k.radio.rel_db())
     }

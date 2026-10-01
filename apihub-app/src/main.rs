@@ -254,6 +254,18 @@ impl ApiHubApp {
                 value(ui, egui::RichText::new(t).size(16.0));
                 ui.end_row();
             }
+            if let Some(t) = view::apple_display_text(&kb.battery) {
+                // What macOS would show for the same raw value (#213).
+                key(ui, "Apple display");
+                value(ui, egui::RichText::new(t).size(16.0));
+                ui.end_row();
+            }
+            if let Some(t) = view::thresholds_text(&kb.battery) {
+                // Thresholds the keyboard reports (0x60, read once per connection).
+                key(ui, "Thresholds");
+                value(ui, egui::RichText::new(t).size(16.0));
+                ui.end_row();
+            }
             if let Some(t) = view::chemistry_text(&kb.battery) {
                 key(ui, "Batteries");
                 value(ui, egui::RichText::new(t).size(16.0));
@@ -362,15 +374,23 @@ impl ApiHubApp {
     fn firmware_tile(&mut self, ui: &mut egui::Ui, kb: &akm_core::report::KbReport) {
         ui.label(egui::RichText::new("Firmware").strong().size(18.0));
         ui.add_space(4.0);
+        // Firmware check against the embedded table (#227); never a flash offer.
+        match view::firmware_line(&kb.firmware, view::locale_is_french()) {
+            Some((line, level)) => {
+                ui.add(egui::Label::new(self.tint(egui::RichText::new(line).strong().size(16.0), level)).wrap());
+                if let Some(src) = kb.firmware.source.as_deref() {
+                    ui.add(egui::Label::new(egui::RichText::new(format!("Source: {src} \u{b7} table of {}", kb.firmware.table_date.as_deref().unwrap_or("?"))).weak().size(13.0)).wrap());
+                }
+            }
+            None => {
+                ui.label(egui::RichText::new("Firmware: not read yet (read once per connection)").weak().size(16.0));
+            }
+        }
+        ui.add_space(4.0);
         kv_grid(ui, "dev_right", |ui| {
             if let Some(ref chip) = kb.device.chip {
                 key(ui, "Chip");
                 value(ui, egui::RichText::new(chip.as_str()).size(16.0));
-                ui.end_row();
-            }
-            if let Some(ref fw) = kb.firmware.version {
-                key(ui, "Version (0x4F)");
-                value(ui, egui::RichText::new(fw).strong().size(18.0));
                 ui.end_row();
             }
             // Uninterpreted vendor reports (meaning not proven, #131/#132).

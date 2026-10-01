@@ -5,7 +5,9 @@ mod cli;
 mod doctor;
 mod dump;
 mod fnmode;
+mod firmware;
 mod histcmd;
+mod info;
 mod ledcmd;
 mod migrate;
 mod passive;
@@ -73,6 +75,8 @@ fn run(cmd: Command) -> u8 {
             }
             Err(e) => fail(&e),
         },
+        Command::Info { json } => cmd_info(json),
+        Command::Firmware { json } => cmd_firmware(json),
         Command::Dump { json } => match dump::run() {
             Ok(d) => {
                 if json {
@@ -147,6 +151,53 @@ fn cmd_status(json: bool) -> u8 {
             EXIT_ABSENT
         }
         Err(e) => fail(&e.to_string()),
+    }
+}
+
+/// `akmctl info`: register map + cached values; never reads the keyboard.
+fn cmd_info(json: bool) -> u8 {
+    let conn = bus::connect();
+    let snap = conn.as_ref().map_err(|e| bus::BusError::Absent(e.to_string())).and_then(bus::get_state);
+    let (snap, code) = match snap {
+        Ok(s) => (Some(s), EXIT_OK),
+        Err(bus::BusError::Absent(m)) => {
+            eprintln!("akmctl: {m} (showing the static table, no cached values)");
+            (None, EXIT_OK)
+        }
+        Err(e) => return fail(&e.to_string()),
+    };
+    let passive = match (conn.as_ref(), snap.as_ref()) {
+        (Ok(c), Some(s)) => passive::fetch(c, s.mac()),
+        _ => serde_json::Value::Null,
+    };
+    if json {
+        println!("{}", info::to_json(snap.as_ref(), &passive));
+    } else {
+        print!("{}", info::to_text(snap.as_ref(), &passive));
+    }
+    code
+}
+
+/// `akmctl firmware`: version, latest known, status, source, table date.
+fn cmd_firmware(json: bool) -> u8 {
+    match daemon_snapshot() {
+        Ok(Some(s)) => {
+            if json {
+                println!("{}", firmware::to_json(&s));
+            } else {
+                print!("{}", firmware::to_text(&s));
+            }
+            EXIT_OK
+        }
+        Ok(None) => {
+            if json {
+                println!("{}", serde_json::json!({"schema": 1, "daemon": false}));
+            } else {
+                print!("Daemon:       not running (the version is read by the daemon)\n{}", firmware::table_text());
+            }
+            EXIT_ABSENT
+        }
+        Err(e) => fail(&e),
     }
 }
 

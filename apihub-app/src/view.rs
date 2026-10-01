@@ -43,6 +43,53 @@ pub fn estimate_text(b: &akm_core::report::KbBattery) -> Option<String> {
     ))
 }
 
+/// French locale (`LC_ALL` > `LC_MESSAGES` > `LANG`), for the firmware line
+/// only: the rest of the window is English.
+pub fn locale_is_french() -> bool {
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .filter_map(|k| std::env::var(k).ok())
+        .find(|v| !v.is_empty())
+        .is_some_and(|v| v.to_ascii_lowercase().starts_with("fr"))
+}
+
+/// The firmware line of the window and its level (#227): `Firmware : 0x0050 —
+/// à jour (dernière version publique connue d'Apple)` in French. `None` while
+/// the version was not read.
+pub fn firmware_line(fw: &akm_core::report::KbFirmware, fr: bool) -> Option<(String, Level)> {
+    let text = if fr {
+        akm_core::firmware::summary_fr(fw)
+    } else {
+        akm_core::firmware::summary_en(fw)
+    }?;
+    let level = match fw.status.as_str() {
+        "up_to_date" => Level::Good,
+        "update_available" => Level::Warn,
+        _ => Level::Unknown,
+    };
+    Some((text, level))
+}
+
+/// Percentage as macOS shows it, labelled (#213).
+pub fn apple_display_text(b: &akm_core::report::KbBattery) -> Option<String> {
+    let p = b.apple_display_pct.filter(|p| p.is_finite())?;
+    Some(format!("{p:.0}% (macOS-style display)"))
+}
+
+/// Battery thresholds read from the keyboard (report 0x60) and where the
+/// voltage sits against them.
+pub fn thresholds_text(b: &akm_core::report::KbBattery) -> Option<String> {
+    let t = b.thresholds?;
+    let mut s = format!(
+        "Full {} / Low {} / Critical {} / Empty {} mV",
+        t.full_mv, t.low_mv, t.critical_mv, t.empty_mv
+    );
+    if let Some([_, low, crit, _]) = b.threshold_margins_mv {
+        s += &format!(" \u{b7} {low:+} mV to Low, {crit:+} mV to Critical");
+    }
+    Some(s)
+}
+
 /// Age of the last reading. The kernel percentage only steps down at
 /// reconnections, so this age says how stale the indication can be (#179).
 pub fn age_text(age_s: Option<u64>) -> String {
@@ -423,5 +470,40 @@ mod tests {
     fn layout_switches_to_one_column_when_narrow() {
         assert!(!two_columns(500.0));
         assert!(two_columns(704.0));
+    }
+
+    #[test]
+    fn firmware_line_apple_display_and_thresholds() {
+        let mut fw = akm_core::report::KbFirmware::default();
+        assert_eq!(firmware_line(&fw, true), None);
+        fw.version = Some("0x0050".into());
+        akm_core::firmware::assess_report(Some(0x0256), &mut fw);
+        let (t, l) = firmware_line(&fw, true).unwrap();
+        assert_eq!(t, "Firmware : 0x0050 \u{2014} \u{e0} jour (derni\u{e8}re version publique connue d'Apple)");
+        assert_eq!(l, Level::Good);
+        assert!(firmware_line(&fw, false).unwrap().0.contains("up to date"));
+        fw.version = Some("0x0044".into());
+        akm_core::firmware::assess_report(Some(0x0256), &mut fw);
+        assert_eq!(firmware_line(&fw, true).unwrap().1, Level::Warn);
+        fw.version = Some("0x0099".into());
+        akm_core::firmware::assess_report(Some(0x0256), &mut fw);
+        assert_eq!(firmware_line(&fw, true).unwrap().1, Level::Unknown);
+
+        let mut b = akm_core::report::KbBattery::default();
+        assert_eq!((apple_display_text(&b), thresholds_text(&b)), (None, None));
+        b.apple_display_pct = Some(100.0);
+        assert_eq!(apple_display_text(&b).unwrap(), "100% (macOS-style display)");
+        b.apple_display_pct = Some(f64::NAN);
+        assert_eq!(apple_display_text(&b), None);
+        let t = akm_core::registry::Thresholds {
+            full_mv: 2954,
+            low_mv: 2506,
+            critical_mv: 2404,
+            empty_mv: 2054,
+        };
+        b.thresholds = Some(t);
+        assert_eq!(thresholds_text(&b).unwrap(), "Full 2954 / Low 2506 / Critical 2404 / Empty 2054 mV");
+        b.threshold_margins_mv = Some(t.margins(2986));
+        assert!(thresholds_text(&b).unwrap().ends_with("+480 mV to Low, +582 mV to Critical"));
     }
 }

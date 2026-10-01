@@ -13,6 +13,9 @@
 //! [notifications]
 //! connection = true          # "disconnected" / "reconnected (N %)", low urgency
 //! battery_replaced = true    # "new batteries detected"
+//!
+//! [display]
+//! apple_percent = true       # also show the percentage "as macOS shows it" (#213)
 //! ```
 //!
 //! Only this small TOML subset is read (sections, integers, floats, booleans,
@@ -36,6 +39,9 @@ pub struct Config {
     pub notify_battery_replaced: bool,
     /// Declared chemistry of the batteries (#178), default alkaline.
     pub chemistry: Chemistry,
+    /// Show the percentage as macOS displays it, labelled "Apple display"
+    /// (#213). Pure host-side computation, default on.
+    pub apple_percent: bool,
 }
 
 impl Default for Config {
@@ -46,6 +52,7 @@ impl Default for Config {
             notify_connection: true,
             notify_battery_replaced: true,
             chemistry: Chemistry::default(),
+            apple_percent: true,
         }
     }
 }
@@ -189,6 +196,7 @@ pub fn parse(content: &str) -> (Config, Vec<String>) {
                     n + 1
                 )),
             },
+            ("display", "apple_percent", Val::Bool(b)) => cfg.apple_percent = b,
             ("notifications", "connection", Val::Bool(b)) => cfg.notify_connection = b,
             ("notifications", "battery_replaced", Val::Bool(b)) => cfg.notify_battery_replaced = b,
             (s, k, _) => warn.push(format!("line {}: unknown or mistyped key [{s}] {k}", n + 1)),
@@ -227,6 +235,17 @@ mod tests {
         assert_eq!(c.alerts.thresholds(), &[30, 15, 5]);
         assert_eq!(c.alerts.hysteresis, 3.0);
         assert!(c.alerts_enabled && !c.notify_connection && c.notify_battery_replaced);
+    }
+
+    #[test]
+    fn apple_percent_option() {
+        assert!(Config::default().apple_percent);
+        let (c, w) = parse("[display]\napple_percent = false\n");
+        assert!(w.is_empty(), "{w:?}");
+        assert!(!c.apple_percent);
+        let (c, w) = parse("[display]\napple_percent = 3\n");
+        assert_eq!(w.len(), 1);
+        assert!(c.apple_percent, "a mistyped value keeps the default");
     }
 
     #[test]

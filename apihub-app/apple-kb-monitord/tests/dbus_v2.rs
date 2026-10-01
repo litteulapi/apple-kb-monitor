@@ -58,6 +58,8 @@ fn keyboard(pct: f64, now: u64) -> Snapshot {
     k.battery.voltage = Some(2.81);
     k.device.mac = Some(MAC.into());
     k.device.model = Some("Apple Wireless Keyboard (A1314, aluminum, ISO)".into());
+    k.firmware.version = Some("0x0050".into());
+    akm_core::firmware::assess_report(Some(0x0256), &mut k.firmware);
     Snapshot {
         connected: true,
         keyboard: Some(k),
@@ -216,6 +218,17 @@ fn inner() {
     ))
     .unwrap();
     assert!(rem > 0, "RemainingSeconds {rem}");
+
+    // Firmware check (#227): same three properties on the root and the device.
+    for (path, iface) in [
+        (service::OBJECT_PATH, service::INTERFACE),
+        (DEV, DEVICE_INTERFACE),
+    ] {
+        let s = |p: &str| String::try_from(get(&c, path, iface, p)).unwrap();
+        assert_eq!(s("FirmwareVersion"), "0x0050", "{path}");
+        assert_eq!(s("FirmwareLatestKnown"), "0x0050", "{path}");
+        assert_eq!(s("FirmwareStatus"), "up_to_date", "{path}");
+    }
 
     // Device object, listed by GetDevices and by the ObjectManager.
     let paths: Vec<OwnedObjectPath> = c

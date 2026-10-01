@@ -39,6 +39,15 @@ use crate::devices::device_path;
 
 pub const INPUT_INTERFACE: &str = "com.agenceapi.AppleKbMonitor1.Input";
 
+/// Raise a desktop notification when the keyboard announces a low / critical
+/// battery (`0x30`, #189). Off until `main` enables it (`notify` and
+/// `alerts_enabled` of the configuration), so tests never notify.
+static KEYBOARD_ALERTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_keyboard_alerts(on: bool) {
+    KEYBOARD_ALERTS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -185,6 +194,15 @@ impl Publisher {
             }
         }
         let new = lock(&self.state);
+        // The keyboard says its battery is low / critical (#189).
+        if let (Some(PassiveEvent::BattStat { value }), true) =
+            (sig, KEYBOARD_ALERTS.load(std::sync::atomic::Ordering::Relaxed))
+        {
+            if let Some(st) = passive::battery_state_alert(old.batt_stat, value) {
+                tracing::info!("keyboard reports battery state {}", st.as_str());
+                crate::notify::battery_state(st);
+            }
+        }
         let Some(path) = self.ensure() else { return };
         let Ok(iref) = self.conn.object_server().interface::<_, Input>(&path) else {
             return;
