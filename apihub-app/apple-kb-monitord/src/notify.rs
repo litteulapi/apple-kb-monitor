@@ -3,14 +3,27 @@
 
 use std::collections::HashMap;
 
+use akm_core::alerts::{Crossing, Urgency};
+use akm_core::batteries::Replacement;
+use akm_core::link::{self, LinkEvent};
 use zbus::zvariant::Value;
 
-/// Send a notification on the session bus; errors are logged, never fatal
-/// (a headless session has no notification server).
+/// Send a critical notification on the session bus; errors are logged,
+/// never fatal (a headless session has no notification server).
 pub fn send(summary: &str, body: &str, icon: &str) {
+    send_with(summary, body, icon, Urgency::Critical, false);
+}
+
+/// Send with an urgency; `transient` notifications are not kept in the
+/// history of the notification server (connection changes).
+pub fn send_with(summary: &str, body: &str, icon: &str, urgency: Urgency, transient: bool) {
     let res = (|| -> zbus::Result<u32> {
         let conn = zbus::blocking::Connection::session()?;
-        let hints: HashMap<&str, Value<'_>> = HashMap::from([("urgency", Value::U8(2))]);
+        let mut hints: HashMap<&str, Value<'_>> =
+            HashMap::from([("urgency", Value::U8(urgency.hint()))]);
+        if transient {
+            hints.insert("transient", Value::Bool(true));
+        }
         let reply = conn.call_method(
             Some("org.freedesktop.Notifications"),
             "/org/freedesktop/Notifications",
@@ -47,8 +60,96 @@ pub fn low_battery(pct: f64) {
     send(&s, &b, "battery-caution");
 }
 
+/// Text and icon of a threshold alert (#82).
+pub fn crossing_text(c: &Crossing) -> (String, String, &'static str) {
+    let (summary, _) = low_battery_text(c.pct);
+    let body = if c.urgency == Urgency::Critical {
+        format!(
+            "Battery at {:.0}% \u{2014} replace the batteries now",
+            c.pct
+        )
+    } else {
+        format!(
+            "Battery at {:.0}% (below {}%) \u{2014} plan to replace the batteries",
+            c.pct, c.threshold
+        )
+    };
+    let icon = if c.urgency == Urgency::Critical {
+        "battery-empty"
+    } else {
+        "battery-caution"
+    };
+    (summary, body, icon)
+}
+
+pub fn battery_crossing(c: &Crossing) {
+    let (s, b, icon) = crossing_text(c);
+    send_with(&s, &b, icon, c.urgency, false);
+}
+
+/// Disconnected / reconnected (#84): low urgency, transient.
+pub fn link(ev: &LinkEvent) {
+    let (s, b) = link::text(ev);
+    let icon = match ev {
+        LinkEvent::Disconnected { .. } => "input-keyboard-virtual-off",
+        LinkEvent::Reconnected { .. } => "input-keyboard",
+    };
+    send_with(&s, &b, icon, Urgency::Low, true);
+}
+
+/// Text of the "new batteries" notification (#85).
+pub fn replaced_text(r: &Replacement) -> (String, String) {
+    let before = r.pct_before.map_or("?".to_string(), |p| format!("{p:.0}%"));
+    (
+        "Apple Keyboard \u{2014} new batteries".into(),
+        format!(
+            "Battery {before} \u{2192} {:.0}%; low-battery alerts re-armed",
+            r.pct_after
+        ),
+    )
+}
+
+pub fn battery_replaced(r: &Replacement) {
+    let (s, b) = replaced_text(r);
+    send_with(&s, &b, "battery-full", Urgency::Normal, false);
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn crossing_and_replacement_texts() {
+        let c = Crossing {
+            threshold: 30,
+            pct: 29.6,
+            urgency: Urgency::Normal,
+        };
+        let (_, b, icon) = crossing_text(&c);
+        assert_eq!(
+            b,
+            "Battery at 30% (below 30%) \u{2014} plan to replace the batteries"
+        );
+        assert_eq!(icon, "battery-caution");
+        let c = Crossing {
+            threshold: 5,
+            pct: 4.0,
+            urgency: Urgency::Critical,
+        };
+        assert!(crossing_text(&c).1.contains("replace the batteries now"));
+        let r = Replacement {
+            ts: 0,
+            pct_before: Some(3.0),
+            pct_after: 100.0,
+            voltage_before: None,
+            voltage_after: None,
+        };
+        assert_eq!(
+            replaced_text(&r).1,
+            "Battery 3% \u{2192} 100%; low-battery alerts re-armed"
+        );
+    }
+
     #[test]
     fn low_battery_text_rounds() {
         let (s, b) = super::low_battery_text(12.4);

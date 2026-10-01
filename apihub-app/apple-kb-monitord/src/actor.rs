@@ -12,11 +12,19 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use akm_core::history::{format_remaining, legacy_path, Clock, History, SystemClock, RETENTION_S};
+use akm_core::alerts::{AlertConfig, AlertState, Urgency};
+use akm_core::batteries::{self, Detector};
+use akm_core::forecast::{self, Forecast};
+use akm_core::history::{
+    format_remaining, legacy_path, Clock, History, HistoryEntry, HistoryEvent, SystemClock,
+    RETENTION_S,
+};
+use akm_core::link::LinkTracker;
 use akm_core::machine::{Action, Event, Machine, RSSI_MAX_AGE};
 use akm_core::rssi::{self, RssiTracker};
 use akm_core::{hidraw, led, power, KbReport, Snapshot, Watch};
 
+use crate::events::{DeviceEvent, EventHub};
 use crate::{bluez, notify, watcher};
 
 /// Messages handled by the actor thread.
@@ -58,12 +66,20 @@ impl Mailbox {
 pub struct Options {
     /// Register `org.bluez.BatteryProvider1` on the system bus.
     pub bluez_provider: bool,
-    /// Desktop notification + CapsLock flash on low battery.
+    /// Desktop notifications (master switch) + CapsLock flash on low battery.
     pub notify: bool,
     /// Write the battery history (single writer).
     pub history: bool,
-    /// Low-battery threshold (%), re-armed at `threshold + 5`.
-    pub low_threshold: f64,
+    /// Low-battery thresholds and hysteresis (#82).
+    pub alerts: AlertConfig,
+    /// Low-battery alerts on/off (signals and notifications).
+    pub alerts_enabled: bool,
+    /// Disconnected / reconnected notifications (#84).
+    pub notify_connection: bool,
+    /// "New batteries" notification (#85).
+    pub notify_battery_replaced: bool,
+    /// Where detected events go (D-Bus device signals, tray...).
+    pub events: Arc<EventHub>,
 }
 
 impl Default for Options {
@@ -72,8 +88,22 @@ impl Default for Options {
             bluez_provider: true,
             notify: true,
             history: true,
-            low_threshold: 15.0,
+            alerts: AlertConfig::default(),
+            alerts_enabled: true,
+            notify_connection: true,
+            notify_battery_replaced: true,
+            events: EventHub::new(),
         }
+    }
+}
+
+impl Options {
+    /// Apply `config.toml` settings.
+    pub fn apply_config(&mut self, c: &akm_core::config::Config) {
+        self.alerts = c.alerts.clone();
+        self.alerts_enabled = c.alerts_enabled;
+        self.notify_connection = c.notify_connection;
+        self.notify_battery_replaced = c.notify_battery_replaced;
     }
 }
 
@@ -81,19 +111,6 @@ impl Default for Options {
 const HISTORY_SPACING: Duration = Duration::from_secs(300);
 /// The published snapshot (LED, RSSI expiry) is refreshed at least this often.
 const TICK: Duration = Duration::from_secs(5);
-
-/// Is the low-battery alert to be raised now? Pure (unit-tested).
-/// `armed` is cleared when raised and re-armed above `threshold + 5`.
-pub fn low_battery_alert(pct: f64, threshold: f64, armed: &mut bool) -> bool {
-    if pct >= threshold + 5.0 {
-        *armed = true;
-    }
-    if *armed && pct < threshold {
-        *armed = false;
-        return true;
-    }
-    false
-}
 
 fn unix_now() -> u64 {
     SystemClock.now()
@@ -106,7 +123,11 @@ struct Actor {
     rssi_at: Option<u64>,
     provider: Option<bluez::BatteryProvider>,
     provider_mac: Option<String>,
-    alert_armed: bool,
+    alerts: AlertState,
+    detector: Detector,
+    link: LinkTracker,
+    forecast: Option<Forecast>,
+    installed_at: Option<u64>,
     history: Option<History>,
     last_history: Option<Instant>,
     last_rotation: Option<Instant>,
@@ -127,14 +148,19 @@ impl Actor {
             }
             h
         });
+        let past = history.as_ref().map(History::read).unwrap_or_default();
         Self {
+            alerts: AlertState::new(opts.alerts.clone()),
+            detector: Detector::primed(&past),
+            link: LinkTracker::new(),
+            forecast: None,
+            installed_at: batteries::current_set_start(&past),
             opts,
             kb: None,
             rssi: RssiTracker::new(RSSI_MAX_AGE),
             rssi_at: None,
             provider: None,
             provider_mac: None,
-            alert_armed: true,
             history,
             last_history: None,
             last_rotation: None,
@@ -173,9 +199,14 @@ impl Actor {
         self.last_error = err;
         match report {
             Some(k) => {
+                let mac = k.device.mac.clone();
+                let pct = k.battery_pct();
                 self.kb = Some(k);
                 self.last_update = unix_now();
                 self.after_battery_update(true);
+                if let Some(ev) = mac.and_then(|m| self.link.acquired(&m, pct)) {
+                    self.link_event(ev);
+                }
                 true
             }
             None => {
@@ -196,6 +227,22 @@ impl Actor {
         }
     }
 
+    /// BlueZ reported the keyboard gone.
+    fn disconnected(&mut self) {
+        if let Some(ev) = self.link.disconnected() {
+            self.link_event(ev);
+        }
+        self.clear();
+    }
+
+    fn link_event(&mut self, ev: akm_core::link::LinkEvent) {
+        tracing::info!("{ev:?}");
+        if self.opts.notify && self.opts.notify_connection {
+            notify::link(&ev);
+        }
+        self.opts.events.publish(DeviceEvent::Link(ev));
+    }
+
     fn clear(&mut self) {
         self.kb = None;
         self.rssi.clear();
@@ -210,19 +257,31 @@ impl Actor {
     fn after_battery_update(&mut self, full_read: bool) {
         let Some(k) = self.kb.as_ref() else { return };
         let Some(pct) = k.battery_pct() else { return };
+        let mac = k.device.mac.clone();
+        let voltage = k.battery.voltage;
         let now = Instant::now();
 
-        if let Some(h) = self.history.as_ref() {
-            let due = self
-                .last_history
-                .is_none_or(|t| now.duration_since(t) >= HISTORY_SPACING);
-            if due || (full_read && k.battery.voltage.is_some()) {
-                match h.append(pct, k.battery.voltage) {
-                    Ok(true) => self.last_history = Some(now),
-                    Ok(false) => {}
-                    Err(e) => tracing::warn!("history append failed: {e}"),
-                }
+        let due = self
+            .last_history
+            .is_none_or(|t| now.duration_since(t) >= HISTORY_SPACING);
+        if due || (full_read && voltage.is_some()) {
+            let ts = self.history.as_ref().map_or_else(unix_now, History::now);
+            let mut entry = HistoryEntry::sample(ts, pct, voltage);
+            if let Some(r) = self.detector.observe(&entry) {
+                entry.event = Some(HistoryEvent::BatteryReplaced);
+                self.on_replaced(mac.as_deref(), r);
             }
+            match self.history.as_ref().map(|h| h.append_entry(&entry)) {
+                Some(Ok(true)) | None => {
+                    self.last_history = Some(now);
+                    self.remaining_at = None; // new data: recompute the forecast
+                }
+                Some(Ok(false)) => {}
+                Some(Err(e)) => tracing::warn!("history append failed: {e}"),
+            }
+        }
+        let Some(k) = self.kb.as_ref() else { return };
+        if let Some(h) = self.history.as_ref() {
             if self
                 .last_rotation
                 .is_none_or(|t| now.duration_since(t) >= Duration::from_secs(24 * 3600))
@@ -256,12 +315,43 @@ impl Actor {
             }
         }
 
-        if low_battery_alert(pct, self.opts.low_threshold, &mut self.alert_armed)
-            && self.opts.notify
-        {
-            tracing::warn!("low battery: {pct:.0}%");
-            notify::low_battery(pct);
-            led::flash_capslock(5);
+        if self.opts.alerts_enabled {
+            if let Some(c) = self.alerts.update(pct) {
+                tracing::warn!("low battery: {pct:.0}% (threshold {}%)", c.threshold);
+                if self.opts.notify {
+                    notify::battery_crossing(&c);
+                    if c.urgency == Urgency::Critical {
+                        led::flash_capslock(5);
+                    }
+                }
+                if let Some(mac) = mac {
+                    self.opts
+                        .events
+                        .publish(DeviceEvent::BatteryLevelCrossed { mac, crossing: c });
+                }
+            }
+        }
+    }
+
+    /// New batteries: re-arm the alerts, notify, publish.
+    fn on_replaced(&mut self, mac: Option<&str>, r: batteries::Replacement) {
+        tracing::info!(
+            "battery replacement detected: {:?}% -> {:.0}%, {:?} V -> {:?} V",
+            r.pct_before,
+            r.pct_after,
+            r.voltage_before,
+            r.voltage_after
+        );
+        self.alerts.rearm_all();
+        self.installed_at = Some(r.ts);
+        if self.opts.notify && self.opts.notify_battery_replaced {
+            notify::battery_replaced(&r);
+        }
+        if let Some(mac) = mac {
+            self.opts.events.publish(DeviceEvent::BatteryReplaced {
+                mac: mac.to_string(),
+                replacement: r,
+            });
         }
     }
 
@@ -284,11 +374,13 @@ impl Actor {
             return;
         }
         self.remaining_at = Some(now);
-        self.remaining = self
-            .history
-            .as_ref()
-            .and_then(History::estimate_remaining)
+        let entries = self.history.as_ref().map(History::read).unwrap_or_default();
+        self.remaining = akm_core::history::estimate_remaining(&entries)
             .map(|(rate, hours)| format_remaining(rate, hours));
+        self.forecast = forecast::estimate(&entries).ok();
+        if let Some(t) = batteries::current_set_start(&entries) {
+            self.installed_at = Some(t);
+        }
     }
 
     fn snapshot(&mut self) -> Snapshot {
@@ -324,6 +416,8 @@ impl Actor {
             rssi_at,
             last_update: self.last_update,
             last_error: self.last_error.clone(),
+            forecast: self.forecast.clone(),
+            batteries_installed_at: self.installed_at,
             ..Default::default()
         }
     }
@@ -422,7 +516,7 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             Ok(Msg::Bus(ev)) => {
                 if machine.on_event(&ev, Instant::now()) == Some(Action::Clear) {
                     tracing::info!("keyboard disconnected");
-                    actor.clear();
+                    actor.disconnected();
                 }
             }
             Ok(Msg::Refresh) => machine.force_refresh(Instant::now()),
@@ -461,18 +555,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn low_battery_alert_fires_once_and_rearms() {
-        let mut armed = true;
-        assert!(!low_battery_alert(50.0, 15.0, &mut armed));
-        assert!(low_battery_alert(14.0, 15.0, &mut armed));
-        assert!(!low_battery_alert(13.0, 15.0, &mut armed), "only once");
-        assert!(
-            !low_battery_alert(18.0, 15.0, &mut armed),
-            "hysteresis: not re-armed yet"
+    fn options_follow_the_config() {
+        let o = Options::default();
+        assert_eq!(o.alerts.thresholds(), &[30, 15, 5]);
+        assert!(o.alerts_enabled && o.notify_connection && o.notify_battery_replaced);
+        let (c, _) = akm_core::config::parse(
+            "[alerts]\nthresholds = [20]\nenabled = false\n[notifications]\nconnection = false\n",
         );
-        assert!(!low_battery_alert(14.0, 15.0, &mut armed));
-        assert!(!low_battery_alert(20.0, 15.0, &mut armed));
-        assert!(low_battery_alert(10.0, 15.0, &mut armed));
+        let mut o = Options::default();
+        o.apply_config(&c);
+        assert_eq!(o.alerts.thresholds(), &[20]);
+        assert!(!o.alerts_enabled && !o.notify_connection && o.notify_battery_replaced);
     }
 
     #[test]

@@ -8,12 +8,18 @@
 //! * [`service`] session interface `com.agenceapi.AppleKbMonitor1`
 //! * [`client`]  D-Bus client + direct one-shot read (daemon absent)
 //! * [`notify`]  desktop notifications (zbus, no notify-rust)
+//! * [`devices`] D-Bus API v2: one object per keyboard (#93)
+//! * [`events`]  in-process event hub (alerts, replacements, link changes)
+//! * [`settings`] `hid_apple` write path through the privileged helper
 //!
 //! No GUI dependency: `apihub-app` (egui) is a client of this crate.
 
 pub mod actor;
 pub mod bluez;
 pub mod client;
+pub mod devices;
+pub mod events;
 pub mod notify;
 pub mod service;
+pub mod settings;
 pub mod watcher;

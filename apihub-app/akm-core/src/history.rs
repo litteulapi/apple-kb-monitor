@@ -32,14 +32,58 @@ impl Clock for SystemClock {
     }
 }
 
+/// Event attached to a sample (written by the daemon, kept by rotation).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryEvent {
+    /// First sample on a new set of batteries (#85).
+    BatteryReplaced,
+}
+
 /// A single battery history entry. `voltage` is absent when the HID
-/// diagnostic report could not be read (kernel percentage only).
+/// diagnostic report could not be read (kernel percentage only). `event`
+/// is absent on ordinary samples (older readers ignore the field).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HistoryEntry {
     pub ts: u64,
     pub pct: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub voltage: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<HistoryEvent>,
+}
+
+impl HistoryEntry {
+    /// Ordinary sample.
+    pub fn sample(ts: u64, pct: f64, voltage: Option<f64>) -> Self {
+        Self {
+            ts,
+            pct,
+            voltage,
+            event: None,
+        }
+    }
+}
+
+/// `YYYY-MM-DD HH:MM` (UTC) of a unix time, without a date crate.
+pub fn format_utc(ts: u64) -> String {
+    let days = (ts / 86_400) as i64;
+    let secs = ts % 86_400;
+    // Civil-from-days (H. Hinnant).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!(
+        "{y:04}-{m:02}-{d:02} {:02}:{:02}",
+        secs / 3600,
+        secs % 3600 / 60
+    )
 }
 
 /// Is this sample worth storing? (no invented 0 V / NaN / out-of-range %).
@@ -159,18 +203,23 @@ impl<C: Clock> History<C> {
 
     /// Append a sample stamped with the clock. `Ok(false)` if rejected as invalid.
     pub fn append(&self, pct: f64, voltage: Option<f64>) -> io::Result<bool> {
-        if !valid_sample(pct, voltage) {
+        self.append_entry(&HistoryEntry::sample(self.clock.now(), pct, voltage))
+    }
+
+    /// Current time of the store's clock.
+    pub fn now(&self) -> u64 {
+        self.clock.now()
+    }
+
+    /// Append a fully built entry (timestamp included). `Ok(false)` if invalid.
+    pub fn append_entry(&self, entry: &HistoryEntry) -> io::Result<bool> {
+        if !valid_sample(entry.pct, entry.voltage) {
             return Ok(false);
         }
-        let entry = HistoryEntry {
-            ts: self.clock.now(),
-            pct,
-            voltage,
-        };
         if let Some(p) = self.path.parent() {
             std::fs::create_dir_all(p)?;
         }
-        let line = serde_json::to_string(&entry).map_err(io::Error::other)?;
+        let line = serde_json::to_string(entry).map_err(io::Error::other)?;
         let mut f = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -192,7 +241,9 @@ impl<C: Clock> History<C> {
     }
 
     /// Drop entries older than `retention_s` (atomic rewrite). Returns the
-    /// number of removed lines (malformed lines are removed too).
+    /// number of removed lines (malformed lines are removed too). Entries
+    /// carrying an event (battery replacement) are kept whatever their age:
+    /// battery sets last longer than the retention.
     pub fn rotate(&self, retention_s: u64) -> io::Result<usize> {
         let content = match std::fs::read_to_string(&self.path) {
             Ok(c) => c,
@@ -203,7 +254,7 @@ impl<C: Clock> History<C> {
         let total = content.lines().count();
         let keep: Vec<HistoryEntry> = parse(&content)
             .into_iter()
-            .filter(|e| e.ts >= cutoff)
+            .filter(|e| e.ts >= cutoff || e.event.is_some())
             .collect();
         if keep.len() == total {
             return Ok(0);
@@ -278,22 +329,8 @@ mod tests {
         assert!(h.append(89.0, None).unwrap());
         let e = h.read();
         assert_eq!(e.len(), 2);
-        assert_eq!(
-            e[0],
-            HistoryEntry {
-                ts: 1_000,
-                pct: 90.0,
-                voltage: Some(2.81)
-            }
-        );
-        assert_eq!(
-            e[1],
-            HistoryEntry {
-                ts: 1_300,
-                pct: 89.0,
-                voltage: None
-            }
-        );
+        assert_eq!(e[0], HistoryEntry::sample(1_000, 90.0, Some(2.81)));
+        assert_eq!(e[1], HistoryEntry::sample(1_300, 89.0, None));
         assert_eq!(h.read_since(1_100).len(), 1);
     }
 
@@ -322,13 +359,20 @@ mod tests {
         assert_eq!(e[0].voltage, Some(2.8));
         assert_eq!(e[1].voltage, None);
         // voltage-less entries serialise without the field
-        let s = serde_json::to_string(&HistoryEntry {
-            ts: 5,
-            pct: 1.0,
-            voltage: None,
-        })
-        .unwrap();
+        let s = serde_json::to_string(&HistoryEntry::sample(5, 1.0, None)).unwrap();
         assert_eq!(s, r#"{"ts":5,"pct":1.0}"#);
+        // event marker round-trips; unknown fields from newer writers are ignored
+        let m = HistoryEntry {
+            event: Some(HistoryEvent::BatteryReplaced),
+            ..HistoryEntry::sample(6, 99.0, Some(3.0))
+        };
+        let j = serde_json::to_string(&m).unwrap();
+        assert_eq!(
+            j,
+            r#"{"ts":6,"pct":99.0,"voltage":3.0,"event":"battery_replaced"}"#
+        );
+        assert_eq!(parse(&j)[0], m);
+        assert_eq!(parse(r#"{"ts":7,"pct":1.0,"future":true}"#).len(), 1);
     }
 
     #[test]
@@ -344,6 +388,18 @@ mod tests {
         assert_eq!(e.len(), 1);
         assert_eq!(e[0].pct, 80.0);
         assert_eq!(h.rotate(RETENTION_S).unwrap(), 0);
+        // replacement markers survive rotation
+        h.append_entry(&HistoryEntry {
+            event: Some(HistoryEvent::BatteryReplaced),
+            ..HistoryEntry::sample(RETENTION_S + 300, 100.0, None)
+        })
+        .unwrap();
+        c.set(3 * RETENTION_S);
+        h.append(70.0, None).unwrap();
+        assert_eq!(h.rotate(RETENTION_S).unwrap(), 1);
+        let e = h.read();
+        assert_eq!(e.len(), 2);
+        assert_eq!(e[0].event, Some(HistoryEvent::BatteryReplaced));
         // missing file is not an error
         assert_eq!(History::new(t.0.join("none"), c).rotate(1).unwrap(), 0);
     }
@@ -367,11 +423,7 @@ mod tests {
 
     #[test]
     fn estimate_from_voltage_slope() {
-        let e = |ts, v| HistoryEntry {
-            ts,
-            pct: 50.0,
-            voltage: v,
-        };
+        let e = |ts, v| HistoryEntry::sample(ts, 50.0, v);
         // 2.9 V -> 2.8 V in 10 h = 10 mV/h; 800 mV left to 2.0 V = 80 h.
         let (rate, hours) =
             estimate_remaining(&[e(0, Some(2.9)), e(18_000, None), e(36_000, Some(2.8))]).unwrap();
@@ -392,6 +444,13 @@ mod tests {
                 .1,
             0.0
         );
+    }
+
+    #[test]
+    fn utc_formatting() {
+        assert_eq!(format_utc(0), "1970-01-01 00:00");
+        assert_eq!(format_utc(1_790_818_907), "2026-10-01 01:41");
+        assert_eq!(format_utc(951_782_400), "2000-02-29 00:00");
     }
 
     #[test]

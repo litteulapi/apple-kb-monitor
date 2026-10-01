@@ -13,12 +13,24 @@
 //! * [`rssi`]        RSSI helper runner + freshness tracker
 //! * [`led`]         keyboard LED state (sysfs) and control
 //! * [`snapshot`]    immutable published state + `Watch` (Arc + version)
+//! * [`alerts`]      multi-threshold low-battery alerts with hysteresis (#82)
+//! * [`forecast`]    autonomy forecast in days from the history (#83)
+//! * [`batteries`]   battery replacement detection, per-set lifetime (#85)
+//! * [`link`]        connection / reconnection notification logic (#84)
+//! * [`config`]      `config.toml` (small TOML subset, no dependency)
+//! * [`hid_params`]  `hid_apple` parameters: read + whitelist
 
+pub mod alerts;
+pub mod batteries;
 pub mod calibration;
+pub mod config;
 pub mod decode;
+pub mod forecast;
+pub mod hid_params;
 pub mod hidraw;
 pub mod history;
 pub mod led;
+pub mod link;
 pub mod machine;
 pub mod model;
 pub mod power;
