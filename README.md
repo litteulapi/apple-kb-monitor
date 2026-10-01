@@ -19,18 +19,19 @@
 
 The Linux `hid-apple` driver only exposes basic battery percentage via the standard HID Battery Strength report (`0x47`). This tool goes far beyond that — it reads **21 undocumented Feature Reports** to extract precise battery levels, raw ADC voltage, firmware version, device identity, Bluetooth connection parameters, and more.
 
-- **`apihub-app`** — Rust/egui desktop app (6 tabs, tray, ~4900 lines): keyboard telemetry, DDC/CI monitor control, MQTT / Home Assistant, BlueZ battery provider
-- **`ddc-tool`** — Rust DDC/CI command line
-- **`apple-kb-monitor`** — legacy Python CLI (2455 lines, stdlib + dbus-fast): `--once`, `--json`, `--waybar`, `--metrics`…
-- systemd user service, udev rules, keyd config, Plasma widget, PKGBUILD
+- **`apihub-app`** — Rust/egui desktop app (2 tabs: Keyboard and Diag, plus a tray icon): keyboard telemetry, battery history, BlueZ battery provider
+- **`rssi-helper`** — tiny C helper carrying `cap_net_admin`, the only privileged binary (RSSI / TX power)
+- **`apple-kb-monitor`** — legacy Python CLI (stdlib + dbus-fast): `--once`, `--json`, `--waybar`, `--metrics`…
+- systemd user service, udev rule (`uaccess`), keyd config, Plasma widget, PKGBUILD, Gitea Actions CI
 
-Documentation: [docs/](docs/) (FEATURES, CONFIGURATION, INSTALL, ARCHITECTURE, TROUBLESHOOTING, TESTING) and the [wiki](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/wiki). Roadmap: [milestones](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/milestones).
+Documentation: [docs/](docs/) (FEATURES, CONFIGURATION, INSTALL, ARCHITECTURE, TROUBLESHOOTING, TESTING, CHANGELOG) and the [wiki](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/wiki). Roadmap: [milestones](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/milestones).
 
 ## Features
 
 | Feature | Source | Details |
 |---|---|---|
-| Precise battery % | HID `0xEA` | Pre-rounding value from ADC, before firmware quantization |
+| Battery % (displayed) | Kernel `power_supply` | `/sys/class/power_supply/hid-<mac>-battery*`, the node UPower reads; source of truth |
+| Precise battery % | HID `0xEA` | Pre-rounding value from ADC, diagnostics only |
 | Raw ADC voltage | HID `0xF5` | 10-bit ADC, 3.3V reference |
 | Calibration curve | HID `0x5A` | 4 discharge thresholds (mV) for 100/75/50/25% |
 | Firmware version | HID `0x4F` | Chip firmware string |
@@ -43,7 +44,7 @@ Documentation: [docs/](docs/) (FEATURES, CONFIGURATION, INSTALL, ARCHITECTURE, T
 | Device mode/class | HID `0x4B` | HID device class |
 | Device state | HID `0x09` | 1=OK, 0=LOW |
 | Config registers | HID `0xF6-F7` | Internal config |
-| RSSI / TX power | BlueZ MGMT | `GET_CONN_INFO` (opcode `0x0031`), requires `CAP_NET_ADMIN` |
+| RSSI / TX power | BlueZ MGMT via `rssi-helper` | `GET_CONN_INFO` (opcode `0x0031`), helper has `cap_net_admin+ep` |
 | Connection state | D-Bus | `org.bluez.Device1` properties |
 
 ## HID Report Map
@@ -73,13 +74,12 @@ Reports discovered by brute-force scanning all 256 Feature Report IDs via `HIDIO
 
 | Model | Controller | Status |
 |---|---|---|
-| Apple Wireless Keyboard A1314 (aluminum, ISO) | BCM2042 | **Tested** |
-| Apple Wireless Keyboard A1016 (white) | BCM2042 | Compatible |
-| Apple Wireless Keyboard A1255 (aluminum) | BCM2042 | Compatible |
-| Apple Magic Keyboard A1644 | BCM20733 | Compatible |
-| Apple Magic Keyboard A2449 (Touch ID) | BCM20733 | Compatible |
+| Apple Wireless Keyboard A1314 (aluminum, ISO) | BCM2042 | **Tested** (fixtures in `tests/fixtures/a1314_iso/`) |
+| A1255 (ANSI, ISO, JIS), A1314 2009 and aluminum (ANSI, ISO, JIS) | BCM2042 | In the model table, not tested |
+| Magic Keyboard 2015 (A1644), with numeric keypad (A1843) | BCM20733 | In the model table, not tested |
+| Magic Keyboard 2021 (A2450, A2449, A2520) and 2024 (3 variants) | BCM20733 / Apple | In the model table, not tested |
 
-All models share the same Broadcom HID register map.
+The 17 models come from `APPLE_MODELS` in `apihub-app/src/keyboard.rs` (PIDs from the kernel `hid-ids.h`; USB vendor `05AC` and Bluetooth vendor `004C` accepted). The raw undocumented HID reports are only read on the BCM2042 family; other models rely on the kernel battery.
 
 ## Installation
 
@@ -99,12 +99,10 @@ makepkg -si
 
 ## Setup
 
-```bash
-# Grant non-root hidraw access
-sudo usermod -aG input $USER
-# Log out and back in for group change to take effect
+No group membership is needed: the udev rule `70-apple-kb-hidraw.rules` tags Apple hidraw devices `uaccess`, so logind grants an ACL to the user of the active seat. Reconnect the keyboard (or `sudo udevadm trigger --subsystem-match=hidraw`) after installing.
 
-# Enable the background monitor
+```bash
+# Optional: background monitor and BlueZ battery provider (legacy Python CLI)
 systemctl --user enable --now apple-kb-monitor.service
 ```
 
@@ -130,9 +128,6 @@ apple-kb-monitor --json
 # Battery/voltage history log
 apple-kb-monitor --history
 
-# RSSI (requires CAP_NET_ADMIN)
-sudo apple-kb-monitor --status
-
 # Daemon mode with low-battery notifications
 apple-kb-monitor --threshold 15 --interval 300
 ```
@@ -141,30 +136,31 @@ apple-kb-monitor --threshold 15 --interval 300
 
 | Feature | Requirement | Setup |
 |---|---|---|
-| All HID reports (battery, voltage, firmware, identity, etc.) | `input` group | `sudo usermod -aG input $USER` + re-login |
-| RSSI, TX power | `CAP_NET_ADMIN` | Run with `sudo` |
+| Battery, HID reports (hidraw) | `uaccess` ACL (active seat user) | Installed by the package (`70-apple-kb-hidraw.rules`) |
+| RSSI, TX power | `cap_net_admin+ep` on `/usr/lib/apple-kb-monitor/rssi-helper` | Applied by the package `post_install` (`setcap`); retry by hand if it prints a warning |
 | Desktop notifications | `libnotify` | `pacman -S libnotify` |
 
-The udev rule (`99-apple-kb-hidraw.rules`) grants `input` group read/write access to Apple hidraw devices, including Bluetooth HID devices connected via uhid (matched by `DEVPATH` since uhid devices lack `idVendor`).
+The rule matches Bluetooth HID devices connected via uhid (`KERNELS` `0005:05AC:*` and `0005:004C:*`) and wired Apple keyboards (`0003:05AC:*`). It must sort before `73-seat-late.rules`, hence the `70-` prefix.
 
 ## Dependencies
 
-The Python CLI needs only `python-dbus-fast`; `apihub-app` is a compiled Rust binary (see [docs/INSTALL.md](docs/INSTALL.md)).
+`apihub-app` is a compiled Rust binary; the Python CLI needs only `python-dbus-fast` (see [docs/INSTALL.md](docs/INSTALL.md)).
 
 | Dependency | Type | Purpose |
 |---|---|---|
-| `python` (>= 3) | Runtime | Core interpreter |
-| `bluez` | Runtime | Bluetooth stack |
-| `dbus` | Runtime | BlueZ device properties |
+| `python`, `python-dbus-fast` | Runtime | Python CLI |
+| `bluez` | Runtime | Bluetooth stack, Battery Provider API |
+| `keyd` | Runtime | Apple special keys remapping |
 | `bluez-utils` | Optional | `bluetoothctl` for manual pairing |
-| `libnotify` | Optional | `notify-send` for desktop notifications |
+| `libnotify` | Optional | `notify-send` for low-battery notifications |
+| `rust`, `gcc` | Build | `apihub-app`, `rssi-helper` |
 
 ## How It Works
 
 1. Discovers Apple Bluetooth keyboards via `/sys/class/hidraw/*/device/uevent`
-2. Opens the `hidraw` device and sends `HIDIOCGFEATURE` ioctls for each known report ID
-3. Decodes binary responses based on the reverse-engineered BCM2042 register map
-4. Queries BlueZ for RSSI via MGMT socket (`GET_CONN_INFO`, opcode `0x0031`) and connection properties via D-Bus
+2. Reads the battery percentage from the kernel `power_supply` node of the keyboard (matched by MAC)
+3. Opens the `hidraw` device and sends `HIDIOCGFEATURE` ioctls for each known report ID (BCM2042 family), decoded from the reverse-engineered register map
+4. Runs `rssi-helper` for RSSI (BlueZ MGMT `GET_CONN_INFO`, opcode `0x0031`) and reads connection properties from BlueZ over D-Bus; exports the battery to BlueZ as `org.bluez.Battery1`
 5. In daemon mode, logs readings to `$XDG_RUNTIME_DIR/apple-kb-monitor/history.jsonl` and sends desktop notifications via `notify-send` when battery drops below threshold
 
 ## Reverse Engineering Notes
@@ -191,19 +187,21 @@ Report `0x5A` stores 4 voltage thresholds (millivolts) used by firmware to map A
 
 ### RSSI
 
-RSSI is read via BlueZ MGMT `GET_CONN_INFO` (opcode `0x0031`), which triggers `HCI Read_RSSI` and `HCI Read_TX_Power` on the ACL connection handle. RSSI = 0 dBm is a valid measurement meaning optimal signal strength ("golden range"), not "unavailable".
+RSSI is read via BlueZ MGMT `GET_CONN_INFO` (opcode `0x0031`) by the `rssi-helper` binary (unprivileged sockets get status `0x14`), which triggers `HCI Read_RSSI` and `HCI Read_TX_Power` on the ACL connection handle. RSSI = 0 dBm is a valid measurement meaning optimal signal strength ("golden range"), not "unavailable".
 
 ## Project Structure
 
 ```
-apihub-app/                 # Rust/egui GUI (src/: main, ddc, keyboard, bluez, brightness, mqtt, rssi, history, tray)
-ddc-tool/                   # Rust DDC/CI CLI
-apple-kb-monitor            # Legacy Python CLI (2455 lines)
-mqtt-bridge.py, apihub-settings, rssi-helper.c   # legacy helpers (not packaged)
+apihub-app/                 # Rust/egui GUI (src/: main, keyboard, power, bluez, rssi, history, tray)
+rssi-helper.c               # C helper with cap_net_admin (RSSI / TX power)
+apple-kb-monitor            # Python CLI
+apihub-settings             # PySide6 settings window (legacy)
 udev/ systemd/ keyd/ modprobe/ dbus/             # system integration
 plasma/ kde/                # Plasma widget, Bluedevil panel patch
+tests/                      # pytest, fixtures/ (real A1314 capture), live/check_keyboard.sh
+.gitea/workflows/ci.yml     # CI
 docs/                       # documentation
-PKGBUILD                    # Arch Linux package
+PKGBUILD, .SRCINFO, apple-kb-monitor.install   # Arch Linux package
 ```
 
 ## Acknowledgments

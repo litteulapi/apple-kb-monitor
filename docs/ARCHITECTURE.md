@@ -1,274 +1,89 @@
 # System architecture
 
-> Line counts measured with `wc -l` on 2026-10-01 (apihub-app/src: 4888 lines in 9 files; ddc-tool: 300; apple-kb-monitor Python CLI: 2455; apihub-settings: 504; mqtt-bridge.py: 193; rssi-helper.c: 66).
+> Line counts measured with `wc -l` on commit `c28fd8b`+ (2026-10-01): `apihub-app/src` 4 095 lines in 7 files (main 1032, keyboard 1065, bluez 576, tray 487, power 285, rssi 253, history 97); `rssi-helper.c` 132; `apple-kb-monitor` (Python) 2 693. Module headers in the source are the reference for design decisions.
 
 ## Overview
 
-apple-kb-monitor is structured around two Rust binaries and a set of system integration files. The primary binary (`apihub-app`) is a monolithic desktop application that consolidates keyboard telemetry, monitor control, MQTT bridging, and brightness handling into a single process.
+The repository is keyboard-only. The display/DDC/MQTT/Home Assistant part was removed (issue #59, tag `archive/avec-ecran`); it now lives in the private repository https://gitea.pika.agenceapi.fr/adminapi/lg-ddc-control. It has one Rust desktop binary (`apihub-app`), one tiny privileged C helper (`rssi-helper`), a legacy Python CLI and a set of system integration files.
 
 ```
-+------------------------------------------------------------------+
-|                     apihub-app (Rust, egui)                       |
-|                     ~4900 LOC, 9 modules                         |
-|                                                                  |
-|  +------------------+  +------------------+  +----------------+  |
-|  | main.rs (2364)   |  | ddc.rs (447)     |  | keyboard.rs    |  |
-|  |                  |  |                  |  | (497)          |  |
-|  | egui UI engine   |  | DDC/CI I2C       |  | HID Feature    |  |
-|  | 6-tab layout     |  | driver           |  | Reports        |  |
-|  | System tray      |  |                  |  | 21 registers   |  |
-|  | App presets      |  | I2C_RDWR ioctl   |  | Wake monitor   |  |
-|  | Battery graph    |  | Bus auto-detect  |  | LED state      |  |
-|  | Profile persist  |  | 34 polled VCPs   |  | 10 KB models   |  |
-|  | Background poll  |  | 0x02 smart poll  |  | HIDIOCGFEATURE |  |
-|  +------------------+  +------------------+  +----------------+  |
-|                                                                  |
-|  +------------------+  +------------------+  +----------------+  |
-|  | bluez.rs (230)   |  | brightness.rs    |  | mqtt.rs (355)  |  |
-|  |                  |  | (208)            |  |                |  |
-|  | Battery Provider |  | F1/F2 evdev      |  | In-process     |  |
-|  | zbus 4 blocking  |  | handler          |  | MQTT client    |  |
-|  | Battery1 iface   |  |                  |  | (rumqttc)      |  |
-|  | Auto-register    |  | Raw input_event  |  |                |  |
-|  | with BlueZ       |  | DDC write        |  | 15 HA entities |  |
-|  |                  |  | KDE OSD          |  | Bidir controls |  |
-|  |                  |  | Circadian curve  |  | Select + Num   |  |
-|  +------------------+  +------------------+  +----------------+  |
-|                                                                  |
-|  +------------------+  +------------------+                      |
-|  | rssi.rs (137)    |  | history.rs (90)  |                      |
-|  |                  |  |                  |                      |
-|  | BlueZ MGMT API   |  | JSONL append-    |                      |
-|  | AF_BLUETOOTH     |  | only store       |                      |
-|  | socket           |  |                  |                      |
-|  | Opcode 0x0031    |  | Discharge rate   |                      |
-|  | RSSI + TX power  |  | Time remaining   |                      |
-|  +------------------+  +------------------+                      |
-+------------------------------------------------------------------+
++-----------------------------------------------------------+
+|                 apihub-app (Rust, egui)                    |
+|                                                           |
+|  main.rs      UI (tabs Keyboard, Diag), polling thread,   |
+|               shared state, battery graph, diagnostics    |
+|  keyboard.rs  model table (17 PIDs), HID Feature Reports, |
+|               wake monitor, LED state                     |
+|  power.rs     kernel power_supply battery (source of      |
+|               truth for the percentage)                   |
+|  bluez.rs     BlueZ Battery Provider (zbus)               |
+|  rssi.rs      runs rssi-helper (timeout, 10 s cache)      |
+|  tray.rs      StatusNotifierItem + dbusmenu (zbus)        |
+|  history.rs   JSONL battery history                       |
++-------------------------+---------------------------------+
+                          | child process
+                  rssi-helper (C, cap_net_admin+ep)
+                  BlueZ MGMT GET_CONN_INFO (0x0031)
 ```
 
 ## Module responsibilities
 
-### main.rs (2364 LOC)
-
-The application entry point and UI engine. Responsibilities:
-
-- **egui application loop** -- 6 tabs (Keyboard, Display, Advanced, System, MQTT, Diagnostics)
-- **System tray** -- pure-zbus StatusNotifierItem + dbusmenu (see tray.rs) with scarab icon, battery tooltip, and right-click menu
-- **App Presets** -- automatic picture mode switching based on active window class via KWin D-Bus scripting (Wayland-native, replaces xdotool)
-- **Battery history graph** -- painter-based 24h dual-axis chart (battery % + voltage)
-- **Factory Reset buttons** -- VCP 0x04 (full reset), 0x05 (brightness/contrast), 0x08 (color) with confirmation dialog
-- **PBP mirror registers** -- displays sub-display settings when split mode is active
-- **Background polling threads** -- spawns dedicated threads for DDC reads, keyboard reads, MQTT, and wake event monitor
-- **Shared state** -- `Arc<Mutex<SharedState>>` for thread-safe data exchange between pollers and UI
-- **Profile persistence** -- save/restore full DDC state as named profiles to `~/.config/apple-kb-monitor/profiles.json`
-- **Config file I/O** -- reads `~/.config/apple-kb-monitor/config.toml` (fallback: `/etc/apple-kb-monitor/config.toml`)
-- **Diagnostics** -- 15 system checks (binary presence, service status, hardware access, config files, permissions)
-
-### ddc.rs (447 LOC)
-
-Direct I2C DDC/CI driver. No subprocess, no ddcutil.
-
-- **4-tier polling** -- HOT (every cycle: brightness, volume, backlight, 0x02), WARM (every 4th: RGB gains, black levels, sharpness), COLD (every 30th: picture mode, input, info VCPs), PBP (conditional on split mode)
-- **VCP 0x02 smart polling** -- reads New Control Value flag; skips WARM tier when the monitor reports no OSD changes
-- **34 polled VCPs** across tiers, **22 writable** via slider controls
-- **Video Black Level RGB** -- newly discovered writable VCPs 0x6C/0x6E/0x70
-- **Bus auto-detection** -- probes all `/dev/i2c-*` for a DDC-capable display by reading VCP 0xDF (version)
-- **Read** -- `I2C_RDWR` ioctl with 2-message transaction (write request + read reply), validates response opcode, VCP code, result code, length, and checksum
-- **Write** -- `I2C_SLAVE` + `libc::write` (required for NVIDIA I2C adapters that reject `I2C_RDWR` for writes)
-- **Bus lock** -- `Mutex<()>` serializes all I2C transactions to prevent bus contention
-- **NVIDIA workaround** -- double-read (flush + real read) to handle pipeline aliasing where rapid sequential reads return the previous request's data
-
-### keyboard.rs (497 LOC)
-
-Pure Rust HID Feature Report reader for BCM2042/BCM20733 keyboards.
-
-- **10 keyboard models** -- full PID table for all known Apple Wireless/Magic keyboards (6 BCM2042, 4 BCM20733)
-- **21 HID Feature Reports** decoded via `HIDIOCGFEATURE` ioctl on `/dev/hidrawN`
-- **Structured output** -- `KbReport` struct with typed fields for battery (3 methods), voltage, firmware, calibration curve, identity, BT parameters
-- **ADC calibration** -- decodes the 4-point discharge curve (0x5A) for voltage-to-percentage interpolation
-- **Battery analysis** -- type detection (alkaline, NiMH, lithium) from voltage range and calibration shape
-- **Wake event monitor** -- dedicated thread reads HID Input Report 0x13 (vendor FF01 usage page) for connection/wake events
-- **LED state reader** -- reads CapsLock and NumLock state from sysfs for badge display in UI
-
-### tray.rs (560 LOC)
-
-System tray implemented directly on zbus (no ksni): `org.kde.StatusNotifierItem` (icon, tooltip, scroll, activate) and `com.canonical.dbusmenu` (right-click menu: info, brightness, picture mode, MQTT, Show Window, Quit). Replaces ksni, whose dbus-rs loop busy-polled every 50 ms.
-
-### bluez.rs (230 LOC)
-
-BlueZ Battery Provider via D-Bus.
-
-- **zbus 4 blocking API** on a dedicated thread
-- **BatteryProvider1** interface registered with BlueZ at `/com/agenceapi/AppleKbMonitor`
-- **Battery1 object** exported per device -- BlueZ picks this up and creates the standard `org.bluez.Battery1` interface that UPower, KDE Plasma, and GNOME read natively
-- **Atomic updates** -- `AtomicU8` for lock-free battery percentage updates from the polling thread
-
-### brightness.rs (208 LOC)
-
-F1/F2 brightness handler via raw evdev.
-
-- **keyd virtual keyboard** -- opens the keyd evdev device and listens for `KEY_BRIGHTNESSDOWN` (224) and `KEY_BRIGHTNESSUP` (225) events
-- **DDC write** -- adjusts monitor brightness via the `ddc` module in 5% steps
-- **KDE OSD** -- sends brightness notification via `qdbus6` to the Plasma OSD
-- **Circadian curve** -- `circadian_brightness()` returns a target brightness based on time of day (30% at night, ramp to 70% by 9 AM, hold, ramp down to 30% by 9 PM)
-- **Cached state** -- `AtomicI32` avoids redundant DDC reads on repeated key presses
-
-### mqtt.rs (355 LOC)
-
-In-process MQTT client for Home Assistant.
-
-- **rumqttc** async client running on a dedicated thread
-- **15 HA auto-discovery entities**:
-  - Keyboard: battery (%), voltage (mV), RSSI (dBm), TX power (dBm) sensors + connected binary_sensor
-  - Monitor: brightness, contrast, volume, color temp, usage hours, backlight PWM sensors
-  - Monitor controls: brightness number, volume number, picture mode select (14 modes), input source select (DP/HDMI1/HDMI2)
-- **Bidirectional** -- subscribes to brightness, volume, picture mode, and input source command topics; writes DDC values on incoming messages
-- **Connection state** -- `Arc<Mutex<bool>>` for UI status display
-- **Config-driven** -- broker, port, auth, topic prefix, monitor model all from config.toml
-
-### rssi.rs (137 LOC)
-
-Bluetooth RSSI and TX power reader via the BlueZ MGMT API.
-
-- **Pure Rust** -- replaces the C `rssi-helper` binary
-- **AF_BLUETOOTH socket** with `BTPROTO_HCI`, `HCI_CHANNEL_CONTROL`
-- **MGMT opcode 0x0031** (Get Connection Info) -- parses RSSI (dBm) and TX power (dBm) from the response
-- **Requires** `CAP_NET_ADMIN` or root -- returns `None` on privilege failure (non-fatal)
-
-### history.rs (90 LOC)
-
-Battery history logging and analytics.
-
-- **JSONL append-only store** at `~/.local/share/apple-kb-monitor/history.jsonl`
-- **Per-reading entries** -- timestamp, battery percentage, voltage
-- **Discharge rate estimation** -- calculates %/hour from recent history window
-- **Time remaining prediction** -- extrapolates battery-empty time from current discharge rate
-- **Best-effort** -- silently ignores write errors (history is non-critical)
-
-## ddc-tool (standalone CLI, 300 LOC)
-
-Separate Rust binary for DDC/CI operations from the command line. Uses the same I2C protocol as `ddc.rs` but is a standalone tool without GUI dependencies.
-
-```
-ddc-tool
-  read <bus> <vcp|all>    I2C_RDWR read, 100ms per VCP
-  write <bus> <vcp> <val> I2C_SLAVE + write(), 30ms
-  json <bus>              30 essential VCPs, JSON output, ~5s
-```
-
-85 VCP codes mapped (20 standard MCCS + 10 LG vendor + 10 newly decoded + 16 mirror + 11 unknown + 5 VGA legacy + 3 black level + 10 monitor info).
+- **main.rs** -- egui application and tray-first startup (window opens on "Show Window"). Two tabs: Keyboard (telemetry, history graph, time remaining) and Diag (checks: binaries, user service, `hidraw readable`, keyd config, udev rules, `hid_apple fnmode`, RSSI helper). A supervised polling thread reads the keyboard, the kernel battery, RSSI and feeds `Arc<Mutex<SharedState>>`; it is restarted after a panic and the poisoned lock is recovered.
+- **keyboard.rs** -- model table `APPLE_MODELS` built from the kernel `hid-ids.h` (17 PIDs; vendors `05AC` and `004C`), `Family` (BCM2042 or Magic Keyboard). HID Feature Reports through `HIDIOCGFEATURE` on `/dev/hidrawN`, only for the BCM2042 family. Battery calibration curve (0x5A) validated before use. Wake monitor thread on Input Report 0x13, started even if the keyboard is absent at launch. CapsLock/NumLock state from sysfs.
+- **power.rs** -- `kernel_battery(mac)`: resolves `/sys/class/power_supply/hid-<mac>-battery[-N]` through the HID parent (`HID_UNIQ`) with a fallback by name, strict MAC validation, `capacity` and `status` parsers separate from I/O and tested on a fake tree. No `unsafe`, no subprocess. The percentage shown comes from here; raw HID reports are diagnostics.
+- **bluez.rs** -- exports one `org.bluez.BatteryProvider1` per connected keyboard under `/com/agenceapi/AppleKbMonitor/dev_AA_BB_CC_DD_EE_FF`, with a zbus `ObjectManager` on the root, and registers it with `org.bluez.BatteryProviderManager1`. No well-known bus name is requested. Adapter path resolved with `GetManagedObjects`. A small state machine re-registers when bluetoothd restarts or the adapter changes. UPower hides the BlueZ battery when the kernel already provides one with the same MAC, so the provider is a fallback.
+- **rssi.rs** -- runs `/usr/lib/apple-kb-monitor/rssi-helper <MAC>` as a child with a 1.5 s timeout and a 10 s cache; value 127 means unavailable. The GUI never opens the MGMT socket itself (status `0x14` for unprivileged sockets). Override for tests: env `APPLE_KB_RSSI_HELPER`.
+- **rssi-helper.c** -- opens the HCI control channel, sends `GET_CONN_INFO`, matches the reply to its request, prints `{"rssi":..,"tx_power":..,"max_tx_power":..}`. Exit codes 1 usage, 2 socket, 3 MGMT status, 4 timeout, 5 unavailable. The only binary with `cap_net_admin` (set by `post_install` with `setcap`, not in `package()` because fakeroot does not keep it).
+- **tray.rs** -- pure zbus: `org.kde.StatusNotifierItem` and `com.canonical.dbusmenu` (info lines, "Show Window", "Quit"). Re-registers with the StatusNotifierWatcher whenever it reappears (`NameOwnerChanged`).
+- **history.rs** -- JSONL store `~/.local/share/apple-kb-monitor/history.jsonl`, discharge rate and time remaining; invalid points (voltage <= 0, NaN) rejected.
 
 ## Data flow
 
 ```
-Hardware Layer
-  Apple Keyboard (BT HID)  -----> /dev/hidrawN     (Feature Reports)
-  Apple Keyboard (BT)      -----> BlueZ (D-Bus)    (connection state)
-  Apple Keyboard (BT)      -----> AF_BLUETOOTH      (MGMT RSSI)
-  LG Monitor (I2C)         <----> /dev/i2c-N        (DDC/CI @ 0x37)
-  keyd virtual keyboard    -----> /dev/input/eventN  (F1/F2 events)
+Hardware / kernel
+  Apple keyboard (BT HID) --> /dev/hidrawN                    HID Feature Reports, wake events
+  hid-apple / hid-input   --> /sys/class/power_supply/hid-*   battery percentage and status
+  BlueZ (D-Bus)           <-> org.bluez.Device1, Battery1     connection state, battery export
+  BlueZ MGMT (HCI ctl)    <-- rssi-helper                     RSSI, TX power
 
-Application Layer (apihub-app, single process)
-  keyboard.rs    reads 21 HID Feature Reports, wake events (0x13), LED state
-  rssi.rs        reads RSSI/TX via AF_BLUETOOTH MGMT socket
-  ddc.rs         reads 34 VCPs (4-tier smart polling), writes 22 VCPs
-  brightness.rs  listens for evdev F1/F2, writes DDC, sends KDE OSD
-  bluez.rs       exports Battery1 interface via zbus D-Bus
-  mqtt.rs        publishes 15 HA entities, bidirectional controls
-  history.rs     battery history, discharge rate, time remaining
-  main.rs        6-tab egui UI, system tray (tray.rs), app presets, battery graph
+System layer
+  udev 70- uaccess        ACL on hidraw for the active seat user
+  keyd                    F3-F6 to KDE shortcuts
+  hid_apple               fnmode=1
+  D-Bus policy            unprivileged sessions may call org.bluez
 
-System Layer
-  keyd             remaps F3-F6 to KDE shortcuts (Meta+Z/G/L/D)
-  hid_apple        fnmode=1 (media keys as default Fn row)
-  udev rules       hidraw group permissions for input group
-  D-Bus policy     allows Battery Provider registration with BlueZ
-
-Desktop Layer
-  KDE Battery      reads Battery1 from BlueZ (populated by bluez.rs)
-  Plasma widget    reads apple-kb-monitor --json + ddc-tool json
-  Bluedevil patch  shows battery %, firmware, profiles in BT panel
+Desktop layer
+  KDE / UPower            kernel battery (and BlueZ Battery1 when no kernel node)
+  Plasma widget           apple-kb-monitor --json
+  Bluedevil patch         battery %, firmware in the BT panel
 ```
 
-## Threading model
+## Privilege model
 
-```
-Thread 1: egui UI loop (main thread)
-  - Reads SharedState, renders 6 tabs
-  - Handles user input (sliders, buttons, profile save/load)
-  - Sends DDC write commands
-  - Renders battery history graph (painter-based)
-
-Thread 2: DDC poller
-  - 4-tier smart polling: HOT every cycle, WARM every 4th (skipped if 0x02=0),
-    COLD every 30th, PBP conditional on split mode
-  - Updates SharedState.ddc
-
-Thread 3: Keyboard poller
-  - Reads 21 HID Feature Reports every 4th poll cycle (~40s; cycle = 10s sleep in the poll thread, main.rs)
-  - Reads LED state from sysfs
-  - Updates SharedState.keyboard
-
-Thread 4: BlueZ Battery Provider
-  - zbus blocking connection loop
-  - Reads AtomicU8 for current battery %
-
-Thread 5: Brightness handler
-  - Blocks on evdev read() for F1/F2 key events
-  - Writes DDC brightness + sends KDE OSD
-
-Thread 6: MQTT client (optional, started from MQTT tab)
-  - rumqttc event loop
-  - Publishes 15 HA entities, processes bidirectional commands
-
-Thread 7: Wake event monitor
-  - Blocks on hidraw read() for Input Report 0x13
-  - Updates last-wake timestamp for UI display
-
-Thread 8: System tray (tray.rs, zbus)
-  - StatusNotifierItem D-Bus service
-  - Battery tooltip updated from SharedState, quit action
-```
+| Component | Privilege | Mechanism |
+|---|---|---|
+| hidraw read | user of the active seat | udev `uaccess` (`70-apple-kb-hidraw.rules`, must sort before `73-seat-late.rules`) |
+| sysfs `power_supply` | any user | world-readable attributes |
+| BlueZ D-Bus | unprivileged | system bus policy `send_destination="org.bluez"` |
+| MGMT RSSI | `cap_net_admin` | file capability on `rssi-helper` only |
 
 ## File layout
 
 ```
-/usr/bin/
-  apihub-app                    Rust GUI (primary interface)
-  ddc-tool                      Rust DDC/CI CLI
-  apple-kb-monitor              Python CLI daemon (legacy)
-
-/etc/
-  apple-kb-monitor/
-    config.toml.example         Configuration template
-  keyd/
-    apple-keyboard.conf         13 Apple special keys (05ac:0256)
-  modprobe.d/
-    hid_apple.conf              fnmode=1
-  dbus-1/system.d/
-    com.agenceapi.AppleKbMonitor.conf   D-Bus policy
-
-/usr/lib/
-  systemd/user/
-    apple-kb-monitor.service    Legacy CLI daemon service
-  udev/rules.d/
-    99-apple-kb-hidraw.rules    hidraw group permissions
-
-/usr/share/
-  applications/
-    apihub-app.desktop          KDE app launcher entry
-  icons/hicolor/scalable/apps/
-    apihub-scarab.svg           Application icon
-  plasma/plasmoids/
-    com.agenceapi.devicehub/    KDE Plasma widget
-  apple-kb-monitor/kde/
-    DeviceItem.qml              Bluedevil panel patch
-
-~/.config/apple-kb-monitor/
-  config.toml                   User configuration (copied from example)
-  profiles.json                 Saved DDC profiles
-
-~/.local/share/apple-kb-monitor/
-  history.jsonl                 Battery history log
+/usr/bin/                         apihub-app, apple-kb-monitor
+/usr/lib/apple-kb-monitor/        rssi-helper (cap_net_admin+ep)
+/usr/lib/udev/rules.d/            70-apple-kb-hidraw.rules
+/usr/lib/systemd/user/            apple-kb-monitor.service
+/etc/keyd/                        apple-keyboard.conf (05ac:0256)
+/etc/modprobe.d/                  hid_apple.conf (fnmode=1)
+/etc/dbus-1/system.d/             com.agenceapi.AppleKbMonitor.conf
+/usr/share/applications/          apihub-app.desktop
+/usr/share/icons/hicolor/scalable/apps/   apihub-scarab.svg
+/usr/share/plasma/plasmoids/      com.agenceapi.devicehub/
+/usr/share/apple-kb-monitor/kde/  DeviceItem.qml (Bluedevil patch)
+~/.local/share/apple-kb-monitor/  history.jsonl
 ```
+
+## Review documents
+
+`REVUE-ARCHITECTURE-GLOBALE.md`, `REVUE-ARCHITECTURE-CLAVIER.md` and `REVUE-CORRECTIFS.md` are dated audit snapshots (2026-10-01) and are not updated with the code. Target architecture steps: issues #60 to #62.

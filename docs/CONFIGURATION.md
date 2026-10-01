@@ -1,20 +1,21 @@
 # Configuration
 
-File: `~/.config/apple-kb-monitor/config.toml`, fallback `/etc/apple-kb-monitor/config.toml` (template: `config.toml.example`). Read by `ddc.rs` (bus), `main.rs` (MQTT/brightness) and `mqtt-bridge.py`.
+There is no configuration file. `config.toml` and `config.toml.example` belonged to the removed display/DDC/MQTT feature set and no code in this repository reads them any more (a leftover `~/.config/apple-kb-monitor/config.toml` is ignored and can be deleted).
 
-| Section | Key | Default | Meaning |
-|---|---|---|---|
-| `[ddc]` | `bus` | `/dev/i2c-6` | I2C bus. Priority: config > auto-detection (probes `/dev/i2c-*` for VCP 0xDF) > fallback `/dev/i2c-6` |
-| `[mqtt]` | `broker` | empty | Broker address; empty disables MQTT |
-| `[mqtt]` | `port` | 1883 | |
-| `[mqtt]` | `user`, `password` | empty | Stored in clear text: keep the file `chmod 600` |
-| `[mqtt]` | `topic_prefix` | `homeassistant` | Discovery/topic prefix |
-| `[monitor]` | `model` | `lg_34gn850` | Slug used in MQTT topic paths |
-| `[brightness]` | `min` / `max` | 2 / 70 | DDC brightness bounds (%) used for lamp sync and MQTT |
-| `[brightness]` | `lamp_entity` | `light.bureau` | Home Assistant entity synchronised with brightness |
+## What is configurable
 
-Notes:
-- The parser is hand-written (no `toml` crate): use `key = value` lines, one per line. Tracked in issue #12.
-- Saving from the MQTT tab rewrites the whole file and resets `topic_prefix` to `homeassistant` and `model` to `lg_34gn850` (issue #12).
-- Profiles: `~/.config/apple-kb-monitor/profiles.json`; App Presets file next to it; battery history: `~/.local/share/apple-kb-monitor/history.jsonl`.
-- The circadian curve (30 % before 06:00, ramp to 70 % at 09:00, 70 % until 17:00, ramp to 30 % at 21:00) is hard-coded (issue #18).
+| Item | Where | Notes |
+|---|---|---|
+| RSSI helper location | env `APPLE_KB_RSSI_HELPER` | Development/test override of `/usr/lib/apple-kb-monitor/rssi-helper` (`rssi.rs`). Not a privilege boundary: the helper itself carries the capability. |
+| Low-battery threshold, poll interval | Python CLI `--threshold` (default 15), `--interval` (default 300) | Set in `systemd/apple-kb-monitor.service` for the user daemon |
+| `fnmode` | `/etc/modprobe.d/hid_apple.conf` (`options hid_apple fnmode=1`) | Applied immediately by `post_install` |
+| Special keys | `/etc/keyd/apple-keyboard.conf` (kept on upgrade, `backup=`) | Device `05ac:0256` |
+| uaccess rule | `/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules` | Override by placing a file of the same name in `/etc/udev/rules.d/` |
+
+## Files written by the app
+
+| Path | Content |
+|---|---|
+| `~/.local/share/apple-kb-monitor/history.jsonl` | Battery history (timestamp, percentage, voltage); invalid points are not written |
+
+The Python CLI keeps its own state under `$XDG_RUNTIME_DIR/apple-kb-monitor/`.

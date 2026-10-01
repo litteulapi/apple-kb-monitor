@@ -4,9 +4,8 @@
 
 - Arch Linux or Manjaro (PKGBUILD provided)
 - Bluetooth adapter supported by BlueZ
-- Apple Wireless Keyboard paired via `bluetoothctl`
-- For DDC/CI: I2C bus accessible (`i2c-dev` module loaded)
-- For Plasma widget: KDE Plasma >= 6.0
+- Apple Bluetooth keyboard paired via `bluetoothctl`
+- For the Plasma widget: KDE Plasma >= 6.0
 
 ## Package installation
 
@@ -16,108 +15,68 @@ cd apple-kb-monitor
 makepkg -si
 ```
 
-The PKGBUILD compiles two Rust binaries (`apihub-app` and `ddc-tool`) and installs all system integration files. Post-install hooks automatically:
+The PKGBUILD compiles the Rust binary `apihub-app` and the C helper `rssi-helper`, and installs all system integration files. The `post_install` hook automatically:
 
-- Reload udev rules (hidraw group permissions)
-- Restart keyd (special key mapping)
-- Set `fnmode=1` on the hid_apple kernel module
-- Patch KDE Bluedevil panel (with backup of the original)
+- Reloads udev rules and re-triggers hidraw devices (applies the `uaccess` ACL to keyboards already connected)
+- Restarts keyd (special key mapping)
+- Sets `fnmode=1` on the hid_apple kernel module
+- Applies `setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper` (RSSI); on failure it prints the command to run by hand
+- Patches the KDE Bluedevil panel (with backup of the original)
 
 ### Build dependencies
 
 | Package | Purpose |
 |---------|---------|
-| `rust` | Compile apihub-app and ddc-tool |
-| `gcc` | Linker for Rust builds |
+| `rust` | Compile apihub-app |
+| `gcc` | Compile rssi-helper, linker for Rust builds |
 
 ### Runtime dependencies
 
 | Package | Required | Purpose |
 |---------|----------|---------|
+| `python`, `python-dbus-fast` | yes | Python CLI |
 | `bluez` | yes | Bluetooth stack (Battery Provider API) |
 | `keyd` | yes | System-level key remapping (Wayland-compatible) |
 | `bluez-utils` | optional | `bluetoothctl` CLI for BT management |
 | `libnotify` | optional | Desktop notifications on low battery |
-| `mosquitto` | optional | MQTT broker (local or for testing) |
 
 ## Post-install setup
 
 ### 1. User permissions
 
-Add your user to the `input` group for hidraw access:
+None. The udev rule `70-apple-kb-hidraw.rules` tags Apple hidraw devices `uaccess`; logind gives the user of the active seat an ACL. There is no `input` group step. If the keyboard was connected before the install and `/dev/hidraw*` is still not readable, reconnect it or run `sudo udevadm trigger --subsystem-match=hidraw`.
+
+Check:
 
 ```bash
-sudo usermod -aG input $USER
+getfacl /dev/hidraw* 2>/dev/null | grep -B3 "user:$USER"
 ```
 
-Log out and back in for the group change to take effect.
+### 2. RSSI
 
-For DDC/CI monitor control, also add yourself to the `i2c` group:
+RSSI and TX power come from `/usr/lib/apple-kb-monitor/rssi-helper`, the only binary with `cap_net_admin`. Check:
 
 ```bash
-sudo usermod -aG i2c $USER
+getcap /usr/lib/apple-kb-monitor/rssi-helper     # cap_net_admin=ep
+/usr/lib/apple-kb-monitor/rssi-helper AA:BB:CC:DD:EE:FF   # {"rssi":-5,"tx_power":4,...}
 ```
 
-### 2. I2C setup for DDC/CI
-
-Load the i2c-dev kernel module (if not already loaded):
-
-```bash
-sudo modprobe i2c-dev
-
-# Make persistent across reboots
-echo "i2c-dev" | sudo tee /etc/modules-load.d/i2c-dev.conf
-```
-
-apihub-app auto-detects the correct I2C bus. To verify manually:
-
-```bash
-ddc-tool read 6 0x10    # try reading brightness from bus 6
-```
+Without the capability the app still works and shows no RSSI. Re-apply with `sudo setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper` (pacman rewrites the file on every upgrade; `post_install` re-applies it).
 
 ### 3. Configuration
 
-Copy the example config and edit as needed:
-
-```bash
-mkdir -p ~/.config/apple-kb-monitor
-cp /etc/apple-kb-monitor/config.toml.example ~/.config/apple-kb-monitor/config.toml
-```
-
-Edit `~/.config/apple-kb-monitor/config.toml`:
-
-```toml
-[ddc]
-bus = "/dev/i2c-6"           # I2C bus (auto-detected if omitted)
-
-[mqtt]
-broker = "192.168.8.3"       # MQTT broker address (leave empty to disable)
-port = 1883
-user = ""
-password = ""
-topic_prefix = "homeassistant"
-
-[monitor]
-model = "lg_34gn850"         # Used in MQTT topic path
-
-[brightness]
-min = 2                      # DDC brightness floor (%)
-max = 70                     # DDC brightness ceiling (%)
-lamp_entity = "light.bureau" # HA entity to sync with
-```
+None. See [CONFIGURATION.md](CONFIGURATION.md).
 
 ### 4. Launch
 
-**apihub-app** is a graphical desktop application. Launch it from:
+**apihub-app** is a desktop application with a tray icon (click the scarab icon, or use "Show Window", to open the window). Launch it from:
 
 - KDE application menu: search for **ApiHub**
 - Terminal: `apihub-app`
 
-It is not a background service -- it runs as a normal desktop application with a window.
+### 5. Optional: Python CLI daemon
 
-### 5. Optional: legacy CLI daemon
-
-The Python `apple-kb-monitor` CLI can run as a systemd user service for headless BlueZ Battery Provider and MQTT publishing:
+The Python `apple-kb-monitor` CLI can run as a systemd user service for a headless BlueZ Battery Provider and low-battery notifications:
 
 ```bash
 systemctl --user enable --now apple-kb-monitor.service
@@ -179,17 +138,17 @@ sudo mv /usr/share/plasma/plasmoids/org.kde.plasma.bluetooth/contents/ui/DeviceI
 ### hidraw permission denied
 
 ```bash
-udevadm control --reload-rules && udevadm trigger
-groups                       # verify "input" is listed
-ls -la /dev/hidraw*          # check permissions
+sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=hidraw
+udevadm info -q property /dev/hidrawN | grep TAGS    # must contain :uaccess:
+ls -la /dev/hidraw*                                  # ACL "+" and your user
 ```
 
-### DDC/CI permission denied on /dev/i2c-*
+The ACL is granted to the user of the active seat only: an SSH session does not get it.
+
+### No RSSI
 
 ```bash
-groups | grep i2c            # verify "i2c" group membership
-sudo modprobe i2c-dev        # verify module is loaded
-ls -la /dev/i2c-*            # check permissions
+getcap /usr/lib/apple-kb-monitor/rssi-helper
 ```
 
 ### keyd keys not working

@@ -1,17 +1,18 @@
 # Testing
 
-| Suite | Location | Count | Command |
-|---|---|---|---|
-| Rust DDC tests | `apihub-app/tests/test_ddc.rs` | 27 `#[test]` | `cd apihub-app && cargo test` |
-| Python CLI tests | `tests/test_apple_kb.py` | 46 `test_*` | `python -m pytest tests/` |
+| Suite | Location | Command |
+|---|---|---|
+| Rust unit tests | `#[cfg(test)]` modules in `apihub-app/src/` (keyboard model table and parsing, `power.rs` on a fake sysfs tree, `rssi.rs` with stub helpers, `bluez.rs` state machine) | `cd apihub-app && cargo test` |
+| Python CLI tests | `tests/test_apple_kb.py` | `python -m pytest tests/` |
+| Live read-only harness | `tests/live/check_keyboard.sh` | see below |
 
-Build checks: `cd apihub-app && cargo build --release && cargo clippy`; `cd ddc-tool && cargo build --release`.
+Build checks: `cd apihub-app && cargo build --release && cargo clippy --all-targets -- -D warnings`; `gcc -Wall -Wextra -Werror -o /tmp/rssi-helper rssi-helper.c`; `udevadm verify udev/70-apple-kb-hidraw.rules`.
 
-Gaps (Gitea issues): no unit tests inside `apihub-app/src` or `ddc-tool` (#11), no CI (#9), no hardware-less integration harness (#24), compatibility of 9 of the 10 keyboard models unverified (#23).
+Packaging check: `makepkg -f --nodeps --skipinteg` in a copy of the tree (installs nothing); regenerate `.SRCINFO` with `makepkg --printsrcinfo > .SRCINFO`.
 
-Manual hardware checklist: `apple-kb-monitor --once/--status/--dump`, apihub-app tabs (Keyboard values, Display sliders, tray menu), F1/F2 brightness, MQTT discovery visible in Home Assistant, `ddc-tool json <bus>`.
+Gaps (Gitea issues): compatibility of 16 of the 17 keyboard models unverified (#23).
 
-Safety: do not run write tests against a production monitor without restoring values; do not send factory reset VCPs (0x04/0x05/0x08) in automated tests.
+Manual hardware checklist: `apple-kb-monitor --once/--status/--dump`, apihub-app Keyboard and Diag tabs, tray menu, RSSI, `busctl tree org.bluez` shows `Battery1`.
 
 ## Tests sur matériel réel (lecture seule)
 
@@ -32,6 +33,6 @@ synthétiques (illisibles sans accès hidraw). Détail et provenance : `tests/fi
 
 ## CI
 
-`.gitea/workflows/ci.yml` (issue #9) : `cargo build/clippy -D warnings/test` sur chaque crate, `py_compile`, `pytest`,
+`.gitea/workflows/ci.yml` (issues #9, #24) : `cargo build/clippy -D warnings/test` sur chaque crate, `py_compile`, `pytest`,
 `shellcheck`, `gcc -Wall -Wextra -Werror rssi-helper.c`, `udevadm verify`. Le job ne requiert aucun matériel.
 Il nécessite un runner Gitea Actions avec Docker (images `rust:1-bookworm`, `debian:bookworm`).

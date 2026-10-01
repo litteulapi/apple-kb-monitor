@@ -710,58 +710,6 @@ class TestAutoBrightness(unittest.TestCase):
         self.assertEqual(cm.exception.code, 1)
 
 
-class TestMqttBridge(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        try:
-            cls.br = _load_script("mqtt-bridge.py", "mqtt_bridge_under_test")
-        except ImportError:
-            raise unittest.SkipTest("paho-mqtt missing")
-
-    def test_invalid_toml_exits_cleanly(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            bad = Path(tmp) / "config.toml"
-            bad.write_text("[mqtt\nbroker = = 1")
-            with mock.patch.object(self.br, "CONFIG_PATHS", [bad]), \
-                    contextlib.redirect_stderr(io.StringIO()) as err:
-                with self.assertRaises(SystemExit) as cm:
-                    self.br.load_config()
-        self.assertEqual(cm.exception.code, 1)
-        self.assertIn("cannot read", err.getvalue())
-
-    def test_inf_payload_does_not_raise(self):
-        msg = mock.Mock(payload=b"inf")
-        client = mock.Mock()
-        ud = {"bri_min": 2, "bri_max": 70, "bus": "6", "topic_state": "s"}
-        with mock.patch.object(self.br, "ddc_write_brightness") as w, \
-                contextlib.redirect_stderr(io.StringIO()):
-            self.br.on_message(client, ud, msg)
-        w.assert_not_called()
-
-    def test_payload_is_clamped(self):
-        msg = mock.Mock(payload=b"500")
-        client = mock.Mock()
-        ud = {"bri_min": 2, "bri_max": 70, "bus": "6", "topic_state": "s"}
-        with mock.patch.object(self.br, "ddc_write_brightness", return_value=True) as w:
-            self.br.on_message(client, ud, msg)
-        self.assertEqual(w.call_args[0][3], 70)
-        client.publish.assert_called_once_with("s", "70", retain=True)
-
-    def test_ddc_timeout_is_handled(self):
-        with mock.patch.object(self.br.subprocess, "run",
-                               side_effect=subprocess.TimeoutExpired("x", 5)), \
-                contextlib.redirect_stderr(io.StringIO()):
-            self.assertFalse(self.br.ddc_write_brightness("6", 2, 70, 30))
-            self.assertEqual(self.br.ddc_read_brightness("6"), -1)
-
-    def test_paho2_client_factory(self):
-        fake = mock.Mock()
-        fake.CallbackAPIVersion.VERSION1 = "V1"
-        with mock.patch.object(self.br, "mqtt", fake):
-            self.br.new_mqtt_client("cid", {"a": 1})
-        fake.Client.assert_called_once_with("V1", client_id="cid", userdata={"a": 1})
-
-
 class TestApihubSettings(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

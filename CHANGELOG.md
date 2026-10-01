@@ -4,23 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - 3.0.1 stabilisation (audit/debug-complet)
+## [3.1.0] - Unreleased (branch audit/debug-complet)
 
-Full audit and debug pass. Bugs are tracked one per Gitea issue (label `bug`); tracking issue: #8. Milestone: v3.0.1.
+Audit and debug pass (tracking issue #8), then scope reduction: the repository is now keyboard-only. Bugs are tracked one per Gitea issue (label `bug`); "Fixes #N" is in the commit messages of `617c3db..HEAD`. Version strings in `Cargo.toml` and `PKGBUILD` still read 3.0.0 (`pkgrel=2`) until the release is cut.
 
-### Fixed (commits on audit/debug-complet, at time of writing)
-- **ddc**: checksum computed without the source byte, short writes ignored, fds without `O_CLOEXEC`, fragile `[ddc]` parsing (#25)
-- **history**: invalid points (voltage <= 0, NaN) rejected on write and ignored in the estimate (#39)
-- **keyboard**: leaking HID fd, wake-monitor busy loop at 100 % CPU after disconnect, unvalidated battery calibration, PID match by substring, NUL in device name, CapsLock LED (#52, #53)
-- **brightness**: evdev reconnection when keyd is absent/restarted, qdbus6 zombies, stale cache resynchronised (#54)
+### Removed (breaking)
+- **Display / DDC / MQTT / Home Assistant**: `ddc.rs`, `brightness.rs`, `mqtt.rs`, `ddc-tool`, `mqtt-bridge.py`, DDC tests, display docs, `config.toml.example`, KDE brightness shortcuts, the `i2c` group step, the `python-paho-mqtt` optional dependency (#59, #74). `apihub-app` now has two tabs: Keyboard and Diag. The code lives in the private repository `lg-ddc-control` (this repository keeps the tag `archive/avec-ecran`).
+- The previous `[3.1.0] - 2026-04-02` entry below describes that display feature set, which no longer exists in this repository.
+
+### Changed
+- **Permissions**: udev rule `70-apple-kb-hidraw.rules` tags Apple hidraw devices `uaccess` (logind ACL for the active seat user) instead of the `input` group. Matches Bluetooth vendors `05AC` and `004C` and wired Apple keyboards (`0003:05AC`). No `usermod -aG input` any more (#63, #73).
+- **Battery source**: the kernel `power_supply` node (`hid-<mac>-battery`, the one UPower reads) is the source of truth for the percentage; raw HID reports are diagnostics (#65, `power.rs`).
+- **RSSI**: read through a dedicated C helper `rssi-helper` installed in `/usr/lib/apple-kb-monitor/` with `cap_net_admin+ep` applied by `post_install` (`setcap`); the GUI stays unprivileged and runs it as a child process with a timeout and a 10 s cache (#69).
+- **BlueZ battery provider**: one `BatteryProvider1` object per keyboard under `/com/agenceapi/AppleKbMonitor`, zbus `ObjectManager`, adapter path resolved from BlueZ, automatic re-registration when bluetoothd restarts, no well-known D-Bus name requested (#67, #72, #81).
+- **Keyboard model table** rebuilt from `hid-ids.h` (17 models); vendors `05AC` and `004C` accepted; raw HID telemetry reserved for the BCM2042 family (#64).
+- Packaging: PKGBUILD uses local sources, `!lto`, `backup`, correct depends/optdepends (#2, #7); `.SRCINFO` regenerated (#3); desktop `Categories` and udev URL fixed, D-Bus policy restricted (#6); Plasma widget launches `apihub-app` (#5).
+
+### Fixed
+- **keyboard**: leaking HID fd, wake-monitor busy loop at 100 % CPU after disconnect, unvalidated calibration, PID match by substring, NUL in device name, CapsLock LED (#52, #53); wake-monitor started on demand even when the keyboard is absent at launch, timestamp exposed (#79).
+- **power / sysfs**: `ps_path` without `-NN` suffix gave an empty sysfs block, `battery.percentage` was null without sysfs fallback when hidraw is unreadable (#70, #71).
+- **rssi**: MGMT reply matched to its request, 127 rejected, strict MAC (#56); poll keeps the last RSSI between HID re-reads (#31); Python MGMT fallback aligned (#77).
+- **bluez**: `PropertiesChanged` on `Percentage`, re-registration, validated MAC (#57); provider alive again after the D-Bus policy change (#72); no log flood on registration failure (#81).
+- **poll / tray / UI**: battery alerts re-armed, no 100 % / 0 V points, Remaining cleared (#31, #32); tray retries SNI registration and re-registers when the StatusNotifierWatcher reappears, scroll saturates (#38, #74); Quit closes the window, diag guard, UTF-8 safe slicing, tooltip `n/a` (#28 to #30, #35, #36); polling thread supervised (restart after panic).
+- **history**: invalid points (voltage <= 0, NaN) rejected on write and ignored in the estimate (#39).
+- **Python CLI / settings**: hardened HID/sysfs access, SDP parsing, history, daemon loop and `--json` serialisation (#40 to #51); no 0 % exported to BlueZ when the HID read fails (#78); calibration validated like the Rust side (#80).
+
+### Added
+- `tests/live/check_keyboard.sh`: read-only checks on real hardware (sysfs vs UPower vs BlueZ vs CLI battery, hidraw rights, udev `uaccess`, keyd, services).
+- Fixtures for a real A1314 ISO under `tests/fixtures/` and CI in `.gitea/workflows/ci.yml` (cargo build/clippy/test, pytest, shellcheck, gcc on `rssi-helper.c`, `udevadm verify`) (#9, #24).
+- Adversarial review documents: `docs/REVUE-ARCHITECTURE-GLOBALE.md`, `docs/REVUE-ARCHITECTURE-CLAVIER.md`, `docs/REVUE-CORRECTIFS.md` (issues #72 to #81).
 
 ### Documentation
-- README rewritten to match the repository (Rust app first, Gitea URLs, real project structure)
-- ARCHITECTURE line counts re-measured with `wc -l`; tray.rs documented (pure zbus)
-- New: docs/FEATURES.md, CONFIGURATION.md, TROUBLESHOOTING.md, TESTING.md; Gitea wiki pages (Home, Fonctionnalités, Installation, Configuration, Architecture, Dépannage, Développement et tests, Matériel supporté, Feuille de route)
+- README, ARCHITECTURE, FEATURES, CONFIGURATION, INSTALL, TROUBLESHOOTING, TESTING rewritten for the keyboard-only scope; Gitea wiki updated.
 
-### Open (see milestones v3.0.1 / v3.1 / v3.2)
-Open bugs #2-#7, #26-#38, #40-#51 at time of writing; evolutions and debt #9-#24. Roadmap: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/milestones
+### Known open items
+- Not fixed by a commit in this range: #75 (RSSI carried over without age or MAC check), #76 (valid RSSI discarded when only the TX power is 127). Some of the fixes above (#25 to #27, #33, #34, #37, #54, #55, #58) concerned display code that was then removed with #59.
+- The Python CLI `apple-kb-monitor` and `apihub-settings` still contain MQTT / `ddc-tool` code paths from before the split; they are outside this documentation pass.
+- Architecture roadmap (workspace + testable core, headless daemon, thin clients): #60 to #62, #66, #68.
 
 ## [3.1.0] - 2026-04-02
 
