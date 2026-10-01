@@ -165,16 +165,19 @@ pub fn spawn(watch: Arc<Watch>) -> SourceHandle {
     SourceHandle { src, quit }
 }
 
-/// Battery history: from the daemon when present, else from the file.
-pub fn load_history() -> Vec<HistoryEntry> {
-    if let Ok(conn) = Connection::session() {
-        if client::daemon_present(&conn) {
-            match client::fetch_history(&conn, 0) {
-                Ok(h) => return h,
-                Err(e) => eprintln!("[source] History() failed: {e}"),
-            }
-        }
+/// Battery history from the daemon, `None` when it is absent or fails.
+/// Blocking D-Bus I/O: call it from a worker thread only (see
+/// `history_view`, #230), never from the UI thread.
+pub fn load_history_from_daemon() -> Option<Vec<HistoryEntry>> {
+    let conn = Connection::session().ok()?;
+    if !client::daemon_present(&conn) {
+        return None;
     }
+    client::fetch_history(&conn, 0).map_err(|e| eprintln!("[source] History() failed: {e}")).ok()
+}
+
+/// Battery history from the file (fallback). Disk I/O: worker thread only.
+pub fn load_history_from_file() -> Vec<HistoryEntry> {
     History::open_default().read()
 }
 

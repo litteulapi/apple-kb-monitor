@@ -1,4 +1,6 @@
 mod fnmode_diag;
+mod framestats;
+mod history_view;
 mod instance;
 mod keyboard;
 mod portal;
@@ -51,13 +53,13 @@ struct ApiHubApp {
     appearance: portal::Shared,
     applied: Option<portal::Appearance>,
     palette: Palette,
-    // Battery history graph
-    battery_history: Vec<(f64, f64)>,    // (timestamp, percentage)
-    voltage_history: Vec<(f64, f64)>,    // (timestamp, voltage)
+    // Battery history graph: loaded by a worker thread, only read here.
+    history: history_view::Loader,
     // Rename field (#141)
     rename_buf: String,
     rename_loaded: Option<String>,
     rename_status: rename::Status,
+    frame_stats: framestats::FrameStats,
 }
 
 impl ApiHubApp {
@@ -69,16 +71,10 @@ impl ApiHubApp {
         tray_show_window: Arc<AtomicBool>,
         quit_flag: Arc<AtomicBool>,
     ) -> Self {
-        // Load battery history from disk (once at startup)
-        let entries = source::load_history();
-        let battery_history: Vec<(f64, f64)> = entries
-            .iter()
-            .map(|e| (e.ts as f64, e.pct))
-            .collect();
-        let voltage_history: Vec<(f64, f64)> = entries
-            .iter()
-            .filter_map(|e| e.reliable_voltage().map(|v| (e.ts as f64, v)))
-            .collect();
+        // Battery history: loaded off the UI thread (D-Bus + disk, #230).
+        let history = history_view::Loader::new();
+        let ctx = cc.egui_ctx.clone();
+        history.request(move || ctx.request_repaint());
 
         Self {
             state,
@@ -91,17 +87,25 @@ impl ApiHubApp {
             appearance: portal::spawn(cc.egui_ctx.clone()),
             applied: None,
             palette: Palette::new(cc.egui_ctx.style().visuals.dark_mode),
-            battery_history,
-            voltage_history,
+            history,
             rename_buf: String::new(),
             rename_loaded: None,
             rename_status: Arc::new(Mutex::new(None)),
+            frame_stats: framestats::FrameStats::from_env(),
         }
     }
 }
 
 impl eframe::App for ApiHubApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        let t0 = std::time::Instant::now();
+        self.update_ui(ctx);
+        self.frame_stats.record(t0.elapsed(), frame.info().cpu_usage);
+    }
+}
+
+impl ApiHubApp {
+    fn update_ui(&mut self, ctx: &egui::Context) {
         // Tray "Quit" while the window is open: close it so main() can exit.
         if self.quit_flag.load(Ordering::Relaxed) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -429,105 +433,91 @@ impl ApiHubApp {
         });
     }
 
-    fn reload_history(&mut self) {
-        let entries = source::load_history();
-        self.battery_history = entries.iter().map(|e| (e.ts as f64, e.pct)).collect();
-        self.voltage_history = entries.iter().filter_map(|e| e.reliable_voltage().map(|v| (e.ts as f64, v))).collect();
-    }
-
-    /// Draw battery + voltage history chart (last 24 h) using egui painter.
+    /// Battery + voltage history chart (last 24 h). Pure drawing: the data
+    /// is loaded by a worker thread and laid out by `view::chart_model`, so a
+    /// frame never waits on D-Bus or the disk and never lays out an
+    /// unbounded string (#230).
     fn draw_battery_history(&mut self, ui: &mut egui::Ui) {
+        let data = self.history.data();
         tile(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("Battery History (24 h)").strong().size(18.0));
-                if ui.button(egui::RichText::new("Refresh").size(14.0)).clicked() {
-                    self.reload_history();
+                let refresh = ui.add_enabled(!data.loading, egui::Button::new(egui::RichText::new("Refresh").size(14.0)));
+                if refresh.clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.history.request(move || ctx.request_repaint());
+                }
+                if data.loading {
+                    ui.spinner();
                 }
             });
-
-            let cutoff = unix_now() as f64 - 24.0 * 3600.0;
-            // Unusable points (NaN, out of range) are never drawn (#198).
-            let batt_data = view::chart_points(&self.battery_history, cutoff, true);
-            let volt_data = view::chart_points(&self.voltage_history, cutoff, false);
-
-            if batt_data.len() < 2 {
-                let msg = if self.battery_history.is_empty() { "No history data yet." } else { "Not enough data points in the last 24 h." };
-                ui.label(egui::RichText::new(msg).weak().size(16.0));
-                return;
+            if let Some(note) = &data.note {
+                ui.add(egui::Label::new(egui::RichText::new(note.as_str()).weak().size(14.0)).wrap());
             }
 
-            let (t_min, t_max) = match (batt_data.first(), batt_data.last()) {
-                (Some(a), Some(b)) => (a.0, b.0),
-                _ => return,
+            let model = match view::chart_model(&data.battery, &data.voltage, unix_now() as f64) {
+                Ok(m) => m,
+                Err(msg) => {
+                    let msg = if data.loading && data.battery.is_empty() { "Loading history..." } else { msg.as_str() };
+                    ui.label(egui::RichText::new(msg).weak().size(16.0));
+                    return;
+                }
             };
-            ui.label(egui::RichText::new(format!(
-                "{} points over {:.1} h",
-                batt_data.len(),
-                (t_max - t_min) / 3600.0
-            )).weak().size(14.0));
+            ui.label(egui::RichText::new(model.summary.as_str()).weak().size(14.0));
             ui.add_space(4.0);
 
-            let (response, painter) = ui.allocate_painter(egui::Vec2::new(ui.available_width(), 160.0), egui::Sense::hover());
+            let (response, painter) = ui.allocate_painter(egui::Vec2::new(ui.available_width(), 170.0), egui::Sense::hover());
             let rect = response.rect;
             let vis = ui.visuals().clone();
             painter.rect_filled(rect, 4.0, vis.extreme_bg_color);
-            // Room on the left for the % labels, on top for the legend.
+            // Room on the left for the % labels, on top for the legend,
+            // at the bottom for the time ticks.
             let plot_rect = egui::Rect::from_min_max(
                 egui::Pos2::new(rect.min.x + 36.0, rect.min.y + 22.0),
-                egui::Pos2::new(rect.max.x - 8.0, rect.max.y - 8.0),
+                egui::Pos2::new(rect.max.x - 8.0, rect.max.y - 20.0),
             );
             if plot_rect.width() < 10.0 || plot_rect.height() < 10.0 {
                 return;
             }
             let painter = painter.with_clip_rect(rect);
-            let t_range = (t_max - t_min).max(1.0);
-            let x_of = |ts: f64| plot_rect.min.x + ((ts - t_min) / t_range) as f32 * plot_rect.width();
+            let (t_min, t_range) = (model.t_min, (model.t_max - model.t_min).max(1.0));
+            let x_of = |ts: f64| plot_rect.min.x + ((ts - t_min) / t_range).clamp(0.0, 1.0) as f32 * plot_rect.width();
             let y_of = |frac: f64| plot_rect.max.y - (frac.clamp(0.0, 1.0) as f32) * plot_rect.height();
+            let grid = egui::Stroke::new(0.5, vis.widgets.noninteractive.bg_stroke.color);
+            let small = egui::FontId::proportional(10.0);
 
             for level in [0.0, 25.0, 50.0, 75.0, 100.0] {
                 let y = y_of(level / 100.0);
-                painter.line_segment(
-                    [egui::Pos2::new(plot_rect.min.x, y), egui::Pos2::new(plot_rect.max.x, y)],
-                    egui::Stroke::new(0.5, vis.widgets.noninteractive.bg_stroke.color),
-                );
-                painter.text(
-                    egui::Pos2::new(plot_rect.min.x - 4.0, y),
-                    egui::Align2::RIGHT_CENTER,
-                    format!("{level:.0}%"),
-                    egui::FontId::proportional(10.0),
-                    vis.weak_text_color(),
-                );
+                painter.line_segment([egui::Pos2::new(plot_rect.min.x, y), egui::Pos2::new(plot_rect.max.x, y)], grid);
+                painter.text(egui::Pos2::new(plot_rect.min.x - 4.0, y), egui::Align2::RIGHT_CENTER, format!("{level:.0}%"), small.clone(), vis.weak_text_color());
+            }
+            for (t, label) in &model.x_ticks {
+                let x = x_of(*t);
+                painter.line_segment([egui::Pos2::new(x, plot_rect.min.y), egui::Pos2::new(x, plot_rect.max.y)], grid);
+                let align = if x > plot_rect.max.x - 30.0 { egui::Align2::RIGHT_TOP } else { egui::Align2::CENTER_TOP };
+                painter.text(egui::Pos2::new(x, plot_rect.max.y + 4.0), align, label, small.clone(), vis.weak_text_color());
             }
 
             let batt_color = self.palette.good;
-            let line: Vec<egui::Pos2> = batt_data.iter().map(|&(t, p)| egui::Pos2::new(x_of(t), y_of(p / 100.0))).collect();
+            let line: Vec<egui::Pos2> = model.batt.iter().map(|&(t, p)| egui::Pos2::new(x_of(t), y_of(p / 100.0))).collect();
             painter.add(egui::Shape::line(line, egui::Stroke::new(2.0, batt_color)));
 
             let volt_color = self.palette.info;
-            let mut legend = vec![(batt_color, "Battery %".to_string())];
-            if volt_data.len() >= 2 {
-                let v_min = volt_data.iter().map(|p| p.1).fold(f64::MAX, f64::min);
-                let v_max = volt_data.iter().map(|p| p.1).fold(f64::MIN, f64::max);
-                let v_range = (v_max - v_min).max(0.1);
-                let (v_lo, v_hi) = (v_min - v_range * 0.05, v_max + v_range * 0.05);
-                let line: Vec<egui::Pos2> = volt_data
-                    .iter()
-                    .filter(|p| p.0 >= t_min)
-                    .map(|&(t, v)| egui::Pos2::new(x_of(t), y_of((v - v_lo) / (v_hi - v_lo))))
-                    .collect();
+            if let Some((v_lo, v_hi)) = model.volt_axis {
+                let line: Vec<egui::Pos2> = model.volt.iter().map(|&(t, v)| egui::Pos2::new(x_of(t), y_of((v - v_lo) / (v_hi - v_lo)))).collect();
                 painter.add(egui::Shape::line(line, egui::Stroke::new(1.5, volt_color)));
-                legend.push((volt_color, format!("Voltage {v_min:.2}\u{2013}{v_max:.2} V (own scale)")));
             }
 
-            // Legend: swatch then its text, laid out right to left.
+            // Legend: swatch then its (bounded) text, laid out right to left.
+            let colors = [batt_color, volt_color];
             let mut x = rect.max.x - 8.0;
-            for (color, text) in legend.iter().rev() {
+            for (text, color) in model.legend.iter().zip(colors).rev() {
                 let galley = painter.layout_no_wrap(text.clone(), egui::FontId::proportional(11.0), vis.weak_text_color());
                 x -= galley.size().x;
                 let y = rect.min.y + 5.0;
-                painter.galley(egui::Pos2::new(x, y), galley.clone(), vis.weak_text_color());
+                painter.galley(egui::Pos2::new(x, y), galley, vis.weak_text_color());
                 x -= 12.0;
-                painter.rect_filled(egui::Rect::from_min_size(egui::Pos2::new(x, y + 2.0), egui::Vec2::splat(8.0)), 1.0, *color);
+                painter.rect_filled(egui::Rect::from_min_size(egui::Pos2::new(x, y + 2.0), egui::Vec2::splat(8.0)), 1.0, color);
                 x -= 14.0;
             }
         });

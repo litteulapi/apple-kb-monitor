@@ -124,6 +124,8 @@ fn run_sandboxed(tag: &str, script: &str) -> Option<impl Fn(&str) -> String> {
     let xclose = dir.join("xclose.py");
     std::fs::write(&conf, BUS_CONF).expect("bus config");
     std::fs::write(&xclose, XCLOSE).expect("xclose helper");
+    std::fs::write(dir.join("daemon.py"), SLOW_DAEMON).expect("fake daemon");
+    std::fs::write(dir.join("xping.py"), XPING).expect("ping helper");
     let status = Command::new("unshare")
         .args(["-rm", "bash", "-c", SANDBOX, "sandbox", "dbus-run-session"])
         .arg(format!("--config-file={}", conf.display()))
@@ -133,6 +135,7 @@ fn run_sandboxed(tag: &str, script: &str) -> Option<impl Fn(&str) -> String> {
         .env("APP", env!("CARGO_BIN_EXE_apihub-app"))
         .env("OUT", &dir)
         .env("XCLOSE", &xclose)
+        .env("FIX", concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures"))
         .env("XDG_CONFIG_HOME", dir.join("config"))
         .env("XDG_STATE_HOME", dir.join("state"))
         .env("RUST_BACKTRACE", "1")
@@ -210,4 +213,125 @@ done
         assert!(!log.contains("no window"), "run {i}: no window:\n{log}");
         assert_eq!(read(&format!("run{i}.res")).trim(), "rc=0 windows=0", "run {i}:\n{log}\nscript: {}", read("script.err"));
     }
+}
+
+/// Fake `apple-kb-monitord` on the private bus: serves the anonymised real
+/// snapshot, but answers `History()` only after `$DELAY` seconds, like a
+/// daemon busy on a slow keyboard read. Timestamps of the real history
+/// fixture are shifted so that its last point is "now".
+const SLOW_DAEMON: &str = r#"
+import json, sys, time
+from gi.repository import Gio, GLib
+snap, hist, delay = open(sys.argv[1]).read(), open(sys.argv[2]).read().splitlines(), int(sys.argv[3])
+rows = [json.loads(l) for l in hist if l.strip()]
+shift = int(time.time()) - max(r["ts"] for r in rows)
+for r in rows: r["ts"] += shift
+XML = """<node><interface name="com.agenceapi.AppleKbMonitor1">
+<method name="GetState"><arg type="s" direction="out"/></method>
+<method name="History"><arg type="t" direction="in"/><arg type="s" direction="out"/></method>
+<property name="Json" type="s" access="read"/>
+<signal name="StateChanged"><arg type="t"/><arg type="s"/></signal></interface></node>"""
+iface = Gio.DBusNodeInfo.new_for_xml(XML).interfaces[0]
+def call(conn, sender, path, iname, method, params, inv):
+    if method == "History":
+        GLib.timeout_add_seconds(delay, lambda: (inv.return_value(GLib.Variant("(s)", (json.dumps(rows),))), False)[1])
+    else:
+        inv.return_value(GLib.Variant("(s)", (snap,)))
+def prop(conn, sender, path, iname, name):
+    return GLib.Variant("s", snap)
+def acquired(conn, name):
+    conn.register_object("/com/agenceapi/AppleKbMonitor1", iface, call, prop, None)
+def owned(conn, name):
+    open(sys.argv[4], "w").write("ready")
+Gio.bus_own_name(Gio.BusType.SESSION, "com.agenceapi.AppleKbMonitor1", 0, acquired, owned, None)
+GLib.MainLoop().run()
+"#;
+
+/// Like a window manager: `_NET_WM_PING` every 250 ms for `secs` seconds;
+/// prints "sent answered max_ms". A WM declares the window "not responding"
+/// after ~5 s without a reply.
+const XPING: &str = r#"
+import ctypes, sys, time, select
+x = ctypes.cdll.LoadLibrary("libX11.so.6")
+x.XOpenDisplay.restype = ctypes.c_void_p
+x.XDefaultRootWindow.restype = ctypes.c_ulong; x.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+x.XInternAtom.restype = ctypes.c_ulong; x.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+x.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.c_void_p]
+x.XSelectInput.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_long]
+x.XFlush.argtypes = x.XPending.argtypes = x.XConnectionNumber.argtypes = [ctypes.c_void_p]
+x.XNextEvent.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+class M(ctypes.Structure):
+    _fields_ = [("type", ctypes.c_int), ("serial", ctypes.c_ulong), ("send_event", ctypes.c_int),
+                ("display", ctypes.c_void_p), ("window", ctypes.c_ulong), ("message_type", ctypes.c_ulong),
+                ("format", ctypes.c_int), ("l", ctypes.c_long * 5)]
+class E(ctypes.Union):
+    _fields_ = [("xclient", M), ("pad", ctypes.c_long * 24)]
+d = x.XOpenDisplay(None); w = int(sys.argv[1]); secs = float(sys.argv[2])
+x.XSelectInput(d, x.XDefaultRootWindow(d), 1 << 19)  # SubstructureNotifyMask
+proto, ping = x.XInternAtom(d, b"WM_PROTOCOLS", 0), x.XInternAtom(d, b"_NET_WM_PING", 0)
+fd = x.XConnectionNumber(d); end = time.time() + secs; sent = ok = 0; worst = 0.0; serial = 0
+while time.time() < end:
+    serial += 1; e = E(); e.xclient.type = 33; e.xclient.window = w; e.xclient.format = 32
+    e.xclient.message_type = proto; e.xclient.l[0] = ping; e.xclient.l[1] = serial; e.xclient.l[2] = w
+    x.XSendEvent(d, w, 0, 0, ctypes.byref(e)); x.XFlush(d); t0 = time.time(); sent += 1; got = False
+    while not got and time.time() - t0 < 5:
+        while x.XPending(d):
+            r = E(); x.XNextEvent(d, ctypes.byref(r))
+            if r.xclient.type == 33 and r.xclient.l[0] == ping and r.xclient.l[1] == serial: got = True
+        if not got: select.select([fd], [], [], 0.02)
+    lat = (time.time() - t0) * 1000
+    worst = max(worst, lat)
+    ok += got
+    time.sleep(0.25)
+print(sent, ok, round(worst))
+"#;
+
+/// #230: 3.1.0 froze ("not responding") because the UI thread made
+/// blocking D-Bus calls (History() at start and on Refresh, no timeout).
+/// With the real (anonymised) history and a daemon that takes 20 s to answer
+/// History(), the window must answer every WM ping for 30 s, through tab
+/// switches, resizes and Refresh clicks, and no frame may take 100 ms.
+#[test]
+fn window_answers_pings_with_real_history_and_a_slow_daemon() {
+    let script = format!(
+        r#"{WAIT_WINDOW}
+mkdir -p "$XDG_STATE_HOME/apple-kb-monitor"
+python3 "$OUT/daemon.py" "$FIX/ui-gel-snapshot.json" "$FIX/ui-gel-history.jsonl" 20 "$OUT/daemon.ready" & DM=$!
+for j in $(seq 50); do [ -f "$OUT/daemon.ready" ] && break; sleep 0.1; done
+AKM_FRAME_STATS="$OUT/frames.log" "$APP" > "$OUT/app.log" 2>&1 & A=$!
+wait_window || echo "no window" >> "$OUT/app.log"
+W=$(xdotool search --name "Apple Keyboard Monitor" | head -1)
+python3 "$OUT/xping.py" "$W" 30 > "$OUT/ping" & P=$!
+sleep 2
+for k in 1 2 3; do
+  xdotool mousemove --window "$W" 112 12 click 1; sleep 1
+  xdotool mousemove --window "$W" 40 12 click 1; sleep 1
+  xdotool windowsize "$W" 900 700; sleep 1; xdotool windowsize "$W" 720 600; sleep 1
+  # Refresh of the history tile (720x600 layout), twice in a row.
+  xdotool mousemove --window "$W" 219 417 click 1 click 1; sleep 3
+done
+wait $P
+kill -0 $A && echo alive > "$OUT/alive"
+kill -TERM $A; wait $A; kill $DM
+"#
+    );
+    let Some(read) = run_sandboxed("gel", &script) else { return };
+    let log = read("app.log");
+    assert!(!log.contains("panicked") && !log.contains("no window"), "{log}\n{}", read("script.err"));
+    assert_eq!(read("alive").trim(), "alive", "{log}");
+    let ping: Vec<u64> = read("ping").split_whitespace().filter_map(|v| v.parse().ok()).collect();
+    assert_eq!(ping.len(), 3, "ping helper: {:?}\n{}", read("ping"), read("script.err"));
+    let (sent, answered, worst_ms) = (ping[0], ping[1], ping[2]);
+    eprintln!("pings: sent={sent} answered={answered} worst={worst_ms} ms");
+    assert_eq!(answered, sent, "window stopped answering the WM (worst {worst_ms} ms)\n{log}");
+    assert!(sent >= 20, "too few pings: {sent}");
+    assert!(worst_ms < 1000, "a ping waited {worst_ms} ms\n{log}");
+    let frames = read("frames.log");
+    let worst_frame = frames
+        .lines()
+        .filter_map(|l| l.split_whitespace().find_map(|kv| kv.strip_prefix("max_update_ms=")))
+        .filter_map(|v| v.parse::<f64>().ok())
+        .fold(0.0_f64, f64::max);
+    assert!(!frames.is_empty(), "no frame statistics\n{log}");
+    assert!(worst_frame < 100.0, "a frame took {worst_frame} ms\n{frames}");
 }

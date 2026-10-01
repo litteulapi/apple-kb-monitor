@@ -221,6 +221,111 @@ pub fn chart_points(pts: &[(f64, f64)], cutoff: f64, pct: bool) -> Vec<(f64, f64
     v
 }
 
+/// Longest text the chart ever lays out (legend, tick); a `{:.2}` of
+/// `f64::MAX` was a 309-digit legend in 3.1.0 (#230).
+pub const CHART_LABEL_MAX: usize = 40;
+/// At most this many time ticks under the chart.
+pub const CHART_TICKS_MAX: usize = 6;
+
+/// Everything the history chart draws, computed without egui (unit-tested):
+/// the UI only maps it to pixels.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChartModel {
+    pub batt: Vec<(f64, f64)>,
+    pub volt: Vec<(f64, f64)>,
+    pub t_min: f64,
+    pub t_max: f64,
+    /// Voltage axis (low, high), padded; `None` when fewer than 2 voltages.
+    pub volt_axis: Option<(f64, f64)>,
+    /// (timestamp, label) under the plot, e.g. "6 h ago", "now".
+    pub x_ticks: Vec<(f64, String)>,
+    /// One text per drawn series, battery first.
+    pub legend: Vec<String>,
+    pub summary: String,
+}
+
+/// Why there is no chart: the text shown instead.
+pub fn chart_model(battery: &[(f64, f64)], voltage: &[(f64, f64)], now: f64) -> Result<ChartModel, String> {
+    let cutoff = now - 24.0 * 3600.0;
+    let batt = chart_points(battery, cutoff, true);
+    if batt.is_empty() {
+        return Err(if battery.is_empty() { "No history data yet.".into() } else { "No data in the last 24 h.".into() });
+    }
+    let (t_min, t_max) = (batt[0].0, batt[batt.len() - 1].0);
+    if batt.len() < 2 || t_max - t_min < 1.0 {
+        return Err(format!("Only one reading in the last 24 h: {}.", pct_text(Some(batt[batt.len() - 1].1), 0)));
+    }
+    let volt: Vec<(f64, f64)> = chart_points(voltage, t_min, false).into_iter().filter(|p| p.0 <= t_max).collect();
+    let mut legend = vec!["Battery %".to_string()];
+    let volt_axis = if volt.len() >= 2 {
+        let lo = volt.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+        let hi = volt.iter().map(|p| p.1).fold(f64::NEG_INFINITY, f64::max);
+        // Constant voltage: a flat line in the middle, not a division by 0.
+        let pad = ((hi - lo) * 0.05).max(0.05);
+        legend.push(clip_label(&format!("Voltage {lo:.2}\u{2013}{hi:.2} V")));
+        Some((lo - pad, hi + pad))
+    } else {
+        None
+    };
+    let hours = (t_max - t_min) / 3600.0;
+    Ok(ChartModel {
+        x_ticks: time_ticks(t_min, t_max, now),
+        summary: format!("{} points over {}", batt.len(), span_text(hours)),
+        batt,
+        volt,
+        t_min,
+        t_max,
+        volt_axis,
+        legend,
+    })
+}
+
+fn clip_label(s: &str) -> String {
+    if s.chars().count() <= CHART_LABEL_MAX {
+        s.to_string()
+    } else {
+        s.chars().take(CHART_LABEL_MAX - 1).chain(std::iter::once('\u{2026}')).collect()
+    }
+}
+
+fn span_text(hours: f64) -> String {
+    if hours < 1.0 {
+        format!("{:.0} min", (hours * 60.0).max(1.0))
+    } else {
+        format!("{hours:.1} h")
+    }
+}
+
+/// Round time ticks between `t_min` and `t_max`, labelled relative to `now`
+/// ("6 h ago", "30 min ago", "now"), never more than [`CHART_TICKS_MAX`].
+pub fn time_ticks(t_min: f64, t_max: f64, now: f64) -> Vec<(f64, String)> {
+    if !(t_min.is_finite() && t_max.is_finite() && now.is_finite()) || t_max <= t_min {
+        return Vec::new();
+    }
+    const STEPS: [f64; 10] = [300.0, 600.0, 900.0, 1800.0, 3600.0, 7200.0, 10800.0, 21600.0, 43200.0, 86400.0];
+    let span = t_max - t_min;
+    let step = STEPS.iter().copied().find(|s| span / s <= (CHART_TICKS_MAX - 1) as f64).unwrap_or(86400.0);
+    // Ticks at whole multiples of `step` before `now`, inside [t_min, t_max].
+    let mut ticks = Vec::new();
+    let mut k = ((now - t_max) / step).ceil().max(0.0);
+    loop {
+        let t = now - k * step;
+        if t < t_min || ticks.len() >= CHART_TICKS_MAX {
+            break;
+        }
+        let ago = (k * step).round() as u64;
+        let label = match ago {
+            0 => "now".to_string(),
+            a if a < 3600 => format!("{} min ago", a / 60),
+            a => format!("{} h ago", a / 3600),
+        };
+        ticks.push((t, label));
+        k += 1.0;
+    }
+    ticks.reverse();
+    ticks
+}
+
 pub fn accent_color(rgb: [u8; 3]) -> Color32 {
     Color32::from_rgb(rgb[0], rgb[1], rgb[2])
 }
@@ -417,6 +522,64 @@ mod tests {
         assert_eq!(chart_points(&pts, 2.0, true), vec![(5.0, 60.0), (10.0, 50.0)]);
         let v = [(1.0, 2.9), (2.0, 0.0), (3.0, 1e9)];
         assert_eq!(chart_points(&v, 0.0, false), vec![(1.0, 2.9)]);
+    }
+
+    fn labels_are_short(m: &ChartModel) {
+        assert!(m.x_ticks.len() <= CHART_TICKS_MAX, "{:?}", m.x_ticks);
+        for t in m.legend.iter().chain(m.x_ticks.iter().map(|t| &t.1)).chain(std::iter::once(&m.summary)) {
+            assert!(t.chars().count() <= CHART_LABEL_MAX, "label too long: {t}");
+            assert!(!t.contains("inf") && !t.contains("NaN"), "{t}");
+        }
+    }
+
+    /// 3.1.0 printed `{:.2}` of f64::MAX as the voltage legend when every
+    /// voltage was unreliable: a 309-digit string (#230).
+    #[test]
+    fn real_history_without_reliable_voltage_has_a_short_legend() {
+        let now = 1_790_858_400.0;
+        let batt: Vec<(f64, f64)> = (0..56).map(|i| (now - 43_200.0 + i as f64 * 785.0, if i < 7 { 90.0 } else { 96.0 })).collect();
+        let m = chart_model(&batt, &[], now).unwrap();
+        assert_eq!(m.legend, vec!["Battery %".to_string()]);
+        assert_eq!(m.volt_axis, None);
+        assert_eq!(m.summary, "56 points over 12.0 h");
+        labels_are_short(&m);
+        assert!(m.x_ticks.len() >= 2);
+        assert!(m.x_ticks.iter().all(|(t, _)| *t >= m.t_min && *t <= m.t_max));
+    }
+
+    #[test]
+    fn chart_handles_empty_single_constant_and_nan() {
+        let now = 100_000.0;
+        assert_eq!(chart_model(&[], &[], now), Err("No history data yet.".into()));
+        assert_eq!(chart_model(&[(1.0, 50.0)], &[], now), Err("No data in the last 24 h.".into()));
+        assert_eq!(chart_model(&[(now - 10.0, 42.0)], &[], now), Err("Only one reading in the last 24 h: 42%.".into()));
+        let nan = [(now - 100.0, f64::NAN), (now - 50.0, f64::NAN)];
+        assert_eq!(chart_model(&nan, &nan, now), Err("No data in the last 24 h.".into()));
+        // Constant battery and voltage: a padded axis, no division by zero.
+        let batt = [(now - 7200.0, 80.0), (now - 3600.0, 80.0), (now, 80.0)];
+        let volt = [(now - 7200.0, 2.9), (now - 3600.0, 2.9), (now, 2.9)];
+        let m = chart_model(&batt, &volt, now).unwrap();
+        let (lo, hi) = m.volt_axis.unwrap();
+        assert!(lo < 2.9 && hi > 2.9 && (hi - lo) < 1.0);
+        assert_eq!(m.legend[1], "Voltage 2.90\u{2013}2.90 V");
+        assert_eq!(m.x_ticks.last().map(|t| t.1.as_str()), Some("now"));
+        labels_are_short(&m);
+        // Absurd voltages are dropped, never formatted.
+        let m = chart_model(&batt, &[(now - 10.0, f64::MAX), (now - 5.0, f64::MIN)], now).unwrap();
+        assert_eq!(m.legend.len(), 1);
+    }
+
+    #[test]
+    fn time_ticks_are_bounded_and_relative() {
+        let now = 1_000_000.0;
+        for span in [60.0, 600.0, 3600.0, 5.0 * 3600.0, 12.0 * 3600.0, 24.0 * 3600.0, 1e7] {
+            let t = time_ticks(now - span, now, now);
+            assert!(!t.is_empty() && t.len() <= CHART_TICKS_MAX, "{span}: {t:?}");
+            assert_eq!(t.last().unwrap().1, "now");
+        }
+        assert_eq!(time_ticks(now - 43_200.0, now, now).iter().map(|t| t.1.as_str()).collect::<Vec<_>>(), ["12 h ago", "9 h ago", "6 h ago", "3 h ago", "now"]);
+        assert!(time_ticks(f64::NAN, now, now).is_empty());
+        assert!(time_ticks(now, now, now).is_empty());
     }
 
     #[test]
