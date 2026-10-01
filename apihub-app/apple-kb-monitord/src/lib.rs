@@ -15,6 +15,7 @@
 //! * [`sleep`]   logind sleep / resume (#145) and shutdown hook
 //! * [`shutdown`] `WillShutdown` (Feature `0x40`) at shutdown, as macOS does (#191)
 //! * [`settings`] `hid_apple` write path through the privileged helper
+//! * [`powerdevil`] KDE PowerDevil low-battery overlap (#254)
 //! * [`alias`]   keyboard name on this computer (BlueZ `Alias`, #141)
 //!
 //! No GUI dependency: `apihub-app` (egui) is a client of this crate.
@@ -28,6 +29,7 @@ pub mod events;
 pub mod keymap;
 pub mod notify;
 pub mod passive;
+pub mod powerdevil;
 pub mod repair;
 pub mod service;
 pub mod settings;
