@@ -148,6 +148,10 @@ fn strip_comment(line: &str) -> &str {
 }
 
 /// Parse the file content. Returns the config and human-readable warnings.
+/// Sections written by other programs that read the same `config.toml` (the
+/// former MQTT/DDC screen bridge). Silently skipped.
+const FOREIGN_SECTIONS: [&str; 4] = ["ddc", "mqtt", "monitor", "brightness"];
+
 pub fn parse(content: &str) -> (Config, Vec<String>) {
     let mut cfg = Config::default();
     let mut warn = Vec::new();
@@ -231,6 +235,9 @@ pub fn parse(content: &str) -> (Config, Vec<String>) {
             ("notifications", "connection", Val::Bool(b)) => cfg.notify_connection = b,
             ("notifications", "battery_replaced", Val::Bool(b)) => cfg.notify_battery_replaced = b,
             ("notifications", "defer_to_powerdevil", Val::Bool(b)) => cfg.defer_to_powerdevil = b,
+            // Sections that belong to another program sharing this file (the
+            // former screen/MQTT bridge, now lg-ddc-control): not ours, so no warning.
+            (s, _, _) if FOREIGN_SECTIONS.contains(&s) => {}
             (s, k, _) => warn.push(format!("line {}: unknown or mistyped key [{s}] {k}", n + 1)),
         }
     }
@@ -256,6 +263,18 @@ pub fn load(path: &Path) -> (Config, Vec<String>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn foreign_sections_of_other_programs_are_ignored_silently() {
+        // The former screen/MQTT bridge writes these into the same file.
+        let (_, warn) = parse(
+            "[ddc]\nbus = \"/dev/i2c-3\"\n[mqtt]\nbroker = \"x\"\nport = 1883\n[monitor]\nmodel = \"m\"\n[brightness]\nmin = 2\nlamp_entity = \"l\"\n[alerts]\nenabled = true\n",
+        );
+        assert!(warn.is_empty(), "{warn:?}");
+        // A typo in one of OUR sections is still reported.
+        let (_, warn) = parse("[apple]\nwill_shutdwn = true\n");
+        assert_eq!(warn.len(), 1, "{warn:?}");
+    }
+
     use super::*;
 
     #[test]
