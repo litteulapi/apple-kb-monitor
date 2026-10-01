@@ -18,13 +18,33 @@ use crate::report::{KbReport, KbWake};
 /// HIDIOCGFEATURE = _IOWR('H', 0x07, 256) — read HID Feature Report
 const HIDIOCGFEATURE: libc::c_ulong = 0xC1004807;
 
+/// Retries of an ioctl interrupted by a signal (EINTR) before giving up.
+const EINTR_RETRIES: u32 = 3;
+
 /// Read one Feature Report on a raw fd (GET_REPORT: read-only on the device).
-pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> Option<Vec<u8>> {
-    let mut buf = [0u8; 256];
-    buf[0] = report_id;
-    // SAFETY: buf is 256 bytes, the size encoded in HIDIOCGFEATURE.
-    let ret = unsafe { libc::ioctl(fd, HIDIOCGFEATURE, buf.as_mut_ptr()) };
-    (ret > 0).then(|| buf[..ret as usize].to_vec())
+///
+/// The errno is captured right after the failing ioctl (never a stale one),
+/// an EINTR is retried, and a 0-byte answer is an empty report (`Ok(vec![])`,
+/// #134). The buffer returned starts with the report id.
+pub fn hid_read_feature(fd: libc::c_int, report_id: u8) -> io::Result<Vec<u8>> {
+    let mut attempts = 0;
+    loop {
+        let mut buf = [0u8; 256];
+        buf[0] = report_id;
+        // SAFETY: buf is 256 bytes, the size encoded in HIDIOCGFEATURE.
+        let ret = unsafe { libc::ioctl(fd, HIDIOCGFEATURE, buf.as_mut_ptr()) };
+        if ret >= 0 {
+            // The kernel never returns more than the 256 bytes encoded above.
+            let n = (ret as usize).min(buf.len());
+            return Ok(buf[..n].to_vec());
+        }
+        let err = io::Error::last_os_error();
+        if err.raw_os_error() == Some(libc::EINTR) && attempts < EINTR_RETRIES {
+            attempts += 1;
+            continue;
+        }
+        return Err(err);
+    }
 }
 
 /// A borrowed hidraw file descriptor as a [`HidSource`].
@@ -32,7 +52,7 @@ pub struct Hidraw(pub libc::c_int);
 
 impl HidSource for Hidraw {
     fn feature(&self, report_id: u8) -> io::Result<Vec<u8>> {
-        hid_read_feature(self.0, report_id).ok_or_else(io::Error::last_os_error)
+        hid_read_feature(self.0, report_id)
     }
 }
 
@@ -325,8 +345,16 @@ mod tests {
     }
 
     #[test]
-    fn hid_read_feature_on_invalid_fd_is_none() {
-        assert!(hid_read_feature(-1, crate::decode::HID_BATTERY_PRECISE).is_none());
-        assert!(Hidraw(-1).feature(0xEA).is_err());
+    fn hid_read_feature_on_invalid_fd_reports_its_own_errno() {
+        // Poison errno (ENOENT) first: the error must come from the ioctl.
+        // SAFETY: valid NUL-terminated path; the open fails, nothing to close.
+        let fd = unsafe { libc::open(c"/nonexistent-akm-test".as_ptr(), libc::O_RDONLY) };
+        assert!(fd < 0);
+        let e = hid_read_feature(-1, crate::decode::HID_PROBE).unwrap_err();
+        assert_eq!(e.raw_os_error(), Some(libc::EBADF));
+        assert_eq!(
+            Hidraw(-1).feature(0xEA).unwrap_err().raw_os_error(),
+            Some(libc::EBADF)
+        );
     }
 }
