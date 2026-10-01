@@ -355,4 +355,14 @@ PID 0x0256 « 2011 ») peut différer : à confirmer par l'expérience E1.
 
 ## 9. Suites dans Gitea
 
-Voir les issues et commentaires listés en fin de session (section mise à jour au moment de leur création).
+Base : https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor
+
+| Issue | Objet |
+|---|---|
+| [#174](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/174) (bug) | RSSI BR/EDR exposé en dBm alors que c'est un écart relatif à la plage idéale (§3.5) |
+| [#175](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/175) (bug, matériel) | Liaison coupée pendant une lecture vendeur : `0xFE` sans réponse, supervision 20 s (§3.7, E8) |
+| [#173](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/173#issuecomment-14929) (commentaire) | Délai de veille `0xF5 = 900 s` : impossible à mesurer tant qu'UPower sonde ; protocole E2/E3 (#176 fermée en doublon) |
+| [#132](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/132#issuecomment-14936) (commentaire) | Vrais paramètres BR/EDR : sniff 12,5 ms, supervision 20 s effective |
+| [#146](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/146#issuecomment-14938) (commentaire) | Coût énergétique chiffré du sondage UPower |
+| [#142](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/142#issuecomment-14940) (commentaire) | Coupure capturée, paramètres de page scan, FastConnectable non appliqué |
+| [#105](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/105#issuecomment-14942) (commentaire) | Critère RSSI de F25 à revoir |
