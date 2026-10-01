@@ -1,89 +1,148 @@
-# System architecture
+# Architecture
 
-> Line counts measured with `wc -l` on commit `c28fd8b`+ (2026-10-01): `apihub-app/src` 3 795 lines in 7 files (main 1032, keyboard 1065, bluez 576, tray 487, power 285, rssi 253, history 97); `rssi-helper.c` 132; `apple-kb-monitor` (Python) 2 693. Module headers in the source are the reference for design decisions.
+State of `main` @ `8cb044e` (package 3.1.0-15, 2026-10-01). Module headers in the source are the reference for design decisions; this document is the map. Size, measured with `wc -l` on that commit (tests included): `akm-core/src` 20 663 lines, `apple-kb-monitord/src` 11 716, `crates/akmctl/src` 8 028, `crates/akm-helper/src` 2 519, window `apihub-app/src` 4 175, `kcm/` 609 C++ + 1 985 QML, Plasma widget 712 QML/JS.
 
-## Overview
+## Principle
 
-The repository is keyboard-only. The display/DDC/MQTT/Home Assistant part was removed (issue #59, tag `archive/avec-ecran`); it now lives in the private repository https://gitea.pika.agenceapi.fr/adminapi/lg-ddc-control. It has one Rust desktop binary (`apihub-app`), one tiny privileged C helper (`rssi-helper`), a legacy Python CLI and a set of system integration files.
+One **user daemon** owns the keyboard. Everything else is a client of its D-Bus interface or a tiny privileged helper that does exactly one thing. The hardware is addressed through a **declarative register map** (`akm-core/src/registry.rs`) and a **model of Apple's own driver** (`akm-core/src/apple_model.rs`): what is read, when, how often, and what the three possible writes are, is decided by data that cites its source, not by scattered code.
 
 ```
-+-----------------------------------------------------------+
-|                 apihub-app (Rust, egui)                    |
-|                                                           |
-|  main.rs      UI (tabs Keyboard, Diag), polling thread,   |
-|               shared state, battery graph, diagnostics    |
-|  keyboard.rs  model table (17 PIDs), HID Feature Reports, |
-|               wake monitor, LED state                     |
-|  power.rs     kernel power_supply battery (source of      |
-|               truth for the percentage)                   |
-|  bluez.rs     BlueZ Battery Provider (zbus)               |
-|  rssi.rs      runs rssi-helper (timeout, 10 s cache)      |
-|  tray.rs      StatusNotifierItem + dbusmenu (zbus)        |
-|  history.rs   JSONL battery history                       |
-+-------------------------+---------------------------------+
-                          | child process
-                  rssi-helper (C, cap_net_admin+ep)
-                  BlueZ MGMT GET_CONN_INFO (0x0031)
+            session bus (D-Bus)                           system bus
+ ┌────────────────────────────────────────────┐    ┌──────────────────────────┐
+ │ apple-kb-monitord  (user service, Rust)    │    │ bluetoothd (BlueZ)       │
+ │  com.agenceapi.AppleKbMonitor1             │◄──►│  Device1, Adapter1,      │
+ │   .Device  .Input  .Link  .Keymap  .Tray   │    │  BatteryProviderManager1 │
+ │  tray SNI + dbusmenu, KNotification        │    └──────────────────────────┘
+ │  akm-core: registry, read_policy, breaker, │              ▲
+ │  apple_model, history, chemistry, keymap   │              │ pidfd_getfd, 1 byte
+ └───────┬───────────────┬────────────────────┘    ┌─────────┴────────────────┐
+         │ hidraw GET     │ child, cap_net_admin    │ akm-hid-control (root)   │
+         ▼               ▼                          │ sleep / wake units       │
+ /dev/hidrawN      rssi-helper (MGMT)              └──────────────────────────┘
+ /sys/class/power_supply/hid-<mac>-battery*
+         ▲
+ clients ├─ akmctl (CLI)        ├─ apihub-app (egui window, D-Bus activatable)
+         ├─ Plasma widget       ├─ kcm_applekeyboard (System Settings)
+         └─ pkexec akm-helper (hid_apple params), akm-keymap-helper (udev hwdb)
 ```
 
-## Module responsibilities
+## Components
 
-- **main.rs** -- egui application and tray-first startup (window opens on "Show Window"). Two tabs: Keyboard (telemetry, history graph, time remaining) and Diag (checks: binaries, user service, `hidraw readable`, keyd config, udev rules, `hid_apple fnmode`, RSSI helper). A supervised polling thread reads the keyboard, the kernel battery, RSSI and feeds `Arc<Mutex<SharedState>>`; it is restarted after a panic and the poisoned lock is recovered.
-- **keyboard.rs** -- model table `APPLE_MODELS` built from the kernel `hid-ids.h` (17 PIDs; vendors `05AC` and `004C`), `Family` (BCM2042 or Magic Keyboard). HID Feature Reports through `HIDIOCGFEATURE` on `/dev/hidrawN`, only for the BCM2042 family. Battery calibration curve (0x5A) validated before use. Wake monitor thread on Input Report 0x13, started even if the keyboard is absent at launch. CapsLock/NumLock state from sysfs.
-- **power.rs** -- `kernel_battery(mac)`: resolves `/sys/class/power_supply/hid-<mac>-battery[-N]` through the HID parent (`HID_UNIQ`) with a fallback by name, strict MAC validation, `capacity` and `status` parsers separate from I/O and tested on a fake tree. No `unsafe`, no subprocess. The percentage shown comes from here; raw HID reports are diagnostics.
-- **bluez.rs** -- exports one `org.bluez.BatteryProvider1` per connected keyboard under `/com/agenceapi/AppleKbMonitor/dev_AA_BB_CC_DD_EE_FF`, with a zbus `ObjectManager` on the root, and registers it with `org.bluez.BatteryProviderManager1`. No well-known bus name is requested. Adapter path resolved with `GetManagedObjects`. A small state machine re-registers when bluetoothd restarts or the adapter changes. UPower hides the BlueZ battery when the kernel already provides one with the same MAC, so the provider is a fallback.
-- **rssi.rs** -- runs `/usr/lib/apple-kb-monitor/rssi-helper <MAC>` as a child with a 1.5 s timeout and a 10 s cache; value 127 means unavailable. The GUI never opens the MGMT socket itself (status `0x14` for unprivileged sockets). Override for tests: env `APPLE_KB_RSSI_HELPER`.
-- **rssi-helper.c** -- opens the HCI control channel, sends `GET_CONN_INFO`, matches the reply to its request, prints `{"rssi":..,"tx_power":..,"max_tx_power":..}`. Exit codes 1 usage, 2 socket, 3 MGMT status, 4 timeout, 5 unavailable. The only binary with `cap_net_admin` (set by `post_install` with `setcap`, not in `package()` because fakeroot does not keep it).
-- **tray.rs** -- pure zbus: `org.kde.StatusNotifierItem` and `com.canonical.dbusmenu` (info lines, "Show Window", "Quit"). Re-registers with the StatusNotifierWatcher whenever it reappears (`NameOwnerChanged`).
-- **history.rs** -- JSONL store `~/.local/share/apple-kb-monitor/history.jsonl`, discharge rate and time remaining; invalid points (voltage <= 0, NaN) rejected.
+| Component | Language, place | Privilege | Role |
+|---|---|---|---|
+| `akm-core` | Rust library, `apihub-app/akm-core/` | none (pure logic + the two hidraw doors) | model table, register map, read policy and circuit breaker, Apple model, decoders, history, chemistry and forecast, alerts, keymap, recovery state machine, config parser. Testable without hardware |
+| `apple-kb-monitord` | Rust binary, `apihub-app/apple-kb-monitord/`, unit `apple-kb-monitord.service` (user, `Type=dbus`) | user of the active seat (`uaccess`) | the only process that opens the keyboard; D-Bus service; BlueZ battery provider; tray; notifications; logind sleep / shutdown inhibitors; PowerDevil dedupe; repair keeper |
+| `akmctl` | Rust binary, `apihub-app/crates/akmctl/` | user; `pkexec` for `set`, `keymap apply`, `hid-control` | CLI: D-Bus client, doctor, repair, selftest, keys / keymap, outputs; the only client that may open the keyboard itself (`dump`, `led`, the two write commands under the shared lock) |
+| `apihub-app` | Rust binary (egui / eframe), `apihub-app/src/` | user | window: tabs Keyboard (telemetry, history graph), Keys, Diag; `com.agenceapi.AppleKbMonitor` activatable, single instance, heartbeat file |
+| `akm-helper` | Rust, `apihub-app/crates/akm-helper/` | root through polkit `set-fnmode` (`auth_admin`) | `hid_apple` parameters (`/sys/module/hid_apple/parameters/*`, `/etc/modprobe.d/hid_apple.conf`); constants only, caller uid checked |
+| `akm-keymap-helper` | Rust, same crate | root through polkit `install-keymap` | validates line by line and installs `/etc/udev/hwdb.d/90-apple-kb-monitor.hwdb` from `/run/user/<uid>/apple-kb-monitor/keymap.hwdb`, `systemd-hwdb update`, `udevadm trigger` |
+| `akm-hid-control` | Rust, same crate | root: system units `apple-kb-monitor-suspend/resume.service`; polkit `hid-control` for the manual test | duplicates `bluetoothd`'s L2CAP control socket (PSM `0x0011`) with `pidfd_getfd` and sends one byte, `0x13` or `0x14`, only if the daemon's published breaker allows it; `inspect` reads the control-channel MTU for the name write |
+| `rssi-helper` | C, `rssi-helper.c` | file capability `cap_net_admin+ep`, `root:akm 0750` | BlueZ MGMT `GET_CONN_INFO` (`0x0031`): RSSI, TX power; JSON on stdout; run as a child by the daemon (1.5 s timeout, 10 s cache) |
+| `kcm_applekeyboard` | C++ plugin + QML pages, `kcm/` | user | System Settings module: State, Keys, Notifications, Name, Diagnostics; D-Bus and `akmctl` calls off the GUI thread; writes `config.toml` atomically |
+| Plasma widget | QML, `plasma/com.agenceapi.devicehub/` | user | compact / full views on the session bus (`DaemonLink.qml`), notification-area claim, FR catalogue |
+| System files | `systemd/`, `dbus/`, `polkit/`, `udev/`, `sysusers/`, `modprobe/`, `data/`, `bluetooth/`, `keyd/` | — | units, D-Bus activation files, polkit policy, `uaccess` rule, group `akm`, `fnmode=1`, `notifyrc`, BlueZ / UPower settings tool, keyd example |
+
+## `akm-core`: what decides
+
+- **`model.rs`**: `APPLE_MODELS`, 17 product ids from the kernel `hid-ids.h` (vendors `05AC` and `004C`), families `Bcm2042`, `MagicKeyboard`, `Unknown`; raw reports only on `Bcm2042`.
+- **`registry.rs`**: every known report (57 entries: Feature, Input, Output) with direction, size, Apple name, meaning, unit, endianness, decoder, proof and safety class (`SafeRead`, `SafeReadInput`, `OncePerConnection`, `PassiveInput`, `ManualOnly`, `NeverRead`, `WriteApple`, `NeverWrite`, `Unknown`). Read allow-lists are generated from it. Writes exist only as **named operations** (`WriteOp::Shutdown` = `0x40`, `Forget` = `0x41`, `DeviceName` = `0x55`), each with an exact length, once per `WriteSession`.
+- **`hidraw.rs`**: the two GET doors (`hid_read_feature` → `HIDIOCGFEATURE`, `hid_read_input` → `HIDIOCGINPUT`, one `ioctl` call `hid_get_report`) and the single SET door `hid_write_feature` with two fixed sizes (1 byte: `Shutdown`, `Forget`; 65 bytes: `DeviceName`), every byte logged, never retried. `WriteDoor` is the same door for a short-lived `akmctl` under the shared lock, obeying the daemon's published breaker. A source scan test fails if a second write path appears.
+- **`apple_model.rs`**: pure state machine of the macOS 26.5 driver (rules R1-R8 of [PARITE-APPLE.md](PARITE-APPLE.md)): readiness, battery schedule (60 s, 4 h, 1 h after failure), request spacing (1 s), timeouts (3.5 s + 1 s watchdog), breaker (3 silences; 2 after a sleep), disconnection request, display curve, battery state, keyboard off, `WillShutdown`. One constants table `APPLE`, every field with its source.
+- **`read_policy.rs`**: applies the model to the hidraw node: routine burst `0x47`, Input `0x30`, `0x46`, `0x49`; once-per-connection `0x4F`, `0x60`, `0x51`-`0x54`; process mutex + `flock` on `$XDG_RUNTIME_DIR/apple-kb-monitor/hid.lock`; `Breaker`; `publish_breaker_state` → `breaker_state.rs` (`breaker.state`, rewritten on change or every 20 s, owner / symlink / size checked by the root readers).
+- **`machine.rs`**, **`link.rs`**, **`recovery.rs`**: connection lifecycle (first acquisition = readiness), passive events, reconnection episodes (connected, dormant, unreachable, auth-failed, suspended) and paging cadence.
+- **`decode.rs`**, **`passive.rs`**, **`report.rs`**: decoders of the Feature values and of the Input reports `0x04`, `0x05`, `0x11`, `0x12`, `0x13`, `0x30`.
+- **`power.rs`**: kernel `power_supply` resolution through `HID_UNIQ`, strict MAC validation, parsers tested on a fake tree.
+- **`history.rs`**, **`chemistry.rs`**, **`forecast.rs`**, **`batteries.rs`**, **`snapshot.rs`**, **`alerts.rs`**: JSONL store (schema 2), discharge curves, estimate and range, battery-change detection, time remaining, thresholds with hysteresis and dedupe.
+- **`firmware.rs`**, **`devname.rs`**, **`alias.rs`**: embedded firmware table; validation, backup and three-lock sequence of the name stored in the keyboard; BlueZ alias.
+- **`keymap.rs`**, **`keytable.rs`**, **`keycodes.rs`**, **`hid_params.rs`**: the three layers of a key (udev hwdb → `hid_apple` → xkb / KDE), `keymap.toml`, presets, hwdb whitelist validator, `hid_apple` parameter whitelist.
+- **`rssi.rs`**, **`signal.rs`**, **`led.rs`**, **`discover.rs`**, **`config.rs`**, **`calibration.rs`**, **`parity.rs`**: helper runner and relative signal quality; evdev LEDs; hidraw discovery; `config.toml`; `0x5A` table validation; `WillShutdown` emission.
+
+## `apple-kb-monitord`: what runs
+
+`main.rs` → `service.rs` exports `com.agenceapi.AppleKbMonitor1` at `/com/agenceapi/AppleKbMonitor1` (`Type=dbus`, `BusName=`). `actor.rs` is the single event loop: BlueZ signals (`watcher.rs`), hidraw reads under the policy, passive input listener (`passive.rs`, interface `.Input`), alerts and notifications (`notify.rs`, KNotification dialect, `powerdevil.rs`), per-device objects (`devices.rs`, `/devices/<MAC>`), keymap interface (`keymap.rs`), repair keeper (`repair.rs`, `/Link`), BlueZ provider (`bluez.rs`, `org.bluez.BatteryProvider1` under `/com/agenceapi/AppleKbMonitor`, re-registered when `bluetoothd` restarts), tray (`tray/`: `sni.rs`, `menu.rs`, `view.rs`, `actions.rs`, `/Tray`), sleep and shutdown inhibitors (`sleep.rs`, `shutdown.rs`), aliases (`alias.rs`), settings (`settings.rs`, `pkexec akm-helper`). `client.rs` is the shared D-Bus client used by `akmctl`, the window and the tests.
+
+Unit hardening (`systemd/apple-kb-monitord.service`): `UMask=0077`, `StateDirectory=apple-kb-monitor`, `KeyringMode=private`, `LimitCORE=0`, `TasksMax=128`, `MemoryMax=512M`, `Restart=on-failure`, `UnsetEnvironment=WAYLAND_DISPLAY DISPLAY` (the daemon never opens a window). The system units of `akm-hid-control` are `ProtectSystem=strict`, `CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH`, `SystemCallFilter=@system-service pidfd_getfd`, `MemoryDenyWriteExecute=yes`.
 
 ## Data flow
 
 ```
 Hardware / kernel
-  Apple keyboard (BT HID) --> /dev/hidrawN                    HID Feature Reports, wake events
-  hid-apple / hid-input   --> /sys/class/power_supply/hid-*   battery percentage and status
-  BlueZ (D-Bus)           <-> org.bluez.Device1, Battery1     connection state, battery export
-  BlueZ MGMT (HCI ctl)    <-- rssi-helper                     RSSI, TX power
+  Apple keyboard (BT HID) --> /dev/hidrawN            GET Feature 0x47 0x46 0x49 0x4F 0x60 0x51-0x54, GET Input 0x30,
+                                                       passive Input 0x04 0x05 0x11 0x12 0x13 0x30; SET 0x40 / 0x41 / 0x55 (named ops)
+  hid-apple / hid-input   --> /sys/class/power_supply  battery percentage and status (source of the displayed %)
+  BlueZ (D-Bus)           <-> Device1, Adapter1        connection state, Alias, Disconnect (breaker), RemoveDevice (repair only)
+  BlueZ MGMT (HCI ctl)    <-- rssi-helper              RSSI, TX power
+  bluetoothd L2CAP ctl    <-- akm-hid-control          HID_CONTROL 0x13 / 0x14 at sleep / wake
 
 System layer
-  udev 70- uaccess        ACL on hidraw for the active seat user
-  keyd                    F3-F6 to KDE shortcuts
-  hid_apple               fnmode=1
-  D-Bus policy            unprivileged sessions may call org.bluez
+  udev 70- uaccess        ACL on hidraw for the active seat user (17 Bluetooth product ids)
+  udev hwdb 90-           optional key mapping written by akm-keymap-helper
+  hid_apple               fnmode and swaps (akm-helper)
+  polkit                  set-fnmode, install-keymap, hid-control (auth_admin, local active session)
+  logind                  PrepareForSleep / PrepareForShutdown delay inhibitors
 
 Desktop layer
-  KDE / UPower            kernel battery (and BlueZ Battery1 when no kernel node)
-  Plasma widget           akmctl status --json / D-Bus com.agenceapi.AppleKbMonitor1
-  Bluedevil patch         battery %, firmware in the BT panel
+  KDE / UPower            kernel battery (and BlueZ Battery1 when no kernel node); PowerDevil warnings observed
+  KNotification           apple-kb-monitor.notifyrc events, actions, replacement
+  Plasma widget, KCM, akmctl, apihub-app     D-Bus com.agenceapi.AppleKbMonitor1 (+ Json property, StateChanged)
 ```
 
 ## Privilege model
 
 | Component | Privilege | Mechanism |
 |---|---|---|
-| hidraw read | user of the active seat | udev `uaccess` (`70-apple-kb-hidraw.rules`, must sort before `73-seat-late.rules`) |
-| sysfs `power_supply` | any user | world-readable attributes |
-| BlueZ D-Bus | unprivileged | system bus policy `send_destination="org.bluez"` |
-| MGMT RSSI | `cap_net_admin` | file capability on `rssi-helper` only |
+| hidraw read / write (named ops) | user of the active seat | udev `uaccess` (`70-apple-kb-hidraw.rules`, sorts before `73-seat-late.rules`); accepted keylogger trade-off in [../udev/README.md](../udev/README.md) |
+| sysfs `power_supply`, `hid_apple` parameters (read) | any user | world-readable attributes |
+| BlueZ D-Bus | unprivileged | standard BlueZ policy |
+| RSSI (MGMT) | `cap_net_admin` | file capability on `rssi-helper`, executable by group `akm` only (#209) |
+| `hid_apple` write, `/etc/modprobe.d` | root | `pkexec akm-helper`, action `set-fnmode`, `auth_admin` without `_keep` (#202, #203) |
+| udev hwdb | root | `pkexec akm-keymap-helper`, action `install-keymap`, whitelist validator (#247) |
+| HID_CONTROL byte | root | system units at sleep / wake; `pkexec akm-hid-control`, action `hid-control`, for the manual test (#244) |
 
-## File layout
+## File layout (installed)
 
 ```
-/usr/bin/                         apihub-app, apple-kb-monitord, akmctl
-/usr/lib/apple-kb-monitor/        rssi-helper (cap_net_admin+ep)
-/usr/lib/udev/rules.d/            70-apple-kb-hidraw.rules
-/usr/lib/systemd/user/            apple-kb-monitord.service
-/etc/keyd/                        apple-keyboard.conf (05ac:0256)
-/etc/modprobe.d/                  hid_apple.conf (fnmode=1)
-/etc/dbus-1/system.d/             com.agenceapi.AppleKbMonitor.conf
-/usr/share/applications/          apihub-app.desktop
-/usr/share/icons/hicolor/scalable/apps/   apihub-scarab.svg
-/usr/share/plasma/plasmoids/      com.agenceapi.devicehub/
-/usr/share/apple-kb-monitor/kde/  DeviceItem.qml (Bluedevil patch)
-~/.local/share/apple-kb-monitor/  history.jsonl
+/usr/bin/                                  akmctl, apihub-app, apple-kb-monitord
+/usr/lib/apple-kb-monitor/                 rssi-helper (cap_net_admin, root:akm 0750), akm-helper, akm-keymap-helper, akm-hid-control
+/usr/lib/systemd/user/                     apple-kb-monitord.service, apple-kb-monitor-shutdown.service, apple-kb-monitor-selfcheck.{service,timer}
+/usr/lib/systemd/system/                   apple-kb-monitor-suspend.service, apple-kb-monitor-resume.service
+/usr/lib/udev/rules.d/                     70-apple-kb-hidraw.rules
+/usr/lib/sysusers.d/                       apple-kb-monitor.conf (group akm)
+/usr/lib/qt6/plugins/plasma/kcms/systemsettings/   kcm_applekeyboard.so
+/usr/share/dbus-1/services/                com.agenceapi.AppleKbMonitor1.service, com.agenceapi.AppleKbMonitor.service
+/usr/share/polkit-1/actions/               com.agenceapi.AppleKbMonitor.policy
+/usr/share/knotifications6/                apple-kb-monitor.notifyrc
+/usr/share/plasma/plasmoids/               com.agenceapi.devicehub/
+/usr/share/applications/                   com.agenceapi.AppleKbMonitor.desktop, kcm_applekeyboard.desktop
+/usr/share/icons/hicolor/scalable/         apps/apihub-scarab.svg, status/apihub-kb-*.svg
+/usr/share/doc/apple-kb-monitor/           KCM.md, KEYD.md, QA-AUTOMATIQUE.md, TOUCHES.md, VEILLE-HID.md, udev-README.md, examples/keyd/
+/etc/apple-kb-monitor/hid-suspend.conf     enabled = true
+/etc/modprobe.d/hid_apple.conf             fnmode=1
+~/.config/apple-kb-monitor/                config.toml, keymap.toml, selfcheck.env
+~/.local/state/apple-kb-monitor/           history.jsonl, selfcheck.json, *-backup-<UTC>.json
+$XDG_RUNTIME_DIR/apple-kb-monitor/         breaker.state, hid.lock, ui-heartbeat.json, keymap.hwdb (staged)
+```
+
+## Repository layout
+
+```
+apihub-app/              Cargo workspace (single version source: [workspace.package] version = PKGBUILD pkgver = CHANGELOG)
+  akm-core/              library + tests/ (integration tests)
+  apple-kb-monitord/     daemon + tests/
+  crates/akmctl/         CLI + tests/cli.rs (the built binary on fixtures)
+  crates/akm-helper/     akm-helper, akm-keymap-helper, akm-hid-control (src/bin/)
+  src/                   egui window; i18n/fr.po
+  audit-fuzz/ audit-props/ audit-ui/   fuzz targets, proptest, UI harness (not in the package)
+  tests/                 smoke_wayland.rs, smoke_xvfb.rs
+kcm/                     System Settings module (CMake), captures/
+plasma/                  widget, po/fr.po, tests/check_plaintext.py
+data/ dbus/ polkit/ systemd/ sysusers/ udev/ modprobe/ keyd/ bluetooth/   system integration
+scripts/                 ci-local.sh, qa_checks.py, *-allow.tsv, package-expected.txt
+tests/                   e2e/ (Xvfb + bubblewrap), fixtures/ (real A1314 capture, synthetic, devname, models), live/ (read-only tools), keyd/
+docs/                    index: INDEX.md
+.gitea/workflows/ci.yml  CI; .githooks/pre-push
 ```
 
 ## Review documents
 
-`REVUE-ARCHITECTURE-GLOBALE.md`, `REVUE-ARCHITECTURE-CLAVIER.md` and `REVUE-CORRECTIFS.md` are dated audit snapshots (2026-10-01) and are not updated with the code. Target architecture steps: issues #60 to #62.
+`REVUE-ARCHITECTURE-GLOBALE.md`, `REVUE-ARCHITECTURE-CLAVIER.md`, `REVUE-CORRECTIFS.md`, `REVUE-UI-TRAY.md` and the `AUDIT-*.md` are dated snapshots and are not updated with the code. The architecture steps they asked for (#59-#62, #66) are done: keyboard-only scope, workspace + testable core, headless daemon, thin D-Bus clients, event-driven actor.
