@@ -32,7 +32,7 @@
 //! * [`firmware`]    firmware version check against the embedded table (#219)
 //! * [`alias`]       validation of the user-chosen keyboard name (#141)
 //! * [`devname`]     name stored IN the keyboard (0x51-0x55): validation, frames,
-//!   backup, guarded write refused until proven (#248)
+//!   backup, guarded write behind three locks (#248)
 //! * [`breaker_state`] the daemon's circuit breaker published in
 //!   `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` for the other emitters
 //!   (`akm-hid-control`, `akmctl`; #244, #251)
