@@ -112,6 +112,37 @@ pub fn open_bluetooth_settings() {
     }
 }
 
+/// Command line of a text-entry dialog (`kdialog` or `zenity`).
+pub fn rename_dialog_argv(prog: &str, title: &str, prompt: &str, current: &str) -> Vec<String> {
+    let v: Vec<&str> = match prog {
+        "kdialog" => vec!["kdialog", "--title", title, "--inputbox", prompt, current],
+        _ => vec![
+            "zenity", "--entry", "--title", title, "--text", prompt, "--entry-text", current,
+        ],
+    };
+    v.into_iter().map(str::to_string).collect()
+}
+
+/// Ask the user for a new name. `None` = cancelled, or no dialog program
+/// (the caller then opens the window, which has a name field).
+pub fn ask_name(title: &str, prompt: &str, current: &str) -> Result<Option<String>, ()> {
+    let Some(prog) = ["kdialog", "zenity"].into_iter().find(|p| which(p).is_some()) else {
+        return Err(());
+    };
+    let argv = rename_dialog_argv(prog, title, prompt, current);
+    let out = Command::new(&argv[0])
+        .args(&argv[1..])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .map_err(|_| ())?;
+    if !out.status.success() {
+        return Ok(None); // cancelled
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    Ok(Some(text.trim_end_matches(['\n', '\r']).to_string()))
+}
+
 /// Clipboard: Klipper over D-Bus (works without `WAYLAND_DISPLAY` in the
 /// unit), else `wl-copy`, `xclip`, `xsel`.
 pub fn copy_to_clipboard(conn: &Connection, text: &str) -> bool {
@@ -205,6 +236,16 @@ pub fn upower_charging(sys: &Connection, mac: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dialog_argv_per_program() {
+        let k = rename_dialog_argv("kdialog", "T", "P", "cur");
+        assert_eq!(k, ["kdialog", "--title", "T", "--inputbox", "P", "cur"]);
+        let z = rename_dialog_argv("zenity", "T", "P", "cur");
+        assert_eq!(z[0], "zenity");
+        assert_eq!(z.last().map(String::as_str), Some("cur"));
+        assert!(z.contains(&"--entry-text".to_string()));
+    }
 
     #[test]
     fn which_finds_sh() {

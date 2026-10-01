@@ -173,6 +173,14 @@ fn watch_once(tx: &Sender<Msg>) -> zbus::Result<()> {
                 let (iface, changed, _inv): (String, Props, Vec<String>) =
                     msg.body().deserialize()?;
                 if sender_bluez && iface == "org.bluez.Device1" {
+                    // Renamed from anywhere (akmctl, bluetoothctl, KDE settings).
+                    if let (Some(alias), Some((mac, _))) =
+                        (prop_str(&changed, "Alias"), known.0.get(&path))
+                    {
+                        if tx.send(Msg::Alias(mac.clone(), Some(alias))).is_err() {
+                            return Ok(());
+                        }
+                    }
                     let Some(connected) = prop_bool(&changed, "Connected") else {
                         continue;
                     };

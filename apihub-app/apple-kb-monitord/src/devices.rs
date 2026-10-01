@@ -5,7 +5,7 @@
 //! The v1 interface on the root object is unchanged (additive only).
 //!
 //! Properties (`PropertiesChanged` emitted):
-//! * `Mac` s, `Model` s, `Connected` b
+//! * `Mac` s, `Model` s, `Name` s (alias, else own name; "" unknown), `Connected` b
 //! * `Battery` i (-1 unknown), `Voltage` d (0 unknown), `Rssi` i (127 unknown)
 //! * `LastUpdate` t (0 never)
 //! * `RemainingSeconds` x (-1 unknown; computed at read time from `EmptyAt`)
@@ -15,6 +15,7 @@
 //!   module; -100 when not loaded)
 //!
 //! Methods: `Refresh()`, `History(t since) -> s`, `BatterySets() -> s`,
+//! `SetAlias(s) -> s` (BlueZ alias, validated; "" = reset),
 //! `SetFnMode(i)`, `SetSwapOptCmd(i)`, `SetIsoLayout(i)` (validated, then
 //! delegated to the privileged helper; `NotSupported` without it).
 //!
@@ -35,6 +36,7 @@ use zbus::object_server::SignalContext;
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::actor::{Mailbox, Msg};
+use crate::alias::{self, AliasBackend};
 use crate::service::Props;
 use crate::settings::{self, SettingsBackend};
 
@@ -64,6 +66,8 @@ pub struct Shared {
     pub mailbox: Arc<Mailbox>,
     pub history: Option<Arc<History>>,
     pub settings: Arc<dyn SettingsBackend>,
+    /// Alias (name on this computer) of the keyboards.
+    pub alias: Arc<dyn AliasBackend>,
     /// MACs with an exported device object, in creation order.
     pub devices: Mutex<Vec<String>>,
 }
@@ -97,6 +101,15 @@ impl Shared {
         serde_json::to_string(&entries).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
 
+    /// Rename a keyboard on this computer; `""` restores its own name.
+    /// Returns the alias now in effect (empty = unknown).
+    pub async fn rename(&self, mac: &str, name: &str) -> zbus::fdo::Result<String> {
+        let (backend, mailbox) = (self.alias.clone(), self.mailbox.clone());
+        let (mac, name) = (mac.to_string(), name.to_string());
+        let r = unblock(move || alias::rename(backend.as_ref(), &mailbox, &mac, &name)).await?;
+        Ok(r.unwrap_or_default())
+    }
+
     pub fn battery_sets_json(&self) -> zbus::fdo::Result<String> {
         let entries = self.history.as_ref().map(|h| h.read()).unwrap_or_default();
         serde_json::to_string(&batteries::battery_sets(&entries))
@@ -116,12 +129,14 @@ pub struct DevProps {
 impl DevProps {
     /// Values for `mac` in `s`; a snapshot of another (or no) keyboard
     /// shows this one as disconnected, keeping its last known model.
-    pub fn for_mac(s: &Snapshot, mac: &str, last_model: &str) -> Self {
+    pub fn for_mac(s: &Snapshot, mac: &str, last: (&str, &str)) -> Self {
+        let (last_model, last_name) = last;
         let mine = s.mac().is_some_and(|m| m.eq_ignore_ascii_case(mac));
         if !mine {
             let mut base = Props::from_snapshot(&Snapshot::default());
             base.mac = mac.to_ascii_uppercase();
             base.model = last_model.to_string();
+            base.name = last_name.to_string();
             return Self {
                 base,
                 rate_pct_per_day: 0.0,
@@ -156,30 +171,31 @@ pub fn remaining_seconds(s: &Snapshot, now: u64) -> i64 {
 pub struct Device {
     mac: String,
     shared: Arc<Shared>,
-    last_model: Mutex<String>,
+    /// Last known (model, name) while another keyboard / none is published.
+    last: Mutex<(String, String)>,
 }
 
 impl Device {
-    pub fn new(mac: &str, model: &str, shared: Arc<Shared>) -> Self {
+    pub fn new(mac: &str, model: &str, name: &str, shared: Arc<Shared>) -> Self {
         Self {
             mac: mac.to_ascii_uppercase(),
             shared,
-            last_model: Mutex::new(model.to_string()),
+            last: Mutex::new((model.to_string(), name.to_string())),
         }
     }
 
     pub fn props(&self) -> DevProps {
         let s = self.shared.watch.get();
-        let mut lm = self.last_model.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(m) = s
-            .model()
-            .filter(|_| s.mac().is_some_and(|x| x.eq_ignore_ascii_case(&self.mac)))
-        {
-            if *lm != m {
-                *lm = m.to_string();
+        let mut last = self.last.lock().unwrap_or_else(|e| e.into_inner());
+        if s.mac().is_some_and(|x| x.eq_ignore_ascii_case(&self.mac)) {
+            if let Some(m) = s.model().filter(|m| *m != last.0) {
+                last.0 = m.to_string();
+            }
+            if let Some(n) = s.display_name().filter(|n| *n != last.1) {
+                last.1 = n.to_string();
             }
         }
-        DevProps::for_mac(&s, &self.mac, &lm)
+        DevProps::for_mac(&s, &self.mac, (&last.0, &last.1))
     }
 
     async fn set(&self, p: Param, v: i32) -> zbus::fdo::Result<()> {
@@ -199,6 +215,12 @@ impl Device {
     #[zbus(property)]
     fn model(&self) -> String {
         self.props().base.model
+    }
+    /// Name to show: the alias set on this computer, else the keyboard's
+    /// own name, else empty (#141).
+    #[zbus(property)]
+    fn name(&self) -> String {
+        self.props().base.name
     }
     #[zbus(property)]
     fn connected(&self) -> bool {
@@ -260,6 +282,12 @@ impl Device {
     /// Battery sets (JSON array of `akm_core::batteries::BatterySet`).
     fn battery_sets(&self) -> zbus::fdo::Result<String> {
         self.shared.battery_sets_json()
+    }
+
+    /// Rename this keyboard on this computer (BlueZ alias, nothing is written
+    /// into the keyboard). `""` restores its own name. Returns the new name.
+    async fn set_alias(&self, name: &str) -> zbus::fdo::Result<String> {
+        self.shared.rename(&self.mac, name).await
     }
 
     async fn set_fn_mode(
@@ -324,6 +352,7 @@ pub fn ensure_device(
     shared: &Arc<Shared>,
     mac: &str,
     model: &str,
+    name: &str,
 ) -> zbus::Result<Option<OwnedObjectPath>> {
     let Some(path) = device_path(mac) else {
         return Ok(None);
@@ -337,7 +366,7 @@ pub fn ensure_device(
         d.push(mac.clone());
     }
     conn.object_server()
-        .at(&path, Device::new(&mac, model, shared.clone()))?;
+        .at(&path, Device::new(&mac, model, name, shared.clone()))?;
     tracing::info!("D-Bus device object {path}");
     Ok(Some(path))
 }
@@ -404,6 +433,7 @@ mod tests {
         k.battery.percentage_fine = Some(70.0);
         k.device.mac = Some("04:DB:56:CA:42:EE".into());
         k.device.model = Some("A1314".into());
+        k.device.alias = Some("Bureau".into());
         let s = Snapshot {
             connected: true,
             keyboard: Some(k),
@@ -417,14 +447,20 @@ mod tests {
             batteries_installed_at: Some(42),
             ..Default::default()
         };
-        let p = DevProps::for_mac(&s, "04:db:56:ca:42:ee", "");
+        let p = DevProps::for_mac(&s, "04:db:56:ca:42:ee", ("", ""));
         assert_eq!((p.base.battery, p.base.connected), (70, true));
         assert_eq!((p.empty_at, p.installed_at), (5_000, 42));
         assert_eq!(p.remaining_s(1_000), 4_000);
         assert_eq!(p.remaining_s(9_000), 0);
         assert_eq!(remaining_seconds(&s, 1_000), 4_000);
-        let o = DevProps::for_mac(&s, "AA:BB:CC:DD:EE:FF", "old");
+        let o = DevProps::for_mac(&s, "AA:BB:CC:DD:EE:FF", ("old", "old name"));
         assert_eq!((o.base.battery, o.base.connected), (-1, false));
+        assert_eq!(
+            (o.base.model.as_str(), o.base.mac.as_str()),
+            ("old", "AA:BB:CC:DD:EE:FF")
+        );
+        assert_eq!(o.base.name, "old name");
+        assert_eq!(p.base.name, "Bureau");
         assert_eq!(
             (o.base.model.as_str(), o.base.mac.as_str()),
             ("old", "AA:BB:CC:DD:EE:FF")

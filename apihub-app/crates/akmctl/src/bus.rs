@@ -58,6 +58,18 @@ pub fn get_state(conn: &Connection) -> Result<Snapshot, BusError> {
     parse_snapshot(&json)
 }
 
+/// `SetAlias(mac, name)` -> the name now in effect (`name == ""` resets).
+pub fn set_alias(conn: &Connection, mac: &str, name: &str) -> Result<String, BusError> {
+    if !daemon_present(conn) {
+        return Err(BusError::Absent(format!(
+            "daemon not running ({BUS_NAME} absent on the session bus)"
+        )));
+    }
+    proxy(conn)?
+        .call("SetAlias", &(mac, name))
+        .map_err(|e| BusError::Failed(format!("SetAlias: {e}")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -7,7 +7,10 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct KbDevice {
     pub model: Option<String>,
+    /// Name the kernel registered the HID device under (`HID_NAME`).
     pub name: Option<String>,
+    /// User-chosen name on this computer (BlueZ `Device1.Alias`, #141).
+    pub alias: Option<String>,
     pub mac: Option<String>,
     pub chip: Option<String>,
     pub driver: Option<String>,

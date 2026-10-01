@@ -187,6 +187,7 @@ fn run(opts: actor::Options, bus_name: Option<String>) -> ExitCode {
     let mut so = service::ServeOptions::new(watch.clone(), mailbox.clone(), history);
     so.events = opts.events.clone();
     so.settings = Arc::new(settings::HelperBackend);
+    so.alias = opts.alias.clone();
     if let Some(n) = bus_name {
         so.bus_name = n;
     }

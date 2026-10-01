@@ -30,6 +30,7 @@ Audit and debug pass (tracking issue #8), then scope reduction: the repository i
 - **Python CLI / settings**: hardened HID/sysfs access, SDP parsing, history, daemon loop and `--json` serialisation (#40 to #51); no 0 % exported to BlueZ when the HID read fails (#78); calibration validated like the Rust side (#80).
 
 ### Added
+- Rename the keyboard on this computer (BlueZ alias): `akmctl rename <name>|--reset`, D-Bus `SetAlias` + `Name` property, tray "Rename keyboard…", name field in the window and the Plasma widget, name in tooltips and JSON; research on the in-keyboard name in docs/RENOMMER-CLAVIER.md (#141).
 - `tests/live/check_keyboard.sh`: read-only checks on real hardware (sysfs vs UPower vs BlueZ vs CLI battery, hidraw rights, udev `uaccess`, keyd, services).
 - Fixtures for a real A1314 ISO under `tests/fixtures/` and CI in `.gitea/workflows/ci.yml` (cargo build/clippy/test, pytest, shellcheck, gcc on `rssi-helper.c`, `udevadm verify`) (#9, #24).
 - Adversarial review documents: `docs/REVUE-ARCHITECTURE-GLOBALE.md`, `docs/REVUE-ARCHITECTURE-CLAVIER.md`, `docs/REVUE-CORRECTIFS.md` (issues #72 to #81).

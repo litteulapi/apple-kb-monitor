@@ -9,13 +9,15 @@
 //! * `Voltage`  d  volts, **0 = unknown** (HID diagnostic)
 //! * `Rssi`     i  dBm, **127 = unknown / stale** (MGMT convention; on
 //!   BR/EDR 0 is a valid value: inside the golden receive power range)
-//! * `Connected` b, `Model` s, `Mac` s (empty = unknown)
+//! * `Connected` b, `Model` s, `Mac` s (empty = unknown), `Name` s (alias,
+//!   else the keyboard's own name; empty = unknown)
 //! * `LastUpdate` t (unix s, 0 = never), `LastError` s (empty = none)
 //! * `Revision` t (snapshot counter), `Json` s (full snapshot, schema 1)
 //! * since API 2: `InterfaceVersion` u (= 2), `RemainingSeconds` x
 //!   (autonomy forecast, **-1 = unknown**, computed at read time)
 //!
-//! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `History(t since) -> s` (JSON array of
+//! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `SetAlias(s mac, s name) -> s`
+//! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (JSON array of
 //! `{ts,pct,voltage?,event?}`); since API 2 `GetDevices() -> ao`,
 //! `BatterySets() -> s`. Signal: `StateChanged(t revision, s json)`.
 //!
@@ -35,6 +37,7 @@ use zbus::interface;
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::actor::Mailbox;
+use crate::alias::{AliasBackend, BluezAlias};
 use crate::devices::{self, DevProps, Device, Shared, INTERFACE_VERSION};
 use crate::events::{DeviceEvent, EventHub};
 use crate::settings::{HelperBackend, SettingsBackend};
@@ -53,6 +56,8 @@ pub struct Props {
     pub rssi: i32,
     pub connected: bool,
     pub model: String,
+    /// Alias, else the keyboard's own name ("" = unknown).
+    pub name: String,
     pub mac: String,
     pub last_update: u64,
     pub last_error: String,
@@ -68,6 +73,7 @@ impl Props {
             rssi: s.rssi().unwrap_or(RSSI_UNKNOWN),
             connected: s.connected,
             model: s.model().unwrap_or_default().to_string(),
+            name: s.display_name().unwrap_or_default().to_string(),
             mac: s.mac().unwrap_or_default().to_string(),
             last_update: s.last_update,
             last_error: s.last_error.clone().unwrap_or_default(),
@@ -111,6 +117,11 @@ impl Monitor {
     fn mac(&self) -> String {
         self.props().mac
     }
+    /// Name to show: alias set on this computer, else own name (#141).
+    #[zbus(property)]
+    fn name(&self) -> String {
+        self.props().name
+    }
     #[zbus(property)]
     fn last_update(&self) -> u64 {
         self.props().last_update
@@ -151,6 +162,13 @@ impl Monitor {
     /// Ask for a full read now (no effect while the keyboard is disconnected).
     fn refresh(&self) -> zbus::fdo::Result<()> {
         self.shared.refresh()
+    }
+
+    /// Rename the keyboard `mac` on this computer (BlueZ alias; nothing is
+    /// written into the keyboard). `""` restores its own name. Returns the
+    /// name now in effect.
+    async fn set_alias(&self, mac: &str, name: &str) -> zbus::fdo::Result<String> {
+        self.shared.rename(mac, name).await
     }
 
     /// History entries with `ts >= since`, as a JSON array.
@@ -210,6 +228,8 @@ pub struct ServeOptions {
     pub events: Arc<EventHub>,
     /// Write path of the `hid_apple` parameters.
     pub settings: Arc<dyn SettingsBackend>,
+    /// Alias (name on this computer) backend.
+    pub alias: Arc<dyn AliasBackend>,
     /// Well-known name to take (tests / side-by-side instances).
     pub bus_name: String,
 }
@@ -222,6 +242,7 @@ impl ServeOptions {
             history,
             events: EventHub::new(),
             settings: Arc::new(HelperBackend),
+            alias: Arc::new(BluezAlias::default()),
             bus_name: BUS_NAME.to_string(),
         }
     }
@@ -245,6 +266,7 @@ pub fn export_on(conn: &Connection, o: &ServeOptions) -> Result<Arc<Shared>, Ser
         mailbox: o.mailbox.clone(),
         history: o.history.clone(),
         settings: o.settings.clone(),
+        alias: o.alias.clone(),
         devices: Mutex::new(Vec::new()),
     });
     conn.object_server().at(
@@ -325,8 +347,13 @@ fn sync_devices(
     prev: &mut HashMap<String, DevProps>,
 ) {
     if let Some(mac) = snap.mac() {
-        if let Err(e) = devices::ensure_device(conn, shared, mac, snap.model().unwrap_or_default())
-        {
+        if let Err(e) = devices::ensure_device(
+            conn,
+            shared,
+            mac,
+            snap.model().unwrap_or_default(),
+            snap.display_name().unwrap_or_default(),
+        ) {
             tracing::warn!("cannot export device {mac}: {e}");
         }
     }
@@ -336,11 +363,11 @@ fn sync_devices(
         .unwrap_or_else(|e| e.into_inner())
         .clone();
     for mac in macs {
-        let last_model = prev
+        let (last_model, last_name) = prev
             .get(&mac)
-            .map(|p| p.base.model.clone())
+            .map(|p| (p.base.model.clone(), p.base.name.clone()))
             .unwrap_or_default();
-        let now = DevProps::for_mac(snap, &mac, &last_model);
+        let now = DevProps::for_mac(snap, &mac, (&last_model, &last_name));
         match prev.get(&mac) {
             Some(old) if *old != now => {
                 if let Err(e) = emit_device(conn, &mac, old, &now) {
@@ -374,6 +401,9 @@ fn emit_device(conn: &Connection, mac: &str, old: &DevProps, now: &DevProps) -> 
         }
         if o.model != n.model {
             d.model_changed(ctx).await?;
+        }
+        if o.name != n.name {
+            d.name_changed(ctx).await?;
         }
         if o.last_update != n.last_update {
             d.last_update_changed(ctx).await?;
@@ -409,8 +439,12 @@ fn spawn_event_forwarder(conn: Connection, shared: Arc<Shared>, hub: &EventHub) 
 }
 
 fn forward(conn: &Connection, shared: &Arc<Shared>, ev: &DeviceEvent) -> zbus::Result<()> {
-    let model = shared.watch.get().model().unwrap_or_default().to_string();
-    let Some(path) = devices::ensure_device(conn, shared, ev.mac(), &model)? else {
+    let snap = shared.watch.get();
+    let (model, name) = (
+        snap.model().unwrap_or_default(),
+        snap.display_name().unwrap_or_default(),
+    );
+    let Some(path) = devices::ensure_device(conn, shared, ev.mac(), model, name)? else {
         return Ok(());
     };
     let iref = conn.object_server().interface::<_, Device>(&path)?;
@@ -470,6 +504,9 @@ fn emit(
         if prev.model != now.model {
             m.model_changed(ctx).await?;
         }
+        if prev.name != now.name {
+            m.name_changed(ctx).await?;
+        }
         if prev.mac != now.mac {
             m.mac_changed(ctx).await?;
         }
@@ -502,6 +539,7 @@ mod tests {
             (-1, 0.0, RSSI_UNKNOWN, false)
         );
         assert!(p.model.is_empty() && p.mac.is_empty() && p.last_error.is_empty());
+        assert!(p.name.is_empty());
 
         let mut k = KbReport::default();
         k.battery.percentage_fine = Some(89.6);
@@ -509,6 +547,7 @@ mod tests {
         k.radio.rssi_dbm = Some(-48);
         k.device.model = Some("A1314".into());
         k.device.mac = Some("04:DB:56:CA:42:EE".into());
+        k.device.name = Some("Own name".into());
         let s = Snapshot {
             connected: true,
             keyboard: Some(k),
@@ -521,5 +560,6 @@ mod tests {
             (90, 2.81, -48, true, 7)
         );
         assert_eq!(p.mac, "04:DB:56:CA:42:EE");
+        assert_eq!(p.name, "Own name");
     }
 }

@@ -36,6 +36,7 @@ fn run(cmd: Command) -> u8 {
             Err(e) => fail(&e),
         },
         Command::Set { what: SetCmd::Fnmode { mode, persist } } => cmd_set_fnmode(mode, persist),
+        Command::Rename { name, reset: _, mac } => cmd_rename(name.as_deref().unwrap_or(""), mac),
         Command::Watch => cmd_watch(),
         Command::Completions { shell } => {
             let mut c = Cli::command();
@@ -109,6 +110,46 @@ fn cmd_set_fnmode(mode: u8, persist: bool) -> u8 {
             None => fail("helper killed by a signal"),
         },
         Err(e) => fail(&format!("cannot run pkexec: {e}")),
+    }
+}
+
+/// `rename <name>` / `rename --reset` (empty name): D-Bus `SetAlias`.
+fn cmd_rename(name: &str, mac: Option<String>) -> u8 {
+    let conn = match bus::connect() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("akmctl: {e}");
+            return EXIT_ABSENT;
+        }
+    };
+    let mac = match mac {
+        Some(m) => m,
+        None => match bus::get_state(&conn) {
+            Ok(s) => match s.mac() {
+                Some(m) => m.to_string(),
+                None => return fail("no keyboard known to the daemon (use --mac)"),
+            },
+            Err(bus::BusError::Absent(m)) => {
+                eprintln!("akmctl: {m}");
+                return EXIT_ABSENT;
+            }
+            Err(e) => return fail(&e.to_string()),
+        },
+    };
+    match bus::set_alias(&conn, &mac, name) {
+        Ok(now) if name.is_empty() => {
+            println!("Name restored: {now}");
+            EXIT_OK
+        }
+        Ok(now) => {
+            println!("Name: {now}");
+            EXIT_OK
+        }
+        Err(bus::BusError::Absent(m)) => {
+            eprintln!("akmctl: {m}");
+            EXIT_ABSENT
+        }
+        Err(e) => fail(&e.to_string()),
     }
 }
 

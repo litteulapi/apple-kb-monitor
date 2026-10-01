@@ -135,6 +135,7 @@ pub(crate) enum Action {
     Refresh,
     Copy,
     Bluetooth,
+    Rename,
     Hide,
 }
 
@@ -339,6 +340,40 @@ pub fn spawn_with(
                 };
             }
         });
+}
+
+/// "Rename keyboard…": ask for a name, set the BlueZ alias. Without a dialog
+/// program the window (which has a name field) is opened instead.
+fn rename_flow(
+    conn: &Connection,
+    token: Option<String>,
+    lang: Lang,
+    mailbox: &Mailbox,
+    mac: &str,
+    current: &str,
+) {
+    let title = lang.t("Renommer le clavier", "Rename keyboard");
+    let prompt = lang.t(
+        "Nouveau nom (vide = nom d'origine du clavier) :",
+        "New name (empty = the keyboard's own name):",
+    );
+    let text = match actions::ask_name(title, prompt, current) {
+        Ok(Some(t)) => t,
+        Ok(None) => return,
+        Err(()) => {
+            tracing::info!("tray: no dialog program, opening the window");
+            actions::open_window(conn, token);
+            return;
+        }
+    };
+    let backend = apple_kb_monitord::alias::BluezAlias::default();
+    match apple_kb_monitord::alias::rename(&backend, mailbox, mac, &text) {
+        Ok(now) => tracing::info!("tray: keyboard renamed to {now:?}"),
+        Err(e) => {
+            tracing::warn!("tray: rename refused: {e}");
+            apple_kb_monitord::notify::send(title, &e.to_string(), "dialog-error");
+        }
+    }
 }
 
 // ── Tray loop ───────────────────────────────────────────────────────────────
@@ -647,6 +682,18 @@ impl Tray {
                 let _ = std::thread::Builder::new()
                     .name("tray-bt".into())
                     .spawn(actions::open_bluetooth_settings);
+            }
+            Action::Rename => {
+                let snap = self.watch.get();
+                let Some(mac) = snap.mac().map(str::to_string) else {
+                    return;
+                };
+                let current = snap.display_name().unwrap_or_default().to_string();
+                let (lang, mailbox) = (self.cfg.lang, self.mailbox.clone());
+                let (c, token) = (conn.clone(), lock(&self.shared).xdg_token.take());
+                let _ = std::thread::Builder::new()
+                    .name("tray-rename".into())
+                    .spawn(move || rename_flow(&c, token, lang, &mailbox, &mac, &current));
             }
             Action::Copy => {
                 let text = view::clipboard_text(
