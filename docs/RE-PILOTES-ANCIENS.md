@@ -107,7 +107,7 @@ Abréviations **[chaîne + désassemblage]** : `MV` MeasuredVoltages, `LT` Latch
   ce qui explique qu'elle varie par paliers et sans bruit (`HARDWARE-RAPPORTS-HID.md` §4) **[plist + déduction]**.
 * **Cadence et sûreté** : Lion lisait `0x47`, `0x49` et `0x60` à **chaque** relevé batterie (60 s après connexion,
   puis toutes les 4 h) **[désassemblage]**. Ces trois lectures font donc partie du trafic de production d'Apple
-  pour notre PID : elles sont **sûres au rythme Apple** (aucune ne figeait le clavier). `0xFE`, `0xEA`, `0xF4`-`0xFF`,
+  pour notre PID : elles sont **validées par Apple au rythme d'Apple** (au plus une série toutes les 4 h), ce qui ne garantit rien pour des rafales. `0xFE`, `0xEA`, `0xF4`-`0xFF`,
   `0x46`, `0x4A`-`0x4C` n'ont été lus par **aucune** version examinée.
 
 ## 5. Ce que les pilotes de l'époque envoyaient réellement à notre PID (10.7.5)
@@ -182,7 +182,7 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
 
 | Étape | Constat | Preuve |
 |---|---|---|
-| Isolement | `IOBluetoothIgnoreHIDDevice`, puis commande noyau `ReleaseAllChannelsWithSleepForHIDUpdate` : le pilote ferme les canaux HID (contrôle puis interruption, 1,3 s d'attente après chacun) | [désassemblage] des deux côtés |
+| Isolement | `IOBluetoothIgnoreHIDDevice`, puis commande noyau `ReleaseAllChannelsWithSleepForHIDUpdate` : le pilote ferme les deux canaux HID (1,3 s d'attente après chacun) | [désassemblage] des deux côtés |
 | Lien | connexion baseband (`PageTimeout`), politique de lien `0x000B` pendant la mise à jour (sniff interdit), `0x000F` restaurée ensuite ; types de paquets `0x0408` | [désassemblage] |
 | **Canal** | **L2CAP, PSM `0xF30D`** (PSM dynamique vendeur), **pas** les PSM HID `0x11`/`0x13` (ré-autorisés en fin de mise à jour) | [désassemblage] `IOBluetoothDeviceOpenL2CAPChannelSync(…, 0xF30D, …)` |
 | Trame de commande | octets bruts `[commande][longueur][paramètres]`, **sans en-tête HIDP**, accusé attendu sous 10 s | [désassemblage] `sendCommand:withAck:param:pLength:` |
@@ -200,3 +200,89 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
   la coïncidence suffit à les classer **« ne jamais écrire »**.
 * Aucun updater ne vise `0x0255-0x0257` (§2) : il n'y a **aucune** raison légitime d'ouvrir le PSM `0xF30D` vers notre
   clavier. Aucun outil ne sera écrit pour cela.
+
+## 7. Table finale : registre → fonction → preuve → risque (état après 2009, 10.7.5 et 26.5)
+
+| ID | Type | Fonction | Preuve | Risque | Usage projet |
+|---|---|---|---|---|---|
+| `0x01` | Out | LED Verr. Maj | [désassemblage] 2009/10.7/26 | nul | déjà géré par le noyau |
+| `0x09` | Feature | drapeau « délai Verr. Maj du firmware » (`01` = désactivé) ; écrit **seulement** pour `0x022C-0x022E` | [désassemblage] 10.7 = 26.5 | faible | lecture ; ne pas écrire |
+| `0x13` | In | bit 1 = sous tension (0 → `KeyboardOff`) | [désassemblage] 10.7 = 26.5 | nul | #190 |
+| `0x30` | In | `BatteryState` 0/1/2 (+3 accepté) | [plist + désassemblage] toutes époques | nul | #189 |
+| `0x40` | Feature WO | `WillShutdown` | [plist + désassemblage] envoyé à chaque arrêt (10.7, 26.5) | faible | #191 |
+| `0x41` | Feature WO | `RecantConnection` = « virtual cable unplug » version Apple | [désassemblage] `recantConnection` ; `blued` ne l'utilise que pour l'émulation HID | élevé (coupe/oublie l'hôte) | ne pas exposer |
+| `0x43` | Feature | `UserMode` | absent du firmware `0x0050` [mesuré] | — | aucun |
+| `0x44` | Feature WO | `FullFactoryDefault` = efface **toutes** les clés de lien (`deleteAllLinkKeys` en 2009) | [désassemblage] **envoyé par Lion à la suppression du clavier** | **élevé mais voulu** : le clavier oublie tous ses hôtes, ré-appairage obligatoire | « oublier proprement », accord du gérant (issue dédiée) |
+| `0x45` | Feature WO | `FactoryDefault` | [plist + désassemblage] jamais appelé par aucun client Apple examiné | élevé, effet exact inconnu | ne pas écrire |
+| `0x46` | Feature | tension instantanée mV (LE) | [mesuré] ; jamais lue par Apple | lecture | ≤ 1/5 min (#177) |
+| `0x47` | Feature | `BatteryPercent` (calculé par le firmware) | toutes époques | lecture | en production |
+| `0x49` | Feature | **`BatteryVoltage`** = tension `Latched` mV (LE) | [plist + désassemblage 10.7] | lecture | rythme Apple : 1/4 h (#139, nouvelle issue) |
+| `0x4A` | Feature | état / notification de **lien SCO** : écrit `03`/`04` par `blued` (Lion) ; GET = `0x12` (codage inconnu) | [désassemblage] | faible (Apple l'écrivait en production) | issue « coexistence casque », accord requis |
+| `0x4B` | Feature | inconnu (`00 08`) | — | — | lecture rare |
+| `0x4C` | Feature | adresse de l'hôte appairé + 12 o | [mesuré] | lecture sensible | #140 |
+| `0x4E` | Feature | `connectionCounts` (10 o) des produits `0x0310` | [désassemblage] | — | absent chez nous |
+| `0x4F` | Feature | version firmware `0x0050` | [mesuré] | lecture | — |
+| `0x50` | Feature WO | `DeviceNameChange` (validation des 4 fragments) | [désassemblage] `setDeviceName:` | moyen | #192 |
+| `0x51-0x54` | Feature | `DeviceName1..4` (lus par `deviceNameFromHardware`) | [désassemblage] | moyen en écriture | #192 |
+| `0x55` | Feature WO | `LongDeviceName` 64 o : **seul** registre écrit par Lion pour renommer un 598 | [désassemblage] | moyen | #192 |
+| `0x5A`, `0xEB` | Feature | copies des seuils de `0x60` (jeux 1 et 2 ?) | [mesuré + déduction] | lecture | intégrité (`calib_mirror_*`) |
+| `0x5B` | Feature | `0xF4` ‖ `0xF5` ‖ zéros | [mesuré] | — | — |
+| `0x5C`, `0x5D` | Feature | vides | [mesuré] | — | — |
+| `0x60` | Feature | **`CalibratedBatteryThresholds3`** : `Full`/`Low`/`Critical`/`Empty` mV (4 × u16 BE) | [plist + désassemblage 10.7] | lecture | nouvelle issue |
+| `0xD0`, `0xD4`, `0xD5` | Feature WO | **inconnus** ; même plage que les opcodes de maintenance `0xD1-0xDB` de l'updater (PSM `0xF30D`) | [désassemblage bfu + déduction] | **inconnu, potentiellement maintenance** | **ne jamais écrire** |
+| `0xD1`, `0xD8` | Feature | inconnus (0) ; même plage `0xDx` | [mesuré] | lecture rare | — |
+| `0xEA` | Feature | second estimateur de % (hypothèse) ; jamais lu par Apple | [mesuré] | lecture | remplacer par `0x47` (#177) |
+| `0xF4`-`0xF7` | Feature | constantes (`0xF5` = 900 : délai de veille ?) ; jamais lus par Apple | [mesuré] | lecture rare | #173 |
+| `0xFA`, `0xFB` | Feature WO | **inconnus de tout logiciel Apple examiné** (2009, 10.7, 26.5, `bfu`) | — | **inconnu** | **ne jamais écrire** |
+| `0xFE` | Feature | fige le firmware à la lecture | [mesuré] #175 | **lecture dangereuse** | exclu |
+| `0xFF` | Feature | tension (BE) + `01` | [mesuré] | lecture | — |
+| `0x04`, `0x05` | In (non déclarés) | inconnus d'Apple ; hypothèses WICED SLEEP / FUNC_LOCK | [source tierce] | nul (lecture passive) | — |
+
+Les inconnues **définitivement sans réponse logicielle publique** sont donc `0xD0 0xD4 0xD5 0xFA 0xFB` (écriture),
+`0x4B 0xD1 0xD8 0xF6 0xF7` (lecture) et les Input `0x04`/`0x05` : **aucun** des quatre logiciels Apple examinés ne les
+mentionne. Seul un dump de la mémoire externe (#184/#185) peut encore les éclairer.
+
+## 8. Fonctions Apple réellement supportées par l'A1314 B (`0x0256`, fw `0x0050`)
+
+Par opposition aux fonctions du Magic Keyboard (`0x90`, `0x35`, rétro-éclairage `0xB0`, `0xF0`/`0xF2`, Lightning) :
+
+1. **Batterie** : pourcentage firmware (`0x47`), état bas/critique poussé (`0x30`), tension `Latched` (`0x49`), seuils
+   `Full`/`Low`/`Critical`/`Empty` (`0x60`), notifications `LowBattery`/`CriticallyLowBattery`, relevé toutes les 4 h.
+2. **Extinction détectée** (`0x13` bit 1) → notification `KeyboardOff`.
+3. **Arrêt de l'hôte annoncé** (`0x40` `WillShutdown`).
+4. **Veille de l'hôte** : HID_CONTROL SUSPEND / EXIT_SUSPEND.
+5. **Nom stocké dans le clavier** : lecture `0x51-0x54`, écriture `0x55` (64 o) — fonction « Renommer » de Lion.
+6. **Oubli de tous les hôtes** (`0x44`) — fonction « Supprimer » de Lion ; `0x41` « renoncer à la connexion ».
+7. **Coexistence avec un casque** : notification de lien SCO (`0x4A` = `03`/`04`) + paramètres de sniff adaptés côté hôte.
+8. **Touches** : Fn = `0x00FF:0x0003`, F1-F12 remappées **par l'hôte** (F4 = Launchpad sur le 598), délai Verr. Maj
+   de 75 ms appliqué **par l'hôte**, émulation pavé numérique par l'hôte.
+9. **Pas** de mise à jour de firmware publique pour ce PID ; **pas** de `UserMode` ; **pas** de rétro-éclairage.
+
+## 9. Corrections à apporter à nos documents (non modifiés ici, voir issues)
+
+| Document | Affirmation actuelle | Correction | Preuve |
+|---|---|---|---|
+| `HARDWARE-RAPPORTS-HID.md` §2 et §3 | `0x5A` = « seuils 100/75/50/25 % » | `0x60` (et ses copies) = seuils **`Full`/`Low`/`Critical`/`Empty`** ; `Low`/`Critical` ↔ `BatteryState` 1/2 | §4 |
+| `HARDWARE-RAPPORTS-HID.md` | `0x49` « tension lissée (hypothèse) » | `BatteryVoltage`, tension **`Latched`** pour Apple | §3-4 |
+| `RE-PILOTE-MACOS.md` §6 | « hypothèse MVLT réfutée » | réfutée **pour 26.5 seulement** : Lion publiait `MV{LT}` = `0x49` | §4 |
+| `RE-PILOTE-MACOS.md` §9 n° 6 | effet du bit 3 inconnu | bit 3 = appareils notifiés du lien SCO (`0x4A`) et sniff ajusté | §5 |
+| `RE-PILOTE-MACOS.md` §5.1 | `0x09`… « jamais envoyé » | confirmé pour 2009 et 10.7 aussi | §5 |
+| `RE-COMMANDES-VENDEUR.md` §4.3 | registres HID WO = « candidats naturels » du canal de flash ; `bfu` passe par le canal de contrôle HIDP | le flash passe par un **PSM L2CAP vendeur `0xF30D`**, trames brutes `D1…DB`, pas par HIDP | §6 |
+| `RE-COMMANDES-VENDEUR.md` §4.3 | `bfu` est « le canal officiel du A1314 » / cible notre `0x0050` | `bfu` vise **`0x0239-0x023B`** (fw `0x44`/`0x46` → `0x50`) ; **aucun** updater pour `0x0255-0x0257` | §2 |
+| `RE-COMMANDES-VENDEUR.md` §5 / `RE-PILOTE-MACOS.md` §8 | `0x44` « INTERDIT » | `0x44` est l'**oubli de tous les hôtes**, envoyé par Lion lors de « Supprimer » : destructif pour l'appairage mais **fonction Apple documentée** ; reste derrière accord explicite | §5 |
+| `RE-COMMANDES-VENDEUR.md` §1.3 | `0xFA`/`0xFB` « porte d'écriture du délai de veille » (spéculation) | aucune trace dans 4 logiciels Apple ; spéculation non étayée, classer « inconnu » | §7 |
+
+## 10. Reproduire (lecture seule, sans clavier)
+
+1. Catalogue `index-lion-snowleopard-leopard.merged-1.sucatalog` → URL `swcdn.apple.com` des paquets (§1).
+2. Lecteur xar : vérifier la somme SHA-1 de la TOC et de chaque fichier ; `Payload` = cpio `odc` gzip.
+   Pour le Combo 10.7.5 (2 Go), lire le `Payload` en flux (`curl -r` → `gzip -dc` → extracteur cpio filtrant) :
+   rien n'est stocké hormis les composants Bluetooth/HID.
+3. `llvm-lipo -thin x86_64|i386`, `llvm-objdump --macho -d` (les sélecteurs Objective-C et les chaînes sont annotés),
+   `llvm-nm -C` (les kexts gardent leurs symboles C++ ; `blued` et `bfu` sont dépouillés : passer par les références
+   de sélecteurs et la table `--objc-meta-data`).
+4. Points d'entrée : `AppleBluetoothHIDKeyboard::{updateBatteryLevel,getLatchedBatteryVoltage,getVoltagesUsed,processInterruptData}`,
+   `IOAppleBluetoothHIDDriver::{processCommandWL,handleStart}`, `-[AppleBluetoothHIDDevice setDeviceName:|fullFactoryDefault|sendSCOLink*]`,
+   chaîne `sending sendSCOLinkACTIVE` dans `blued`, `kRemoveDevice` dans `Bluetooth.prefPane`, `sendCommand:withAck:param:pLength:` et
+   `ackReceived:` dans `bfu`.
+5. **Ne pas** analyser `FWDecrypt` ni tenter de déchiffrer `config.hex`.
