@@ -24,6 +24,7 @@
 //! * [`hid_params`]  `hid_apple` parameters: read + whitelist
 //! * [`keymap`]      special keys: kernel Fn table, effective table, manual
 //!   mapping (`keymap.toml` → udev hwdb), xkb/KDE names (#247)
+//! * [`keytable`]    effective table JSON, keyboard detection, apply plan
 //! * [`keycodes`]    `KEY_*` names of `input-event-codes.h`
 //! * [`passive`]     passive listening to input reports 0x04/0x05/0x30/0x13/0x11/0x12
 //!   (#130, #187, #129)
@@ -44,6 +45,7 @@ pub mod forecast;
 pub mod hid_params;
 pub mod keycodes;
 pub mod keymap;
+pub mod keytable;
 pub mod hidraw;
 pub mod history;
 pub mod led;

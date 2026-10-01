@@ -146,6 +146,26 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// Effective table of the special keys (F1-F12, Eject; --all: every known
+    /// key): physical key -> evdev code (after hwdb and hid_apple, per fnmode)
+    /// -> keysym -> KDE global shortcut. Never reads a key press
+    Keys {
+        /// Verdict per key ([ok] = a KDE shortcut is bound) and what to test
+        #[arg(long)]
+        check: bool,
+        /// All known keys (modifiers, arrows, Fn...), not only the top row
+        #[arg(long)]
+        all: bool,
+        /// Machine-readable JSON (with the KDE actions)
+        #[arg(long)]
+        json: bool,
+    },
+    /// Manual key mapping without keyd ($XDG_CONFIG_HOME/apple-kb-monitor/keymap.toml
+    /// -> udev hwdb, installed with administrator authentication)
+    Keymap {
+        #[command(subcommand)]
+        cmd: KeymapCmd,
+    },
     /// Health self-check (daemon, link, journal, crashes, window, disk), run by apple-kb-monitor-selfcheck.timer
     Selftest(crate::selftest::SelftestArgs),
     /// Print a shell completion script on stdout
@@ -219,6 +239,74 @@ pub enum HistoryCmd {
 pub enum GetCmd {
     /// Current Fn mode (0-3), read from /sys/module/hid_apple/parameters/fnmode
     Fnmode,
+    /// hid_apple parameters (all of them, or one)
+    Param {
+        #[arg(value_parser = crate::keymapcmd::parse_param_name)]
+        name: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum KeymapCmd {
+    /// Show the profiles of keymap.toml (--hwdb: the file `apply` would install)
+    Show {
+        #[arg(long)]
+        hwdb: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remap a key: KEY = F1..F12, Eject, Fn, LeftCmd... or a HID usage (0x7003a);
+    /// CODE = a KEY_* name of linux/input-event-codes.h. Applied by `apply`
+    Set {
+        #[arg(value_parser = crate::keymapcmd::parse_key)]
+        key: u32,
+        #[arg(value_parser = crate::keymapcmd::parse_code)]
+        code: u16,
+        /// Profile to edit (default: the active one)
+        #[arg(long, value_parser = crate::keymapcmd::parse_profile)]
+        profile: Option<String>,
+    },
+    /// Back to the kernel mapping for one key (in keymap.toml)
+    Unset {
+        #[arg(value_parser = crate::keymapcmd::parse_key)]
+        key: u32,
+        #[arg(long, value_parser = crate::keymapcmd::parse_profile)]
+        profile: Option<String>,
+    },
+    /// Base preset of a profile: apple (Apple legend, fnmode=1), fkeys
+    /// (F1-F12 first, fnmode=2), linux-pc (Cmd<->Alt, swap_opt_cmd=1)
+    Preset {
+        #[arg(value_parser = crate::keymapcmd::parse_preset)]
+        name: akm_core::keymap::Preset,
+        #[arg(long, value_parser = crate::keymapcmd::parse_profile)]
+        profile: Option<String>,
+    },
+    /// Select the active profile (created with the apple preset if new)
+    Use {
+        #[arg(value_parser = crate::keymapcmd::parse_profile)]
+        profile: String,
+    },
+    /// Install the active profile: udev hwdb (akm-keymap-helper) and hid_apple
+    /// parameters (akm-helper, persistent, ALL Apple keyboards)
+    Apply {
+        /// Show what would change, change nothing
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Remove the installed hwdb (kernel mapping back at once) and clear the
+    /// keys of the active profile
+    Reset,
+    /// Restore the previously installed hwdb file
+    Rollback,
+    /// Add the KDE shortcuts the Apple legend needs and KDE lacks (F4 =
+    /// Launch (D) -> application launcher), never replacing a binding
+    KdeApply {
+        #[arg(long)]
+        dry_run: bool,
+        /// Remove exactly the keys kde-apply added
+        #[arg(long, conflicts_with = "dry_run")]
+        undo: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -230,6 +318,17 @@ pub enum SetCmd {
         #[arg(value_parser = parse_mode)]
         mode: u8,
         /// Also write it to /etc/modprobe.d/hid_apple.conf so it survives reboots
+        #[arg(long)]
+        persist: bool,
+    },
+    /// Set a hid_apple parameter (fnmode 0-4, iso_layout -1..1, swap_opt_cmd 0-2,
+    /// swap_ctrl_cmd 0-1, swap_fn_leftctrl 0-1). Global to ALL Apple keyboards
+    Param {
+        #[arg(value_parser = crate::keymapcmd::parse_param_name)]
+        name: String,
+        #[arg(allow_hyphen_values = true)]
+        value: String,
+        /// Also write it to /etc/modprobe.d/hid_apple.conf
         #[arg(long)]
         persist: bool,
     },
@@ -308,6 +407,9 @@ mod tests {
         assert!(Cli::try_parse_from(["akmctl", "get", "fnmode"]).is_ok());
         assert!(Cli::try_parse_from(["akmctl", "watch"]).is_ok());
         assert!(Cli::try_parse_from(["akmctl", "get", "nothing"]).is_err());
+        assert!(Cli::try_parse_from(["akmctl", "get", "param"]).is_ok());
+        assert!(Cli::try_parse_from(["akmctl", "get", "param", "swap_opt_cmd"]).is_ok());
+        assert!(Cli::try_parse_from(["akmctl", "get", "param", "rightalt_as_rightctrl"]).is_err());
         assert!(Cli::try_parse_from(["akmctl"]).is_err());
     }
 
@@ -334,5 +436,32 @@ mod tests {
         assert!(p(&["led", "CapsLock", "OFF"]).is_ok());
         assert!(p(&["led", "caps"]).is_err() && p(&["led", "caps", "dim"]).is_err() && p(&["led", "shift", "on"]).is_err());
         assert_eq!(Span::Week.seconds(), 604_800);
+    }
+
+    #[test]
+    fn keys_and_keymap_parse() {
+        let p = |a: &[&str]| Cli::try_parse_from([&["akmctl"], a].concat());
+        assert!(matches!(p(&["keys", "--check"]).unwrap().command, Command::Keys { check: true, all: false, json: false }));
+        match p(&["keymap", "set", "f6", "KEY_F13"]).unwrap().command {
+            Command::Keymap { cmd: KeymapCmd::Set { key, code, profile } } => assert_eq!((key, code, profile), (0x7003f, 183, None)),
+            c => panic!("{c:?}"),
+        }
+        assert!(p(&["keymap", "set", "0xc00b8", "KEY_DELETE", "--profile", "work"]).is_ok());
+        for bad in [
+            &["keymap", "set", "F13", "KEY_F1"][..],
+            &["keymap", "set", "F1", "f2"],
+            &["keymap", "set", "F1", "KEY_F2\nKEY_F3"],
+            &["keymap", "set", "0x10001", "KEY_A"],
+            &["keymap", "set", "F1", "KEY_F2", "--profile", "../x"],
+            &["keymap", "preset", "mac"],
+            &["keymap", "use", "Work"],
+            &["keymap", "kde-apply", "--dry-run", "--undo"],
+            &["set", "param", "ejectcd_as_delete", "1"],
+        ] {
+            assert!(p(bad).is_err(), "{bad:?}");
+        }
+        assert!(p(&["keymap", "preset", "linux-pc"]).is_ok() && p(&["keymap", "apply", "--dry-run"]).is_ok());
+        assert!(p(&["keymap", "reset"]).is_ok() && p(&["keymap", "rollback"]).is_ok() && p(&["keymap", "show", "--hwdb"]).is_ok());
+        assert!(p(&["set", "param", "iso_layout", "-1", "--persist"]).is_ok());
     }
 }

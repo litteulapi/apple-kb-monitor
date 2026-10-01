@@ -27,6 +27,9 @@
 //! `{ts,pct,voltage?,event?,schema?,mv_0x46?,mv_0x49?,voltage_valid?}`, `voltage_valid=false` = legacy value, #180); since API 2 `GetDevices() -> ao`,
 //! `BatterySets() -> s`, `NotifyShutdown() -> (b, s)` (the one write macOS does: `WillShutdown`, #191). Signal: `StateChanged(t revision, s json)`.
 //!
+//! Since #247 the same object also carries `com.agenceapi.AppleKbMonitor1.Keymap`
+//! (special keys, manual key mapping): see [`crate::keymap`].
+//!
 //! API 2 adds one object per keyboard and `org.freedesktop.DBus.ObjectManager`
 //! on this path: see [`crate::devices`]. Everything above is unchanged from
 //! API 1 (only additions), for the Plasma widget and `apihub-app`.
@@ -324,6 +327,11 @@ pub fn export_on(conn: &Connection, o: &ServeOptions) -> Result<Arc<Shared>, Ser
     )?;
     conn.object_server()
         .at(OBJECT_PATH, zbus::fdo::ObjectManager)?;
+    // Special keys and manual key mapping (#247), see crate::keymap.
+    conn.object_server().at(
+        OBJECT_PATH,
+        crate::keymap::KeymapIface::new(Default::default(), Arc::new(crate::keymap::Pkexec::default())),
+    )?;
     let flags = zbus::fdo::RequestNameFlags::DoNotQueue.into();
     let name = zbus::names::WellKnownName::try_from(o.bus_name.as_str())
         .map_err(|e| ServeError::Bus(e.into()))?;

@@ -8,6 +8,9 @@ mod fnmode;
 mod firmware;
 mod histcmd;
 mod info;
+mod kde;
+mod keymapcmd;
+mod keys;
 mod ledcmd;
 mod migrate;
 mod passive;
@@ -63,7 +66,20 @@ fn run(cmd: Command) -> u8 {
             }
             Err(e) => fail(&e),
         },
+        Command::Get { what: GetCmd::Param { name } } => keymapcmd::cmd_get_param(name.as_deref()),
         Command::Set { what: SetCmd::Fnmode { mode, persist } } => cmd_set_fnmode(mode, persist),
+        Command::Set { what: SetCmd::Param { name, value, persist } } => {
+            let p = akm_core::keymap::kernel_param(&name).expect("validated by clap");
+            match akm_core::keymap::parse_param_value(p, &value) {
+                Ok(v) => keymapcmd::cmd_set_param(&name, v, persist),
+                Err(e) => {
+                    eprintln!("akmctl: {e}");
+                    EXIT_USAGE
+                }
+            }
+        }
+        Command::Keys { check, all, json } => keymapcmd::cmd_keys(check, all, json),
+        Command::Keymap { cmd } => keymapcmd::run(cmd),
         Command::Rename { name, reset: _, mac } => cmd_rename(name.as_deref().unwrap_or(""), mac),
         Command::Watch => cmd_watch(),
         Command::History(h) => cmd_history(h),

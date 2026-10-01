@@ -25,6 +25,7 @@ pub mod bluez;
 pub mod client;
 pub mod devices;
 pub mod events;
+pub mod keymap;
 pub mod notify;
 pub mod passive;
 pub mod repair;
