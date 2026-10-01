@@ -85,21 +85,25 @@ fn class_entries(dir: &Path) -> Vec<(String, PathBuf)> {
 
 /// keyd's virtual keyboard evdev (`/dev/input/eventN`), if keyd is running.
 pub fn find_keyd_virtual_evdev_in(sys: &Path, dev: &Path) -> Option<PathBuf> {
-    class_entries(&sys.join("class/input")).into_iter().find_map(|(name, p)| {
-        if !name.starts_with("event") {
-            return None;
-        }
-        let n = std::fs::read_to_string(p.join("device/name")).ok()?;
-        (n.trim() == KEYD_VIRTUAL_KEYBOARD).then(|| dev.join("input").join(&name))
-    })
+    class_entries(&sys.join("class/input"))
+        .into_iter()
+        .find_map(|(name, p)| {
+            if !name.starts_with("event") {
+                return None;
+            }
+            let n = std::fs::read_to_string(p.join("device/name")).ok()?;
+            (n.trim() == KEYD_VIRTUAL_KEYBOARD).then(|| dev.join("input").join(&name))
+        })
 }
 
 /// Apple keyboard evdev, recognised by HID_ID of its HID parent.
 pub fn find_apple_evdev_in(sys: &Path, dev: &Path) -> Option<PathBuf> {
-    class_entries(&sys.join("class/input")).into_iter().find_map(|(name, p)| {
-        (name.starts_with("event") && node_is_apple_keyboard(&p))
-            .then(|| dev.join("input").join(&name))
-    })
+    class_entries(&sys.join("class/input"))
+        .into_iter()
+        .find_map(|(name, p)| {
+            (name.starts_with("event") && node_is_apple_keyboard(&p))
+                .then(|| dev.join("input").join(&name))
+        })
 }
 
 /// Pick the LED write target: keyd virtual keyboard first, Apple evdev as fallback.
@@ -113,10 +117,12 @@ pub fn led_target_in(sys: &Path, dev: &Path) -> Option<LedTarget> {
 /// (`suffix` = "capslock" / "numlock"), not just any LED of that name.
 pub fn apple_led_brightness_in(sys: &Path, suffix: &str) -> Option<PathBuf> {
     let want = format!("::{}", suffix);
-    class_entries(&sys.join("class/leds")).into_iter().find_map(|(name, p)| {
-        (name.ends_with(&want) && node_is_apple_keyboard(&p.join("device")))
-            .then(|| p.join("brightness"))
-    })
+    class_entries(&sys.join("class/leds"))
+        .into_iter()
+        .find_map(|(name, p)| {
+            (name.ends_with(&want) && node_is_apple_keyboard(&p.join("device")))
+                .then(|| p.join("brightness"))
+        })
 }
 
 fn read_led_in(sys: &Path, suffix: &str) -> bool {
@@ -189,7 +195,11 @@ mod tests {
     struct Fake(PathBuf);
     impl Fake {
         fn new() -> Self {
-            let p = std::env::temp_dir().join(format!("kbled-test-{}-{}", std::process::id(), T.fetch_add(1, Ordering::SeqCst)));
+            let p = std::env::temp_dir().join(format!(
+                "kbled-test-{}-{}",
+                std::process::id(),
+                T.fetch_add(1, Ordering::SeqCst)
+            ));
             let _ = std::fs::remove_dir_all(&p);
             std::fs::create_dir_all(&p).unwrap();
             Fake(p)
@@ -202,18 +212,39 @@ mod tests {
         /// HID device + input node + evdev + capslock LED, wired with symlinks like real sysfs.
         fn add_hid_keyboard(&self, hid: &str, hid_id: &str, input: &str, event: &str, name: &str) {
             let hdir = format!("devices/virtual/uhid/{hid}");
-            self.put(&format!("{hdir}/uevent"), &format!("HID_ID={hid_id}\nHID_NAME={name}\n"));
+            self.put(
+                &format!("{hdir}/uevent"),
+                &format!("HID_ID={hid_id}\nHID_NAME={name}\n"),
+            );
             self.put(&format!("{hdir}/input/{input}/name"), name);
             self.put(&format!("{hdir}/input/{input}/{event}/dev"), "13:64\n");
-            self.put(&format!("{hdir}/input/{input}/{input}::capslock/brightness"), "1\n");
-            self.put(&format!("{hdir}/input/{input}/{input}::numlock/brightness"), "0\n");
+            self.put(
+                &format!("{hdir}/input/{input}/{input}::capslock/brightness"),
+                "1\n",
+            );
+            self.put(
+                &format!("{hdir}/input/{input}/{input}::numlock/brightness"),
+                "0\n",
+            );
             std::fs::create_dir_all(self.0.join("class/input")).unwrap();
             std::fs::create_dir_all(self.0.join("class/leds")).unwrap();
             let abs = |r: &str| self.0.join(r);
-            symlink(abs(&format!("{hdir}/input/{input}/{event}")), abs(&format!("class/input/{event}"))).unwrap();
-            symlink(abs(&format!("{hdir}/input/{input}")), abs(&format!("class/input/{input}"))).unwrap();
+            symlink(
+                abs(&format!("{hdir}/input/{input}/{event}")),
+                abs(&format!("class/input/{event}")),
+            )
+            .unwrap();
+            symlink(
+                abs(&format!("{hdir}/input/{input}")),
+                abs(&format!("class/input/{input}")),
+            )
+            .unwrap();
             // event's device -> input node, as in real sysfs
-            symlink(abs(&format!("{hdir}/input/{input}")), abs(&format!("{hdir}/input/{input}/{event}/device"))).unwrap();
+            symlink(
+                abs(&format!("{hdir}/input/{input}")),
+                abs(&format!("{hdir}/input/{input}/{event}/device")),
+            )
+            .unwrap();
             for l in ["capslock", "numlock"] {
                 let led = abs(&format!("{hdir}/input/{input}/{input}::{l}"));
                 symlink(abs(&format!("{hdir}/input/{input}")), led.join("device")).unwrap();
@@ -241,24 +272,62 @@ mod tests {
     fn apple_evdev_found_by_hid_id_not_by_name() {
         let f = Fake::new();
         // User-renamed Apple keyboard + a non-Apple one named like an Apple one.
-        f.add_hid_keyboard("0005:05AC:0256.0014", "0005:000005AC:00000256", "input7", "event7", "Clavier de maria #1");
-        f.add_hid_keyboard("0003:046D:C31C.0001", "0003:0000046D:0000C31C", "input3", "event3", "Apple Keyboard Lookalike");
+        f.add_hid_keyboard(
+            "0005:05AC:0256.0014",
+            "0005:000005AC:00000256",
+            "input7",
+            "event7",
+            "Clavier de maria #1",
+        );
+        f.add_hid_keyboard(
+            "0003:046D:C31C.0001",
+            "0003:0000046D:0000C31C",
+            "input3",
+            "event3",
+            "Apple Keyboard Lookalike",
+        );
         let dev = Path::new("/dev");
-        assert_eq!(find_apple_evdev_in(&f.0, dev), Some(PathBuf::from("/dev/input/event7")));
+        assert_eq!(
+            find_apple_evdev_in(&f.0, dev),
+            Some(PathBuf::from("/dev/input/event7"))
+        );
     }
 
     #[test]
     fn led_target_prefers_keyd_virtual_keyboard() {
         let f = Fake::new();
-        f.add_hid_keyboard("0005:05AC:0256.0014", "0005:000005AC:00000256", "input7", "event7", "Clavier de maria #1");
+        f.add_hid_keyboard(
+            "0005:05AC:0256.0014",
+            "0005:000005AC:00000256",
+            "input7",
+            "event7",
+            "Clavier de maria #1",
+        );
         let dev = Path::new("/dev");
-        assert_eq!(led_target_in(&f.0, dev), Some(LedTarget::AppleDirect(PathBuf::from("/dev/input/event7"))));
+        assert_eq!(
+            led_target_in(&f.0, dev),
+            Some(LedTarget::AppleDirect(PathBuf::from("/dev/input/event7")))
+        );
         // keyd appears
-        f.put("devices/virtual/input/input99/name", "keyd virtual keyboard\n");
+        f.put(
+            "devices/virtual/input/input99/name",
+            "keyd virtual keyboard\n",
+        );
         std::fs::create_dir_all(f.0.join("devices/virtual/input/input99/event99")).unwrap();
-        symlink(f.0.join("devices/virtual/input/input99/event99"), f.0.join("class/input/event99")).unwrap();
-        symlink(f.0.join("devices/virtual/input/input99"), f.0.join("devices/virtual/input/input99/event99/device")).unwrap();
-        assert_eq!(led_target_in(&f.0, dev), Some(LedTarget::KeydVirtual(PathBuf::from("/dev/input/event99"))));
+        symlink(
+            f.0.join("devices/virtual/input/input99/event99"),
+            f.0.join("class/input/event99"),
+        )
+        .unwrap();
+        symlink(
+            f.0.join("devices/virtual/input/input99"),
+            f.0.join("devices/virtual/input/input99/event99/device"),
+        )
+        .unwrap();
+        assert_eq!(
+            led_target_in(&f.0, dev),
+            Some(LedTarget::KeydVirtual(PathBuf::from("/dev/input/event99")))
+        );
     }
 
     #[test]
@@ -270,11 +339,32 @@ mod tests {
     #[test]
     fn led_state_reads_the_apple_keyboard_led_only() {
         let f = Fake::new();
-        f.add_hid_keyboard("0003:046D:C31C.0001", "0003:0000046D:0000C31C", "input3", "event3", "Other");
-        f.put("devices/virtual/uhid/0003:046D:C31C.0001/input/input3/input3::capslock/brightness", "1\n");
-        f.add_hid_keyboard("0005:05AC:0256.0014", "0005:000005AC:00000256", "input7", "event7", "Apple");
-        f.put("devices/virtual/uhid/0005:05AC:0256.0014/input/input7/input7::capslock/brightness", "0\n");
-        f.put("devices/virtual/uhid/0005:05AC:0256.0014/input/input7/input7::numlock/brightness", "1\n");
+        f.add_hid_keyboard(
+            "0003:046D:C31C.0001",
+            "0003:0000046D:0000C31C",
+            "input3",
+            "event3",
+            "Other",
+        );
+        f.put(
+            "devices/virtual/uhid/0003:046D:C31C.0001/input/input3/input3::capslock/brightness",
+            "1\n",
+        );
+        f.add_hid_keyboard(
+            "0005:05AC:0256.0014",
+            "0005:000005AC:00000256",
+            "input7",
+            "event7",
+            "Apple",
+        );
+        f.put(
+            "devices/virtual/uhid/0005:05AC:0256.0014/input/input7/input7::capslock/brightness",
+            "0\n",
+        );
+        f.put(
+            "devices/virtual/uhid/0005:05AC:0256.0014/input/input7/input7::numlock/brightness",
+            "1\n",
+        );
         assert!(!read_led_in(&f.0, "capslock")); // the other keyboard's lit LED is ignored
         assert!(read_led_in(&f.0, "numlock"));
     }
@@ -285,7 +375,10 @@ mod tests {
         let file = f.0.join("evdev");
         std::fs::write(&file, b"").unwrap();
         write_led_event(&file, 1, true).unwrap();
-        assert_eq!(std::fs::read(&file).unwrap(), build_led_event(1, true).to_vec());
+        assert_eq!(
+            std::fs::read(&file).unwrap(),
+            build_led_event(1, true).to_vec()
+        );
         let err = write_led_event(&f.0.join("missing/dir/event"), 1, true).unwrap_err();
         assert!(matches!(err, LedError::Open(..)));
         assert!(err.to_string().contains("cannot open"));

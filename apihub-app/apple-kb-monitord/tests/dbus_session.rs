@@ -31,7 +31,12 @@ fn keyboard(pct: f64) -> Snapshot {
     k.radio.rssi_dbm = Some(-52);
     k.device.mac = Some("04:DB:56:CA:42:EE".into());
     k.device.model = Some("Apple Wireless Keyboard (A1314, aluminum, ISO)".into());
-    Snapshot { connected: true, keyboard: Some(k), last_update: 1_700_000_000, ..Default::default() }
+    Snapshot {
+        connected: true,
+        keyboard: Some(k),
+        last_update: 1_700_000_000,
+        ..Default::default()
+    }
 }
 
 fn busctl_like_get(conn: &Connection, prop: &str) -> zbus::zvariant::OwnedValue {
@@ -49,7 +54,8 @@ fn busctl_like_get(conn: &Connection, prop: &str) -> zbus::zvariant::OwnedValue 
 }
 
 fn inner() {
-    let addr = std::env::var("DBUS_SESSION_BUS_ADDRESS").expect("dbus-run-session sets the address");
+    let addr =
+        std::env::var("DBUS_SESSION_BUS_ADDRESS").expect("dbus-run-session sets the address");
     assert!(!addr.is_empty());
 
     // Server side: watch + mailbox + history in a temp dir, no actor (no hardware).
@@ -63,7 +69,15 @@ fn inner() {
     let watch = Arc::new(Watch::new());
     watch.publish(keyboard(90.0));
     let mailbox = Mailbox::new();
-    let _server = service::serve(watch.clone(), mailbox.clone(), Some(Arc::new(History::new(dir.join("h.jsonl"), akm_core::history::SystemClock)))).expect("serve");
+    let _server = service::serve(
+        watch.clone(),
+        mailbox.clone(),
+        Some(Arc::new(History::new(
+            dir.join("h.jsonl"),
+            akm_core::history::SystemClock,
+        ))),
+    )
+    .expect("serve");
 
     // Second instance must be refused (single owner of the keyboard).
     let other = Connection::session().unwrap();
@@ -80,7 +94,27 @@ fn inner() {
     assert_eq!(f64::try_from(busctl_like_get(&c, "Voltage")).unwrap(), 2.81);
     assert_eq!(i32::try_from(busctl_like_get(&c, "Rssi")).unwrap(), -52);
     assert!(bool::try_from(busctl_like_get(&c, "Connected")).unwrap());
-    assert!(String::try_from(busctl_like_get(&c, "Model")).unwrap().contains("A1314"));
+    assert!(String::try_from(busctl_like_get(&c, "Model"))
+        .unwrap()
+        .contains("A1314"));
+    let state: String = c
+        .call_method(
+            Some(service::BUS_NAME),
+            service::OBJECT_PATH,
+            Some(service::INTERFACE),
+            "GetState",
+            &(),
+        )
+        .unwrap()
+        .body()
+        .deserialize()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Snapshot>(&state)
+            .unwrap()
+            .battery_pct(),
+        Some(90.0)
+    );
     let snap = client::fetch_snapshot(&c).unwrap();
     assert_eq!(snap.battery_pct(), Some(90.0));
     let (s, src) = client::snapshot(false).unwrap();
@@ -98,7 +132,10 @@ fn inner() {
     let (tx, rx) = mpsc::channel();
     mailbox.install(tx);
     client::request_refresh(&c).unwrap();
-    assert_eq!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Msg::Refresh);
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+        Msg::Refresh
+    );
 
     // Signals: subscribe, publish a change, expect PropertiesChanged(Battery)
     // and StateChanged with the new revision.
@@ -120,10 +157,17 @@ fn inner() {
         let mut saw_state = None;
         for m in &mut it {
             let m = m.unwrap();
-            let member = m.header().member().map(|x| x.to_string()).unwrap_or_default();
+            let member = m
+                .header()
+                .member()
+                .map(|x| x.to_string())
+                .unwrap_or_default();
             if member == "PropertiesChanged" {
-                let (iface, changed, _): (String, std::collections::HashMap<String, zbus::zvariant::OwnedValue>, Vec<String>) =
-                    m.body().deserialize().unwrap();
+                let (iface, changed, _): (
+                    String,
+                    std::collections::HashMap<String, zbus::zvariant::OwnedValue>,
+                    Vec<String>,
+                ) = m.body().deserialize().unwrap();
                 if iface == service::INTERFACE {
                     if let Some(v) = changed.get("Battery") {
                         assert_eq!(i32::try_from(v.try_clone().unwrap()).unwrap(), 42);
@@ -142,13 +186,19 @@ fn inner() {
             }
         }
     });
-    let got = done_rx.recv_timeout(Duration::from_secs(5)).expect("PropertiesChanged + StateChanged received");
+    let got = done_rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("PropertiesChanged + StateChanged received");
     assert_eq!(got, rev);
     assert_eq!(i32::try_from(busctl_like_get(&c, "Battery")).unwrap(), 42);
 
     // Unknown battery is exposed as the documented sentinel -1.
     watch.publish(Snapshot::default());
     assert_eq!(i32::try_from(busctl_like_get(&c, "Battery")).unwrap(), -1);
+    assert_eq!(
+        i32::try_from(busctl_like_get(&c, "Rssi")).unwrap(),
+        service::RSSI_UNKNOWN
+    );
     assert!(!bool::try_from(busctl_like_get(&c, "Connected")).unwrap());
 
     let _ = std::fs::remove_dir_all(&dir);
@@ -160,7 +210,11 @@ fn session_interface_on_private_bus() {
         inner();
         return;
     }
-    if Command::new("dbus-run-session").arg("--version").output().is_err() {
+    if Command::new("dbus-run-session")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         eprintln!("SKIP: dbus-run-session not installed");
         return;
     }
@@ -168,11 +222,30 @@ fn session_interface_on_private_bus() {
     let out = Command::new("dbus-run-session")
         .arg("--")
         .arg(exe)
-        .args(["--exact", "session_interface_on_private_bus", "--nocapture", "--test-threads=1"])
+        .args([
+            "--exact",
+            "session_interface_on_private_bus",
+            "--nocapture",
+            "--test-threads=1",
+        ])
         .env(INNER, "1")
         .output()
         .expect("run under dbus-run-session");
-    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
-    assert!(out.status.success(), "inner run failed:\n{}", text.chars().rev().take(3000).collect::<String>().chars().rev().collect::<String>());
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        out.status.success(),
+        "inner run failed:\n{}",
+        text.chars()
+            .rev()
+            .take(3000)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>()
+    );
     assert!(text.contains("1 passed"), "inner test did not run:\n{text}");
 }

@@ -66,7 +66,9 @@ impl Snapshot {
         self.keyboard.as_ref().and_then(|k| k.radio.rssi_dbm)
     }
     pub fn model(&self) -> Option<&str> {
-        self.keyboard.as_ref().and_then(|k| k.device.model.as_deref())
+        self.keyboard
+            .as_ref()
+            .and_then(|k| k.device.model.as_deref())
     }
     pub fn mac(&self) -> Option<&str> {
         self.keyboard.as_ref().and_then(|k| k.device.mac.as_deref())
@@ -81,13 +83,21 @@ impl Snapshot {
     pub fn tooltip_text(&self) -> String {
         format!(
             "Apple Keyboard \u{2014} Battery: {}",
-            self.battery_pct().map(|p| format!("{:.0}%", p)).unwrap_or_else(|| "n/a".into())
+            self.battery_pct()
+                .map(|p| format!("{:.0}%", p))
+                .unwrap_or_else(|| "n/a".into())
         )
     }
 
     /// Same content, ignoring the publication counter.
     pub fn same_content(&self, other: &Snapshot) -> bool {
-        Snapshot { version: 0, ..self.clone() } == Snapshot { version: 0, ..other.clone() }
+        Snapshot {
+            version: 0,
+            ..self.clone()
+        } == Snapshot {
+            version: 0,
+            ..other.clone()
+        }
     }
 }
 
@@ -145,7 +155,11 @@ mod tests {
     fn with_battery(p: f64) -> Snapshot {
         let mut k = KbReport::default();
         k.battery.percentage = Some(p);
-        Snapshot { connected: true, keyboard: Some(k), ..Default::default() }
+        Snapshot {
+            connected: true,
+            keyboard: Some(k),
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -158,7 +172,10 @@ mod tests {
 
     #[test]
     fn rssi_age_is_derived_from_its_timestamp() {
-        let s = Snapshot { rssi_at: Some(1_000), ..Default::default() };
+        let s = Snapshot {
+            rssi_at: Some(1_000),
+            ..Default::default()
+        };
         assert_eq!(s.rssi_age_s(1_030), Some(30));
         assert_eq!(s.rssi_age_s(900), Some(0));
         assert_eq!(Snapshot::default().rssi_age_s(5), None);
@@ -191,7 +208,14 @@ mod tests {
     fn json_schema_is_stable() {
         let s = with_battery(90.0);
         let j = serde_json::to_value(&s).unwrap();
-        for k in ["schema", "version", "connected", "keyboard", "last_update", "last_error"] {
+        for k in [
+            "schema",
+            "version",
+            "connected",
+            "keyboard",
+            "last_update",
+            "last_error",
+        ] {
             assert!(j.get(k).is_some(), "{k}");
         }
         let back: Snapshot = serde_json::from_value(j).unwrap();

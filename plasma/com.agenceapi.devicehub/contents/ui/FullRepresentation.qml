@@ -30,10 +30,12 @@ ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
 
         PlasmaComponents3.Label {
-            text: root.batteryPercent + "%"
+            text: root.batteryPercent >= 0 ? root.batteryPercent + "%" : "\u2014"
             font.pixelSize: Kirigami.Units.gridUnit * 2
             font.bold: true
-            color: root.batteryPercent <= 15
+            color: root.batteryPercent < 0
+                ? Kirigami.Theme.disabledTextColor
+                : root.batteryPercent <= 15
                 ? Kirigami.Theme.negativeTextColor
                 : root.batteryPercent <= 50
                     ? Kirigami.Theme.neutralTextColor
@@ -43,12 +45,12 @@ ColumnLayout {
         ColumnLayout {
             spacing: 0
             PlasmaComponents3.Label {
-                text: root.voltage.toFixed(3) + " V"
+                text: root.voltage > 0 ? root.voltage.toFixed(3) + " V" : "\u2014 V"
                 font: Kirigami.Theme.smallFont
                 color: Kirigami.Theme.disabledTextColor
             }
             PlasmaComponents3.Label {
-                text: root.rssi + " dBm"
+                text: root.rssi !== 127 ? root.rssi + " dBm" : "RSSI n/a"
                 font: Kirigami.Theme.smallFont
                 color: Kirigami.Theme.disabledTextColor
             }
@@ -62,7 +64,7 @@ ColumnLayout {
             height: width
             radius: width / 2
             color: {
-                if (!root.connected) return Kirigami.Theme.disabledTextColor
+                if (!root.connected || root.rssi === 127) return Kirigami.Theme.disabledTextColor
                 if (root.rssi > -50) return Kirigami.Theme.positiveTextColor
                 if (root.rssi > -70) return Kirigami.Theme.neutralTextColor
                 return Kirigami.Theme.negativeTextColor
@@ -70,7 +72,7 @@ ColumnLayout {
         }
 
         PlasmaComponents3.Label {
-            text: root.connected ? "Connected" : "Offline"
+            text: root.connected ? "Connected" : (root.daemonRunning ? "Offline" : "Monitor stopped")
             font: Kirigami.Theme.smallFont
             color: root.connected
                 ? Kirigami.Theme.positiveTextColor
@@ -84,7 +86,7 @@ ColumnLayout {
         Layout.rightMargin: Kirigami.Units.largeSpacing
         from: 0
         to: 100
-        value: root.batteryPercent
+        value: Math.max(0, root.batteryPercent)
     }
 
     Kirigami.Separator { Layout.fillWidth: true }

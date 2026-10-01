@@ -16,7 +16,16 @@ pub fn send(summary: &str, body: &str, icon: &str) {
             "/org/freedesktop/Notifications",
             Some("org.freedesktop.Notifications"),
             "Notify",
-            &("apple-kb-monitord", 0u32, icon, summary, body, Vec::<&str>::new(), hints, -1i32),
+            &(
+                "apple-kb-monitord",
+                0u32,
+                icon,
+                summary,
+                body,
+                Vec::<&str>::new(),
+                hints,
+                -1i32,
+            ),
         )?;
         reply.body().deserialize()
     })();
@@ -27,7 +36,10 @@ pub fn send(summary: &str, body: &str, icon: &str) {
 
 /// Low-battery alert text.
 pub fn low_battery_text(pct: f64) -> (String, String) {
-    ("Apple Keyboard \u{2014} Low Battery".into(), format!("Battery at {:.0}% \u{2014} charge soon", pct))
+    (
+        "Apple Keyboard \u{2014} Low Battery".into(),
+        format!("Battery at {:.0}% \u{2014} charge soon", pct),
+    )
 }
 
 pub fn low_battery(pct: f64) {

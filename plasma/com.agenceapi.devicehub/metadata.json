@@ -11,11 +11,11 @@
                 "Email": "han@agenceapi.com"
             }
         ],
-        "Version": "3.0.0",
+        "Version": "3.1.0",
         "License": "GPL-2.0-or-later",
         "Website": "https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
     },
     "X-Plasma-API": "declarativeappletscript",
-    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-API-Minimum-Version": "6.1",
     "KPackageStructure": "Plasma/Applet"
 }

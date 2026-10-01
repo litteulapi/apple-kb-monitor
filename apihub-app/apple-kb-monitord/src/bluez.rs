@@ -60,7 +60,9 @@ const WATCH_PERIOD: Duration = Duration::from_secs(5);
 fn normalize_mac(mac: &str) -> Option<String> {
     let parts: Vec<&str> = mac.trim().split(':').collect();
     if parts.len() != 6
-        || !parts.iter().all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
+        || !parts
+            .iter()
+            .all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
     {
         return None;
     }
@@ -79,7 +81,11 @@ fn child_path(norm_mac: &str) -> String {
 
 /// BlueZ device object of a keyboard on a given adapter.
 fn device_path(adapter: &str, norm_mac: &str) -> String {
-    format!("{}/dev_{}", adapter.trim_end_matches('/'), mac_segment(norm_mac))
+    format!(
+        "{}/dev_{}",
+        adapter.trim_end_matches('/'),
+        mac_segment(norm_mac)
+    )
 }
 
 /// Pick the adapter among BlueZ managed objects `(path, interfaces)`:
@@ -95,7 +101,9 @@ fn pick_adapter(objects: &[(String, Vec<String>)]) -> Option<String> {
 /// Delay before retrying a failed registration: 5 s, 10 s, 20 s ... capped at 5 min.
 fn retry_delay(failures: u32) -> Duration {
     let shift = failures.saturating_sub(1).min(6);
-    WATCH_PERIOD.saturating_mul(1u32 << shift).min(Duration::from_secs(300))
+    WATCH_PERIOD
+        .saturating_mul(1u32 << shift)
+        .min(Duration::from_secs(300))
 }
 
 /// A failure is logged only when the counter is a power of two (1, 2, 4, 8...),
@@ -126,20 +134,32 @@ enum Action {
     Forget,
     /// (Re-)register on `adapter`; `unregister_from` is set when the old BlueZ
     /// instance is still alive and must drop its registration first.
-    Register { adapter: String, unregister_from: Option<String> },
+    Register {
+        adapter: String,
+        unregister_from: Option<String>,
+    },
 }
 
 fn decide(reg: &Reg, obs: Option<&Observed>) -> Action {
     match (reg, obs) {
         (Reg::Unregistered, None) => Action::Nothing,
         (Reg::Registered { .. }, None) => Action::Forget,
-        (Reg::Unregistered, Some(o)) => Action::Register { adapter: o.adapter.clone(), unregister_from: None },
+        (Reg::Unregistered, Some(o)) => Action::Register {
+            adapter: o.adapter.clone(),
+            unregister_from: None,
+        },
         (Reg::Registered { owner, adapter }, Some(o)) => {
             if *owner != o.owner {
                 // bluetoothd restarted: it forgot us, the old owner is gone.
-                Action::Register { adapter: o.adapter.clone(), unregister_from: None }
+                Action::Register {
+                    adapter: o.adapter.clone(),
+                    unregister_from: None,
+                }
             } else if *adapter != o.adapter {
-                Action::Register { adapter: o.adapter.clone(), unregister_from: Some(adapter.clone()) }
+                Action::Register {
+                    adapter: o.adapter.clone(),
+                    unregister_from: Some(adapter.clone()),
+                }
             } else {
                 Action::Nothing
             }
@@ -209,7 +229,11 @@ impl BatteryProvider {
                 return None;
             }
         };
-        Some(Self { tx, handle: Some(handle), legacy_mac: None })
+        Some(Self {
+            tx,
+            handle: Some(handle),
+            legacy_mac: None,
+        })
     }
 
     /// Spawn the provider and publish `initial_pct` for `mac`. Returns `None`
@@ -285,7 +309,14 @@ fn run_provider(rx: mpsc::Receiver<Cmd>) {
             return;
         }
     };
-    let mut w = Worker { conn, desired: BTreeMap::new(), exported: BTreeMap::new(), reg: Reg::Unregistered, failures: 0, retry_at: Instant::now() };
+    let mut w = Worker {
+        conn,
+        desired: BTreeMap::new(),
+        exported: BTreeMap::new(),
+        reg: Reg::Unregistered,
+        failures: 0,
+        retry_at: Instant::now(),
+    };
 
     let mut next_watch = Instant::now();
     loop {
@@ -329,9 +360,15 @@ impl Worker {
     }
 
     fn export(&mut self, adapter: &str, mac: &str, pct: u8) {
-        let Ok(dev) = OwnedObjectPath::try_from(device_path(adapter, mac)) else { return };
+        let Ok(dev) = OwnedObjectPath::try_from(device_path(adapter, mac)) else {
+            return;
+        };
         let path = child_path(mac);
-        match self.conn.object_server().at(path.as_str(), Bat { device: dev, pct }) {
+        match self
+            .conn
+            .object_server()
+            .at(path.as_str(), Bat { device: dev, pct })
+        {
             Ok(_) => {
                 self.exported.insert(mac.to_string(), ());
             }
@@ -350,7 +387,9 @@ impl Worker {
 
     fn update_object(&self, mac: &str, pct: u8) {
         let path = child_path(mac);
-        let Ok(iref) = self.conn.object_server().interface::<_, Bat>(path.as_str()) else { return };
+        let Ok(iref) = self.conn.object_server().interface::<_, Bat>(path.as_str()) else {
+            return;
+        };
         let changed = {
             let mut b = iref.get_mut();
             let c = b.pct != pct;
@@ -374,7 +413,10 @@ impl Worker {
                 self.reg = Reg::Unregistered;
             }
             Action::Register { .. } if self.failures > 0 && Instant::now() < self.retry_at => {}
-            Action::Register { adapter, unregister_from } => {
+            Action::Register {
+                adapter,
+                unregister_from,
+            } => {
                 let owner = obs.map(|o| o.owner).unwrap_or_default();
                 if let Some(old) = unregister_from {
                     let _ = self.call_manager(&old, "UnregisterBatteryProvider");
@@ -384,7 +426,8 @@ impl Worker {
                 for m in macs {
                     self.unexport(&m);
                 }
-                let desired: Vec<(String, u8)> = self.desired.iter().map(|(m, p)| (m.clone(), *p)).collect();
+                let desired: Vec<(String, u8)> =
+                    self.desired.iter().map(|(m, p)| (m.clone(), *p)).collect();
                 for (m, p) in desired {
                     self.export(&adapter, &m, p);
                 }
@@ -400,7 +443,10 @@ impl Worker {
                         if should_log_failure(self.failures) {
                             tracing::warn!(
                                 "registration on {} failed (attempt {}), retry in {}s: {}",
-                                adapter, self.failures, retry_delay(self.failures).as_secs(), e
+                                adapter,
+                                self.failures,
+                                retry_delay(self.failures).as_secs(),
+                                e
                             );
                         }
                     }
@@ -436,7 +482,10 @@ impl Worker {
             .iter()
             .map(|(p, i)| (p.as_str().to_string(), i.keys().cloned().collect()))
             .collect();
-        Some(Observed { owner, adapter: pick_adapter(&flat)? })
+        Some(Observed {
+            owner,
+            adapter: pick_adapter(&flat)?,
+        })
     }
 
     fn call_manager(&self, adapter: &str, method: &str) -> zbus::Result<()> {
@@ -463,7 +512,10 @@ impl Worker {
         for m in macs {
             self.unexport(&m);
         }
-        let _ = self.conn.object_server().remove::<zbus::fdo::ObjectManager, _>(PROVIDER_ROOT);
+        let _ = self
+            .conn
+            .object_server()
+            .remove::<zbus::fdo::ObjectManager, _>(PROVIDER_ROOT);
         self.reg = Reg::Unregistered;
     }
 }
@@ -478,14 +530,29 @@ mod tests {
 
     #[test]
     fn mac_normalised_to_upper() {
-        assert_eq!(normalize_mac("aa:bb:0c:dd:ee:01").as_deref(), Some("AA:BB:0C:DD:EE:01"));
-        assert_eq!(normalize_mac(" 04:db:56:CA:42:ee ").as_deref(), Some("04:DB:56:CA:42:EE"));
+        assert_eq!(
+            normalize_mac("aa:bb:0c:dd:ee:01").as_deref(),
+            Some("AA:BB:0C:DD:EE:01")
+        );
+        assert_eq!(
+            normalize_mac(" 04:db:56:CA:42:ee ").as_deref(),
+            Some("04:DB:56:CA:42:EE")
+        );
     }
 
     #[test]
     fn mac_rejects_non_macs() {
-        for bad in ["", "unknown", "aa:bb:cc:dd:ee", "aa:bb:cc:dd:ee:ff:00", "aa:bb:cc:dd:ee:g1",
-                    "a:bb:cc:dd:ee:ff", "aa:bb:cc:dd:ee:ff/../x", "aa bb cc dd ee ff", "+a:bb:cc:dd:ee:ff"] {
+        for bad in [
+            "",
+            "unknown",
+            "aa:bb:cc:dd:ee",
+            "aa:bb:cc:dd:ee:ff:00",
+            "aa:bb:cc:dd:ee:g1",
+            "a:bb:cc:dd:ee:ff",
+            "aa:bb:cc:dd:ee:ff/../x",
+            "aa bb cc dd ee ff",
+            "+a:bb:cc:dd:ee:ff",
+        ] {
             assert_eq!(normalize_mac(bad), None, "{:?}", bad);
         }
     }
@@ -493,9 +560,18 @@ mod tests {
     #[test]
     fn paths_are_derived_from_normalised_mac() {
         let m = normalize_mac("04:db:56:ca:42:ee").unwrap();
-        assert_eq!(child_path(&m), "/com/agenceapi/AppleKbMonitor/dev_04_DB_56_CA_42_EE");
-        assert_eq!(device_path("/org/bluez/hci1", &m), "/org/bluez/hci1/dev_04_DB_56_CA_42_EE");
-        assert_eq!(device_path("/org/bluez/hci0/", &m), "/org/bluez/hci0/dev_04_DB_56_CA_42_EE");
+        assert_eq!(
+            child_path(&m),
+            "/com/agenceapi/AppleKbMonitor/dev_04_DB_56_CA_42_EE"
+        );
+        assert_eq!(
+            device_path("/org/bluez/hci1", &m),
+            "/org/bluez/hci1/dev_04_DB_56_CA_42_EE"
+        );
+        assert_eq!(
+            device_path("/org/bluez/hci0/", &m),
+            "/org/bluez/hci0/dev_04_DB_56_CA_42_EE"
+        );
         assert!(ObjectPath::try_from(child_path(&m)).is_ok());
     }
 
@@ -508,7 +584,10 @@ mod tests {
         let objs = vec![
             obj("/org/bluez", &["org.bluez.AgentManager1"]),
             obj("/org/bluez/hci1/dev_X", &["org.bluez.Device1"]),
-            obj("/org/bluez/hci1", &[PROVIDER_MANAGER_IFACE, "org.bluez.Adapter1"]),
+            obj(
+                "/org/bluez/hci1",
+                &[PROVIDER_MANAGER_IFACE, "org.bluez.Adapter1"],
+            ),
             obj("/org/bluez/hci0", &[PROVIDER_MANAGER_IFACE]),
         ];
         assert_eq!(pick_adapter(&objs).as_deref(), Some("/org/bluez/hci0"));
@@ -517,10 +596,16 @@ mod tests {
     }
 
     fn obs(o: &str, a: &str) -> Observed {
-        Observed { owner: o.into(), adapter: a.into() }
+        Observed {
+            owner: o.into(),
+            adapter: a.into(),
+        }
     }
     fn reg(o: &str, a: &str) -> Reg {
-        Reg::Registered { owner: o.into(), adapter: a.into() }
+        Reg::Registered {
+            owner: o.into(),
+            adapter: a.into(),
+        }
     }
 
     #[test]
@@ -530,21 +615,45 @@ mod tests {
         // BlueZ appears: register.
         assert_eq!(
             decide(&Reg::Unregistered, Some(&obs(":1.5", "/org/bluez/hci0"))),
-            Action::Register { adapter: "/org/bluez/hci0".into(), unregister_from: None }
+            Action::Register {
+                adapter: "/org/bluez/hci0".into(),
+                unregister_from: None
+            }
         );
         // Stable: nothing.
-        assert_eq!(decide(&reg(":1.5", "/org/bluez/hci0"), Some(&obs(":1.5", "/org/bluez/hci0"))), Action::Nothing);
+        assert_eq!(
+            decide(
+                &reg(":1.5", "/org/bluez/hci0"),
+                Some(&obs(":1.5", "/org/bluez/hci0"))
+            ),
+            Action::Nothing
+        );
         // bluetoothd vanished.
-        assert_eq!(decide(&reg(":1.5", "/org/bluez/hci0"), None), Action::Forget);
+        assert_eq!(
+            decide(&reg(":1.5", "/org/bluez/hci0"), None),
+            Action::Forget
+        );
         // bluetoothd restarted (new owner): re-register, no unregister (old is dead).
         assert_eq!(
-            decide(&reg(":1.5", "/org/bluez/hci0"), Some(&obs(":1.9", "/org/bluez/hci0"))),
-            Action::Register { adapter: "/org/bluez/hci0".into(), unregister_from: None }
+            decide(
+                &reg(":1.5", "/org/bluez/hci0"),
+                Some(&obs(":1.9", "/org/bluez/hci0"))
+            ),
+            Action::Register {
+                adapter: "/org/bluez/hci0".into(),
+                unregister_from: None
+            }
         );
         // Adapter changed under the same bluetoothd: unregister from old one.
         assert_eq!(
-            decide(&reg(":1.5", "/org/bluez/hci0"), Some(&obs(":1.5", "/org/bluez/hci1"))),
-            Action::Register { adapter: "/org/bluez/hci1".into(), unregister_from: Some("/org/bluez/hci0".into()) }
+            decide(
+                &reg(":1.5", "/org/bluez/hci0"),
+                Some(&obs(":1.5", "/org/bluez/hci1"))
+            ),
+            Action::Register {
+                adapter: "/org/bluez/hci1".into(),
+                unregister_from: Some("/org/bluez/hci0".into())
+            }
         );
     }
 

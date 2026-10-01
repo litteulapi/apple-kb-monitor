@@ -28,30 +28,120 @@ pub struct ModelInfo {
 }
 
 const fn m(pid: u32, model: &'static str, chip: &'static str, family: Family) -> ModelInfo {
-    ModelInfo { pid, model, chip, family }
+    ModelInfo {
+        pid,
+        model,
+        chip,
+        family,
+    }
 }
 
 /// Wireless Apple keyboards, checked against the kernel's
 /// `drivers/hid/hid-ids.h` and `hid-apple.c`. Wired models (ALU_ANSI 0x0220,
 /// ALU_REVB 0x024f..) and internal ones (GEYSER4 0x0229) are deliberately absent.
 pub const APPLE_MODELS: &[ModelInfo] = &[
-    m(0x022c, "Apple Wireless Keyboard (A1255, aluminum, ANSI)", "BCM2042", Family::Bcm2042),
-    m(0x022d, "Apple Wireless Keyboard (A1255, aluminum, ISO)", "BCM2042", Family::Bcm2042),
-    m(0x022e, "Apple Wireless Keyboard (A1255, aluminum, JIS)", "BCM2042", Family::Bcm2042),
-    m(0x0239, "Apple Wireless Keyboard (A1314, 2009, ANSI)", "BCM2042", Family::Bcm2042),
-    m(0x023a, "Apple Wireless Keyboard (A1314, 2009, ISO)", "BCM2042", Family::Bcm2042),
-    m(0x023b, "Apple Wireless Keyboard (A1314, 2009, JIS)", "BCM2042", Family::Bcm2042),
-    m(0x0255, "Apple Wireless Keyboard (A1314, aluminum, ANSI)", "BCM2042", Family::Bcm2042),
-    m(0x0256, "Apple Wireless Keyboard (A1314, aluminum, ISO)", "BCM2042", Family::Bcm2042),
-    m(0x0257, "Apple Wireless Keyboard (A1314, aluminum, JIS)", "BCM2042", Family::Bcm2042),
-    m(0x0267, "Apple Magic Keyboard 2015 (A1644)", "BCM20733", Family::MagicKeyboard),
-    m(0x026c, "Apple Magic Keyboard with Numeric Keypad 2015 (A1843)", "BCM20733", Family::MagicKeyboard),
-    m(0x029c, "Apple Magic Keyboard 2021 (A2450)", "Apple", Family::MagicKeyboard),
-    m(0x029a, "Apple Magic Keyboard with Touch ID 2021 (A2449)", "Apple", Family::MagicKeyboard),
-    m(0x029f, "Apple Magic Keyboard with Touch ID and Numeric Keypad 2021 (A2520)", "Apple", Family::MagicKeyboard),
-    m(0x0320, "Apple Magic Keyboard 2024", "Apple", Family::MagicKeyboard),
-    m(0x0321, "Apple Magic Keyboard with Touch ID 2024", "Apple", Family::MagicKeyboard),
-    m(0x0322, "Apple Magic Keyboard with Touch ID and Numeric Keypad 2024", "Apple", Family::MagicKeyboard),
+    m(
+        0x022c,
+        "Apple Wireless Keyboard (A1255, aluminum, ANSI)",
+        "BCM2042",
+        Family::Bcm2042,
+    ),
+    m(
+        0x022d,
+        "Apple Wireless Keyboard (A1255, aluminum, ISO)",
+        "BCM2042",
+        Family::Bcm2042,
+    ),
+    m(
+        0x022e,
+        "Apple Wireless Keyboard (A1255, aluminum, JIS)",
+        "BCM2042",
+        Family::Bcm2042,
+    ),
+    m(
+        0x0239,
+        "Apple Wireless Keyboard (A1314, 2009, ANSI)",
+        "BCM2042",
+        Family::Bcm2042,
+    ),
+    m(
+        0x023a,
+        "Apple Wireless Keyboard (A1314, 2009, ISO)",
+        "BCM2042",
+        Family::Bcm2042,
+    ),
+    m(
+        0x023b,
+        "Apple Wireless Keyboard (A1314, 2009, JIS)",
+        "BCM2042",
+        Family::Bcm2042,
+    ),
+    m(
+        0x0255,
+        "Apple Wireless Keyboard (A1314, aluminum, ANSI)",
+        "BCM2042",
+        Family::Bcm2042,
+    ),
+    m(
+        0x0256,
+        "Apple Wireless Keyboard (A1314, aluminum, ISO)",
+        "BCM2042",
+        Family::Bcm2042,
+    ),
+    m(
+        0x0257,
+        "Apple Wireless Keyboard (A1314, aluminum, JIS)",
+        "BCM2042",
+        Family::Bcm2042,
+    ),
+    m(
+        0x0267,
+        "Apple Magic Keyboard 2015 (A1644)",
+        "BCM20733",
+        Family::MagicKeyboard,
+    ),
+    m(
+        0x026c,
+        "Apple Magic Keyboard with Numeric Keypad 2015 (A1843)",
+        "BCM20733",
+        Family::MagicKeyboard,
+    ),
+    m(
+        0x029c,
+        "Apple Magic Keyboard 2021 (A2450)",
+        "Apple",
+        Family::MagicKeyboard,
+    ),
+    m(
+        0x029a,
+        "Apple Magic Keyboard with Touch ID 2021 (A2449)",
+        "Apple",
+        Family::MagicKeyboard,
+    ),
+    m(
+        0x029f,
+        "Apple Magic Keyboard with Touch ID and Numeric Keypad 2021 (A2520)",
+        "Apple",
+        Family::MagicKeyboard,
+    ),
+    m(
+        0x0320,
+        "Apple Magic Keyboard 2024",
+        "Apple",
+        Family::MagicKeyboard,
+    ),
+    m(
+        0x0321,
+        "Apple Magic Keyboard with Touch ID 2024",
+        "Apple",
+        Family::MagicKeyboard,
+    ),
+    m(
+        0x0322,
+        "Apple Magic Keyboard with Touch ID and Numeric Keypad 2024",
+        "Apple",
+        Family::MagicKeyboard,
+    ),
 ];
 
 /// Look a (vendor, product) pair up. Both Apple vendors (USB 0x05AC and
@@ -98,13 +188,20 @@ pub fn apple_model_from_uevent(uevent: &str) -> Option<(&'static str, &'static s
 /// Real BT MAC (upper-case) from `HID_UNIQ=` (the 0x4C report holds an
 /// internal identity, not the MAC).
 pub fn mac_from_uevent(uevent: &str) -> Option<String> {
-    let mac = uevent.lines().find_map(|l| l.strip_prefix("HID_UNIQ="))?.trim().to_uppercase();
+    let mac = uevent
+        .lines()
+        .find_map(|l| l.strip_prefix("HID_UNIQ="))?
+        .trim()
+        .to_uppercase();
     (mac.contains(':') && mac.len() >= 17).then_some(mac)
 }
 
 /// User-visible name from `HID_NAME=`.
 pub fn name_from_uevent(uevent: &str) -> Option<String> {
-    let n = uevent.lines().find_map(|l| l.strip_prefix("HID_NAME="))?.trim();
+    let n = uevent
+        .lines()
+        .find_map(|l| l.strip_prefix("HID_NAME="))?
+        .trim();
     (!n.is_empty()).then(|| n.to_string())
 }
 
@@ -126,7 +223,8 @@ mod tests {
 
     #[test]
     fn uevent_matches_exact_vendor_and_product() {
-        let u = "DRIVER=hid-generic\nHID_ID=0005:000005AC:00000255\nHID_NAME=Apple Wireless Keyboard\n";
+        let u =
+            "DRIVER=hid-generic\nHID_ID=0005:000005AC:00000255\nHID_NAME=Apple Wireless Keyboard\n";
         let (m, c) = apple_model_from_uevent(u).unwrap();
         assert!(m.contains("A1314") && m.contains("ANSI"));
         assert_eq!(c, "BCM2042");
@@ -160,7 +258,10 @@ mod tests {
         assert_eq!(mi.family, Family::MagicKeyboard);
         assert_eq!(family(0x004c, 0x0267), Family::MagicKeyboard);
         assert_eq!(family(0x05ac, 0x0321), Family::MagicKeyboard);
-        assert!(lookup_model(0x004c, 0x029a).unwrap().model.contains("Touch ID"));
+        assert!(lookup_model(0x004c, 0x029a)
+            .unwrap()
+            .model
+            .contains("Touch ID"));
         assert!(lookup_model(0x004c, 0x0322).is_some());
     }
 
@@ -169,18 +270,41 @@ mod tests {
         for pid in [0x0220, 0x0229, 0x024f, 0x0250] {
             assert!(lookup_model(APPLE_USB_VID, pid).is_none(), "{:#06x}", pid);
         }
-        assert!(lookup_model(APPLE_USB_VID, 0x022c).unwrap().model.contains("ANSI"));
-        assert!(lookup_model(APPLE_USB_VID, 0x022d).unwrap().model.contains("ISO"));
-        assert!(lookup_model(APPLE_USB_VID, 0x022e).unwrap().model.contains("JIS"));
-        assert!(lookup_model(APPLE_USB_VID, 0x0267).unwrap().model.contains("2015"));
-        assert!(lookup_model(APPLE_USB_VID, 0x026c).unwrap().model.contains("Numeric"));
+        assert!(lookup_model(APPLE_USB_VID, 0x022c)
+            .unwrap()
+            .model
+            .contains("ANSI"));
+        assert!(lookup_model(APPLE_USB_VID, 0x022d)
+            .unwrap()
+            .model
+            .contains("ISO"));
+        assert!(lookup_model(APPLE_USB_VID, 0x022e)
+            .unwrap()
+            .model
+            .contains("JIS"));
+        assert!(lookup_model(APPLE_USB_VID, 0x0267)
+            .unwrap()
+            .model
+            .contains("2015"));
+        assert!(lookup_model(APPLE_USB_VID, 0x026c)
+            .unwrap()
+            .model
+            .contains("Numeric"));
     }
 
     #[test]
     fn bcm2042_gating_by_family() {
-        let bcm: Vec<u32> = (0x022c..=0x022e).chain(0x0239..=0x023b).chain(0x0255..=0x0257).collect();
+        let bcm: Vec<u32> = (0x022c..=0x022e)
+            .chain(0x0239..=0x023b)
+            .chain(0x0255..=0x0257)
+            .collect();
         for mi in APPLE_MODELS {
-            assert_eq!(mi.family == Family::Bcm2042, bcm.contains(&mi.pid), "{:#06x}", mi.pid);
+            assert_eq!(
+                mi.family == Family::Bcm2042,
+                bcm.contains(&mi.pid),
+                "{:#06x}",
+                mi.pid
+            );
         }
         for pid in &bcm {
             assert_eq!(family(APPLE_USB_VID, *pid), Family::Bcm2042);
@@ -192,7 +316,11 @@ mod tests {
     #[test]
     fn model_table_has_no_duplicate_pid() {
         for (i, a) in APPLE_MODELS.iter().enumerate() {
-            assert!(APPLE_MODELS[i + 1..].iter().all(|b| b.pid != a.pid), "{:#06x}", a.pid);
+            assert!(
+                APPLE_MODELS[i + 1..].iter().all(|b| b.pid != a.pid),
+                "{:#06x}",
+                a.pid
+            );
         }
     }
 
@@ -201,7 +329,11 @@ mod tests {
         assert!(is_apple_modalias("usb:v05ACp0256d0050"));
         assert!(is_apple_modalias("bluetooth:v004Cp029Cd0001"));
         assert!(!is_apple_modalias("usb:v046Dp0001d0001"));
-        assert!(is_keyboard_upower_path("/org/freedesktop/UPower/devices/keyboard_hid_04o_db"));
-        assert!(!is_keyboard_upower_path("/org/freedesktop/UPower/devices/battery_BAT0"));
+        assert!(is_keyboard_upower_path(
+            "/org/freedesktop/UPower/devices/keyboard_hid_04o_db"
+        ));
+        assert!(!is_keyboard_upower_path(
+            "/org/freedesktop/UPower/devices/battery_BAT0"
+        ));
     }
 }

@@ -56,7 +56,10 @@ pub fn normalize_mac(mac: &str) -> Option<String> {
     if parts.len() != 6 {
         return None;
     }
-    if !parts.iter().all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit())) {
+    if !parts
+        .iter()
+        .all(|p| p.len() == 2 && p.bytes().all(|b| b.is_ascii_hexdigit()))
+    {
         return None;
     }
     Some(mac.to_ascii_lowercase())
@@ -66,7 +69,11 @@ pub fn normalize_mac(mac: &str) -> Option<String> {
 /// `hid-<mac>-battery` (old kernels) or `hid-<mac>-battery-<digits>` (new).
 pub fn mac_matches_name(name: &str, mac_lower: &str) -> bool {
     let prefix = format!("hid-{}-battery", mac_lower);
-    let Some(rest) = name.to_ascii_lowercase().strip_prefix(&prefix).map(str::to_owned) else {
+    let Some(rest) = name
+        .to_ascii_lowercase()
+        .strip_prefix(&prefix)
+        .map(str::to_owned)
+    else {
         return false;
     };
     rest.is_empty()
@@ -202,7 +209,10 @@ mod tests {
     #[test]
     fn mac_normalisation_is_strict() {
         assert_eq!(normalize_mac(MAC).as_deref(), Some("04:db:56:ca:42:ee"));
-        assert_eq!(normalize_mac("04:db:56:ca:42:ee").as_deref(), Some("04:db:56:ca:42:ee"));
+        assert_eq!(
+            normalize_mac("04:db:56:ca:42:ee").as_deref(),
+            Some("04:db:56:ca:42:ee")
+        );
         assert!(normalize_mac("04:db:56:ca:42").is_none());
         assert!(normalize_mac("04:db:56:ca:42:zz").is_none());
         assert!(normalize_mac("../../etc:passwd:x:y:z:1").is_none());
@@ -229,11 +239,25 @@ mod tests {
         t.write(&format!("{d}/status"), "Discharging\n");
         t.write(&format!("{d}/present"), "1\n");
         // Decoy for another keyboard and the laptop battery.
-        t.write("class/power_supply/hid-aa:bb:cc:dd:ee:ff-battery-71/capacity", "12\n");
+        t.write(
+            "class/power_supply/hid-aa:bb:cc:dd:ee:ff-battery-71/capacity",
+            "12\n",
+        );
         t.write("class/power_supply/BAT0/capacity", "55\n");
         let r = kernel_battery_in(&t.0, MAC).unwrap();
-        assert_eq!(r, BatteryReading { percent: 90, status: BatteryStatus::Discharging });
-        assert_eq!(kernel_battery_in(&t.0, "aa:bb:cc:dd:ee:ff").unwrap().percent, 12);
+        assert_eq!(
+            r,
+            BatteryReading {
+                percent: 90,
+                status: BatteryStatus::Discharging
+            }
+        );
+        assert_eq!(
+            kernel_battery_in(&t.0, "aa:bb:cc:dd:ee:ff")
+                .unwrap()
+                .percent,
+            12
+        );
     }
 
     #[test]
@@ -244,11 +268,20 @@ mod tests {
             "HID_ID=0005:000005AC:00000256\nHID_UNIQ=04:db:56:ca:42:ee\n",
         );
         // Name the fallback would never match.
-        t.write("bus/hid/devices/0005:05AC:0256.0014/power_supply/kbd-battery/x", "");
+        t.write(
+            "bus/hid/devices/0005:05AC:0256.0014/power_supply/kbd-battery/x",
+            "",
+        );
         t.write("class/power_supply/kbd-battery/capacity", "73\n");
         t.write("class/power_supply/kbd-battery/status", "Charging\n");
         let r = kernel_battery_in(&t.0, MAC).unwrap();
-        assert_eq!(r, BatteryReading { percent: 73, status: BatteryStatus::Charging });
+        assert_eq!(
+            r,
+            BatteryReading {
+                percent: 73,
+                status: BatteryStatus::Charging
+            }
+        );
     }
 
     #[test]
@@ -256,7 +289,10 @@ mod tests {
         let t = Tmp::new();
         let d = "class/power_supply/hid-04:db:56:ca:42:ee-battery";
         t.write(&format!("{d}/capacity"), "40\n");
-        assert_eq!(kernel_battery_in(&t.0, MAC).unwrap().status, BatteryStatus::Unknown);
+        assert_eq!(
+            kernel_battery_in(&t.0, MAC).unwrap().status,
+            BatteryStatus::Unknown
+        );
         t.write(&format!("{d}/capacity"), "garbage\n");
         assert!(kernel_battery_in(&t.0, MAC).is_none());
     }

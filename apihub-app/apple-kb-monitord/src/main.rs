@@ -44,7 +44,11 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Option<Args>, St
             "--no-history" => a.opts.history = false,
             "--threshold" => {
                 let v = it.next().ok_or("--threshold needs a value")?;
-                a.opts.low_threshold = v.parse::<f64>().ok().filter(|t| (1.0..=95.0).contains(t)).ok_or(format!("invalid threshold: {v}"))?;
+                a.opts.low_threshold = v
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|t| (1.0..=95.0).contains(t))
+                    .ok_or(format!("invalid threshold: {v}"))?;
             }
             "--version" | "-V" => {
                 println!("apple-kb-monitord {}", env!("CARGO_PKG_VERSION"));
@@ -76,7 +80,11 @@ fn main() -> ExitCode {
         return match client::snapshot(!args.daemon_only) {
             Ok((s, src)) => {
                 println!("{}", client::to_json(&s, src));
-                if s.connected { ExitCode::SUCCESS } else { ExitCode::from(1) }
+                if s.connected {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::from(1)
+                }
             }
             Err(e) => {
                 eprintln!("{e}");
@@ -86,7 +94,8 @@ fn main() -> ExitCode {
     }
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .with_target(false)
         .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
@@ -150,7 +159,15 @@ mod tests {
         assert!(!a.json && a.opts.bluez_provider && a.opts.notify && a.opts.history);
         let a = p(&["--json", "--daemon-only"]).unwrap().unwrap();
         assert!(a.json && a.daemon_only);
-        let a = p(&["--no-bluez-provider", "--no-notify", "--no-history", "--threshold", "20"]).unwrap().unwrap();
+        let a = p(&[
+            "--no-bluez-provider",
+            "--no-notify",
+            "--no-history",
+            "--threshold",
+            "20",
+        ])
+        .unwrap()
+        .unwrap();
         assert!(!a.opts.bluez_provider && !a.opts.notify && !a.opts.history);
         assert_eq!(a.opts.low_threshold, 20.0);
         assert!(p(&["--daemon-only"]).is_err());

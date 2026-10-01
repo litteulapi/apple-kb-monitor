@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-pub use akm_core::machine::*;
 use crate::actor::Msg;
+pub use akm_core::machine::*;
 use akm_core::model::{is_apple_modalias, is_keyboard_upower_path};
 
 use zbus::blocking::{fdo::DBusProxy, Connection, MessageIterator};
@@ -23,7 +23,8 @@ use zbus::MatchRule;
 type Props = HashMap<String, OwnedValue>;
 
 fn prop_str(p: &Props, k: &str) -> Option<String> {
-    p.get(k).and_then(|v| <&str>::try_from(v).ok().map(str::to_string))
+    p.get(k)
+        .and_then(|v| <&str>::try_from(v).ok().map(str::to_string))
 }
 
 fn prop_bool(p: &Props, k: &str) -> Option<bool> {
@@ -33,39 +34,42 @@ fn prop_bool(p: &Props, k: &str) -> Option<bool> {
 /// Spawn the watcher thread. It reconnects to the bus on failure (10 s) and
 /// emits `NoBluez` once if BlueZ cannot be reached at all.
 pub fn spawn_signal_watcher(tx: Sender<Msg>) {
-    let _ = std::thread::Builder::new().name("kb-watch".into()).spawn(move || {
-        let mut told_no_bluez = false;
-        loop {
-            match watch_once(&tx) {
-                Ok(()) => return, // receiver gone
-                Err(e) => {
-                    tracing::warn!("D-Bus error: {e} — retry in 10s");
-                    if !told_no_bluez {
-                        told_no_bluez = true;
-                        if tx.send(Msg::Bus(Event::NoBluez)).is_err() {
-                            return;
+    let _ = std::thread::Builder::new()
+        .name("kb-watch".into())
+        .spawn(move || {
+            let mut told_no_bluez = false;
+            loop {
+                match watch_once(&tx) {
+                    Ok(()) => return, // receiver gone
+                    Err(e) => {
+                        tracing::warn!("D-Bus error: {e} — retry in 10s");
+                        if !told_no_bluez {
+                            told_no_bluez = true;
+                            if tx.send(Msg::Bus(Event::NoBluez)).is_err() {
+                                return;
+                            }
                         }
+                        std::thread::sleep(Duration::from_secs(10));
                     }
-                    std::thread::sleep(Duration::from_secs(10));
                 }
             }
-        }
-    });
+        });
 }
 
 fn add_rules(conn: &Connection) -> zbus::Result<()> {
     let dbus = DBusProxy::new(conn)?;
-    let props = |sender: &'static str, arg0: Option<&'static str>| -> zbus::Result<MatchRule<'static>> {
-        let mut b = MatchRule::builder()
-            .msg_type(zbus::message::Type::Signal)
-            .sender(sender)?
-            .interface("org.freedesktop.DBus.Properties")?
-            .member("PropertiesChanged")?;
-        if let Some(a) = arg0 {
-            b = b.arg(0, a)?;
-        }
-        Ok(b.build())
-    };
+    let props =
+        |sender: &'static str, arg0: Option<&'static str>| -> zbus::Result<MatchRule<'static>> {
+            let mut b = MatchRule::builder()
+                .msg_type(zbus::message::Type::Signal)
+                .sender(sender)?
+                .interface("org.freedesktop.DBus.Properties")?
+                .member("PropertiesChanged")?;
+            if let Some(a) = arg0 {
+                b = b.arg(0, a)?;
+            }
+            Ok(b.build())
+        };
     dbus.add_match_rule(props("org.bluez", Some("org.bluez.Device1"))?)?;
     dbus.add_match_rule(props("org.freedesktop.UPower", None)?)?;
     let owner = MatchRule::builder()
@@ -103,13 +107,19 @@ fn initial_sync(conn: &Connection, known: &mut Known, tx: &Sender<Msg>) -> zbus:
         .build()?;
     let mut sent = false;
     for (path, ifaces) in om.get_managed_objects()? {
-        let Some(d) = ifaces.iter().find(|(k, _)| k.as_str() == "org.bluez.Device1").map(|(_, v)| v) else {
+        let Some(d) = ifaces
+            .iter()
+            .find(|(k, _)| k.as_str() == "org.bluez.Device1")
+            .map(|(_, v)| v)
+        else {
             continue;
         };
         if !prop_str(d, "Modalias").is_some_and(|m| is_apple_modalias(&m)) {
             continue;
         }
-        let Some(mac) = prop_str(d, "Address").map(|a| a.to_ascii_uppercase()) else { continue };
+        let Some(mac) = prop_str(d, "Address").map(|a| a.to_ascii_uppercase()) else {
+            continue;
+        };
         let connected = prop_bool(d, "Connected").unwrap_or(false);
         known.0.insert(path.to_string(), (mac.clone(), connected));
         if connected {
@@ -134,8 +144,14 @@ fn watch_once(tx: &Sender<Msg>) -> zbus::Result<()> {
     for msg in &mut it {
         let msg = msg?;
         let hdr = msg.header();
-        let member = hdr.member().map(|m| m.as_str().to_string()).unwrap_or_default();
-        let path = hdr.path().map(|p| p.as_str().to_string()).unwrap_or_default();
+        let member = hdr
+            .member()
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_default();
+        let path = hdr
+            .path()
+            .map(|p| p.as_str().to_string())
+            .unwrap_or_default();
         match member.as_str() {
             "NameOwnerChanged" => {
                 // bluetoothd restarted: resync from scratch.
@@ -154,9 +170,12 @@ fn watch_once(tx: &Sender<Msg>) -> zbus::Result<()> {
             }
             "PropertiesChanged" => {
                 let sender_bluez = path.starts_with("/org/bluez/");
-                let (iface, changed, _inv): (String, Props, Vec<String>) = msg.body().deserialize()?;
+                let (iface, changed, _inv): (String, Props, Vec<String>) =
+                    msg.body().deserialize()?;
                 if sender_bluez && iface == "org.bluez.Device1" {
-                    let Some(connected) = prop_bool(&changed, "Connected") else { continue };
+                    let Some(connected) = prop_bool(&changed, "Connected") else {
+                        continue;
+                    };
                     let entry = match known.0.get(&path) {
                         Some((m, _)) => Some(m.clone()),
                         None => device_props(&calls, &path).ok().and_then(|p| {
@@ -168,7 +187,11 @@ fn watch_once(tx: &Sender<Msg>) -> zbus::Result<()> {
                     };
                     let Some(mac) = entry else { continue };
                     known.0.insert(path.clone(), (mac.clone(), connected));
-                    let ev = if connected { Event::Connected(mac) } else { Event::Disconnected(mac) };
+                    let ev = if connected {
+                        Event::Connected(mac)
+                    } else {
+                        Event::Disconnected(mac)
+                    };
                     if tx.send(Msg::Bus(ev)).is_err() {
                         return Ok(());
                     }

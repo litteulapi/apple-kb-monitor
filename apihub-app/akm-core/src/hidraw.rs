@@ -38,7 +38,10 @@ impl HidSource for Hidraw {
 
 /// First Apple keyboard hidraw (`/dev/hidrawN`) under a sysfs root.
 pub fn find_apple_hidraw_in(sys: &Path) -> Option<String> {
-    let mut entries: Vec<_> = std::fs::read_dir(sys.join("class/hidraw")).ok()?.flatten().collect();
+    let mut entries: Vec<_> = std::fs::read_dir(sys.join("class/hidraw"))
+        .ok()?
+        .flatten()
+        .collect();
     entries.sort_by_key(|e| e.file_name());
     entries.into_iter().find_map(|entry| {
         let uevent = std::fs::read_to_string(entry.path().join("device/uevent")).ok()?;
@@ -54,24 +57,37 @@ pub fn find_apple_hidraw() -> Option<String> {
 
 /// HID uevent of the device behind `/dev/hidrawN`.
 fn hidraw_uevent(sys: &Path, dev_path: &str) -> String {
-    std::fs::read_to_string(sys.join("class/hidraw").join(dev_path.trim_start_matches("/dev/")).join("device/uevent"))
-        .unwrap_or_default()
+    std::fs::read_to_string(
+        sys.join("class/hidraw")
+            .join(dev_path.trim_start_matches("/dev/"))
+            .join("device/uevent"),
+    )
+    .unwrap_or_default()
 }
 
 /// HID uevent of the keyboard with this MAC (`HID_UNIQ`), from `bus/hid/devices`.
 pub fn hid_uevent_for_mac_in(sys: &Path, mac: &str) -> Option<String> {
-    let mut devs: Vec<_> = std::fs::read_dir(sys.join("bus/hid/devices")).ok()?.flatten().map(|e| e.path()).collect();
+    let mut devs: Vec<_> = std::fs::read_dir(sys.join("bus/hid/devices"))
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .collect();
     devs.sort();
     devs.into_iter().find_map(|d| {
         let u = std::fs::read_to_string(d.join("uevent")).ok()?;
         let uniq = u.lines().find_map(|l| l.strip_prefix("HID_UNIQ="))?;
-        (uniq.trim().eq_ignore_ascii_case(mac.trim()) && apple_model_from_uevent(&u).is_some()).then_some(u)
+        (uniq.trim().eq_ignore_ascii_case(mac.trim()) && apple_model_from_uevent(&u).is_some())
+            .then_some(u)
     })
 }
 
 /// MAC of the first Apple keyboard known to the kernel HID bus (connected).
 pub fn find_apple_keyboard_mac_in(sys: &Path) -> Option<String> {
-    let mut devs: Vec<_> = std::fs::read_dir(sys.join("bus/hid/devices")).ok()?.flatten().map(|e| e.path()).collect();
+    let mut devs: Vec<_> = std::fs::read_dir(sys.join("bus/hid/devices"))
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .collect();
     devs.sort();
     devs.into_iter().find_map(|d| {
         let u = std::fs::read_to_string(d.join("uevent")).ok()?;
@@ -142,8 +158,12 @@ pub fn read_keyboard() -> Option<KbReport> {
     let (fd, path) = get_hid_fd()?;
     let sys = Path::new("/sys");
     let uevent = hidraw_uevent(sys, &path);
-    let kernel = crate::model::mac_from_uevent(&uevent).and_then(|m| crate::power::kernel_battery(&m));
-    let wake = KbWake { last_age_s: wake.last().map(|t| t.elapsed().as_secs_f64()), count: wake.count() };
+    let kernel =
+        crate::model::mac_from_uevent(&uevent).and_then(|m| crate::power::kernel_battery(&m));
+    let wake = KbWake {
+        last_age_s: wake.last().map(|t| t.elapsed().as_secs_f64()),
+        count: wake.count(),
+    };
     let r = build_report(&uevent, kernel, &Hidraw(fd), wake);
     if r.is_none() {
         // Keyboard not responding: reopen next time.
@@ -192,14 +212,16 @@ pub fn ensure_wake_monitor() -> Arc<WakeState> {
     WAKE.get_or_init(|| {
         let st = Arc::new(WakeState::default());
         let lw = st.clone();
-        let spawned = std::thread::Builder::new().name("kb-wake-monitor".into()).spawn(move || loop {
-            if WAKE_ENABLED.load(Ordering::Relaxed) {
-                if let Some(path) = find_apple_hidraw() {
-                    wake_loop(&path, &lw);
+        let spawned = std::thread::Builder::new()
+            .name("kb-wake-monitor".into())
+            .spawn(move || loop {
+                if WAKE_ENABLED.load(Ordering::Relaxed) {
+                    if let Some(path) = find_apple_hidraw() {
+                        wake_loop(&path, &lw);
+                    }
                 }
-            }
-            std::thread::sleep(Duration::from_secs(5));
-        });
+                std::thread::sleep(Duration::from_secs(5));
+            });
         if let Err(e) = spawned {
             eprintln!("[keyboard] cannot spawn wake monitor: {}", e);
         }
@@ -225,15 +247,26 @@ pub fn is_wake_report(report: &[u8]) -> bool {
 
 /// Read input reports until the device disappears, errors or the monitor is disabled.
 fn wake_loop(path: &str, lw: &WakeState) {
-    let Ok(c_path) = std::ffi::CString::new(path) else { return };
+    let Ok(c_path) = std::ffi::CString::new(path) else {
+        return;
+    };
     // SAFETY: valid NUL-terminated path.
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC) };
+    let fd = unsafe {
+        libc::open(
+            c_path.as_ptr(),
+            libc::O_RDONLY | libc::O_NONBLOCK | libc::O_CLOEXEC,
+        )
+    };
     if fd < 0 {
         return;
     }
     let mut buf = [0u8; 64];
     while WAKE_ENABLED.load(Ordering::Relaxed) {
-        let mut pfd = libc::pollfd { fd, events: libc::POLLIN, revents: 0 };
+        let mut pfd = libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        };
         // SAFETY: one valid pollfd.
         let ret = unsafe { libc::poll(&mut pfd, 1, 2000) };
         if ret < 0 {

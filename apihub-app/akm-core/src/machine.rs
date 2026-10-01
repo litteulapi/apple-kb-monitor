@@ -222,7 +222,10 @@ impl Machine {
         if !self.acquired {
             return self.next_acquire;
         }
-        [self.next_slow, self.next_kernel, self.next_rssi].into_iter().flatten().min()
+        [self.next_slow, self.next_kernel, self.next_rssi]
+            .into_iter()
+            .flatten()
+            .min()
     }
 }
 
@@ -277,7 +280,10 @@ mod tests {
         assert_eq!(m.due(t0), vec![Action::Acquire]);
         m.acquire_done(false, t0);
         assert!(m.due(t0 + Duration::from_millis(400)).is_empty());
-        assert_eq!(m.due(t0 + Duration::from_millis(500)), vec![Action::Acquire]);
+        assert_eq!(
+            m.due(t0 + Duration::from_millis(500)),
+            vec![Action::Acquire]
+        );
         m.acquire_done(false, t0 + Duration::from_millis(500));
         assert_eq!(m.next_deadline(), Some(t0 + Duration::from_millis(1500)));
         assert_eq!(backoff(0), Duration::from_millis(500));
@@ -292,13 +298,19 @@ mod tests {
         let mut m = Machine::new();
         m.on_event(&Event::Connected(MAC.into()), t0);
         m.acquire_done(true, t0);
-        assert_eq!(m.on_event(&Event::Disconnected(MAC.into()), t0 + s(5)), Some(Action::Clear));
+        assert_eq!(
+            m.on_event(&Event::Disconnected(MAC.into()), t0 + s(5)),
+            Some(Action::Clear)
+        );
         assert!(!m.is_connected());
         assert!(m.due(t0 + s(100_000)).is_empty());
         assert_eq!(m.next_deadline(), None);
         // Disconnect of another MAC is ignored.
         m.on_event(&Event::Connected(MAC.into()), t0 + s(10));
-        assert_eq!(m.on_event(&Event::Disconnected("AA:BB:CC:DD:EE:FF".into()), t0 + s(11)), None);
+        assert_eq!(
+            m.on_event(&Event::Disconnected("AA:BB:CC:DD:EE:FF".into()), t0 + s(11)),
+            None
+        );
         assert!(m.is_connected());
     }
 

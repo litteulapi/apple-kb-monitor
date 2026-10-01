@@ -17,7 +17,7 @@ MouseArea {
     }
 
     Rectangle {
-        visible: root.connected
+        visible: root.connected && root.batteryPercent >= 0
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         width: badgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 2

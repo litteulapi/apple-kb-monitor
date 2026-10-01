@@ -33,7 +33,10 @@ pub enum RssiError {
     HelperSpawn(String),
     Timeout,
     /// Helper exited non-zero; carries its stderr (first line).
-    Helper { code: Option<i32>, msg: String },
+    Helper {
+        code: Option<i32>,
+        msg: String,
+    },
     BadOutput(String),
     Unavailable,
 }
@@ -107,7 +110,14 @@ fn run_helper(path: &str, mac: &str, timeout: Duration) -> Result<(i8, Option<i8
     if !std::path::Path::new(path).exists() {
         return Err(RssiError::HelperMissing(path.to_string()));
     }
-    let spawn = || Command::new(path).arg(mac).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn();
+    let spawn = || {
+        Command::new(path)
+            .arg(mac)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+    };
     // ETXTBSY: a just-written helper can still be open in a concurrently
     // forked process for a few ms; retry briefly instead of failing.
     let mut child = (0..5)
@@ -143,7 +153,10 @@ fn run_helper(path: &str, mac: &str, timeout: Duration) -> Result<(i8, Option<i8
     }
     if !status.success() {
         let msg = err.lines().next().unwrap_or("").trim().to_string();
-        return Err(RssiError::Helper { code: status.code(), msg });
+        return Err(RssiError::Helper {
+            code: status.code(),
+            msg,
+        });
     }
     parse_helper_output(&out)
 }
@@ -181,7 +194,10 @@ pub struct RssiTracker {
 
 impl RssiTracker {
     pub fn new(max_age: Duration) -> Self {
-        Self { max_age, sample: None }
+        Self {
+            max_age,
+            sample: None,
+        }
     }
 
     /// Record the outcome of a read for `mac`. `None` (failure) drops any value.
@@ -248,17 +264,38 @@ mod tests {
 
     #[test]
     fn rejects_invalid_values_and_garbage() {
-        assert_eq!(parse_helper_output(r#"{"rssi":127,"tx_power":4}"#), Err(RssiError::Unavailable));
-        assert!(matches!(parse_helper_output(""), Err(RssiError::BadOutput(_))));
-        assert!(matches!(parse_helper_output("nope"), Err(RssiError::BadOutput(_))));
-        assert!(matches!(parse_helper_output(r#"{"rssi":null,"tx_power":null}"#), Err(RssiError::BadOutput(_))));
-        assert!(matches!(parse_helper_output(r#"{"rssi":-300,"tx_power":1}"#), Err(RssiError::BadOutput(_))));
+        assert_eq!(
+            parse_helper_output(r#"{"rssi":127,"tx_power":4}"#),
+            Err(RssiError::Unavailable)
+        );
+        assert!(matches!(
+            parse_helper_output(""),
+            Err(RssiError::BadOutput(_))
+        ));
+        assert!(matches!(
+            parse_helper_output("nope"),
+            Err(RssiError::BadOutput(_))
+        ));
+        assert!(matches!(
+            parse_helper_output(r#"{"rssi":null,"tx_power":null}"#),
+            Err(RssiError::BadOutput(_))
+        ));
+        assert!(matches!(
+            parse_helper_output(r#"{"rssi":-300,"tx_power":1}"#),
+            Err(RssiError::BadOutput(_))
+        ));
     }
 
     #[test]
     fn tx_power_127_does_not_invalidate_rssi() {
-        assert_eq!(parse_helper_output(r#"{"rssi":-40,"tx_power":127}"#), Ok((-40, None)));
-        assert_eq!(parse_helper_output(r#"{"rssi":-40,"tx_power":null}"#), Ok((-40, None)));
+        assert_eq!(
+            parse_helper_output(r#"{"rssi":-40,"tx_power":127}"#),
+            Ok((-40, None))
+        );
+        assert_eq!(
+            parse_helper_output(r#"{"rssi":-40,"tx_power":null}"#),
+            Ok((-40, None))
+        );
         assert_eq!(parse_helper_output(r#"{"rssi":-40}"#), Ok((-40, None)));
     }
 
@@ -268,7 +305,9 @@ mod tests {
         let mut tr = RssiTracker::new(Duration::from_secs(100));
         assert_eq!(tr.current(MAC, t0), None);
         tr.record(MAC, Some((-50, Some(4))), t0);
-        let (r, tx, age) = tr.current(&MAC.to_lowercase(), t0 + Duration::from_secs(30)).unwrap();
+        let (r, tx, age) = tr
+            .current(&MAC.to_lowercase(), t0 + Duration::from_secs(30))
+            .unwrap();
         assert_eq!((r, tx, age), (-50, Some(4), Duration::from_secs(30)));
         assert_eq!(tr.current(MAC, t0 + Duration::from_secs(101)), None);
         assert_eq!(tr.current("AA:BB:CC:DD:EE:FF", t0), None);
@@ -291,12 +330,18 @@ mod tests {
     #[test]
     fn helper_success() {
         let h = fake_helper("ok", r#"echo '{"rssi":-55,"tx_power":4,"max_tx_power":4}'"#);
-        assert_eq!(run_helper(&h, MAC, Duration::from_secs(2)), Ok((-55, Some(4))));
+        assert_eq!(
+            run_helper(&h, MAC, Duration::from_secs(2)),
+            Ok((-55, Some(4)))
+        );
     }
 
     #[test]
     fn helper_permission_denied_carries_reason() {
-        let h = fake_helper("denied", "echo 'rssi-helper: MGMT status 0x14 (permission denied)' >&2; exit 3");
+        let h = fake_helper(
+            "denied",
+            "echo 'rssi-helper: MGMT status 0x14 (permission denied)' >&2; exit 3",
+        );
         match run_helper(&h, MAC, Duration::from_secs(2)) {
             Err(RssiError::Helper { code: Some(3), msg }) => assert!(msg.contains("0x14")),
             other => panic!("unexpected {other:?}"),
@@ -307,19 +352,28 @@ mod tests {
     fn helper_timeout_kills_child() {
         let h = fake_helper("slow", "sleep 5");
         let t = Instant::now();
-        assert_eq!(run_helper(&h, MAC, Duration::from_millis(200)), Err(RssiError::Timeout));
+        assert_eq!(
+            run_helper(&h, MAC, Duration::from_millis(200)),
+            Err(RssiError::Timeout)
+        );
         assert!(t.elapsed() < Duration::from_secs(2));
     }
 
     #[test]
     fn bad_mac_never_spawns() {
-        assert_eq!(run_helper("/bin/true", "not a mac", Duration::from_secs(1)), Err(RssiError::BadMac));
+        assert_eq!(
+            run_helper("/bin/true", "not a mac", Duration::from_secs(1)),
+            Err(RssiError::BadMac)
+        );
         assert_eq!(read_rssi("not a mac"), None);
     }
 
     #[test]
     fn mac_parsing_is_strict() {
-        assert_eq!(parse_mac("AA:bb:0C:dd:EE:01"), Some([0xAA, 0xBB, 0x0C, 0xDD, 0xEE, 0x01]));
+        assert_eq!(
+            parse_mac("AA:bb:0C:dd:EE:01"),
+            Some([0xAA, 0xBB, 0x0C, 0xDD, 0xEE, 0x01])
+        );
         assert_eq!(parse_mac("+A:bb:0C:dd:EE:01"), None);
         assert_eq!(parse_mac("A:bb:0C:dd:EE:01"), None);
         assert_eq!(parse_mac("AA:bb:0C:dd:EE"), None);
@@ -327,5 +381,4 @@ mod tests {
         assert_eq!(parse_mac("ZZ:bb:0C:dd:EE:01"), None);
         assert_eq!(parse_mac(""), None);
     }
-
 }

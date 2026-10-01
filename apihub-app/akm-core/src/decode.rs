@@ -6,7 +6,9 @@
 use std::collections::HashMap;
 use std::io;
 
-use crate::calibration::{adc_to_voltage, interpolate_battery, parse_calibration, DEFAULT_CALIBRATION_MV};
+use crate::calibration::{
+    adc_to_voltage, interpolate_battery, parse_calibration, DEFAULT_CALIBRATION_MV,
+};
 use crate::model::{family_from_uevent, mac_from_uevent, model_from_uevent, Family};
 use crate::power::BatteryReading;
 use crate::report::{KbReport, KbWake};
@@ -117,10 +119,12 @@ impl Fixture {
 
 impl HidSource for Fixture {
     fn feature(&self, report_id: u8) -> io::Result<Vec<u8>> {
-        self.reports
-            .get(&report_id)
-            .cloned()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("no report {report_id:#04x}")))
+        self.reports.get(&report_id).cloned().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("no report {report_id:#04x}"),
+            )
+        })
     }
 }
 
@@ -216,7 +220,10 @@ pub fn decode_bcm2042(src: &dyn HidSource, report: &mut KbReport) -> bool {
 
     if let Some(buf) = get(src, HID_DEVICE_STATE) {
         // Device reports LOW: clamp an optimistic interpolated percentage.
-        if buf.len() >= 2 && buf[1] == 0 && report.battery.percentage_interpolated.unwrap_or(100.0) > 15.0 {
+        if buf.len() >= 2
+            && buf[1] == 0
+            && report.battery.percentage_interpolated.unwrap_or(100.0) > 15.0
+        {
             report.battery.percentage_interpolated = Some(10.0);
         }
     }
@@ -310,7 +317,10 @@ mod tests {
         assert_eq!(r.bluetooth.conn_interval_ms, Some(68.75));
         assert_eq!(r.bluetooth.slave_latency, Some(12));
         assert_eq!(r.bluetooth.supervision_timeout_s, Some(20.0));
-        assert_eq!(r.bluetooth.identity_key.as_deref(), Some("01:02:03:04:05:06:07"));
+        assert_eq!(
+            r.bluetooth.identity_key.as_deref(),
+            Some("01:02:03:04:05:06:07")
+        );
         assert!(r.bluetooth.connected);
     }
 
@@ -346,7 +356,10 @@ mod tests {
 
     #[test]
     fn build_report_prefers_kernel_capacity() {
-        let k = BatteryReading { percent: 90, status: BatteryStatus::Discharging };
+        let k = BatteryReading {
+            percent: 90,
+            status: BatteryStatus::Discharging,
+        };
         let r = build_report(UEVENT, Some(k), &full_fixture(), KbWake::default()).unwrap();
         assert_eq!(r.battery_pct(), Some(90.0));
         assert_eq!(r.battery.percentage, Some(90.0));
@@ -366,7 +379,10 @@ mod tests {
             }
         }
         let u = "HID_ID=0005:0000004C:0000029C\nHID_UNIQ=aa:bb:cc:dd:ee:ff\n";
-        let k = BatteryReading { percent: 55, status: BatteryStatus::Discharging };
+        let k = BatteryReading {
+            percent: 55,
+            status: BatteryStatus::Discharging,
+        };
         let r = build_report(u, Some(k), &Panics, KbWake::default()).unwrap();
         assert_eq!(r.battery_pct(), Some(55.0));
         assert!(r.bluetooth.connected);
@@ -374,7 +390,10 @@ mod tests {
 
     #[test]
     fn hex_dump_parsing() {
-        let f = Fixture::from_hex_dump("# dump\nea 5a\n475a000000\n\n5a 0b 54 09 92 09 2e 07 d0 # calib\n").unwrap();
+        let f = Fixture::from_hex_dump(
+            "# dump\nea 5a\n475a000000\n\n5a 0b 54 09 92 09 2e 07 d0 # calib\n",
+        )
+        .unwrap();
         assert_eq!(f.len(), 3);
         assert_eq!(f.feature(0xEA).unwrap(), vec![0xEA, 0x5A]);
         assert!(f.feature(0x99).is_err());

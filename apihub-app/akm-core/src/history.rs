@@ -44,7 +44,9 @@ pub struct HistoryEntry {
 
 /// Is this sample worth storing? (no invented 0 V / NaN / out-of-range %).
 pub fn valid_sample(pct: f64, voltage: Option<f64>) -> bool {
-    pct.is_finite() && (0.0..=100.0).contains(&pct) && voltage.is_none_or(|v| v.is_finite() && v > 0.0)
+    pct.is_finite()
+        && (0.0..=100.0).contains(&pct)
+        && voltage.is_none_or(|v| v.is_finite() && v > 0.0)
 }
 
 /// `$XDG_STATE_HOME/apple-kb-monitor/history.jsonl` (fallback `~/.local/state`).
@@ -69,7 +71,10 @@ pub fn legacy_path() -> PathBuf {
 
 /// Parse JSONL content; malformed lines are skipped.
 pub fn parse(content: &str) -> Vec<HistoryEntry> {
-    content.lines().filter_map(|l| serde_json::from_str(l).ok()).collect()
+    content
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok())
+        .collect()
 }
 
 /// Discharge rate (mV/h) and remaining hours down to 2.0 V, from the last 50
@@ -78,7 +83,11 @@ pub fn estimate_remaining(entries: &[HistoryEntry]) -> Option<(f64, f64)> {
     let recent: Vec<(u64, f64)> = entries
         .iter()
         .rev()
-        .filter_map(|e| e.voltage.filter(|v| v.is_finite() && *v > 0.0).map(|v| (e.ts, v)))
+        .filter_map(|e| {
+            e.voltage
+                .filter(|v| v.is_finite() && *v > 0.0)
+                .map(|v| (e.ts, v))
+        })
         .take(50)
         .collect();
     if recent.len() < 2 {
@@ -125,7 +134,10 @@ impl History<SystemClock> {
 
 impl<C: Clock> History<C> {
     pub fn new(path: impl Into<PathBuf>, clock: C) -> Self {
-        Self { path: path.into(), clock }
+        Self {
+            path: path.into(),
+            clock,
+        }
     }
 
     pub fn path(&self) -> &Path {
@@ -150,19 +162,28 @@ impl<C: Clock> History<C> {
         if !valid_sample(pct, voltage) {
             return Ok(false);
         }
-        let entry = HistoryEntry { ts: self.clock.now(), pct, voltage };
+        let entry = HistoryEntry {
+            ts: self.clock.now(),
+            pct,
+            voltage,
+        };
         if let Some(p) = self.path.parent() {
             std::fs::create_dir_all(p)?;
         }
         let line = serde_json::to_string(&entry).map_err(io::Error::other)?;
-        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&self.path)?;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
         writeln!(f, "{line}")?;
         Ok(true)
     }
 
     /// Every entry (empty if the file is missing).
     pub fn read(&self) -> Vec<HistoryEntry> {
-        std::fs::read_to_string(&self.path).map(|c| parse(&c)).unwrap_or_default()
+        std::fs::read_to_string(&self.path)
+            .map(|c| parse(&c))
+            .unwrap_or_default()
     }
 
     /// Entries with `ts >= since`.
@@ -180,7 +201,10 @@ impl<C: Clock> History<C> {
         };
         let cutoff = self.clock.now().saturating_sub(retention_s);
         let total = content.lines().count();
-        let keep: Vec<HistoryEntry> = parse(&content).into_iter().filter(|e| e.ts >= cutoff).collect();
+        let keep: Vec<HistoryEntry> = parse(&content)
+            .into_iter()
+            .filter(|e| e.ts >= cutoff)
+            .collect();
         if keep.len() == total {
             return Ok(0);
         }
@@ -228,7 +252,11 @@ mod tests {
     struct Tmp(PathBuf);
     impl Tmp {
         fn new() -> Self {
-            let p = std::env::temp_dir().join(format!("akm-hist-{}-{}", std::process::id(), N.fetch_add(1, Ordering::SeqCst)));
+            let p = std::env::temp_dir().join(format!(
+                "akm-hist-{}-{}",
+                std::process::id(),
+                N.fetch_add(1, Ordering::SeqCst)
+            ));
             let _ = std::fs::remove_dir_all(&p);
             std::fs::create_dir_all(&p).unwrap();
             Tmp(p)
@@ -250,8 +278,22 @@ mod tests {
         assert!(h.append(89.0, None).unwrap());
         let e = h.read();
         assert_eq!(e.len(), 2);
-        assert_eq!(e[0], HistoryEntry { ts: 1_000, pct: 90.0, voltage: Some(2.81) });
-        assert_eq!(e[1], HistoryEntry { ts: 1_300, pct: 89.0, voltage: None });
+        assert_eq!(
+            e[0],
+            HistoryEntry {
+                ts: 1_000,
+                pct: 90.0,
+                voltage: Some(2.81)
+            }
+        );
+        assert_eq!(
+            e[1],
+            HistoryEntry {
+                ts: 1_300,
+                pct: 89.0,
+                voltage: None
+            }
+        );
         assert_eq!(h.read_since(1_100).len(), 1);
     }
 
@@ -259,7 +301,13 @@ mod tests {
     fn invalid_samples_are_rejected() {
         let t = Tmp::new();
         let h = History::new(t.0.join("h.jsonl"), FakeClock::at(1));
-        for (p, v) in [(f64::NAN, Some(2.8)), (101.0, None), (-1.0, None), (50.0, Some(0.0)), (50.0, Some(f64::INFINITY))] {
+        for (p, v) in [
+            (f64::NAN, Some(2.8)),
+            (101.0, None),
+            (-1.0, None),
+            (50.0, Some(0.0)),
+            (50.0, Some(f64::INFINITY)),
+        ] {
             assert!(!h.append(p, v).unwrap(), "{p} {v:?}");
         }
         assert!(h.read().is_empty());
@@ -268,12 +316,18 @@ mod tests {
 
     #[test]
     fn legacy_format_and_garbage_lines() {
-        let e = parse("{\"ts\":1,\"pct\":90.0,\"voltage\":2.8}\nnot json\n{\"ts\":2,\"pct\":89.0}\n");
+        let e =
+            parse("{\"ts\":1,\"pct\":90.0,\"voltage\":2.8}\nnot json\n{\"ts\":2,\"pct\":89.0}\n");
         assert_eq!(e.len(), 2);
         assert_eq!(e[0].voltage, Some(2.8));
         assert_eq!(e[1].voltage, None);
         // voltage-less entries serialise without the field
-        let s = serde_json::to_string(&HistoryEntry { ts: 5, pct: 1.0, voltage: None }).unwrap();
+        let s = serde_json::to_string(&HistoryEntry {
+            ts: 5,
+            pct: 1.0,
+            voltage: None,
+        })
+        .unwrap();
         assert_eq!(s, r#"{"ts":5,"pct":1.0}"#);
     }
 
@@ -306,15 +360,25 @@ mod tests {
         h.append(49.0, None).unwrap();
         assert!(!h.migrate_from(&legacy).unwrap(), "never overwrites");
         assert_eq!(h.read().len(), 2);
-        assert!(!History::new(t.0.join("x.jsonl"), FakeClock::at(0)).migrate_from(&t.0.join("missing")).unwrap());
+        assert!(!History::new(t.0.join("x.jsonl"), FakeClock::at(0))
+            .migrate_from(&t.0.join("missing"))
+            .unwrap());
     }
 
     #[test]
     fn estimate_from_voltage_slope() {
-        let e = |ts, v| HistoryEntry { ts, pct: 50.0, voltage: v };
+        let e = |ts, v| HistoryEntry {
+            ts,
+            pct: 50.0,
+            voltage: v,
+        };
         // 2.9 V -> 2.8 V in 10 h = 10 mV/h; 800 mV left to 2.0 V = 80 h.
-        let (rate, hours) = estimate_remaining(&[e(0, Some(2.9)), e(18_000, None), e(36_000, Some(2.8))]).unwrap();
-        assert!((rate - 10.0).abs() < 1e-6 && (hours - 80.0).abs() < 1e-6, "{rate} {hours}");
+        let (rate, hours) =
+            estimate_remaining(&[e(0, Some(2.9)), e(18_000, None), e(36_000, Some(2.8))]).unwrap();
+        assert!(
+            (rate - 10.0).abs() < 1e-6 && (hours - 80.0).abs() < 1e-6,
+            "{rate} {hours}"
+        );
         assert_eq!(format_remaining(rate, hours), "3.3 days (10.0 mV/h)");
         assert_eq!(format_remaining(3.0, 5.0), "5.0h (3.0 mV/h)");
         // not enough data / not discharging / too short
@@ -322,7 +386,12 @@ mod tests {
         assert!(estimate_remaining(&[e(0, Some(2.8)), e(36_000, Some(2.9))]).is_none());
         assert!(estimate_remaining(&[e(0, Some(2.9)), e(10, Some(2.8))]).is_none());
         // empty battery
-        assert_eq!(estimate_remaining(&[e(0, Some(2.1)), e(3600, Some(1.9))]).unwrap().1, 0.0);
+        assert_eq!(
+            estimate_remaining(&[e(0, Some(2.1)), e(3600, Some(1.9))])
+                .unwrap()
+                .1,
+            0.0
+        );
     }
 
     #[test]

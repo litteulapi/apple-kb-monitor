@@ -113,7 +113,8 @@ mod tests {
         let s = serde_json::to_string(&r).unwrap();
         assert_eq!(serde_json::from_str::<KbReport>(&s).unwrap(), r);
         // Missing sections / unknown fields are accepted (forward compatible).
-        let partial: KbReport = serde_json::from_str(r#"{"battery":{"percentage":90},"x":1}"#).unwrap();
+        let partial: KbReport =
+            serde_json::from_str(r#"{"battery":{"percentage":90},"x":1}"#).unwrap();
         assert_eq!(partial.battery.percentage, Some(90.0));
     }
 }

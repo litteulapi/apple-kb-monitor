@@ -7,12 +7,13 @@
 //! Properties (all emit `PropertiesChanged`):
 //! * `Battery`  i  percentage 0..100, **-1 = unknown**
 //! * `Voltage`  d  volts, **0 = unknown** (HID diagnostic)
-//! * `Rssi`     i  dBm, **0 = unknown / stale**
+//! * `Rssi`     i  dBm, **127 = unknown / stale** (MGMT convention; on
+//!   BR/EDR 0 is a valid value: inside the golden receive power range)
 //! * `Connected` b, `Model` s, `Mac` s (empty = unknown)
 //! * `LastUpdate` t (unix s, 0 = never), `LastError` s (empty = none)
 //! * `Revision` t (snapshot counter), `Json` s (full snapshot, schema 1)
 //!
-//! Methods: `Refresh()`, `History(t since) -> s` (JSON array of
+//! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `History(t since) -> s` (JSON array of
 //! `{ts,pct,voltage?}`). Signal: `StateChanged(t revision, s json)`.
 
 use std::sync::Arc;
@@ -29,6 +30,8 @@ use crate::actor::{Mailbox, Msg};
 pub const BUS_NAME: &str = "com.agenceapi.AppleKbMonitor1";
 pub const OBJECT_PATH: &str = "/com/agenceapi/AppleKbMonitor1";
 pub const INTERFACE: &str = "com.agenceapi.AppleKbMonitor1";
+/// `Rssi` value when no fresh measurement exists.
+pub const RSSI_UNKNOWN: i32 = 127;
 
 /// D-Bus view of a snapshot (sentinels instead of options).
 #[derive(Debug, Clone, PartialEq)]
@@ -46,9 +49,11 @@ pub struct Props {
 impl Props {
     pub fn from_snapshot(s: &Snapshot) -> Self {
         Self {
-            battery: s.battery_pct().map_or(-1, |p| p.round().clamp(0.0, 100.0) as i32),
+            battery: s
+                .battery_pct()
+                .map_or(-1, |p| p.round().clamp(0.0, 100.0) as i32),
             voltage: s.voltage().filter(|v| v.is_finite()).unwrap_or(0.0),
-            rssi: s.rssi().unwrap_or(0),
+            rssi: s.rssi().unwrap_or(RSSI_UNKNOWN),
             connected: s.connected,
             model: s.model().unwrap_or_default().to_string(),
             mac: s.mac().unwrap_or_default().to_string(),
@@ -117,23 +122,39 @@ impl Monitor {
         env!("CARGO_PKG_VERSION")
     }
 
+    /// Full snapshot as JSON (same as the `Json` property, without a variant:
+    /// convenient for QML / shell clients).
+    fn get_state(&self) -> String {
+        serde_json::to_string(&self.watch.get()).unwrap_or_default()
+    }
+
     /// Ask for a full read now (no effect while the keyboard is disconnected).
     fn refresh(&self) -> zbus::fdo::Result<()> {
         if self.mailbox.send(Msg::Refresh) {
             Ok(())
         } else {
-            Err(zbus::fdo::Error::Failed("acquisition thread not running".into()))
+            Err(zbus::fdo::Error::Failed(
+                "acquisition thread not running".into(),
+            ))
         }
     }
 
     /// History entries with `ts >= since`, as a JSON array.
     fn history(&self, since: u64) -> zbus::fdo::Result<String> {
-        let entries = self.history.as_ref().map(|h| h.read_since(since)).unwrap_or_default();
+        let entries = self
+            .history
+            .as_ref()
+            .map(|h| h.read_since(since))
+            .unwrap_or_default();
         serde_json::to_string(&entries).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
 
     #[zbus(signal)]
-    async fn state_changed(ctxt: &zbus::object_server::SignalContext<'_>, revision: u64, json: &str) -> zbus::Result<()>;
+    async fn state_changed(
+        ctxt: &zbus::object_server::SignalContext<'_>,
+        revision: u64,
+        json: &str,
+    ) -> zbus::Result<()>;
 }
 
 /// Why the service could not start.
@@ -147,7 +168,9 @@ pub enum ServeError {
 impl std::fmt::Display for ServeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ServeError::NameTaken => write!(f, "{BUS_NAME} is already owned: another monitor is running"),
+            ServeError::NameTaken => {
+                write!(f, "{BUS_NAME} is already owned: another monitor is running")
+            }
             ServeError::Bus(e) => write!(f, "session bus: {e}"),
         }
     }
@@ -166,7 +189,14 @@ pub fn serve_on(
     mailbox: Arc<Mailbox>,
     history: Option<Arc<History>>,
 ) -> Result<(), ServeError> {
-    conn.object_server().at(OBJECT_PATH, Monitor { watch, mailbox, history })?;
+    conn.object_server().at(
+        OBJECT_PATH,
+        Monitor {
+            watch,
+            mailbox,
+            history,
+        },
+    )?;
     let flags = zbus::fdo::RequestNameFlags::DoNotQueue.into();
     match conn.request_name_with_flags(BUS_NAME, flags) {
         Ok(RequestNameReply::PrimaryOwner) | Ok(RequestNameReply::AlreadyOwner) => Ok(()),
@@ -178,7 +208,11 @@ pub fn serve_on(
 
 /// Connect to the session bus, export, take the name and start the thread
 /// that turns snapshot changes into `PropertiesChanged` + `StateChanged`.
-pub fn serve(watch: Arc<Watch>, mailbox: Arc<Mailbox>, history: Option<Arc<History>>) -> Result<Connection, ServeError> {
+pub fn serve(
+    watch: Arc<Watch>,
+    mailbox: Arc<Mailbox>,
+    history: Option<Arc<History>>,
+) -> Result<Connection, ServeError> {
     let conn = Connection::session()?;
     serve_on(&conn, watch.clone(), mailbox, history)?;
     spawn_emitter(conn.clone(), watch);
@@ -187,19 +221,23 @@ pub fn serve(watch: Arc<Watch>, mailbox: Arc<Mailbox>, history: Option<Arc<Histo
 
 /// Emit change signals for every new snapshot.
 pub fn spawn_emitter(conn: Connection, watch: Arc<Watch>) {
-    let _ = std::thread::Builder::new().name("dbus-emitter".into()).spawn(move || {
-        let mut seen = watch.version();
-        let mut prev = Props::from_snapshot(&watch.get());
-        loop {
-            let Some(snap) = watch.wait_newer(seen, Duration::from_secs(60)) else { continue };
-            seen = snap.version;
-            let now = Props::from_snapshot(&snap);
-            if let Err(e) = emit(&conn, &prev, &now, &snap) {
-                tracing::warn!("cannot emit D-Bus signals: {e}");
+    let _ = std::thread::Builder::new()
+        .name("dbus-emitter".into())
+        .spawn(move || {
+            let mut seen = watch.version();
+            let mut prev = Props::from_snapshot(&watch.get());
+            loop {
+                let Some(snap) = watch.wait_newer(seen, Duration::from_secs(60)) else {
+                    continue;
+                };
+                seen = snap.version;
+                let now = Props::from_snapshot(&snap);
+                if let Err(e) = emit(&conn, &prev, &now, &snap) {
+                    tracing::warn!("cannot emit D-Bus signals: {e}");
+                }
+                prev = now;
             }
-            prev = now;
-        }
-    });
+        });
 }
 
 fn emit(conn: &Connection, prev: &Props, now: &Props, snap: &Snapshot) -> zbus::Result<()> {
@@ -246,7 +284,10 @@ mod tests {
     #[test]
     fn props_use_documented_sentinels() {
         let p = Props::from_snapshot(&Snapshot::default());
-        assert_eq!((p.battery, p.voltage, p.rssi, p.connected), (-1, 0.0, 0, false));
+        assert_eq!(
+            (p.battery, p.voltage, p.rssi, p.connected),
+            (-1, 0.0, RSSI_UNKNOWN, false)
+        );
         assert!(p.model.is_empty() && p.mac.is_empty() && p.last_error.is_empty());
 
         let mut k = KbReport::default();
@@ -255,9 +296,17 @@ mod tests {
         k.radio.rssi_dbm = Some(-48);
         k.device.model = Some("A1314".into());
         k.device.mac = Some("04:DB:56:CA:42:EE".into());
-        let s = Snapshot { connected: true, keyboard: Some(k), last_update: 7, ..Default::default() };
+        let s = Snapshot {
+            connected: true,
+            keyboard: Some(k),
+            last_update: 7,
+            ..Default::default()
+        };
         let p = Props::from_snapshot(&s);
-        assert_eq!((p.battery, p.voltage, p.rssi, p.connected, p.last_update), (90, 2.81, -48, true, 7));
+        assert_eq!(
+            (p.battery, p.voltage, p.rssi, p.connected, p.last_update),
+            (90, 2.81, -48, true, 7)
+        );
         assert_eq!(p.mac, "04:DB:56:CA:42:EE");
     }
 }

@@ -45,7 +45,11 @@ impl Mailbox {
     }
     /// Send to the running actor; false if none is running.
     pub fn send(&self, m: Msg) -> bool {
-        self.0.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_some_and(|tx| tx.send(m).is_ok())
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .is_some_and(|tx| tx.send(m).is_ok())
     }
 }
 
@@ -64,7 +68,12 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Self { bluez_provider: true, notify: true, history: true, low_threshold: 15.0 }
+        Self {
+            bluez_provider: true,
+            notify: true,
+            history: true,
+            low_threshold: 15.0,
+        }
     }
 }
 
@@ -140,12 +149,19 @@ impl Actor {
     /// readable. Returns true when a connected keyboard was acquired.
     fn acquire(&mut self, mac: Option<&str>) -> bool {
         let hid = hidraw::read_keyboard().filter(|k| {
-            mac.is_none_or(|m| k.device.mac.as_deref().is_some_and(|km| km.eq_ignore_ascii_case(m)))
+            mac.is_none_or(|m| {
+                k.device
+                    .mac
+                    .as_deref()
+                    .is_some_and(|km| km.eq_ignore_ascii_case(m))
+            })
         });
         let (report, err) = match hid {
             Some(k) => (Some(k), None),
             None => {
-                let m = mac.map(str::to_string).or_else(|| hidraw::find_apple_keyboard_mac_in(std::path::Path::new("/sys")));
+                let m = mac
+                    .map(str::to_string)
+                    .or_else(|| hidraw::find_apple_keyboard_mac_in(std::path::Path::new("/sys")));
                 match m.as_deref().and_then(hidraw::report_from_sysfs) {
                     Some(k) if k.battery_pct().is_some() => {
                         (Some(k), Some("HID diagnostics unavailable (hidraw not readable or keyboard asleep): kernel battery only".to_string()))
@@ -197,7 +213,9 @@ impl Actor {
         let now = Instant::now();
 
         if let Some(h) = self.history.as_ref() {
-            let due = self.last_history.is_none_or(|t| now.duration_since(t) >= HISTORY_SPACING);
+            let due = self
+                .last_history
+                .is_none_or(|t| now.duration_since(t) >= HISTORY_SPACING);
             if due || (full_read && k.battery.voltage.is_some()) {
                 match h.append(pct, k.battery.voltage) {
                     Ok(true) => self.last_history = Some(now),
@@ -205,7 +223,10 @@ impl Actor {
                     Err(e) => tracing::warn!("history append failed: {e}"),
                 }
             }
-            if self.last_rotation.is_none_or(|t| now.duration_since(t) >= Duration::from_secs(24 * 3600)) {
+            if self
+                .last_rotation
+                .is_none_or(|t| now.duration_since(t) >= Duration::from_secs(24 * 3600))
+            {
                 self.last_rotation = Some(now);
                 match h.rotate(RETENTION_S) {
                     Ok(0) => {}
@@ -220,7 +241,11 @@ impl Actor {
                 self.provider = bluez::BatteryProvider::spawn();
             }
             if let Some(bp) = self.provider.as_ref() {
-                if self.provider_mac.as_deref().is_some_and(|m| !m.eq_ignore_ascii_case(&mac)) {
+                if self
+                    .provider_mac
+                    .as_deref()
+                    .is_some_and(|m| !m.eq_ignore_ascii_case(&mac))
+                {
                     // Another keyboard: withdraw the old object (MAC tracking).
                     if let Some(old) = self.provider_mac.take() {
                         bp.remove(&old);
@@ -231,7 +256,9 @@ impl Actor {
             }
         }
 
-        if low_battery_alert(pct, self.opts.low_threshold, &mut self.alert_armed) && self.opts.notify {
+        if low_battery_alert(pct, self.opts.low_threshold, &mut self.alert_armed)
+            && self.opts.notify
+        {
             tracing::warn!("low battery: {pct:.0}%");
             notify::low_battery(pct);
             led::flash_capslock(5);
@@ -239,7 +266,9 @@ impl Actor {
     }
 
     fn refresh_rssi(&mut self) {
-        let Some(mac) = self.kb.as_ref().and_then(|k| k.device.mac.clone()) else { return };
+        let Some(mac) = self.kb.as_ref().and_then(|k| k.device.mac.clone()) else {
+            return;
+        };
         let r = rssi::read_rssi(&mac);
         if r.is_some() {
             self.rssi_at = Some(unix_now());
@@ -248,7 +277,10 @@ impl Actor {
     }
 
     fn refresh_remaining(&mut self, now: Instant) {
-        if self.remaining_at.is_some_and(|t| now.duration_since(t) < HISTORY_SPACING) {
+        if self
+            .remaining_at
+            .is_some_and(|t| now.duration_since(t) < HISTORY_SPACING)
+        {
             return;
         }
         self.remaining_at = Some(now);
@@ -266,14 +298,22 @@ impl Actor {
         let mut rssi_at = None;
         if let Some(k) = kb.as_mut() {
             // RSSI is exposed only while fresh and taken from this very MAC.
-            let cur = k.device.mac.as_deref().and_then(|m| self.rssi.current(m, now));
+            let cur = k
+                .device
+                .mac
+                .as_deref()
+                .and_then(|m| self.rssi.current(m, now));
             k.radio.rssi_dbm = cur.map(|c| c.0);
             k.radio.tx_power_dbm = cur.and_then(|c| c.1);
             k.bluetooth.rssi_dbus = None;
             k.bluetooth.tx_power_dbus = None;
             rssi_at = cur.and(self.rssi_at);
         }
-        let (caps, num) = if kb.is_some() { led::read_led_state() } else { (false, false) };
+        let (caps, num) = if kb.is_some() {
+            led::read_led_state()
+        } else {
+            (false, false)
+        };
         Snapshot {
             connected: kb.is_some(),
             kb_error: kb.is_none().then(|| "Keyboard: not found".to_string()),
@@ -331,7 +371,9 @@ pub fn spawn(watch: Arc<Watch>, mailbox: Arc<Mailbox>, opts: Options) -> ActorHa
         .spawn(move || {
             while !q.load(Ordering::Relaxed) {
                 let (w, m, qf, o) = (watch.clone(), mb.clone(), q.clone(), opts.clone());
-                let worker = thread::Builder::new().name("kb-actor".into()).spawn(move || run(w, m, qf, o));
+                let worker = thread::Builder::new()
+                    .name("kb-actor".into())
+                    .spawn(move || run(w, m, qf, o));
                 match worker.map(|h| h.join()) {
                     Ok(Ok(())) => break,
                     Ok(Err(_)) => {
@@ -351,7 +393,11 @@ pub fn spawn(watch: Arc<Watch>, mailbox: Arc<Mailbox>, opts: Options) -> ActorHa
             hidraw::close_hid_fd();
         })
         .expect("spawn kb-supervisor");
-    ActorHandle { quit, mailbox, thread: Some(thread) }
+    ActorHandle {
+        quit,
+        mailbox,
+        thread: Some(thread),
+    }
 }
 
 /// Event loop. While the keyboard is disconnected nothing keyboard-related runs.
@@ -369,7 +415,9 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             break;
         }
         let now = Instant::now();
-        let wait = machine.next_deadline().map_or(TICK, |d| d.saturating_duration_since(now).min(TICK));
+        let wait = machine
+            .next_deadline()
+            .map_or(TICK, |d| d.saturating_duration_since(now).min(TICK));
         match rx.recv_timeout(wait) {
             Ok(Msg::Bus(ev)) => {
                 if machine.on_event(&ev, Instant::now()) == Some(Action::Clear) {
@@ -418,7 +466,10 @@ mod tests {
         assert!(!low_battery_alert(50.0, 15.0, &mut armed));
         assert!(low_battery_alert(14.0, 15.0, &mut armed));
         assert!(!low_battery_alert(13.0, 15.0, &mut armed), "only once");
-        assert!(!low_battery_alert(18.0, 15.0, &mut armed), "hysteresis: not re-armed yet");
+        assert!(
+            !low_battery_alert(18.0, 15.0, &mut armed),
+            "hysteresis: not re-armed yet"
+        );
         assert!(!low_battery_alert(14.0, 15.0, &mut armed));
         assert!(!low_battery_alert(20.0, 15.0, &mut armed));
         assert!(low_battery_alert(10.0, 15.0, &mut armed));
