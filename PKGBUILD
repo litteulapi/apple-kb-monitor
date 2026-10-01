@@ -1,8 +1,8 @@
 # Maintainer: Han <han@agenceapi.com>
 pkgname=apple-kb-monitor
 pkgver=3.0.0
-pkgrel=1
-pkgdesc="Full telemetry + key mapping for Apple Wireless Keyboards (BCM2042/BCM20733) — battery, voltage, RSSI, DDC brightness, MQTT Home Assistant, KDE integration"
+pkgrel=2
+pkgdesc="Telemetry and key mapping for Apple Bluetooth keyboards (BCM2042/BCM20733): battery, voltage, RSSI, BlueZ battery provider, KDE integration"
 arch=('x86_64')
 url="https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
 license=('GPL-2.0-or-later')
@@ -11,7 +11,6 @@ makedepends=('rust' 'gcc')
 optdepends=(
     'bluez-utils: bluetoothctl CLI for BT management'
     'libnotify: desktop notifications on low battery'
-    'python-paho-mqtt: MQTT publishing from the CLI daemon (--mqtt)'
 )
 options=('!lto')   # C-LTO objects from ring break the Rust link (rust-lld)
 backup=('etc/keyd/apple-keyboard.conf' 'etc/modprobe.d/hid_apple.conf')
@@ -20,16 +19,11 @@ install=apple-kb-monitor.install
 # subdirectories (systemd/, udev/, ...) are installed directly from $startdir.
 source=(
     'apple-kb-monitor'
-    'config.toml.example'
     'apihub-app.desktop'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP')
 
 build() {
-    # ddc-tool (Rust)
-    cd "$startdir/ddc-tool"
-    cargo build --release --target-dir target
-
     # apihub-app (Rust GUI)
     cd "$startdir/apihub-app"
     cargo build --release --target-dir target
@@ -42,15 +36,11 @@ build() {
 package() {
     # ── Binaries ────────────────────────────────────────────────────────
     install -Dm755 "$srcdir/apple-kb-monitor"                        "$pkgdir/usr/bin/apple-kb-monitor"
-    install -Dm755 "$startdir/ddc-tool/target/release/ddc-tool"     "$pkgdir/usr/bin/ddc-tool"
     install -Dm755 "$startdir/apihub-app/target/release/apihub-app" "$pkgdir/usr/bin/apihub-app"
 
     # ── RSSI helper (cap_net_admin set in post_install, not here: setcap is
     #    not possible under fakeroot and xattrs are not reliably kept) ────
     install -Dm755 "$startdir/rssi-helper"                          "$pkgdir/usr/lib/apple-kb-monitor/rssi-helper"
-
-    # ── Config ──────────────────────────────────────────────────────────
-    install -Dm644 "$srcdir/config.toml.example"               "$pkgdir/etc/apple-kb-monitor/config.toml.example"
 
     # ── systemd user service (CLI daemon) ───────────────────────────────
     install -Dm644 "$startdir/systemd/apple-kb-monitor.service"          "$pkgdir/usr/lib/systemd/user/apple-kb-monitor.service"

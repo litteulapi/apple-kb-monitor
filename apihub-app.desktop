@@ -1,11 +1,11 @@
 [Desktop Entry]
 Name=ApiHub
-GenericName=Device Hub
-Comment=Apple Keyboard telemetry + LG Monitor DDC control + MQTT Home Assistant
+GenericName=Keyboard Monitor
+Comment=Apple Bluetooth keyboard telemetry and battery
 Exec=apihub-app
 Icon=apihub-scarab
 Terminal=false
 Type=Application
 Categories=System;Monitor;
-Keywords=keyboard;monitor;ddc;brightness;apple;bluetooth;mqtt;
+Keywords=keyboard;apple;bluetooth;battery;rssi;
 StartupWMClass=apihub
