@@ -1,6 +1,7 @@
 mod diag;
 mod fnmode_diag;
 mod framestats;
+mod heartbeat;
 mod history_view;
 mod instance;
 mod keyboard;
@@ -15,7 +16,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use view::{Level, Palette};
 use std::thread;
-use std::time::Duration;
 
 use akm_core::{Snapshot, Watch};
 use eframe::egui;
@@ -61,6 +61,8 @@ struct ApiHubApp {
     rename_loaded: Option<String>,
     rename_status: rename::Status,
     frame_stats: framestats::FrameStats,
+    // UI heartbeat (#240): ticked from update(), written by a small thread.
+    heartbeat: Option<heartbeat::Heartbeat>,
 }
 
 impl ApiHubApp {
@@ -93,6 +95,7 @@ impl ApiHubApp {
             rename_loaded: None,
             rename_status: Arc::new(Mutex::new(None)),
             frame_stats: framestats::FrameStats::from_env(),
+            heartbeat: heartbeat::Heartbeat::from_env(),
         }
     }
 }
@@ -101,7 +104,11 @@ impl eframe::App for ApiHubApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let t0 = std::time::Instant::now();
         self.update_ui(ctx);
-        self.frame_stats.record(t0.elapsed(), frame.info().cpu_usage);
+        let took = t0.elapsed();
+        self.frame_stats.record(took, frame.info().cpu_usage);
+        if let Some(hb) = self.heartbeat.as_mut() {
+            hb.tick(took);
+        }
     }
 }
 
@@ -140,8 +147,9 @@ impl ApiHubApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
 
-        // Next repaint in 2s — egui sleeps until then or until user interaction
-        ctx.request_repaint_after(Duration::from_secs(2));
+        // Next repaint in 1 s (also minimised/hidden): drives the UI heartbeat
+        // (#240); egui sleeps until then or until user interaction.
+        ctx.request_repaint_after(heartbeat::PERIOD);
 
         let snap = self.state.get();
 
@@ -797,7 +805,7 @@ fn open_window(state: &State, raise: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBoo
         // Never block in eglSwapBuffers: with vsync on, Mesa waits for a
         // Wayland frame callback that a minimized or hidden window never
         // gets, the main thread stops answering pings ("Not responding") and
-        // ignores Activate/Quit (#231). Repaints are timer-driven (2 s) or
+        // ignores Activate/Quit (#231). Repaints are timer-driven (1 s) or
         // input-driven anyway, so there is nothing to tear.
         vsync: false,
         // Return to main() on close, which then ends the process (#226).
