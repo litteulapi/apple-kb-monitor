@@ -12,6 +12,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `akmctl info`: the register map with the values cached by the daemon, "never read" otherwise; never reads the keyboard.
 - "Apple display" percentage (`[display] apple_percent`, #213) next to the keyboard indication; Input `0x30` BatteryState raises "low" / "critical" notifications driven by the keyboard (#189).
 
+### Added (parity with what Apple sends to this keyboard, #189 #190 #191)
+- `WillShutdown` (Feature `0x40`, report id alone, wire `53 40`) sent once at shutdown / restart, as macOS does, **default on** (`[apple] will_shutdown`, shown by `akmctl status`). Conditions: option on, keyboard connected, once per run, circuit breaker, 1 s spacing. Triggers: logind `PrepareForShutdown` (second delay inhibitor, `sleep.rs`), D-Bus `NotifyShutdown`, `akmctl shutdown-notify [--only-if-stopping]` run by the user unit `apple-kb-monitor-shutdown.service`. It is the only write the software can make: register-map class `WriteAppleParity`, `check_write` refuses the other 255 ids and every other direction, `WriteSession` refuses a second write, `hid_write_feature` (1-byte ioctl, every byte logged) is the single hardware door. Tests use a spy, never the keyboard.
+- Input `0x13` with bit 1 = 0 is `KeyboardOff` (the keyboard switches off), as in macOS: `PoweredOff` property and `KeyboardOff` signal on the `Input` interface; the disconnection that follows is `LinkEvent::PoweredOff` ("switched off"), not "disconnected". `13 01` is no longer a wake.
+- Keyboard-driven battery alerts (`0x30`) get explicit labels ("battery low / critical (keyboard alert)"), a `BatteryAlert` signal, the CapsLock flash when critical, and are deduplicated with the percentage alerts (`AlertDedupe`: the keyboard is authoritative, one alert per event).
+- Not implemented on purpose: HID_CONTROL SUSPEND / EXIT_SUSPEND (#244, see `docs/PARITE-APPLE.md`).
+
 ### Security (audit 2, #202-#212, #214)
 - `Refresh()` (D-Bus, tray) is bounded: ignored within 5 min of the last read or accepted refresh; HID reads are 1 s apart and a circuit breaker stops them after 3 failed requests until the keyboard shows signs of life (#206, #214).
 - `SetFnMode` runs `/usr/bin/pkexec <helper> set-fnmode <n>` from constants (no `$PATH`, no `APPLE_KB_SETTINGS_HELPER`), checks the caller's uid, one dialog at a time, logged; `SetSwapOptCmd`/`SetIsoLayout` removed (no polkit action); polkit `auth_admin` without `_keep` (#202, #203).

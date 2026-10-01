@@ -51,11 +51,12 @@ lit d'ailleurs aucun rapport vendeur sur les familles hors BCM2042.
 `akmctl info` liste la table complète. Classes de sécurité : `SafeRead` (`0x47`, `0x46`, `0x49`), `OncePerConnection`
 (`0x4F`, `0x60`, `0x51`-`0x54` ; le démon ne lit que `0x4F` et `0x60`), `PassiveInput` (`0x04` `0x05` `0x30` `0x13` `0x11`
 `0x12`), `ManualOnly` (lisibles mais jamais demandés par le démon : `0xFF`, `0x5A`, `0xEB`, `0x5B`, `0xF4`, `0xF5`, `0xEA`,
-`0x09`, `0x5C`, `0x5D`), `NeverRead` (`0xFE`, `0x4C`, Input `0x01`, `0x34`, `0x35`), `NeverWrite` (`0x40` `0x41` `0x43`
+`0x09`, `0x5C`, `0x5D`), `NeverRead` (`0xFE`, `0x4C`, Input `0x01`, `0x34`, `0x35`), `WriteAppleParity` (`0x40` seul), `NeverWrite` (`0x41` `0x43`
 `0x44` `0x45` `0x4A` `0x50` `0x55`, `0xD0` `0xD4` `0xD5` `0xFA` `0xFB`, et tout `0xDx`/`0xFx` inconnu), `Unknown`. La liste blanche
 de lecture est **générée** de la table ; `hid_read_feature` (seul appel `ioctl` vers le clavier) refuse tout id dont la classe
-ne permet pas la lecture, avant l'ioctl. Aucune écriture HID n'existe : `0x44` (oubli de tous les hôtes, #217) et `0x4A`
-(notification SCO, #216) restent des écritures soumises à l'accord explicite du gérant et ne sont pas implémentées.
+ne permet pas la lecture, avant l'ioctl. Une seule écriture HID existe : `0x40` `WillShutdown` (id seul, une fois à l'arrêt, ce que macOS envoie, #191,
+`docs/PARITE-APPLE.md`) ; `hid_write_feature` est le seul appel `HIDIOCSFEATURE`. `0x44` (oubli de tous les hôtes, #217) et
+`0x4A` (notification SCO, #216) restent refusés et ne sont pas implémentés.
 
 Seuils `0x60` (Full / Low / Critical / Empty, mV, 4 × u16 BE, lus une fois par connexion) : exposés en JSON
 (`battery.thresholds`, `threshold_level`, `threshold_margins_mv`) et affichés avec la marge restante avant `Low` et `Critical`
