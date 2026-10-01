@@ -1,575 +1,232 @@
 mod bluez;
-mod brightness;
-mod ddc;
 mod history;
 mod keyboard;
 mod power;
-mod mqtt;
 mod rssi;
 mod tray;
 
 use keyboard::*;
 
-use std::collections::HashMap;
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use eframe::egui;
 
-// ── Profile persistence ────────────────────────────────────────────────────
-
-type DdcProfile = (String, HashMap<String, u16>);
-
-/// Serializes every config/profile write (callers may be on different threads).
-static WRITE_LOCK: Mutex<()> = Mutex::new(());
-
-/// Atomic file write (tmp + rename) with explicit permissions, so a crash or a
-/// concurrent writer never leaves a truncated/mixed file.
-fn atomic_write(path: &std::path::Path, data: &[u8], mode: u32) -> std::io::Result<()> {
-    use std::io::Write;
-    use std::os::unix::fs::OpenOptionsExt;
-    let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    let mut tmp = path.as_os_str().to_owned();
-    tmp.push(format!(".tmp.{}", std::process::id()));
-    let tmp = std::path::PathBuf::from(tmp);
-    let res = (|| {
-        let mut f = std::fs::OpenOptions::new()
-            .write(true).create(true).truncate(true).mode(mode)
-            .open(&tmp)?;
-        f.write_all(data)?;
-        f.sync_all()?;
-        std::fs::rename(&tmp, path)
-    })();
-    if res.is_err() {
-        let _ = std::fs::remove_file(&tmp);
-    }
-    res
-}
-
-/// Read and parse a JSON file. A corrupt file is moved aside to `<name>.bad`
-/// (instead of being silently overwritten by the next save).
-fn load_json_or_backup<T: serde::de::DeserializeOwned>(path: &std::path::Path) -> Option<T> {
-    let data = std::fs::read_to_string(path).ok()?;
-    match serde_json::from_str::<T>(&data) {
-        Ok(v) => Some(v),
-        Err(e) => {
-            let mut bad = path.as_os_str().to_owned();
-            bad.push(".bad");
-            eprintln!("[config] {} is corrupt ({}), moved to {:?}", path.display(), e, bad);
-            let _ = std::fs::rename(path, std::path::PathBuf::from(bad));
-            None
-        }
-    }
-}
-
-fn profiles_path() -> std::path::PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join("apple-kb-monitor/profiles.json")
-}
-
-fn load_profiles() -> Vec<DdcProfile> {
-    load_json_or_backup::<Vec<DdcProfile>>(&profiles_path()).unwrap_or_default()
-}
-
-fn save_profiles(profiles: &[DdcProfile]) {
-    let path = profiles_path();
-    if let Ok(json) = serde_json::to_string_pretty(profiles) {
-        if let Err(e) = atomic_write(&path, json.as_bytes(), 0o644) {
-            eprintln!("[config] cannot save profiles: {}", e);
-        }
-    }
-}
-
-// ── App Preset persistence ────────────────────────────────────────────────
-
-/// (window_class, picture_mode_value)
-type AppPreset = (String, u16);
-
-fn app_presets_path() -> std::path::PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-        .join("apple-kb-monitor/app_presets.json")
-}
-
-fn load_app_presets() -> Vec<AppPreset> {
-    let path = app_presets_path();
-    if !path.exists() {
-        return vec![
-            ("firefox".to_string(), 15),   // sRGB
-            ("steam".to_string(), 30),      // FPS 1
-            ("gimp".to_string(), 48),       // Photo
-        ];
-    }
-    load_json_or_backup::<Vec<AppPreset>>(&path).unwrap_or_default()
-}
-
-fn save_app_presets(presets: &[AppPreset]) {
-    let path = app_presets_path();
-    if let Ok(json) = serde_json::to_string_pretty(presets) {
-        if let Err(e) = atomic_write(&path, json.as_bytes(), 0o644) {
-            eprintln!("[config] cannot save app presets: {}", e);
-        }
-    }
-}
-
-/// Get the active window class via KWin scripting D-Bus (Wayland native).
-/// Loads a 1-line JS script into KWin, reads output from journalctl, cleans up.
-/// Falls back to xprop for X11 sessions.
-fn active_window_class() -> Option<String> {
-    // Method 1: KWin D-Bus scripting (KDE Wayland)
-    if std::env::var("WAYLAND_DISPLAY").is_ok() {
-        return active_window_kwin();
-    }
-    // Method 2: xprop (X11)
-    let active = Command::new("xprop")
-        .args(["-root", "_NET_ACTIVE_WINDOW"])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output().ok()?;
-    let wid = String::from_utf8_lossy(&active.stdout);
-    let wid = wid.split_whitespace().last()?;
-    if wid == "0x0" || wid == "0" { return None; }
-    let cls = Command::new("xprop")
-        .args(["-id", wid, "WM_CLASS"])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output().ok()?;
-    let out = String::from_utf8_lossy(&cls.stdout);
-    // WM_CLASS(STRING) = "instance", "class"
-    let class = out.split('"').nth(3)?.to_lowercase();
-    if class.is_empty() { None } else { Some(class) }
-}
-
-fn active_window_kwin() -> Option<String> {
-    // Unique marker per call so a stale journal line is never mistaken for
-    // the current answer; script is null-safe when no window is active.
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let marker = format!("APIHUB_CLASS_{}:", nonce);
-    let script = format!(
-        "console.log('{}' + (workspace.activeWindow ? workspace.activeWindow.resourceClass : ''));",
-        marker
-    );
-    let tmp = std::env::temp_dir().join(format!("apihub_kwin_detect_{}.js", std::process::id()));
-    std::fs::write(&tmp, script).ok()?;
-
-    let qdbus = |args: &[&str]| {
-        Command::new("qdbus6")
-            .args(args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output()
-    };
-
-    // Load script
-    let tmp_s = tmp.to_string_lossy().to_string();
-    let load = qdbus(&["org.kde.KWin", "/Scripting",
-                       "org.kde.kwin.Scripting.loadScript", &tmp_s, "apihub-detect"]);
-    let _ = std::fs::remove_file(&tmp);
-    let load = load.ok()?;
-    let sid = String::from_utf8_lossy(&load.stdout).trim().to_string();
-    // loadScript returns the script id, or -1 on failure.
-    if sid.is_empty() || sid.parse::<i64>().map(|n| n < 0).unwrap_or(true) {
-        return None;
-    }
-    let script_path = format!("/Scripting/Script{}", sid);
-
-    // Run, read the journal, then always clean up (no early return in between).
-    let _ = qdbus(&["org.kde.KWin", &script_path, "org.kde.kwin.Script.run"]);
-    thread::sleep(Duration::from_millis(100));
-
-    let class = Command::new("journalctl")
-        .args(["--user", "-t", "kwin_wayland", "-n", "20", "--no-pager", "-o", "cat"])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output()
-        .ok()
-        .and_then(|journal| {
-            let out = String::from_utf8_lossy(&journal.stdout).to_string();
-            out.lines().rev()
-                .find(|l| l.contains(&marker))
-                .and_then(|l| l.split(&marker).nth(1).map(|s| s.trim().to_lowercase()))
-        });
-
-    let _ = qdbus(&["org.kde.KWin", &script_path, "org.kde.kwin.Script.stop"]);
-    let _ = qdbus(&["org.kde.KWin", "/Scripting",
-                    "org.kde.kwin.Scripting.unloadScript", "apihub-detect"]);
-
-    class.filter(|s| !s.is_empty())
-}
-
 // ── Shared state ────────────────────────────────────────────────────────────
-
-#[derive(Clone)]
-pub(crate) struct DdcValues {
-    pub(crate) data: HashMap<String, (u16, u16)>,
-    pub(crate) last_update: Option<Instant>,
-    pub(crate) error: Option<String>,
-}
-
-impl Default for DdcValues {
-    fn default() -> Self {
-        Self {
-            data: HashMap::new(),
-            last_update: None,
-            error: None,
-        }
-    }
-}
 
 #[derive(Clone, Default)]
 pub(crate) struct SharedState {
-    pub(crate) ddc: DdcValues,
     pub(crate) keyboard: Option<KbReport>,
     pub(crate) kb_error: Option<String>,
     pub(crate) caps_lock: bool,
     pub(crate) num_lock: bool,
     pub(crate) remaining_display: Option<String>,
-    /// MQTT connection status — set by the MqttBridge thread, read by tray menu.
-    pub(crate) mqtt_connected: bool,
 }
 
 type State = Arc<Mutex<SharedState>>;
 
-/// Tray tooltip text; shows "n/a" instead of an invented 0 when a source is absent.
+/// Tray tooltip text; shows "n/a" instead of an invented 0 when the source is absent.
 fn tooltip_text(snap: &SharedState) -> String {
     let pct = snap.keyboard.as_ref().and_then(|kb| {
         kb.battery.percentage_fine
             .or(kb.battery.percentage_interpolated)
             .or(kb.battery.percentage)
     });
-    let bri = snap.ddc.data.get("brightness").map(|v| v.0);
     format!(
-        "ApiHub \u{2014} Battery: {} \u{2014} Brightness: {}",
+        "Apple Keyboard \u{2014} Battery: {}",
         pct.map(|p| format!("{:.0}%", p)).unwrap_or_else(|| "n/a".into()),
-        bri.map(|b| format!("{}%", b)).unwrap_or_else(|| "n/a".into()),
     )
-}
-
-// ── Single ordered DDC writer (#33) ────────────────────────────────────────
-
-type WriteBatch = (String, Vec<(u8, u16)>);
-
-/// One long-lived writer thread: batches are applied strictly in submission
-/// order (a thread per frame could reorder slider values).
-fn ddc_writer() -> &'static std::sync::mpsc::Sender<WriteBatch> {
-    static TX: std::sync::OnceLock<std::sync::mpsc::Sender<WriteBatch>> = std::sync::OnceLock::new();
-    TX.get_or_init(|| {
-        let (tx, rx) = std::sync::mpsc::channel::<WriteBatch>();
-        thread::Builder::new()
-            .name("ddc-writer".into())
-            .spawn(move || {
-                for (bus, batch) in rx {
-                    for (vcp, val) in batch {
-                        if let Err(e) = ddc::ddc_write_vcp(&bus, vcp, val) {
-                            eprintln!("DDC write 0x{:02X}={}: {}", vcp, val, e);
-                        }
-                    }
-                }
-            })
-            .expect("failed to spawn ddc-writer thread");
-        tx
-    })
-}
-
-// ── Process-wide MQTT bridge (#29) ─────────────────────────────────────────
-
-struct BridgeGlobal {
-    connected: Arc<Mutex<bool>>,
-    last_publish: Arc<Mutex<Option<Instant>>>,
-    last_cmd: Arc<Mutex<Option<String>>>,
-    tx: rumqttc::Client,
-    cfg: mqtt::MqttCfg,
-}
-
-static BRIDGE: Mutex<Option<BridgeGlobal>> = Mutex::new(None);
-
-/// Handle on the running bridge, if any.
-fn bridge_handle() -> Option<mqtt::MqttBridge> {
-    let g = BRIDGE.lock().ok()?;
-    let b = g.as_ref()?;
-    Some(mqtt::MqttBridge::from_parts(
-        b.connected.clone(), b.last_publish.clone(), b.last_cmd.clone(), b.tx.clone(),
-    ))
-}
-
-/// Start the bridge once per process (fixed MQTT client id: a 2nd connection
-/// would make the broker kick the 1st in a loop); later calls attach to it.
-fn bridge_start_or_attach(cfg: mqtt::MqttCfg) -> mqtt::MqttBridge {
-    if let Some(h) = bridge_handle() {
-        return h;
-    }
-    let bridge = mqtt::MqttBridge::start(cfg.clone());
-    if let (Some(tx), Ok(mut g)) = (bridge.tx_clone(), BRIDGE.lock()) {
-        *g = Some(BridgeGlobal {
-            connected: bridge.connected.clone(),
-            last_publish: bridge.last_publish.clone(),
-            last_cmd: bridge.last_cmd.clone(),
-            tx,
-            cfg,
-        });
-    }
-    bridge
-}
-
-/// Publish telemetry now on a background thread (UI "Publish Now" + tray menu).
-pub(crate) fn mqtt_publish_now(state: &State) {
-    let parts = BRIDGE.lock().ok().and_then(|g| {
-        g.as_ref().map(|b| (
-            b.connected.clone(), b.last_publish.clone(), b.last_cmd.clone(),
-            b.tx.clone(), b.cfg.clone(),
-        ))
-    });
-    let Some((c, lp, lc, tx, cfg)) = parts else {
-        eprintln!("[mqtt] publish requested but the bridge is not running");
-        return;
-    };
-    let snap = state.lock().map(|s| s.clone()).unwrap_or_default();
-    thread::spawn(move || {
-        let b = mqtt::MqttBridge::from_parts(c, lp, lc, tx);
-        b.publish_telemetry(&snap.keyboard, &snap.ddc.data, &cfg);
-    });
 }
 
 // ── Background polling ──────────────────────────────────────────────────────
 
-fn apply_burst(state: &State, results: &[(&str, u16, u16)]) {
-    if results.is_empty() { return; }
-    if let Ok(mut s) = state.lock() {
-        for (name, cur, max) in results {
-            s.ddc.data.insert(name.to_string(), (*cur, *max));
-        }
-        s.ddc.last_update = Some(Instant::now());
-        s.ddc.error = None;
-    }
-}
-
-/// Shared app presets (read by poll thread, written by UI).
-type SharedPresets = Arc<Mutex<(bool, Vec<AppPreset>)>>;
-
-fn spawn_poll_thread(state: State, presets: SharedPresets, quit_flag: Arc<std::sync::atomic::AtomicBool>) {
-    // Start brightness F1/F2 handler
-    let bus_for_bri = ddc::default_bus();
-    brightness::spawn_brightness_thread(bus_for_bri);
-
-    // Start wake event monitor (Input Report 0x13)
+/// Start the polling thread under a supervisor: if the worker panics, the
+/// shared-state poison is cleared and the worker is restarted (it used to die
+/// silently, freezing the UI and the tray on stale data).
+fn spawn_poll_thread(state: State, quit_flag: Arc<AtomicBool>) {
+    // Wake event monitor (Input Report 0x13)
     let _wake_monitor = keyboard::find_apple_hidraw()
         .map(|path| keyboard::spawn_wake_monitor(&path));
 
-    thread::spawn(move || {
-        let bus = ddc::default_bus();
-        let mut cycle: u32 = 0;
-        let mut battery_notified = false;
-        let mut ddc_fail_streak: u32 = 0;
-        let mut ddc_fail_notified = false;
-
-        // BlueZ Battery Provider — lazy init: created when keyboard is first found.
-        // This avoids None-forever if the keyboard is absent at startup (M6).
-        let mut battery_provider: Option<bluez::BatteryProvider> = None;
-
-        loop {
-            // Check quit flag before each cycle
-            if quit_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                eprintln!("[poll] quit flag set, exiting poll thread");
-                break;
-            }
-            // ── Keyboard: direct HID ioctl — every 2nd cycle (~10s) ──
-            let prev_kb = state.lock().ok().and_then(|s| s.keyboard.clone());
-            let mut kb = if cycle % 4 == 0 {
-                let mut fresh = keyboard::read_keyboard();
-                // RSSI is only refreshed every 10th cycle: carry the last known
-                // values over a HID re-read so they don't flicker to "absent".
-                if let (Some(nk), Some(pk)) = (fresh.as_mut(), prev_kb.as_ref()) {
-                    if nk.radio.rssi_dbm.is_none() { nk.radio.rssi_dbm = pk.radio.rssi_dbm; }
-                    if nk.radio.tx_power_dbm.is_none() { nk.radio.tx_power_dbm = pk.radio.tx_power_dbm; }
-                }
-                fresh
-            } else {
-                prev_kb
-            };
-            let mut mac_for_rssi: Option<String> = None;
-
-            // Battery low notification + BlueZ provider update + history
-            if let Some(ref k) = kb {
-                let pct_opt = k.battery.percentage_fine
-                    .or(k.battery.percentage_interpolated)
-                    .or(k.battery.percentage)
-                    .filter(|p| p.is_finite());
-                let pct = pct_opt.unwrap_or(100.0);
-
-                // Lazy-init BlueZ Battery Provider on first keyboard detection (M6).
-                // If the provider is None and we have a MAC, try to create it.
-                if battery_provider.is_none() && pct_opt.is_some() {
-                    if let Some(ref mac) = k.device.mac {
-                        battery_provider = bluez::BatteryProvider::start(mac, pct.round() as u8);
-                    }
-                }
-
-                // Update BlueZ Battery Provider (KDE/GNOME battery display)
-                if let (Some(bp), true) = (battery_provider.as_ref(), pct_opt.is_some()) {
-                    bp.update_percentage(pct.round().clamp(0.0, 100.0) as u8);
-                }
-
-                // Save MAC for RSSI read after this borrow ends
-                mac_for_rssi = k.device.mac.clone();
-
-                // History logging (every 30th cycle = ~15s)
-                if cycle % 30 == 0 && pct_opt.is_some() {
-                    // Only log real samples (no invented 100 % / 0 V points).
-                    if let Some(voltage) = k.battery.voltage {
-                        history::append_history(pct, voltage);
-                    }
-                }
-
-                // Re-arm the low-battery alert once the battery has recovered
-                if pct_opt.is_some() && pct >= 20.0 {
-                    battery_notified = false;
-                }
-                // Low battery notification
-                if pct_opt.is_some() && !battery_notified && pct < 15.0 {
-                    battery_notified = true;
-                    let _ = notify_rust::Notification::new()
-                        .summary("Apple Keyboard — Low Battery")
-                        .body(&format!("Battery at {:.0}% — charge soon", pct))
-                        .icon("battery-caution")
-                        .show();
-                    // Flash CapsLock LED 5 times as visual alert
-                    keyboard::flash_capslock(5);
-                }
-            }
-
-            // RSSI from BlueZ MGMT API (every 10th cycle — blocking socket)
-            if cycle % 10 == 0 {
-                if let Some(ref mac) = mac_for_rssi {
-                    if let Some((rssi, tx)) = rssi::read_rssi(mac) {
-                        if let Some(ref mut k) = kb {
-                            k.radio.rssi_dbm = Some(rssi as i32);
-                            k.radio.tx_power_dbm = Some(tx as i32);
+    thread::Builder::new()
+        .name("poll-supervisor".into())
+        .spawn(move || {
+            while !quit_flag.load(Ordering::Relaxed) {
+                let (st, qf) = (state.clone(), quit_flag.clone());
+                let worker = thread::Builder::new()
+                    .name("poll".into())
+                    .spawn(move || poll_loop(st, qf))
+                    .expect("failed to spawn poll thread");
+                match worker.join() {
+                    Ok(()) => break, // quit flag honoured
+                    Err(_) => {
+                        eprintln!("[poll] worker panicked — restarting in 5s");
+                        state.clear_poison();
+                        if let Ok(mut s) = state.lock() {
+                            s.kb_error = Some("Poll thread crashed — restarting".into());
                         }
+                        thread::sleep(Duration::from_secs(5));
                     }
                 }
             }
+        })
+        .expect("failed to spawn poll supervisor");
+}
 
-            // LED state (sysfs, fast)
-            let (caps, num) = keyboard::read_led_state();
+fn poll_loop(state: State, quit_flag: Arc<AtomicBool>) {
+    let mut cycle: u32 = 0;
+    let mut battery_notified = false;
 
-            // Battery remaining (every 30th cycle)
-            // Outer Option: "was recomputed this cycle"; inner: the estimate
-            // (None clears a stale value, e.g. after a recharge).
-            let remaining: Option<Option<String>> = if cycle % 30 == 0 {
-                Some(history::estimate_remaining().map(|(rate, hours)| {
-                    if hours < 24.0 {
-                        format!("{:.1}h ({:.1} mV/h)", hours, rate)
-                    } else {
-                        format!("{:.1} days ({:.1} mV/h)", hours / 24.0, rate)
-                    }
-                }))
-            } else {
-                None
-            };
+    // BlueZ Battery Provider — lazy init: created when keyboard is first found.
+    // This avoids None-forever if the keyboard is absent at startup (M6).
+    let mut battery_provider: Option<bluez::BatteryProvider> = None;
+    // MAC currently exported on the BlueZ provider (withdrawn on disconnection).
+    let mut provider_mac: Option<String> = None;
+    // Kernel power_supply percentage — source of truth when available.
+    let mut kernel_pct: Option<u8> = None;
 
-            if let Ok(mut s) = state.lock() {
-                s.kb_error = if kb.is_none() { Some("Keyboard: not found".into()) } else { None };
-                s.keyboard = kb;
-                s.caps_lock = caps;
-                s.num_lock = num;
-                if let Some(r) = remaining {
-                    s.remaining_display = r;
-                }
-            }
-
-            // ── SMART POLL: read VCP 0x02 first (single read, ~50ms) ──
-            // If 0 = nothing changed → skip ALL DDC reads this cycle
-            let ncv = ddc::ddc_read_vcp(&bus, 0x02)
-                .map(|(cur, _)| cur).unwrap_or(1);
-
-            if ncv != 0 || cycle % 6 == 0 {
-                // Something changed (or periodic forced read)
-                // Read HOT VCPs only (brightness, volume, backlight)
-                let hot = ddc::read_batch(&bus, ddc::HOT_VCPS);
-                if hot.is_empty() {
-                    ddc_fail_streak += 1;
-                    if ddc_fail_streak >= 5 && !ddc_fail_notified {
-                        ddc_fail_notified = true;
-                        let _ = notify_rust::Notification::new()
-                            .summary("DDC/CI Communication Failure")
-                            .body("5 consecutive DDC read failures — check I2C bus")
-                            .icon("dialog-error")
-                            .show();
-                    }
-                } else {
-                    ddc_fail_streak = 0;
-                    ddc_fail_notified = false;
-                }
-                apply_burst(&state, &hot);
-            }
-
-            // ── WARM: every 6th cycle (~30s) ───────────────────────
-            if cycle % 6 == 0 {
-                apply_burst(&state, &ddc::read_batch(&bus, ddc::WARM_VCPS));
-            }
-
-            // ── COLD: every 30th cycle (~2.5min) ───────────────────
-            if cycle % 30 == 0 {
-                apply_burst(&state, &ddc::read_batch(&bus, ddc::COLD_VCPS));
-            }
-
-            // ── PBP mirror registers (informational) ──────────────
-            // Every 30th cycle, only when split mode is active (D7 != 1)
-            if cycle % 30 == 0 {
-                let split = state.lock().ok()
-                    .and_then(|s| s.ddc.data.get("split_mode").map(|v| v.0))
-                    .unwrap_or(1);
-                if split != 1 {
-                    apply_burst(&state, &ddc::read_batch(&bus, ddc::PBP_MIRROR_VCPS));
-                }
-            }
-
-            // ── App Preset: auto picture mode by active window ────
-            // Every 10th cycle (~7s) — reduces subprocess spawning.
-            // Snapshot the presets first: never hold the lock across subprocesses.
-            if cycle % 10 == 0 {
-                let (enabled, list) = presets.lock()
-                    .map(|p| (p.0, p.1.clone()))
-                    .unwrap_or((false, Vec::new()));
-                if enabled && !list.is_empty() {
-                    if let Some(wclass) = active_window_class() {
-                        for (class, mode) in &list {
-                            let class = class.trim().to_lowercase();
-                            // An empty class would match every window.
-                            if class.is_empty() || !wclass.contains(&class) {
-                                continue;
-                            }
-                            // Only write if picture mode differs
-                            let current_mode = state.lock().ok()
-                                .and_then(|s| s.ddc.data.get("picture_mode").map(|v| v.0))
-                                .unwrap_or(0);
-                            if current_mode != *mode && ddc::ddc_write_vcp(&bus, 0x15, *mode).is_ok() {
-                                if let Ok(mut s) = state.lock() {
-                                    let max = s.ddc.data.get("picture_mode").map(|v| v.1).unwrap_or(255);
-                                    s.ddc.data.insert("picture_mode".to_string(), (*mode, max));
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-
-            cycle = cycle.wrapping_add(1);
-
-            // HOT cycle: ~210ms I2C + 500ms wait = ~710ms per cycle
-            thread::sleep(Duration::from_secs(10));
+    loop {
+        // Check quit flag before each cycle
+        if quit_flag.load(Ordering::Relaxed) {
+            eprintln!("[poll] quit flag set, exiting poll thread");
+            break;
         }
-    });
+        // ── Keyboard: direct HID ioctl — every 4th cycle (~40s) ──
+        let prev_kb = state.lock().ok().and_then(|s| s.keyboard.clone());
+        let mut kb = if cycle.is_multiple_of(4) {
+            let mut fresh = keyboard::read_keyboard();
+            // RSSI is only refreshed every 10th cycle: carry the last known
+            // values over a HID re-read so they don't flicker to "absent".
+            if let (Some(nk), Some(pk)) = (fresh.as_mut(), prev_kb.as_ref()) {
+                if nk.radio.rssi_dbm.is_none() { nk.radio.rssi_dbm = pk.radio.rssi_dbm; }
+                if nk.radio.tx_power_dbm.is_none() { nk.radio.tx_power_dbm = pk.radio.tx_power_dbm; }
+            }
+            fresh
+        } else {
+            prev_kb
+        };
+        let mut mac_for_rssi: Option<String> = None;
+
+        // Kernel battery (power_supply) every 3rd cycle (~30s, like UPower: each
+        // read triggers a HID GET_REPORT). It overrides the raw HID percentage.
+        let kb_mac = kb.as_ref().and_then(|k| k.device.mac.clone());
+        if kb.is_none() {
+            kernel_pct = None;
+        } else if cycle.is_multiple_of(3) {
+            kernel_pct = kb_mac.as_deref()
+                .and_then(power::kernel_battery)
+                .map(|r| r.percent);
+        }
+        if let (Some(k), Some(p)) = (kb.as_mut(), kernel_pct) {
+            k.battery.percentage_fine = Some(f64::from(p));
+        }
+
+        // Keyboard gone (or another one): withdraw the exported Battery1 so
+        // BlueZ/KDE do not keep showing a frozen value.
+        let connected_mac = kb.as_ref()
+            .filter(|k| k.bluetooth.connected)
+            .and_then(|k| k.device.mac.clone());
+        if let (Some(old), Some(bp)) = (provider_mac.as_ref(), battery_provider.as_ref()) {
+            if connected_mac.as_ref() != Some(old) {
+                bp.remove(old);
+                provider_mac = None;
+            }
+        }
+
+        // Battery low notification + BlueZ provider update + history
+        if let Some(ref k) = kb {
+            let pct_opt = k.battery.percentage_fine
+                .or(k.battery.percentage_interpolated)
+                .or(k.battery.percentage)
+                .filter(|p| p.is_finite());
+            let pct = pct_opt.unwrap_or(100.0);
+
+            // BlueZ Battery Provider: created lazily, then one object per keyboard.
+            if let (Some(mac), true) = (connected_mac.as_deref(), pct_opt.is_some()) {
+                if battery_provider.is_none() {
+                    battery_provider = bluez::BatteryProvider::spawn();
+                }
+                if let Some(bp) = battery_provider.as_ref() {
+                    bp.set_battery(mac, pct.round().clamp(0.0, 100.0) as u8);
+                    provider_mac = Some(mac.to_string());
+                }
+            }
+
+            // Save MAC for RSSI read after this borrow ends
+            mac_for_rssi = k.device.mac.clone();
+
+            // History logging (every 30th cycle = ~15s)
+            if cycle.is_multiple_of(30) && pct_opt.is_some() {
+                // Only log real samples (no invented 100 % / 0 V points).
+                if let Some(voltage) = k.battery.voltage {
+                    history::append_history(pct, voltage);
+                }
+            }
+
+            // Re-arm the low-battery alert once the battery has recovered
+            if pct_opt.is_some() && pct >= 20.0 {
+                battery_notified = false;
+            }
+            // Low battery notification
+            if pct_opt.is_some() && !battery_notified && pct < 15.0 {
+                battery_notified = true;
+                let _ = notify_rust::Notification::new()
+                    .summary("Apple Keyboard — Low Battery")
+                    .body(&format!("Battery at {:.0}% — charge soon", pct))
+                    .icon("battery-caution")
+                    .show();
+                // Flash CapsLock LED 5 times as visual alert
+                keyboard::flash_capslock(5);
+            }
+        }
+
+        // RSSI from BlueZ MGMT API (every 10th cycle — blocking socket)
+        if cycle.is_multiple_of(10) {
+            if let Some(ref mac) = mac_for_rssi {
+                if let Some((rssi, tx)) = rssi::read_rssi(mac) {
+                    if let Some(ref mut k) = kb {
+                        k.radio.rssi_dbm = Some(rssi as i32);
+                        k.radio.tx_power_dbm = Some(tx as i32);
+                    }
+                }
+            }
+        }
+
+        // LED state (sysfs, fast)
+        let (caps, num) = keyboard::read_led_state();
+
+        // Battery remaining (every 30th cycle)
+        // Outer Option: "was recomputed this cycle"; inner: the estimate
+        // (None clears a stale value, e.g. after a recharge).
+        let remaining: Option<Option<String>> = if cycle.is_multiple_of(30) {
+            Some(history::estimate_remaining().map(|(rate, hours)| {
+                if hours < 24.0 {
+                    format!("{:.1}h ({:.1} mV/h)", hours, rate)
+                } else {
+                    format!("{:.1} days ({:.1} mV/h)", hours / 24.0, rate)
+                }
+            }))
+        } else {
+            None
+        };
+
+        if let Ok(mut s) = state.lock() {
+            s.kb_error = if kb.is_none() { Some("Keyboard: not found".into()) } else { None };
+            s.keyboard = kb;
+            s.caps_lock = caps;
+            s.num_lock = num;
+            if let Some(r) = remaining {
+                s.remaining_display = r;
+            }
+        }
+
+
+        cycle = cycle.wrapping_add(1);
+        thread::sleep(Duration::from_secs(10));
+    }
 }
 
 // ── App ─────────────────────────────────────────────────────────────────────
@@ -577,122 +234,7 @@ fn spawn_poll_thread(state: State, presets: SharedPresets, quit_flag: Arc<std::s
 #[derive(PartialEq)]
 enum Tab {
     Keyboard,
-    Display,
-    Advanced,
-    System,
-    Mqtt,
     Diag,
-}
-
-#[derive(Clone)]
-struct MqttConfig {
-    broker: String,
-    port: String,
-    user: String,
-    pass: String,
-    lamp_entity: String,
-    bri_min: f32,
-    bri_max: f32,
-}
-
-/// Parse the right-hand side of a `key = value` TOML line: quoted strings
-/// (with `\\`, `\"`, `\n`, `\t` escapes), literal 'strings', or bare values
-/// with an optional trailing `# comment`.
-fn parse_toml_string_value(raw: &str) -> String {
-    let raw = raw.trim();
-    if let Some(rest) = raw.strip_prefix('"') {
-        let mut out = String::new();
-        let mut chars = rest.chars();
-        while let Some(c) = chars.next() {
-            match c {
-                '"' => break,
-                '\\' => match chars.next() {
-                    Some('n') => out.push('\n'),
-                    Some('t') => out.push('\t'),
-                    Some(other) => out.push(other),
-                    None => break,
-                },
-                _ => out.push(c),
-            }
-        }
-        out
-    } else if let Some(rest) = raw.strip_prefix('\'') {
-        rest.split('\'').next().unwrap_or("").to_string()
-    } else {
-        raw.split('#').next().unwrap_or("").trim().to_string()
-    }
-}
-
-impl MqttConfig {
-    fn from_config_file() -> Self {
-        let mut cfg = Self {
-            broker: String::new(), port: "1883".to_string(),
-            user: String::new(), pass: String::new(),
-            lamp_entity: "light.bureau".to_string(),
-            bri_min: 2.0, bri_max: 70.0,
-        };
-        // Try ~/.config/apple-kb-monitor/config.toml
-        let paths = [
-            dirs::config_dir().map(|d| d.join("apple-kb-monitor/config.toml")),
-            Some(std::path::PathBuf::from("/etc/apple-kb-monitor/config.toml")),
-        ];
-        for path in paths.into_iter().flatten() {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                // Section-aware TOML parser — only read keys from their proper section.
-                // Limitation: nested/dotted sections (e.g. [foo.bar]) are not supported;
-                // lines with dots in the section name are rejected to avoid silent misparse.
-                let mut section = String::new();
-                for line in content.lines() {
-                    let line = line.trim();
-                    if line.starts_with('[') {
-                        // Drop a trailing comment ("[mqtt] # note") before the brackets.
-                        let head = line.split('#').next().unwrap_or("").trim();
-                        let name = head.trim_matches(|c| c == '[' || c == ']').trim();
-                        if name.contains('.') {
-                            // Reject dotted/nested section — treat as unknown section
-                            section = String::new();
-                        } else {
-                            section = name.to_string();
-                        }
-                        continue;
-                    }
-                    if line.is_empty() || line.starts_with('#') { continue; }
-                    if let Some((key, val)) = line.split_once('=') {
-                        let key = key.trim();
-                        let val = parse_toml_string_value(val);
-                        match (section.as_str(), key) {
-                            ("mqtt", "broker") => cfg.broker = val,
-                            ("mqtt", "port") => cfg.port = val,
-                            ("mqtt", "user") => cfg.user = val,
-                            ("mqtt", "password") => cfg.pass = val,
-                            ("mqtt", "topic_prefix") => {} // recognized but not stored in MqttConfig
-                            ("brightness", "min") => cfg.bri_min = val.parse().unwrap_or(2.0),
-                            ("brightness", "max") => cfg.bri_max = val.parse().unwrap_or(70.0),
-                            ("brightness", "lamp_entity") => cfg.lamp_entity = val,
-                            _ => {}
-                        }
-                    }
-                }
-                eprintln!("[config] loaded {}", path.display());
-                break;
-            }
-        }
-        // Sanitize: finite, within 0..=100, min <= max (used as u16 clamp bounds).
-        if !cfg.bri_min.is_finite() || !(0.0..=100.0).contains(&cfg.bri_min) { cfg.bri_min = 2.0; }
-        if !cfg.bri_max.is_finite() || !(0.0..=100.0).contains(&cfg.bri_max) { cfg.bri_max = 70.0; }
-        if cfg.bri_min > cfg.bri_max {
-            cfg.bri_min = 2.0;
-            cfg.bri_max = 70.0;
-        }
-        if cfg.port.trim().parse::<u16>().is_err() { cfg.port = "1883".to_string(); }
-        cfg
-    }
-}
-
-impl Default for MqttConfig {
-    fn default() -> Self {
-        Self::from_config_file()
-    }
 }
 
 #[derive(Clone)]
@@ -705,62 +247,29 @@ struct DiagResult {
 struct ApiHubApp {
     state: State,
     tab: Tab,
-    i2c_bus: String,
-    pending_writes: Vec<(u8, u16)>,
     style_initialized: bool,
-    mqtt: MqttConfig,
     diag_results: Arc<Mutex<Vec<DiagResult>>>,
-    diag_running: Arc<std::sync::atomic::AtomicBool>,
-    mqtt_bridge: Option<mqtt::MqttBridge>,
-    mqtt_note: String,
-    quit_flag: Arc<std::sync::atomic::AtomicBool>,
-    // DDC profile presets
-    profiles: Vec<DdcProfile>,
-    profile_name: String,
-    // Circadian auto-brightness
-    auto_brightness: bool,
-    last_auto_bri: u16,
-    // App Presets — auto picture mode by active window
-    app_presets: Vec<AppPreset>,
-    app_presets_enabled: bool,
-    app_preset_new_class: String,
-    app_preset_new_mode: u16,
-    shared_presets: SharedPresets,
-    // Factory reset confirmation guard
-    confirm_factory_reset: bool,
+    diag_running: Arc<AtomicBool>,
+    quit_flag: Arc<AtomicBool>,
     // System tray tooltip (shared with tray thread)
     tray_tooltip: Arc<Mutex<String>>,
     // Tray "Show Window" flag
-    tray_show_window: Arc<std::sync::atomic::AtomicBool>,
+    tray_show_window: Arc<AtomicBool>,
     // Battery history graph
     battery_history: Vec<(f64, f64)>,    // (timestamp, percentage)
     voltage_history: Vec<(f64, f64)>,    // (timestamp, voltage)
-    monitor_info: ddc::MonitorInfo,
 }
 
 impl ApiHubApp {
-    /// Create the GUI app. Does NOT spawn poll thread, MQTT, or BlueZ —
+    /// Create the GUI app. Does NOT spawn the poll thread or BlueZ —
     /// those are owned by main() and shared via Arc<Mutex<SharedState>>.
     fn new(
         _cc: &eframe::CreationContext<'_>,
         tray_tooltip: Arc<Mutex<String>>,
         state: State,
-        tray_show_window: Arc<std::sync::atomic::AtomicBool>,
-        shared_presets: SharedPresets,
-        quit_flag: Arc<std::sync::atomic::AtomicBool>,
+        tray_show_window: Arc<AtomicBool>,
+        quit_flag: Arc<AtomicBool>,
     ) -> Self {
-        let mqtt = MqttConfig::default();
-        let i2c_bus = ddc::default_bus();
-        let monitor_info = ddc::read_monitor_info(&i2c_bus);
-        // Handle on the process-wide bridge started by main() (if any).
-        let mqtt_bridge: Option<mqtt::MqttBridge> = bridge_handle();
-        // Use the SAME shared presets as the poll thread (owned by main()),
-        // so UI changes actually reach the poller.
-        let (app_presets_enabled, app_presets) = shared_presets
-            .lock()
-            .map(|p| (p.0, p.1.clone()))
-            .unwrap_or_else(|_| (false, load_app_presets()));
-
         // Load battery history from disk (once at startup)
         let entries = history::read_history();
         let battery_history: Vec<(f64, f64)> = entries
@@ -775,30 +284,14 @@ impl ApiHubApp {
         Self {
             state,
             tab: Tab::Keyboard,
-            i2c_bus,
-            pending_writes: Vec::new(),
             style_initialized: false,
-            mqtt,
             diag_results: Arc::new(Mutex::new(Vec::new())),
-            diag_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            mqtt_bridge,
-            mqtt_note: String::new(),
+            diag_running: Arc::new(AtomicBool::new(false)),
             quit_flag,
-            profiles: load_profiles(),
-            profile_name: String::new(),
-            auto_brightness: false,
-            last_auto_bri: 0,
-            app_presets,
-            app_presets_enabled,
-            app_preset_new_class: String::new(),
-            app_preset_new_mode: 15, // default: sRGB
-            shared_presets,
-            confirm_factory_reset: false,
             tray_tooltip,
             tray_show_window,
             battery_history,
             voltage_history,
-            monitor_info,
         }
     }
 }
@@ -806,7 +299,7 @@ impl ApiHubApp {
 impl eframe::App for ApiHubApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Tray "Quit" while the window is open: close it so main() can exit.
-        if self.quit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        if self.quit_flag.load(Ordering::Relaxed) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
 
@@ -818,45 +311,6 @@ impl eframe::App for ApiHubApp {
                 if let Ok(mut tt) = self.tray_tooltip.lock() {
                     *tt = text;
                 }
-            }
-        }
-
-        // Circadian auto-brightness: evaluated every frame, whatever tab is shown.
-        if self.auto_brightness {
-            let target = brightness::circadian_brightness();
-            if target != self.last_auto_bri {
-                self.last_auto_bri = target;
-                self.pending_writes.push((0x10, target));
-            }
-        } else {
-            // Re-enabling must re-apply the current target.
-            self.last_auto_bri = 0;
-        }
-
-        // Process pending DDC writes — deduplicate per VCP, optimistic UI update
-        {
-            // Keep only the LAST value per VCP (dedup rapid slider drags),
-            // preserving submission order.
-            let mut deduped: Vec<(u8, u16)> = Vec::new();
-            for (vcp, val) in self.pending_writes.drain(..) {
-                deduped.retain(|(v, _)| *v != vcp);
-                deduped.push((vcp, val));
-            }
-            if !deduped.is_empty() {
-                // Optimistic update: immediately reflect new values in UI
-                if let Ok(mut s) = self.state.lock() {
-                    for &(vcp, val) in &deduped {
-                        for v in ddc::ESSENTIAL_VCPS {
-                            if v.code == vcp {
-                                let max = s.ddc.data.get(v.name).map(|d| d.1).unwrap_or(255);
-                                s.ddc.data.insert(v.name.to_string(), (val, max));
-                                break;
-                            }
-                        }
-                    }
-                }
-                // Single ordered writer thread (bus lock alone doesn't order threads)
-                let _ = ddc_writer().send((self.i2c_bus.clone(), deduped));
             }
         }
 
@@ -879,13 +333,13 @@ impl eframe::App for ApiHubApp {
             self.style_initialized = true;
         }
 
-        // Request next repaint in 2s — egui will sleep until then or until user interaction
         // Check if tray requested window show
-        if self.tray_show_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        if self.tray_show_window.swap(false, Ordering::Relaxed) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
 
+        // Next repaint in 2s — egui sleeps until then or until user interaction
         ctx.request_repaint_after(Duration::from_secs(2));
 
         let snap = self.state.lock().map(|s| s.clone()).unwrap_or_default();
@@ -893,10 +347,6 @@ impl eframe::App for ApiHubApp {
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.tab, Tab::Keyboard, "Keyboard");
-                ui.selectable_value(&mut self.tab, Tab::Display, "Display");
-                ui.selectable_value(&mut self.tab, Tab::Advanced, "Advanced");
-                ui.selectable_value(&mut self.tab, Tab::System, "System");
-                ui.selectable_value(&mut self.tab, Tab::Mqtt, "MQTT");
                 ui.selectable_value(&mut self.tab, Tab::Diag, "Diag");
             });
         });
@@ -904,46 +354,9 @@ impl eframe::App for ApiHubApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             match self.tab {
                 Tab::Keyboard => self.tab_keyboard(ui, &snap),
-                Tab::Display => self.tab_display(ui, &snap),
-                Tab::Advanced => self.tab_advanced(ui, &snap),
-                Tab::System => self.tab_system(ui, &snap),
-                Tab::Mqtt => self.tab_mqtt(ui),
                 Tab::Diag => self.tab_diag(ui),
             }
         });
-    }
-}
-
-// ── Helper macros ───────────────────────────────────────────────────────────
-
-fn ddc_cur(snap: &SharedState, name: &str) -> u16 {
-    snap.ddc.data.get(name).map(|v| v.0).unwrap_or(0)
-}
-
-fn ddc_max(snap: &SharedState, name: &str) -> u16 {
-    snap.ddc.data.get(name).map(|v| v.1).unwrap_or(100)
-}
-
-fn ddc_has(snap: &SharedState, name: &str) -> bool {
-    snap.ddc.data.contains_key(name)
-}
-
-// ── VCP label mapping ──────────────────────────────────────────────────────
-
-fn vcp_label(name: &str) -> &str {
-    match name {
-        "brightness" => "Brightness",
-        "contrast" => "Contrast",
-        "sharpness" => "Sharpness",
-        "black_stabilizer" => "Black Stabilizer",
-        "volume" => "Volume",
-        "red_gain" => "Red",
-        "green_gain" => "Green",
-        "blue_gain" => "Blue",
-        "black_level_red" => "Red",
-        "black_level_green" => "Green",
-        "black_level_blue" => "Blue",
-        other => other,
     }
 }
 
@@ -1333,840 +746,23 @@ impl ApiHubApp {
         });
     }
 
-    fn tab_display(&mut self, ui: &mut egui::Ui, snap: &SharedState) {
-        // Monitor identity header — model name prominent, details smaller
-        let mi = &self.monitor_info;
-        if !mi.name.is_empty() {
-            ui.vertical(|ui| {
-                ui.label(egui::RichText::new(format!("{} {}", mi.manufacturer, mi.name)).strong().size(28.0));
-                ui.label(egui::RichText::new(format!("{}  \u{2022}  {}  \u{2022}  {}", mi.connector, mi.adapter, mi.serial))
-                    .weak().size(16.0));
-            });
-        } else {
-            ui.label(egui::RichText::new("Display Controls").strong().size(28.0));
-        }
-        ui.separator();
-
-        if let Some(ref err) = snap.ddc.error {
-            ui.label(egui::RichText::new(err.as_str()).size(16.0).color(egui::Color32::from_rgb(255, 100, 100)));
-        }
-
-        let color_red = egui::Color32::from_rgb(255, 90, 90);
-        let color_green = egui::Color32::from_rgb(80, 220, 100);
-        let color_blue = egui::Color32::from_rgb(100, 160, 255);
-
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            // ── Continuous sliders ──────────────────────────────────────
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("\u{1F5A5} Image").strong().size(18.0));
-                self.vcp_slider(ui, snap, "brightness", 0x10);
-                self.vcp_slider(ui, snap, "contrast", 0x12);
-                self.vcp_slider(ui, snap, "sharpness", 0x87);
-                self.vcp_slider(ui, snap, "black_stabilizer", 0xF9);
-            });
-
-            ui.add_space(10.0);
-
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("\u{1F50A} Audio").strong().size(18.0));
-                self.vcp_slider(ui, snap, "volume", 0x62);
-            });
-
-            ui.add_space(10.0);
-
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("\u{1F3A8} RGB Gain").strong().size(18.0));
-                self.vcp_slider_colored(ui, snap, "red_gain", 0x16, Some(color_red));
-                self.vcp_slider_colored(ui, snap, "green_gain", 0x18, Some(color_green));
-                self.vcp_slider_colored(ui, snap, "blue_gain", 0x1A, Some(color_blue));
-            });
-
-            ui.add_space(10.0);
-
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("\u{2B1B} Video Black Level").strong().size(18.0));
-                self.vcp_slider_colored(ui, snap, "black_level_red", 0x6C, Some(color_red));
-                self.vcp_slider_colored(ui, snap, "black_level_green", 0x6E, Some(color_green));
-                self.vcp_slider_colored(ui, snap, "black_level_blue", 0x70, Some(color_blue));
-            });
-
-            ui.add_space(10.0);
-
-            // ── Picture mode ────────────────────────────────────────────
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("\u{1F5BC} Picture Mode").strong().size(18.0));
-                ui.horizontal_wrapped(|ui| {
-                    // Real LG 34GN850 picture mode values (brute-force verified)
-                    let modes: [(u16, &str); 14] = [
-                        (45, "Custom"),
-                        (1, "Reader"),
-                        (20, "Vivid"),
-                        (22, "HDR Effect"),
-                        (46, "Cinema"),
-                        (6, "Color Weakness"),
-                        (30, "FPS 1"),
-                        (31, "FPS 2"),
-                        (39, "RTS"),
-                        (15, "sRGB"),
-                        (24, "DCI-P3"),
-                        (25, "EBU"),
-                        (48, "Photo"),
-                        (49, "Calibration"),
-                    ];
-                    let cur = ddc_cur(snap, "picture_mode");
-                    for (val, label) in modes {
-                        if ui.selectable_label(cur == val, label).clicked() {
-                            self.pending_writes.push((0x15, val));
-                        }
-                    }
-                });
-            });
-
-            ui.add_space(10.0);
-
-            // ── Input source ────────────────────────────────────────────
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("\u{1F50C} Input Source").strong().size(18.0));
-                ui.horizontal_wrapped(|ui| {
-                    let inputs = [
-                        (0x0F, "DisplayPort"),
-                        (0x11, "HDMI 1"),
-                        (0x12, "HDMI 2"),
-                    ];
-                    let cur = ddc_cur(snap, "input_source");
-                    for (val, label) in inputs {
-                        if ui.selectable_label(cur == val, label).clicked() {
-                            self.pending_writes.push((0x60, val));
-                        }
-                    }
-                });
-            });
-
-            ui.add_space(10.0);
-
-            // ── Auto Brightness (circadian) ────────────────────────────
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("Auto Brightness").strong().size(18.0));
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.auto_brightness, "Enable circadian curve");
-                    if self.auto_brightness {
-                        let target = brightness::circadian_brightness();
-                        ui.label(egui::RichText::new(format!("Target: {}%", target))
-                            .strong().size(16.0)
-                            .color(egui::Color32::from_rgb(120, 200, 255)));
-                    }
-                });
-            });
-
-            ui.add_space(10.0);
-
-            // ── DDC Profiles ───────────────────────────────────────────
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("Profiles").strong().size(18.0));
-                ui.add_space(4.0);
-
-                // Save new profile
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Name").weak().size(16.0));
-                    ui.add(egui::TextEdit::singleline(&mut self.profile_name).desired_width(140.0));
-                    if ui.button(egui::RichText::new("Save").size(16.0)).clicked()
-                        && !self.profile_name.trim().is_empty()
-                    {
-                        let profile_keys: &[(&str, u8)] = &[
-                            ("brightness", 0x10), ("contrast", 0x12),
-                            ("red_gain", 0x16), ("green_gain", 0x18), ("blue_gain", 0x1A),
-                            ("sharpness", 0x87), ("volume", 0x62),
-                            ("black_stabilizer", 0xF9), ("picture_mode", 0x15),
-                        ];
-                        let mut values = HashMap::new();
-                        for &(name, _vcp) in profile_keys {
-                            if ddc_has(snap, name) {
-                                values.insert(name.to_string(), ddc_cur(snap, name));
-                            }
-                        }
-                        let name = self.profile_name.trim().to_string();
-                        // Replace if name exists, otherwise append
-                        if let Some(pos) = self.profiles.iter().position(|(n, _)| n == &name) {
-                            self.profiles[pos].1 = values;
-                        } else {
-                            self.profiles.push((name, values));
-                        }
-                        save_profiles(&self.profiles);
-                        self.profile_name.clear();
-                    }
-                });
-
-                ui.add_space(4.0);
-
-                // List saved profiles
-                let mut delete_idx: Option<usize> = None;
-                for (idx, (name, values)) in self.profiles.iter().enumerate() {
-                    ui.horizontal(|ui| {
-                        if ui.button(egui::RichText::new(name).strong().size(16.0)).clicked() {
-                            // Restore profile: push all values as pending writes
-                            let vcp_map: &[(&str, u8)] = &[
-                                ("brightness", 0x10), ("contrast", 0x12),
-                                ("red_gain", 0x16), ("green_gain", 0x18), ("blue_gain", 0x1A),
-                                ("sharpness", 0x87), ("volume", 0x62),
-                                ("black_stabilizer", 0xF9), ("picture_mode", 0x15),
-                            ];
-                            for &(key, vcp) in vcp_map {
-                                if let Some(&val) = values.get(key) {
-                                    self.pending_writes.push((vcp, val));
-                                }
-                            }
-                        }
-                        if ui.small_button("Delete").clicked() {
-                            delete_idx = Some(idx);
-                        }
-                        // Show summary
-                        let summary: Vec<String> = values.iter()
-                            .take(4)
-                            .map(|(k, v)| format!("{}={}", k, v))
-                            .collect();
-                        let suffix = if values.len() > 4 {
-                            format!(" +{}", values.len() - 4)
-                        } else {
-                            String::new()
-                        };
-                        ui.label(egui::RichText::new(format!("{}{}", summary.join(", "), suffix))
-                            .weak().size(14.0));
-                    });
-                }
-                if let Some(idx) = delete_idx {
-                    self.profiles.remove(idx);
-                    save_profiles(&self.profiles);
-                }
-            });
-
-            ui.add_space(10.0);
-
-            // ── App Presets — auto picture mode by active window ───
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("App Presets").strong().size(18.0));
-                ui.add_space(4.0);
-
-                let mut presets_changed = false;
-                ui.horizontal(|ui| {
-                    if ui.checkbox(&mut self.app_presets_enabled, "Auto-switch picture mode by window").changed() {
-                        presets_changed = true;
-                    }
-                });
-
-                ui.add_space(4.0);
-
-                // Picture mode lookup for display labels
-                let mode_labels: &[(u16, &str)] = &[
-                    (45, "Custom"), (1, "Reader"), (20, "Vivid"), (22, "HDR Effect"),
-                    (46, "Cinema"), (6, "Color Weakness"), (30, "FPS 1"), (31, "FPS 2"),
-                    (39, "RTS"), (15, "sRGB"), (24, "DCI-P3"), (25, "EBU"),
-                    (48, "Photo"), (49, "Calibration"),
-                ];
-
-                // Existing presets grid
-                let mut delete_preset_idx: Option<usize> = None;
-                egui::Grid::new("app_presets_grid")
-                    .num_columns(3)
-                    .spacing([12.0, 6.0])
-                    .show(ui, |ui| {
-                        ui.label(egui::RichText::new("Window Class").strong().size(16.0));
-                        ui.label(egui::RichText::new("Picture Mode").strong().size(16.0));
-                        ui.label("");
-                        ui.end_row();
-                        for (idx, (class, mode)) in self.app_presets.iter().enumerate() {
-                            ui.label(egui::RichText::new(class).monospace().size(16.0));
-                            let label = mode_labels.iter()
-                                .find(|(v, _)| v == mode)
-                                .map(|(_, l)| *l)
-                                .unwrap_or("Unknown");
-                            ui.label(egui::RichText::new(format!("{} ({})", label, mode)).size(16.0));
-                            if ui.small_button("Delete").clicked() {
-                                delete_preset_idx = Some(idx);
-                            }
-                            ui.end_row();
-                        }
-                    });
-
-                if let Some(idx) = delete_preset_idx {
-                    self.app_presets.remove(idx);
-                    // Fire-and-forget disk write (M15) — avoid blocking UI thread.
-                    let presets_copy = self.app_presets.clone();
-                    thread::spawn(move || save_app_presets(&presets_copy));
-                    presets_changed = true;
-                }
-
-                ui.add_space(4.0);
-
-                // Add new preset
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Class").weak().size(16.0));
-                    ui.add(egui::TextEdit::singleline(&mut self.app_preset_new_class).desired_width(100.0));
-                    ui.label(egui::RichText::new("Mode").weak().size(16.0));
-                    egui::ComboBox::from_id_salt("app_preset_mode")
-                        .selected_text(
-                            mode_labels.iter()
-                                .find(|(v, _)| *v == self.app_preset_new_mode)
-                                .map(|(_, l)| *l)
-                                .unwrap_or("?"),
-                        )
-                        .show_ui(ui, |ui| {
-                            for &(val, label) in mode_labels {
-                                ui.selectable_value(&mut self.app_preset_new_mode, val, label);
-                            }
-                        });
-                    if ui.button(egui::RichText::new("Add").size(16.0)).clicked()
-                        && !self.app_preset_new_class.trim().is_empty()
-                    {
-                        let class = self.app_preset_new_class.trim().to_lowercase();
-                        // Replace if class exists
-                        if let Some(pos) = self.app_presets.iter().position(|(c, _)| c == &class) {
-                            self.app_presets[pos].1 = self.app_preset_new_mode;
-                        } else {
-                            self.app_presets.push((class, self.app_preset_new_mode));
-                        }
-                        // Fire-and-forget disk write (M15) — avoid blocking UI thread.
-                        let presets_copy = self.app_presets.clone();
-                        thread::spawn(move || save_app_presets(&presets_copy));
-                        self.app_preset_new_class.clear();
-                        presets_changed = true;
-                    }
-                });
-
-                // Sync to poll thread when anything changes
-                if presets_changed {
-                    if let Ok(mut p) = self.shared_presets.lock() {
-                        p.0 = self.app_presets_enabled;
-                        p.1 = self.app_presets.clone();
-                    }
-                }
-            });
-        });
-    }
-
-    fn tab_advanced(&mut self, ui: &mut egui::Ui, snap: &SharedState) {
-        ui.label(egui::RichText::new("Advanced Settings").strong().size(18.0));
-        ui.separator();
-
-        if let Some(ref err) = snap.ddc.error {
-            ui.label(egui::RichText::new(err.as_str()).size(16.0).color(egui::Color32::from_rgb(255, 100, 100)));
-        }
-
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            // Response Time — brute-force verified: 0-3 accepted, 4 rejected
-            self.button_group(ui, snap, "\u{23F1} Response Time", "response_time", 0xF7, &[
-                (0, "Off"), (1, "Fast"), (2, "Normal"), (3, "Slow"),
-            ]);
-
-            // FreeSync — 0/1/2 verified (write causes I2C bus reset, normal)
-            self.button_group(ui, snap, "\u{1F504} FreeSync", "freesync", 0xF8, &[
-                (0, "Off"), (1, "Basic"), (2, "Extended"),
-            ]);
-
-            // Gamma via MCCS VCP 0x72 — only 3 values accepted (1.8 rejected)
-            self.button_group(ui, snap, "\u{1F313} Gamma", "gamma_curve", 0x72, &[
-                (0x6400, "2.0"), (0x7800, "2.2"), (0x8C00, "2.4"),
-            ]);
-
-            // Smart Energy — only 0 and 2 accepted (1 rejected)
-            self.button_group(ui, snap, "\u{26A1} Smart Energy Saving", "smart_energy", 0xF6, &[
-                (0, "Off"), (2, "High"),
-            ]);
-
-            // Aspect Ratio — only 1 accepted on current setup (resolution-dependent)
-            self.readonly_group(ui, snap, "\u{1F4D0} Aspect Ratio", "aspect_ratio", &[
-                (0, "Full Wide"), (1, "Original"), (2, "Just Scan"),
-            ]);
-
-            // Audio Mute
-            self.button_group(ui, snap, "\u{1F507} Audio Mute", "audio_mute", 0x8D, &[
-                (1, "Muted"), (2, "Unmuted"),
-            ]);
-
-            // Language — 16 values (0-15), brute-force verified
-            self.button_group(ui, snap, "\u{1F310} OSD Language", "language", 0xCC, &[
-                (0, "EN"), (1, "FR"), (2, "DE"), (3, "ES"),
-                (4, "IT"), (5, "KO"), (6, "ZH"), (7, "JA"),
-                (8, "PT"), (9, "RU"), (10, "ZH-T"), (11, "PL"),
-                (12, "TR"), (13, "CZ"), (14, "SV"), (15, "FI"),
-            ]);
-
-            // Read-only VCPs (type=TABLE, DDC writes ignored)
-            self.readonly_group(ui, snap, "\u{1F4A1} Power LED", "power_led", &[
-                (0, "Off"), (1, "On"),
-            ]);
-
-            self.readonly_group(ui, snap, "\u{1F5A5} Split / PBP", "split_mode", &[
-                (0, "Off"), (1, "PBP"),
-            ]);
-
-            self.readonly_group(ui, snap, "\u{1F512} OSD Lock", "osd_lock", &[
-                (2, "Unlocked"), (1, "Locked"),
-            ]);
-
-            ui.add_space(10.0);
-
-            // ── Maintenance / Factory Reset ───────────────────────────
-            ui.group(|ui| {
-                ui.label(egui::RichText::new("\u{1F527} Maintenance").strong().size(18.0));
-                ui.add_space(4.0);
-
-                ui.horizontal(|ui| {
-                    if ui.button(egui::RichText::new("Reset Brightness/Contrast").size(16.0)).clicked() {
-                        self.pending_writes.push((0x05, 1));
-                    }
-                    if ui.button(egui::RichText::new("Reset Color").size(16.0)).clicked() {
-                        self.pending_writes.push((0x08, 1));
-                    }
-                });
-
-                ui.add_space(4.0);
-
-                if self.confirm_factory_reset {
-                    ui.horizontal(|ui| {
-                        ui.label(egui::RichText::new("Are you sure? This resets ALL settings.")
-                            .size(16.0).color(egui::Color32::from_rgb(255, 70, 70)));
-                        if ui.button(egui::RichText::new("Confirm Factory Reset")
-                            .size(16.0).strong().color(egui::Color32::from_rgb(255, 70, 70))).clicked()
-                        {
-                            self.pending_writes.push((0x04, 1));
-                            self.confirm_factory_reset = false;
-                        }
-                        if ui.button(egui::RichText::new("Cancel").size(16.0)).clicked() {
-                            self.confirm_factory_reset = false;
-                        }
-                    });
-                } else {
-                    let btn = egui::Button::new(
-                        egui::RichText::new("Factory Reset ALL").size(16.0).strong()
-                            .color(egui::Color32::WHITE)
-                    ).fill(egui::Color32::from_rgb(180, 40, 40));
-                    if ui.add(btn).clicked() {
-                        self.confirm_factory_reset = true;
-                    }
-                }
-            });
-        });
-    }
-
-    fn tab_system(&self, ui: &mut egui::Ui, snap: &SharedState) {
-        // Status badges at top, full width
-        ui.horizontal_wrapped(|ui| {
-            let age = snap.ddc.last_update.map(|t| t.elapsed());
-            let fresh = age.map(|a| a.as_secs() < 10).unwrap_or(false);
-            self.badge(ui, "DDC", fresh);
-
-            let kb_ok = snap.keyboard.is_some();
-            self.badge(ui, "Keyboard", kb_ok);
-
-            if let Some(ref kb) = snap.keyboard {
-                self.badge(ui, "BT", kb.bluetooth.connected);
-            }
-        });
-
-        ui.add_space(6.0);
-
-        // Two columns: Monitor info left, Raw VCP right
-        ui.columns(2, |cols| {
-            // ── LEFT: Monitor info ──────────────────────────────────
-            cols[0].group(|ui| {
-                ui.label(egui::RichText::new("Monitor").strong().size(18.0));
-                ui.add_space(4.0);
-                egui::Grid::new("sys_monitor")
-                    .num_columns(2)
-                    .spacing([16.0, 8.0])
-                    .show(ui, |ui| {
-                        if ddc_has(snap, "power_mode") {
-                            let pm = ddc_cur(snap, "power_mode");
-                            ui.label(egui::RichText::new("Power").weak().size(16.0));
-                            let (label, color) = match pm {
-                                1 => ("On", egui::Color32::from_rgb(80, 220, 100)),
-                                2 => ("Standby", egui::Color32::from_rgb(255, 200, 50)),
-                                3 => ("Suspend", egui::Color32::from_rgb(255, 200, 50)),
-                                4 => ("Off (soft)", egui::Color32::from_rgb(255, 70, 70)),
-                                5 => ("Off (hard)", egui::Color32::from_rgb(255, 70, 70)),
-                                _ => ("Unknown", egui::Color32::GRAY),
-                            };
-                            ui.label(egui::RichText::new(label).strong().size(18.0).color(color));
-                            ui.end_row();
-                        }
-                        if ddc_has(snap, "usage_hours") {
-                            ui.label(egui::RichText::new("Usage").weak().size(16.0));
-                            let h = ddc_cur(snap, "usage_hours");
-                            ui.label(egui::RichText::new(format!("{} h ({} days)", h, h / 24)).size(16.0));
-                            ui.end_row();
-                        }
-                        if ddc_has(snap, "firmware") {
-                            let fw = ddc_cur(snap, "firmware");
-                            ui.label(egui::RichText::new("Firmware").weak().size(16.0));
-                            ui.label(egui::RichText::new(format!("{}.{}", fw >> 8, fw & 0xFF)).strong().size(18.0));
-                            ui.end_row();
-                        }
-                        if ddc_has(snap, "vcp_version") {
-                            let ver = ddc_cur(snap, "vcp_version");
-                            ui.label(egui::RichText::new("VCP Version").weak().size(16.0));
-                            ui.label(egui::RichText::new(format!("{}.{}", ver >> 8, ver & 0xFF)).size(16.0));
-                            ui.end_row();
-                        }
-                        if ddc_has(snap, "display_tech") {
-                            let dt = ddc_cur(snap, "display_tech");
-                            ui.label(egui::RichText::new("Panel").weak().size(16.0));
-                            let label = match dt {
-                                1 => "CRT", 2 => "LCD", 3 => "IPS",
-                                4 => "OLED", 5 => "VA", _ => "Unknown",
-                            };
-                            ui.label(egui::RichText::new(label).size(16.0));
-                            ui.end_row();
-                        }
-                        if ddc_has(snap, "backlight_pwm") {
-                            let pwm = ddc_cur(snap, "backlight_pwm");
-                            let max = ddc_max(snap, "backlight_pwm");
-                            ui.label(egui::RichText::new("Backlight").weak().size(16.0));
-                            ui.label(egui::RichText::new(format!("{}/{}", pwm, max)).size(16.0));
-                            ui.end_row();
-                        }
-                    });
-            });
-
-            cols[0].add_space(8.0);
-
-            cols[0].group(|ui| {
-                ui.label(egui::RichText::new("Signal").strong().size(18.0));
-                ui.add_space(4.0);
-                egui::Grid::new("sys_signal")
-                    .num_columns(2)
-                    .spacing([16.0, 8.0])
-                    .show(ui, |ui| {
-                        if ddc_has(snap, "h_freq") {
-                            let hf = ddc_cur(snap, "h_freq");
-                            ui.label(egui::RichText::new("H-Freq").weak().size(16.0));
-                            ui.label(egui::RichText::new(format!("{:.2} kHz", hf as f32 / 100.0)).size(16.0));
-                            ui.end_row();
-                        }
-                        if ddc_has(snap, "v_freq") {
-                            let vf = ddc_cur(snap, "v_freq");
-                            ui.label(egui::RichText::new("V-Freq").weak().size(16.0));
-                            // LG encoding: raw value, display as-is (non-standard)
-                            ui.label(egui::RichText::new(format!("{}", vf)).size(16.0));
-                            ui.end_row();
-                        }
-                        if ddc_has(snap, "picture_mode") {
-                            let pm = ddc_cur(snap, "picture_mode");
-                            ui.label(egui::RichText::new("Picture Mode").weak().size(16.0));
-                            let name = match pm {
-                                1 => "Reader", 6 => "Color Weakness",
-                                15 => "sRGB", 20 => "Vivid", 22 => "HDR Effect",
-                                24 => "DCI-P3", 25 => "EBU",
-                                30 => "FPS 1", 31 => "FPS 2", 39 => "RTS",
-                                45 => "Custom", 46 => "Cinema",
-                                48 => "Photo", 49 => "Calibration",
-                                _ => "Unknown",
-                            };
-                            ui.label(egui::RichText::new(format!("{} ({})", name, pm)).strong().size(16.0));
-                            ui.end_row();
-                        }
-                        if ddc_has(snap, "color_preset") {
-                            let cp = ddc_cur(snap, "color_preset");
-                            ui.label(egui::RichText::new("Color Preset").weak().size(16.0));
-                            let label = match cp {
-                                5 => "6500K", 8 => "9300K", 0x0B => "User", _ => "Other",
-                            };
-                            ui.label(egui::RichText::new(format!("{} ({})", label, cp)).size(16.0));
-                            ui.end_row();
-                        }
-                        if ddc_has(snap, "color_temp_kelvin") {
-                            let k = ddc_cur(snap, "color_temp_kelvin");
-                            ui.label(egui::RichText::new("Color Temp").weak().size(16.0));
-                            ui.label(egui::RichText::new(format!("{} K", k)).size(16.0));
-                            ui.end_row();
-                        }
-                    });
-            });
-
-            // ── PBP Sub-Display (mirror registers) ─────────────────
-            // Only shown when split mode is active (D7 != 1)
-            {
-                let split = ddc_cur(snap, "split_mode");
-                let has_mirror = ddc_has(snap, "mirror_brightness")
-                    || ddc_has(snap, "mirror_contrast")
-                    || ddc_has(snap, "mirror_color_preset");
-                if split != 1 && has_mirror {
-                    cols[0].add_space(8.0);
-                    cols[0].group(|ui| {
-                        ui.label(egui::RichText::new("PBP Sub-Display").strong().size(18.0));
-                        ui.add_space(4.0);
-                        egui::Grid::new("sys_pbp_mirror")
-                            .num_columns(2)
-                            .spacing([16.0, 8.0])
-                            .show(ui, |ui| {
-                                if ddc_has(snap, "mirror_brightness") {
-                                    ui.label(egui::RichText::new("Brightness").weak().size(16.0));
-                                    ui.label(egui::RichText::new(format!("{}", ddc_cur(snap, "mirror_brightness")))
-                                        .monospace().size(16.0));
-                                    ui.end_row();
-                                }
-                                if ddc_has(snap, "mirror_contrast") {
-                                    ui.label(egui::RichText::new("Contrast").weak().size(16.0));
-                                    ui.label(egui::RichText::new(format!("{}", ddc_cur(snap, "mirror_contrast")))
-                                        .monospace().size(16.0));
-                                    ui.end_row();
-                                }
-                                if ddc_has(snap, "mirror_color_preset") {
-                                    let cp = ddc_cur(snap, "mirror_color_preset");
-                                    ui.label(egui::RichText::new("Color Preset").weak().size(16.0));
-                                    let label = match cp {
-                                        5 => "6500K", 8 => "9300K", 0x0B => "User", _ => "Other",
-                                    };
-                                    ui.label(egui::RichText::new(format!("{} ({})", label, cp))
-                                        .monospace().size(16.0));
-                                    ui.end_row();
-                                }
-                            });
-                    });
-                }
-            }
-
-            // ── RIGHT: Raw VCP dump (scrollable) ────────────────────
-            cols[1].group(|ui| {
-                ui.label(egui::RichText::new("Raw VCP Values").strong().size(18.0));
-                ui.add_space(4.0);
-                egui::ScrollArea::vertical().max_height((ui.available_height() - 8.0).max(50.0)).show(ui, |ui| {
-                    egui::Grid::new("raw_vcp")
-                        .num_columns(3)
-                        .spacing([12.0, 4.0])
-                        .striped(true)
-                        .min_col_width(60.0)
-                        .show(ui, |ui| {
-                            ui.label(egui::RichText::new("VCP").strong().size(16.0));
-                            ui.label(egui::RichText::new("Current").strong().size(16.0));
-                            ui.label(egui::RichText::new("Max").strong().size(16.0));
-                            ui.end_row();
-
-                            let mut keys: Vec<_> = snap.ddc.data.keys().collect();
-                            keys.sort();
-                            for k in keys {
-                                let (cur, max) = snap.ddc.data[k.as_str()];
-                                ui.label(egui::RichText::new(k.as_str()).size(16.0));
-                                ui.label(egui::RichText::new(format!("{}", cur)).monospace().size(16.0));
-                                ui.label(egui::RichText::new(format!("{}", max)).monospace().size(16.0));
-                                ui.end_row();
-                            }
-                        });
-                });
-            });
-        });
-    }
-
-    fn mqtt_cfg(&self) -> mqtt::MqttCfg {
-        mqtt::MqttCfg {
-            broker: self.mqtt.broker.clone(),
-            port: self.mqtt.port.parse().unwrap_or(1883),
-            user: self.mqtt.user.clone(),
-            pass: self.mqtt.pass.clone(),
-            topic_prefix: "homeassistant".to_string(),
-            monitor_model: "lg_34gn850".to_string(),
-            bri_min: self.mqtt.bri_min as u16,
-            bri_max: self.mqtt.bri_max as u16,
-            bus: self.i2c_bus.clone(),
-        }
-    }
-
-    fn tab_mqtt(&mut self, ui: &mut egui::Ui) {
-        let bridge_active = self.mqtt_bridge.as_ref()
-            .map(|b| b.is_connected()).unwrap_or(false);
-
-        ui.columns(2, |cols| {
-            // ── LEFT: Supervision ──────────────────────────────────
-            cols[0].group(|ui| {
-                ui.label(egui::RichText::new("MQTT Bridge (in-process)").strong().size(18.0));
-                ui.add_space(4.0);
-
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Status").weak().size(16.0));
-                    if self.mqtt_bridge.is_some() {
-                        let (label, dot, color) = if bridge_active {
-                            ("Connected", "\u{1F7E2}", egui::Color32::from_rgb(80, 220, 100))
-                        } else {
-                            ("Connecting...", "\u{1F7E1}", egui::Color32::from_rgb(255, 200, 50))
-                        };
-                        ui.label(egui::RichText::new(dot).size(16.0));
-                        ui.label(egui::RichText::new(label).strong().size(16.0).color(color));
-                    } else {
-                        ui.label(egui::RichText::new("\u{1F534}").size(16.0));
-                        ui.label(egui::RichText::new("Stopped").strong().size(16.0)
-                            .color(egui::Color32::from_rgb(255, 70, 70)));
-                    }
-                });
-
-                ui.add_space(8.0);
-
-                ui.horizontal(|ui| {
-                    if self.mqtt_bridge.is_some() {
-                        if ui.button(egui::RichText::new("Stop").size(16.0)).clicked() {
-                            self.mqtt_bridge = None;
-                        }
-                    } else {
-                        if ui.button(egui::RichText::new("Start").size(16.0)).clicked() {
-                            if bridge_handle().is_some() || !self.mqtt.broker.is_empty() {
-                                self.mqtt_bridge = Some(bridge_start_or_attach(self.mqtt_cfg()));
-                            }
-                        }
-                    }
-                    if ui.button(egui::RichText::new("Publish Now").size(16.0)).clicked() {
-                        // Fire-and-forget on a background thread (M11).
-                        mqtt_publish_now(&self.state);
-                    }
-                });
-
-                // Last command received
-                if let Some(bridge) = &self.mqtt_bridge {
-                    if let Ok(lc) = bridge.last_cmd.lock() {
-                        if let Some(cmd) = lc.as_ref() {
-                            ui.add_space(4.0);
-                            ui.label(egui::RichText::new(format!("Last: {}", cmd)).weak().size(16.0));
-                        }
-                    }
-                    if let Ok(lp) = bridge.last_publish.lock() {
-                        if let Some(t) = lp.as_ref() {
-                            let ago = t.elapsed().as_secs();
-                            ui.label(egui::RichText::new(format!("Published {}s ago", ago)).weak().size(16.0));
-                        }
-                    }
-                }
-            });
-
-            cols[0].add_space(8.0);
-
-            cols[0].group(|ui| {
-                ui.label(egui::RichText::new("Lamp → Monitor Sync").strong().size(18.0));
-                ui.add_space(4.0);
-                egui::Grid::new("mqtt_sync")
-                    .num_columns(2)
-                    .spacing([16.0, 8.0])
-                    .show(ui, |ui| {
-                        ui.label(egui::RichText::new("Source").weak().size(16.0));
-                        ui.label(egui::RichText::new(&self.mqtt.lamp_entity).monospace().size(16.0));
-                        ui.end_row();
-                        ui.label(egui::RichText::new("Formula").weak().size(16.0));
-                        ui.label(egui::RichText::new(format!(
-                            "{} + (lamp/255) × {}", self.mqtt.bri_min as u16,
-                            (self.mqtt.bri_max - self.mqtt.bri_min) as u16
-                        )).monospace().size(16.0));
-                        ui.end_row();
-                        ui.label(egui::RichText::new("Range").weak().size(16.0));
-                        ui.label(egui::RichText::new(format!(
-                            "{}% – {}%", self.mqtt.bri_min as u16, self.mqtt.bri_max as u16
-                        )).strong().size(16.0));
-                        ui.end_row();
-                        ui.label(egui::RichText::new("Broker").weak().size(16.0));
-                        ui.label(egui::RichText::new(format!(
-                            "{}:{}", self.mqtt.broker, self.mqtt.port
-                        )).monospace().size(16.0));
-                        ui.end_row();
-                    });
-            });
-
-            // ── RIGHT: Settings ────────────────────────────────────
-            cols[1].group(|ui| {
-                ui.label(egui::RichText::new("Settings").strong().size(18.0));
-                ui.add_space(4.0);
-                egui::Grid::new("mqtt_settings")
-                    .num_columns(2)
-                    .spacing([16.0, 8.0])
-                    .show(ui, |ui| {
-                        ui.label(egui::RichText::new("Broker").weak().size(16.0));
-                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.broker).desired_width(180.0));
-                        ui.end_row();
-                        ui.label(egui::RichText::new("Port").weak().size(16.0));
-                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.port).desired_width(60.0));
-                        ui.end_row();
-                        ui.label(egui::RichText::new("User").weak().size(16.0));
-                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.user).desired_width(180.0));
-                        ui.end_row();
-                        ui.label(egui::RichText::new("Password").weak().size(16.0));
-                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.pass).password(true).desired_width(180.0));
-                        ui.end_row();
-                        ui.label(egui::RichText::new("Lamp Entity").weak().size(16.0));
-                        ui.add(egui::TextEdit::singleline(&mut self.mqtt.lamp_entity).desired_width(180.0));
-                        ui.end_row();
-                        ui.label(egui::RichText::new("I2C Bus").weak().size(16.0));
-                        ui.add(egui::TextEdit::singleline(&mut self.i2c_bus).desired_width(180.0));
-                        ui.end_row();
-                    });
-
-                ui.add_space(12.0);
-                ui.label(egui::RichText::new("Brightness Range").strong().size(18.0));
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Min").weak().size(16.0));
-                    ui.add(egui::Slider::new(&mut self.mqtt.bri_min, 0.0..=30.0).show_value(true));
-                });
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Max").weak().size(16.0));
-                    ui.add(egui::Slider::new(&mut self.mqtt.bri_max, 30.0..=100.0).show_value(true));
-                });
-
-                ui.add_space(12.0);
-                if ui.button(egui::RichText::new("Save Config & Reconnect").size(16.0).strong()).clicked() {
-                    let config_path = dirs::config_dir()
-                        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
-                        .join("apple-kb-monitor/config.toml");
-                    let esc = |s: &str| {
-                        s.replace('\\', "\\\\").replace('"', "\\\"")
-                            .replace('\n', "\\n").replace('\r', "")
-                    };
-                    // Always write a valid integer port (raw text could break the TOML).
-                    let port: u16 = self.mqtt.port.trim().parse().unwrap_or(1883);
-                    self.mqtt.port = port.to_string();
-                    let toml = format!(
-                        "[ddc]\nbus = \"{}\"\n\n[mqtt]\nbroker = \"{}\"\nport = {}\nuser = \"{}\"\npassword = \"{}\"\ntopic_prefix = \"homeassistant\"\n\n[monitor]\nmodel = \"lg_34gn850\"\n\n[brightness]\nmin = {}\nmax = {}\nlamp_entity = \"{}\"\n",
-                        esc(&self.i2c_bus), esc(&self.mqtt.broker), port,
-                        esc(&self.mqtt.user), esc(&self.mqtt.pass),
-                        self.mqtt.bri_min as u16, self.mqtt.bri_max as u16,
-                        esc(&self.mqtt.lamp_entity),
-                    );
-                    // 0600: the file holds the MQTT password.
-                    self.mqtt_note = match atomic_write(&config_path, toml.as_bytes(), 0o600) {
-                        Ok(()) => String::new(),
-                        Err(e) => format!("Cannot save config: {}", e),
-                    };
-                    if bridge_handle().is_some() {
-                        // The single in-process bridge keeps its connection
-                        // (fixed MQTT client id: a 2nd one would fight with it).
-                        if self.mqtt_note.is_empty() {
-                            self.mqtt_note = "Saved. Broker/credentials apply at next launch.".into();
-                        }
-                        self.mqtt_bridge = bridge_handle();
-                    } else if !self.mqtt.broker.is_empty() {
-                        self.mqtt_bridge = Some(bridge_start_or_attach(self.mqtt_cfg()));
-                    }
-                }
-                if !self.mqtt_note.is_empty() {
-                    ui.label(egui::RichText::new(&self.mqtt_note).weak().size(14.0));
-                }
-            });
-        });
-    }
-
-    /// Run diagnostics in a background thread (M10) to avoid blocking the UI.
     fn run_diagnostics(&mut self) {
         // Guard against concurrent runs
-        if self.diag_running.load(std::sync::atomic::Ordering::Relaxed) {
+        if self.diag_running.swap(true, Ordering::Relaxed) {
             return;
         }
-        self.diag_running.store(true, std::sync::atomic::Ordering::Relaxed);
         if let Ok(mut r) = self.diag_results.lock() {
             r.clear();
         }
 
         let results = self.diag_results.clone();
         let running = self.diag_running.clone();
-        let bus = self.i2c_bus.clone();
 
         /// Clears the "running" flag even if the diagnostics thread panics.
-        struct RunningGuard(Arc<std::sync::atomic::AtomicBool>);
+        struct RunningGuard(Arc<AtomicBool>);
         impl Drop for RunningGuard {
             fn drop(&mut self) {
-                self.0.store(false, std::sync::atomic::Ordering::Relaxed);
+                self.0.store(false, Ordering::Relaxed);
             }
         }
 
@@ -2174,14 +770,10 @@ impl ApiHubApp {
             let _guard = RunningGuard(running);
             let mut out: Vec<DiagResult> = Vec::new();
 
-            // Extract bus number from path (e.g. "/dev/i2c-6" -> "6")
-            let bus_num = bus.rsplit('-').next().unwrap_or("6").to_string();
             let checks: Vec<(&str, Vec<String>, &str)> = vec![
                 ("apple-kb-monitor", vec!["--version".into()], "Main daemon binary"),
-                ("ddc-tool", vec!["read".into(), bus_num, "0x10".into()], "DDC/CI I2C tool"),
                 ("keyd", vec!["-v".into()], "Key remapping daemon"),
                 ("bluetoothctl", vec!["--version".into()], "BlueZ CLI"),
-                ("mosquitto_pub", vec!["--help".into()], "MQTT publish tool"),
             ];
 
             for (bin, args, desc) in &checks {
@@ -2201,7 +793,7 @@ impl ApiHubApp {
                     }
                     Ok(o) => {
                         let err = String::from_utf8_lossy(&o.stderr);
-                        if err.contains("Usage") || err.contains("usage") || err.contains("mosquitto_pub") {
+                        if err.contains("Usage") || err.contains("usage") {
                             out.push(DiagResult {
                                 label: desc.to_string(), ok: true,
                                 detail: format!("{}: installed", bin),
@@ -2222,46 +814,27 @@ impl ApiHubApp {
                 }
             }
 
-            // Services
-            for svc in ["apple-kb-monitor", "apple-brightness", "mqtt-bridge"] {
-                let result = Command::new("systemctl")
-                    .args(["--user", "is-active", &format!("{}.service", svc)])
-                    .output();
-                let active = result.map(|o| o.status.success()).unwrap_or(false);
-                out.push(DiagResult {
-                    label: format!("{}.service", svc), ok: active,
-                    detail: if active { "active (running)".into() } else { "inactive / not found".into() },
-                });
-            }
-
-            // I2C bus
-            let i2c_ok = std::path::Path::new(&bus).exists();
+            // Service
+            let active = Command::new("systemctl")
+                .args(["--user", "is-active", "apple-kb-monitor.service"])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false);
             out.push(DiagResult {
-                label: "I2C bus".into(), ok: i2c_ok,
-                detail: if i2c_ok { format!("{}: accessible", bus) } else { format!("{}: NOT FOUND", bus) },
+                label: "apple-kb-monitor.service".into(), ok: active,
+                detail: if active { "active (running)".into() } else { "inactive / not found".into() },
             });
 
-            // hidraw (keyboard) — enumerate /dev/hidraw*
-            let hidraw_count = std::fs::read_dir("/dev").map(|rd| {
-                rd.filter_map(|e| e.ok())
-                    .filter(|e| e.file_name().to_string_lossy().starts_with("hidraw"))
-                    .count()
-            }).unwrap_or(0);
-            out.push(DiagResult {
-                label: "HID raw device".into(), ok: hidraw_count > 0,
-                detail: if hidraw_count > 0 { format!("{} hidraw device(s) in /dev/", hidraw_count) }
-                        else { "no hidraw device found".into() },
-            });
-
-            // Config file
-            let cfg_path = dirs::config_dir()
-                .map(|d| d.join("apple-kb-monitor/config.toml"))
-                .unwrap_or_default();
-            let cfg_ok = cfg_path.exists();
-            out.push(DiagResult {
-                label: "Config file".into(), ok: cfg_ok,
-                detail: if cfg_ok { format!("{}", cfg_path.display()) } else { "not found — copy config.toml.example".into() },
-            });
+            // Apple keyboard hidraw node: present AND readable by this user
+            // (udev rule uses TAG+="uaccess", no group membership needed).
+            let (hid_ok, hid_detail) = match keyboard::find_apple_hidraw() {
+                None => (false, "no Apple hidraw device found (keyboard off or not paired?)".to_string()),
+                Some(path) => match std::fs::File::open(&path) {
+                    Ok(_) => (true, format!("{}: readable", path)),
+                    Err(e) => (false, format!("{}: {} — check the udev uaccess rule", path, e)),
+                },
+            };
+            out.push(DiagResult { label: "hidraw readable".into(), ok: hid_ok, detail: hid_detail });
 
             // keyd config
             let keyd_ok = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
@@ -2285,31 +858,10 @@ impl ApiHubApp {
             });
 
             // rssi-helper caps
-            let rssi_path = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper");
-            let rssi_ok = rssi_path.exists();
+            let rssi_ok = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper").exists();
             out.push(DiagResult {
                 label: "RSSI helper".into(), ok: rssi_ok,
                 detail: if rssi_ok { "rssi-helper installed (needs CAP_NET_ADMIN)".into() } else { "NOT FOUND".into() },
-            });
-
-            // user in input group (pure libc — no subprocess)
-            let input_ok = {
-                let mut buf = [0i32; 64];
-                let n = unsafe { libc::getgroups(64, buf.as_mut_ptr() as *mut u32) };
-                if n > 0 {
-                    let input_content = std::fs::read_to_string("/etc/group").unwrap_or_default();
-                    let input_gid = input_content.lines()
-                        .find(|l| l.starts_with("input:"))
-                        .and_then(|l| l.split(':').nth(2))
-                        .and_then(|s| s.parse::<i32>().ok());
-                    input_gid.map(|gid| buf[..n as usize].contains(&gid)).unwrap_or(false)
-                } else {
-                    false
-                }
-            };
-            out.push(DiagResult {
-                label: "User in input group".into(), ok: input_ok,
-                detail: if input_ok { "input group: OK".into() } else { "NOT in input group — run: sudo usermod -aG input $USER".into() },
             });
 
             // Store results (the guard clears the running flag on drop)
@@ -2371,111 +923,6 @@ impl ApiHubApp {
             }
         });
     }
-
-    // ── Widget helpers ──────────────────────────────────────────────────
-
-    fn vcp_slider(&mut self, ui: &mut egui::Ui, snap: &SharedState, name: &str, vcp: u8) {
-        self.vcp_slider_colored(ui, snap, name, vcp, None);
-    }
-
-    fn vcp_slider_colored(&mut self, ui: &mut egui::Ui, snap: &SharedState, name: &str, vcp: u8, color: Option<egui::Color32>) {
-        let cur = ddc_cur(snap, name) as f32;
-        let max = ddc_max(snap, name) as f32;
-        let max_val = if max == 0.0 { 100.0 } else { max };
-        let mut val = cur;
-        let label_text = vcp_label(name);
-        let is_percent = max_val <= 100.0;
-
-        ui.horizontal(|ui| {
-            let rt = if let Some(c) = color {
-                egui::RichText::new(label_text).size(16.0).color(c).strong()
-            } else {
-                egui::RichText::new(label_text).size(16.0)
-            };
-            ui.label(rt);
-            let suffix = if is_percent { "%" } else { "" };
-            let slider = egui::Slider::new(&mut val, 0.0..=max_val)
-                .custom_formatter(move |v, _| format!("{:.0}{}", v, suffix))
-                .custom_parser(|s| s.trim_end_matches('%').trim().parse::<f64>().ok());
-            if ui.add(slider).changed() {
-                self.pending_writes.push((vcp, val as u16));
-            }
-        });
-    }
-
-    fn button_group(
-        &mut self,
-        ui: &mut egui::Ui,
-        snap: &SharedState,
-        title: &str,
-        name: &str,
-        vcp: u8,
-        options: &[(u16, &str)],
-    ) {
-        ui.group(|ui| {
-            ui.label(egui::RichText::new(title).strong().size(18.0));
-            ui.horizontal_wrapped(|ui| {
-                let cur = ddc_cur(snap, name);
-                for &(val, label) in options {
-                    if ui.selectable_label(cur == val, label).clicked() {
-                        self.pending_writes.push((vcp, val));
-                    }
-                }
-            });
-        });
-        ui.add_space(4.0);
-    }
-
-    fn readonly_group(
-        &self,
-        ui: &mut egui::Ui,
-        snap: &SharedState,
-        title: &str,
-        name: &str,
-        options: &[(u16, &str)],
-    ) {
-        ui.group(|ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(title).strong().size(18.0));
-                if !ddc_has(snap, name) {
-                    ui.label(egui::RichText::new("loading...").weak().size(16.0).italics());
-                }
-            });
-            if ddc_has(snap, name) {
-                ui.horizontal_wrapped(|ui| {
-                    let cur = ddc_cur(snap, name);
-                    for &(val, label) in options {
-                        let selected = cur == val;
-                        let text = if selected {
-                            egui::RichText::new(format!("  {}  ", label)).strong().size(16.0)
-                                .color(egui::Color32::from_rgb(120, 200, 255))
-                                .background_color(egui::Color32::from_rgb(30, 50, 70))
-                        } else {
-                            egui::RichText::new(format!("  {}  ", label)).weak().size(16.0)
-                        };
-                        ui.label(text);
-                    }
-                });
-            }
-        });
-        ui.add_space(4.0);
-    }
-
-    fn badge(&self, ui: &mut egui::Ui, label: &str, ok: bool) {
-        let (text, bg) = if ok {
-            (format!("{}: OK", label), egui::Color32::from_rgb(30, 100, 40))
-        } else {
-            (format!("{}: --", label), egui::Color32::from_rgb(100, 30, 30))
-        };
-        let rt = egui::RichText::new(text)
-            .color(egui::Color32::WHITE)
-            .strong()
-            .size(16.0);
-        ui.group(|ui| {
-            ui.visuals_mut().widgets.noninteractive.bg_fill = bg;
-            ui.label(rt);
-        });
-    }
 }
 
 // ── Entrypoint ──────────────────────────────────────────────────────────────
@@ -2483,72 +930,42 @@ impl ApiHubApp {
 fn main() -> eframe::Result<()> {
     // ── Single process architecture ──────────────────────────────────
     // 1. Start tray (always, zero CPU via zbus epoll)
-    // 2. Start poll thread + MQTT + services
+    // 2. Start the supervised poll thread
     // 3. Wait for "Show Window" → open eframe in THIS process
     // 4. When window closes → back to tray-only (no subprocess, no zombie)
-    // 5. Quit flag (M2/M13) — graceful shutdown, lets destructors run
+    // 5. Quit flag — graceful shutdown, lets destructors run
 
     let state: State = Arc::new(Mutex::new(SharedState::default()));
-    let i2c_bus = ddc::default_bus();
 
-    // ── Shared quit flag (M2/M13) — set by tray "Quit", checked by main loop + poll thread
-    let quit_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    // Shared quit flag — set by tray "Quit", checked by main loop + poll thread
+    let quit_flag = Arc::new(AtomicBool::new(false));
 
     // ── Tray icon ────────────────────────────────────────────────────
-    let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("ApiHub \u{2014} starting...".into()));
-    let show_window = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let tray_tooltip: Arc<Mutex<String>> = Arc::new(Mutex::new("Apple Keyboard \u{2014} starting...".into()));
+    let show_window = Arc::new(AtomicBool::new(false));
     tray::spawn(
         tray_tooltip.clone(),
         state.clone(),
-        i2c_bus.clone(),
         show_window.clone(),
         quit_flag.clone(),
     );
 
-    // ── Polling + services ───────────────────────────────────────────
-    let app_presets = load_app_presets();
-    let shared_presets: SharedPresets = Arc::new(Mutex::new((false, app_presets)));
-    spawn_poll_thread(Arc::clone(&state), shared_presets.clone(), quit_flag.clone());
-
-    let mqtt = MqttConfig::default();
-    if !mqtt.broker.is_empty() {
-        let cfg = mqtt::MqttCfg {
-            broker: mqtt.broker, port: mqtt.port.trim().parse().unwrap_or(1883),
-            user: mqtt.user, pass: mqtt.pass,
-            topic_prefix: "homeassistant".into(), monitor_model: "lg_34gn850".into(),
-            bri_min: mqtt.bri_min as u16, bri_max: mqtt.bri_max as u16,
-            bus: i2c_bus,
-        };
-        eprintln!("[mqtt] auto-start: {}:{}", cfg.broker, cfg.port);
-        let bridge = bridge_start_or_attach(cfg);
-        // Mirror the bridge status into SharedState (tray menu) from its own
-        // thread: main() is blocked in eframe while the window is open.
-        let bridge_connected = bridge.connected.clone();
-        let st = state.clone();
-        thread::spawn(move || {
-            loop {
-                let connected = bridge_connected.lock().map(|c| *c).unwrap_or(false);
-                if let Ok(mut s) = st.lock() {
-                    s.mqtt_connected = connected;
-                }
-                thread::sleep(Duration::from_secs(2));
-            }
-        });
-    }
+    // ── Polling ──────────────────────────────────────────────────────
+    spawn_poll_thread(Arc::clone(&state), quit_flag.clone());
 
     eprintln!("[apihub] tray mode — click scarab icon to open window");
 
     // ── Main loop: tray-only until "Show Window" ─────────────────────
     loop {
-        // Check quit flag (M2) — break out and let destructors run
-        if quit_flag.load(std::sync::atomic::Ordering::Relaxed) {
+        // Check quit flag — break out and let destructors run
+        if quit_flag.load(Ordering::Relaxed) {
             eprintln!("[apihub] quit flag set — shutting down gracefully");
             break;
         }
 
         std::thread::sleep(Duration::from_secs(2));
 
-        // Update tray tooltip + MQTT connected state in SharedState (M7)
+        // Update tray tooltip
         if let Ok(snap) = state.lock() {
             if let Ok(mut tt) = tray_tooltip.lock() {
                 *tt = tooltip_text(&snap);
@@ -2556,11 +973,11 @@ fn main() -> eframe::Result<()> {
         }
 
         // Show Window → open eframe in THIS process (blocks until window closed)
-        if show_window.swap(false, std::sync::atomic::Ordering::Relaxed) {
+        if show_window.swap(false, Ordering::Relaxed) {
             eprintln!("[apihub] opening window...");
             let options = eframe::NativeOptions {
                 viewport: egui::ViewportBuilder::default()
-                    .with_title("ApiHub \u{2014} Monitor + Keyboard")
+                    .with_title("Apple Keyboard Monitor")
                     .with_inner_size([720.0, 600.0])
                     .with_min_inner_size([500.0, 400.0]),
                 vsync: true,
@@ -2574,16 +991,14 @@ fn main() -> eframe::Result<()> {
                     let tt = tray_tooltip.clone();
                     let st = state.clone();
                     let sw = show_window.clone();
-                    let sp = shared_presets.clone();
                     let qf = quit_flag.clone();
-                    move |cc| Ok(Box::new(ApiHubApp::new(cc, tt, st, sw, sp, qf)))
+                    move |cc| Ok(Box::new(ApiHubApp::new(cc, tt, st, sw, qf)))
                 }),
             ) {
                 // No display / GPU init failure: stay in tray mode instead of dying silently.
                 eprintln!("[apihub] cannot open window: {}", e);
             }
             eprintln!("[apihub] window closed — back to tray mode");
-            // Window closed → loop back to tray-only mode (unless quit flag is set)
         }
     }
 
@@ -2595,18 +1010,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn toml_value_roundtrips_escapes() {
-        let esc = |s: &str| s.replace('\\', "\\\\").replace('"', "\\\"");
-        let pw = r#"a"b\c#d"#;
-        assert_eq!(parse_toml_string_value(&format!("\"{}\"  # comment", esc(pw))), pw);
-        assert_eq!(parse_toml_string_value(" 1883 # port"), "1883");
-        assert_eq!(parse_toml_string_value("'lit#eral'"), "lit#eral");
-    }
-
-    #[test]
     fn tooltip_shows_na_without_sources() {
         let t = tooltip_text(&SharedState::default());
         assert!(t.contains("n/a"));
         assert!(!t.contains("0%"));
+    }
+
+    #[test]
+    fn poisoned_state_is_recovered() {
+        let st: State = Arc::new(Mutex::new(SharedState::default()));
+        let s2 = st.clone();
+        let _ = thread::spawn(move || {
+            let _g = s2.lock().unwrap();
+            panic!("boom");
+        })
+        .join();
+        assert!(st.lock().is_err());
+        st.clear_poison();
+        assert!(st.lock().is_ok());
     }
 }

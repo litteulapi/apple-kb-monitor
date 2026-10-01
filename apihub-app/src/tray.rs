@@ -5,8 +5,7 @@
 //!
 //! Implements:
 //! - org.kde.StatusNotifierItem  (icon, tooltip, scroll, activate)
-//! - com.canonical.dbusmenu      (right-click menu: info, brightness, picture
-//!                                 mode, MQTT, Show Window, Quit)
+//! - com.canonical.dbusmenu      (right-click menu: battery/RSSI/LED info, Show Window, Quit)
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -16,15 +15,12 @@ use zbus::blocking::Connection;
 use zbus::interface;
 use zbus::zvariant::{OwnedValue, Signature, Value};
 
-use crate::ddc;
-
 type State = Arc<Mutex<crate::SharedState>>;
 
 // ── org.kde.StatusNotifierItem ───────────────────────────────────────────────
 
 struct SniItem {
     tooltip: Arc<Mutex<String>>,
-    i2c_bus: String,
     show_window: Arc<AtomicBool>,
 }
 
@@ -101,18 +97,7 @@ impl SniItem {
     fn secondary_activate(&self, _x: i32, _y: i32) {}
     fn context_menu(&self, _x: i32, _y: i32) {}
 
-    fn scroll(&self, delta: i32, orientation: &str) {
-        if orientation == "vertical" || orientation == "Vertical" {
-            if let Ok((cur, _)) = ddc::ddc_read_vcp(&self.i2c_bus, 0x10) {
-                let new_val = if delta > 0 {
-                    cur.saturating_add(1).min(100)
-                } else {
-                    cur.saturating_sub(1)
-                };
-                let _ = ddc::ddc_write_vcp(&self.i2c_bus, 0x10, new_val);
-            }
-        }
-    }
+    fn scroll(&self, _delta: i32, _orientation: &str) {}
 
     #[zbus(signal)]
     async fn new_icon(ctxt: &zbus::object_server::SignalContext<'_>) -> zbus::Result<()>;
@@ -139,30 +124,8 @@ mod menu_id {
     pub const INFO_BATTERY: i32 = 1;
     pub const INFO_RSSI: i32 = 2;
     pub const INFO_LOCKS: i32 = 3;
-    pub const INFO_BRIGHTNESS: i32 = 4;
     pub const INFO_REMAINING: i32 = 5;
     pub const SEP1: i32 = 10;
-    pub const MONITOR_SUB: i32 = 20;
-    pub const BRI_10: i32 = 21;
-    pub const BRI_30: i32 = 22;
-    pub const BRI_50: i32 = 23;
-    pub const BRI_70: i32 = 24;
-    pub const BRI_100: i32 = 25;
-    pub const SEP_BRI: i32 = 26;
-    pub const PM_CUSTOM: i32 = 30;
-    pub const PM_READER: i32 = 31;
-    pub const PM_VIVID: i32 = 32;
-    pub const PM_SRGB: i32 = 33;
-    pub const PM_FPS1: i32 = 34;
-    pub const PM_FPS2: i32 = 35;
-    pub const PM_RTS: i32 = 36;
-    pub const PM_CINEMA: i32 = 37;
-    pub const PM_HDR: i32 = 38;
-    pub const PM_DCIP3: i32 = 39;
-    pub const PM_PHOTO: i32 = 40;
-    pub const MQTT_SUB: i32 = 50;
-    pub const MQTT_STATUS: i32 = 51;
-    pub const MQTT_PUBLISH: i32 = 52;
     pub const SEP2: i32 = 60;
     pub const SHOW_WINDOW: i32 = 61;
     pub const QUIT: i32 = 62;
@@ -170,7 +133,6 @@ mod menu_id {
 
 struct DbusmenuServer {
     state: State,
-    i2c_bus: String,
     show_window: Arc<AtomicBool>,
     quit_flag: Arc<AtomicBool>,
     revision: Arc<AtomicU32>,
@@ -250,12 +212,6 @@ impl DbusmenuServer {
                     format!("CapsLock: {}  NumLock: {}", caps, num),
                 ));
             }
-            let bri = snap.ddc.data.get("brightness").map(|v| v.0).unwrap_or(0);
-            let vol = snap.ddc.data.get("volume").map(|v| v.0).unwrap_or(0);
-            root_children.push(info_item(
-                menu_id::INFO_BRIGHTNESS,
-                format!("Brightness: {}%  Volume: {}%", bri, vol),
-            ));
             if let Some(ref rem) = snap.remaining_display {
                 root_children.push(info_item(
                     menu_id::INFO_REMAINING,
@@ -265,52 +221,6 @@ impl DbusmenuServer {
         }
 
         root_children.push(sep(menu_id::SEP1));
-
-        // ── Monitor submenu ───────────────────────────────────────
-        let mut monitor = Vec::new();
-        for (id, label) in [
-            (menu_id::BRI_10, "Brightness 10%"),
-            (menu_id::BRI_30, "Brightness 30%"),
-            (menu_id::BRI_50, "Brightness 50%"),
-            (menu_id::BRI_70, "Brightness 70%"),
-            (menu_id::BRI_100, "Brightness 100%"),
-        ] {
-            monitor.push(action_item(id, label));
-        }
-        monitor.push(sep(menu_id::SEP_BRI));
-        for (id, label) in [
-            (menu_id::PM_CUSTOM, "Custom"),
-            (menu_id::PM_READER, "Reader"),
-            (menu_id::PM_VIVID, "Vivid"),
-            (menu_id::PM_SRGB, "sRGB"),
-            (menu_id::PM_FPS1, "FPS 1"),
-            (menu_id::PM_FPS2, "FPS 2"),
-            (menu_id::PM_RTS, "RTS"),
-            (menu_id::PM_CINEMA, "Cinema"),
-            (menu_id::PM_HDR, "HDR Effect"),
-            (menu_id::PM_DCIP3, "DCI-P3"),
-            (menu_id::PM_PHOTO, "Photo"),
-        ] {
-            monitor.push(action_item(id, label));
-        }
-        root_children.push(sub(menu_id::MONITOR_SUB, "Monitor", monitor));
-
-        // ── MQTT submenu ──────────────────────────────────────────
-        let mqtt_connected = snap.as_ref().map(|s| s.mqtt_connected).unwrap_or(false);
-        root_children.push(sub(
-            menu_id::MQTT_SUB,
-            "MQTT",
-            vec![
-                info_item(
-                    menu_id::MQTT_STATUS,
-                    format!(
-                        "Status: {}",
-                        if mqtt_connected { "Connected" } else { "Disconnected" }
-                    ),
-                ),
-                action_item(menu_id::MQTT_PUBLISH, "Publish Now"),
-            ],
-        ));
 
         root_children.push(sep(menu_id::SEP2));
         root_children.push(action_item(menu_id::SHOW_WINDOW, "Show Window"));
@@ -328,25 +238,7 @@ impl DbusmenuServer {
     /// Dispatch an item click by menu id.
     fn handle_event(&self, id: i32) {
         use menu_id::*;
-        let bus = &self.i2c_bus;
         match id {
-            BRI_10 => { let _ = ddc::ddc_write_vcp(bus, 0x10, 10); }
-            BRI_30 => { let _ = ddc::ddc_write_vcp(bus, 0x10, 30); }
-            BRI_50 => { let _ = ddc::ddc_write_vcp(bus, 0x10, 50); }
-            BRI_70 => { let _ = ddc::ddc_write_vcp(bus, 0x10, 70); }
-            BRI_100 => { let _ = ddc::ddc_write_vcp(bus, 0x10, 100); }
-            PM_CUSTOM => { let _ = ddc::ddc_write_vcp(bus, 0x15, 45); }
-            PM_READER => { let _ = ddc::ddc_write_vcp(bus, 0x15, 1); }
-            PM_VIVID => { let _ = ddc::ddc_write_vcp(bus, 0x15, 20); }
-            PM_SRGB => { let _ = ddc::ddc_write_vcp(bus, 0x15, 15); }
-            PM_FPS1 => { let _ = ddc::ddc_write_vcp(bus, 0x15, 30); }
-            PM_FPS2 => { let _ = ddc::ddc_write_vcp(bus, 0x15, 31); }
-            PM_RTS => { let _ = ddc::ddc_write_vcp(bus, 0x15, 39); }
-            PM_CINEMA => { let _ = ddc::ddc_write_vcp(bus, 0x15, 46); }
-            PM_HDR => { let _ = ddc::ddc_write_vcp(bus, 0x15, 22); }
-            PM_DCIP3 => { let _ = ddc::ddc_write_vcp(bus, 0x15, 24); }
-            PM_PHOTO => { let _ = ddc::ddc_write_vcp(bus, 0x15, 48); }
-            MQTT_PUBLISH => crate::mqtt_publish_now(&self.state),
             SHOW_WINDOW => self.show_window.store(true, Ordering::Relaxed),
             QUIT => self.quit_flag.store(true, Ordering::Relaxed),
             _ => {}
@@ -477,17 +369,6 @@ fn sep(id: i32) -> MenuItem {
     }
 }
 
-fn sub(id: i32, label: &str, children: Vec<MenuItem>) -> MenuItem {
-    MenuItem {
-        id,
-        props: vec![
-            ("label", Value::from(String::from(label))),
-            ("children-display", Value::from("submenu")),
-        ],
-        children,
-    }
-}
-
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /// Spawn the system tray on a dedicated thread (fire-and-forget, like ksni).
@@ -497,7 +378,6 @@ fn sub(id: i32, label: &str, children: Vec<MenuItem>) -> MenuItem {
 pub fn spawn(
     tooltip: Arc<Mutex<String>>,
     state: State,
-    i2c_bus: String,
     show_window: Arc<AtomicBool>,
     quit_flag: Arc<AtomicBool>,
 ) {
@@ -513,7 +393,6 @@ pub fn spawn(
                 if let Err(e) = run(
                     tooltip.clone(),
                     state.clone(),
-                    i2c_bus.clone(),
                     show_window.clone(),
                     quit_flag.clone(),
                 ) {
@@ -525,21 +404,46 @@ pub fn spawn(
         .expect("failed to spawn tray thread");
 }
 
+const WATCHER: &str = "org.kde.StatusNotifierWatcher";
+
+/// Register the item with the watcher; the watcher may have just claimed its
+/// name and not export its interface yet, so retry with a growing delay.
+fn register_with_backoff(conn: &Connection, bus_name: &str) -> bool {
+    let mut delay = 1u64;
+    for attempt in 1..=8 {
+        match conn.call_method(
+            Some(WATCHER),
+            "/StatusNotifierWatcher",
+            Some(WATCHER),
+            "RegisterStatusNotifierItem",
+            &bus_name,
+        ) {
+            Ok(_) => {
+                eprintln!("[tray] registered with StatusNotifierWatcher");
+                return true;
+            }
+            Err(e) => {
+                eprintln!("[tray] register attempt {}/8 failed: {}", attempt, e);
+                std::thread::sleep(std::time::Duration::from_secs(delay));
+                delay = (delay * 2).min(30);
+            }
+        }
+    }
+    false
+}
+
 fn run(
     tooltip: Arc<Mutex<String>>,
     state: State,
-    i2c_bus: String,
     show_window: Arc<AtomicBool>,
     quit_flag: Arc<AtomicBool>,
 ) -> zbus::Result<()> {
     let sni = SniItem {
         tooltip,
-        i2c_bus: i2c_bus.clone(),
         show_window: show_window.clone(),
     };
     let menu = DbusmenuServer {
         state,
-        i2c_bus,
         show_window,
         quit_flag,
         revision: Arc::new(AtomicU32::new(1)),
@@ -554,32 +458,30 @@ fn run(
     conn.object_server().at("/StatusNotifierItem", sni)?;
     conn.object_server().at("/MenuBar", menu)?;
 
-    // Register with the host panel's StatusNotifierWatcher
-    // The panel may start after us (login autostart): retry for ~1 minute.
-    for attempt in 1..=12 {
-        match conn.call_method(
-            Some("org.kde.StatusNotifierWatcher"),
-            "/StatusNotifierWatcher",
-            Some("org.kde.StatusNotifierWatcher"),
-            "RegisterStatusNotifierItem",
-            &bus_name,
-        ) {
-            Ok(_) => {
-                eprintln!("[tray] registered with StatusNotifierWatcher");
-                break;
-            }
-            Err(e) => {
-                eprintln!("[tray] watcher unavailable (attempt {}/12): {}", attempt, e);
-                if attempt < 12 {
-                    std::thread::sleep(std::time::Duration::from_secs(5));
-                }
-            }
-        }
+    // Subscribe BEFORE the first registration so a watcher appearing in
+    // between is not missed.
+    let dbus = zbus::blocking::fdo::DBusProxy::new(&conn)?;
+    let owner_changes = dbus.receive_name_owner_changed()?;
+
+    // Initial registration, with backoff, if a watcher is already on the bus.
+    // If the panel starts later, the NameOwnerChanged loop below registers us.
+    if dbus
+        .name_has_owner(WATCHER.try_into().expect("valid bus name"))
+        .unwrap_or(false)
+    {
+        register_with_backoff(&conn, &bus_name);
     }
 
-    // Block forever. zbus serves D-Bus messages internally via its async
-    // runtime — the thread sleeps on epoll until a message arrives.
-    loop {
-        std::thread::park();
+    // Stay registered for the whole life of the app: every time a
+    // StatusNotifierWatcher (re)appears — plasmashell restart, panel crash —
+    // register again. The signal iterator blocks on epoll (no polling).
+    for sig in owner_changes {
+        let Ok(args) = sig.args() else { continue };
+        if args.name().as_str() == WATCHER && args.new_owner().is_some() {
+            eprintln!("[tray] StatusNotifierWatcher (re)appeared — registering");
+            register_with_backoff(&conn, &bus_name);
+        }
     }
+    // Signal stream ended: let the caller rebuild the connection.
+    Err(zbus::Error::Failure("NameOwnerChanged stream ended".into()))
 }

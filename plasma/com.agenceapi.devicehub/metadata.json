@@ -2,7 +2,7 @@
     "KPlugin": {
         "Id": "com.agenceapi.devicehub",
         "Name": "ApiHub",
-        "Description": "Apple Keyboard telemetry + Monitor DDC/CI control",
+        "Description": "Apple Bluetooth keyboard telemetry",
         "Icon": "preferences-desktop-peripherals",
         "Category": "System Information",
         "Authors": [
