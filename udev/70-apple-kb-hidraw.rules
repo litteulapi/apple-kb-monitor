@@ -1,6 +1,6 @@
 # Apple Bluetooth keyboards: hidraw access for the active seat user only (logind ACL).
 # Must sort before 73-seat-late.rules, which applies the uaccess tag.
-# 05AC = Apple USB vendor (A1255/A1314), 004C = Apple Bluetooth SIG vendor (Magic Keyboard 2015+).
+# 05AC = Apple USB vendor (A1255/A1314, wired 0003), 004C = Apple Bluetooth SIG vendor (Magic Keyboard 2015+).
 ACTION=="remove", GOTO="apple_kb_end"
-SUBSYSTEM=="hidraw", KERNELS=="0005:05AC:*|0005:004C:*", TAG+="uaccess"
+SUBSYSTEM=="hidraw", KERNELS=="0005:05AC:*|0005:004C:*|0003:05AC:*", TAG+="uaccess"
 LABEL="apple_kb_end"
