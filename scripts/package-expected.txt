@@ -25,6 +25,7 @@ usr/share/doc/apple-kb-monitor/examples/keyd/apple-keyboard.conf
 usr/share/doc/apple-kb-monitor/KEYD.md
 etc/modprobe.d/hid_apple.conf
 usr/lib/systemd/user/default.target.wants/apple-kb-monitor-shutdown.service
+usr/lib/systemd/user/default.target.wants/apple-kb-monitord.service
 usr/lib/systemd/user/timers.target.wants/apple-kb-monitor-selfcheck.timer
 usr/share/doc/apple-kb-monitor/TOUCHES.md
 usr/lib/apple-kb-monitor/akm-hid-control

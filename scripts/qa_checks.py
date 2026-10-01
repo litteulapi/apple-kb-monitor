@@ -310,6 +310,17 @@ def cmd_package(pkg: str) -> int:
     install = member(".INSTALL")
     if "setcap" not in install or "cap_net_admin" not in install:
         f.add(".INSTALL", 0, "setcap", "post_install must apply setcap cap_net_admin to rssi-helper")
+    # #260: the units are enabled by the package's .wants links only; the
+    # scriptlet enables nothing (its /etc links outlived the package) and
+    # pre_remove drops any /etc link left by an older scriptlet.
+    code = "\n".join(l for l in install.splitlines() if not l.lstrip().startswith("#") and "echo" not in l)
+    if re.search(r"systemctl[^\n#]*\senable\b", code):
+        f.add(".INSTALL", 0, "enable", "the scriptlet must not `systemctl enable` (the package ships the .wants links)")
+    if not re.search(r"(?m)^pre_remove\(\)", install):
+        f.add(".INSTALL", 0, "pre_remove", "pre_remove must drop the /etc/systemd links of the units")
+    for name in names:
+        if re.search(r"(\.bak|\.orig|\.pacsave|\.pacnew|~)([-.]|$)|mqtt-bridge", Path(name).name):
+            f.add(name, 0, "leftover", f"backup or obsolete file shipped in the package: {name}")
     pkginfo = member(".PKGINFO")
     m = re.search(r"^pkgver = ([^-\n]+)-", pkginfo, re.M)
     cv = cargo_version()

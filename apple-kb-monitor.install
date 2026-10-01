@@ -1,10 +1,40 @@
-# Units are enabled by the package itself (an Arch package does not enable
-# anything on its own): the sleep/resume HID_CONTROL units (system, root) and the
-# user units (daemon, shutdown notice, self-check timer) for every user.
-# Idempotent; opt out with `systemctl mask <unit>`.
-_akm_enable() {
-    systemctl enable apple-kb-monitor-suspend.service apple-kb-monitor-resume.service >/dev/null 2>&1 || true
-    systemctl --global enable apple-kb-monitord.service apple-kb-monitor-shutdown.service apple-kb-monitor-selfcheck.timer >/dev/null 2>&1 || true
+# Units are enabled by the package itself, through the `*.target.wants/`
+# links it ships under /usr/lib/systemd/{system,user} (PKGBUILD): they come and
+# go with the package. The scriptlet enables nothing (#260): up to 3.1.0-16 it
+# ran `systemctl enable` / `systemctl --global enable`, which duplicated those
+# links under /etc/systemd and left them dangling after `pacman -R`.
+# Opt out with `systemctl mask <unit>` (or `systemctl --user mask`).
+_akm_root=""
+_akm_system_units="apple-kb-monitor-suspend.service apple-kb-monitor-resume.service"
+_akm_user_units="apple-kb-monitord.service apple-kb-monitor-shutdown.service apple-kb-monitor-selfcheck.timer"
+
+# Remove the /etc/systemd links of our units, if any (written by the
+# 3.1.0-16 scriptlet, or by a user's `systemctl enable`): `systemctl disable`
+# only touches /etc, the package links keep the units enabled, a mask stays.
+_akm_drop_etc_links() {
+    sys=0 usr=0
+    for u in $_akm_system_units; do
+        for l in "$_akm_root"/etc/systemd/system/*.wants/"$u"; do [ -L "$l" ] && sys=1; done
+    done
+    for u in $_akm_user_units; do
+        for l in "$_akm_root"/etc/systemd/user/*.wants/"$u"; do [ -L "$l" ] && usr=1; done
+    done
+    # shellcheck disable=SC2086
+    [ $sys = 1 ] && { systemctl disable $_akm_system_units >/dev/null 2>&1 || true; }
+    # shellcheck disable=SC2086
+    [ $usr = 1 ] && { systemctl --global disable $_akm_user_units >/dev/null 2>&1 || true; }
+    return 0
+}
+
+# Leftovers of a version older than the package (#260): mqtt-bridge.py and a
+# .bak of it, root-executable in the helpers' directory, owned by no package.
+_akm_drop_orphans() {
+    for f in "$_akm_root"/usr/lib/apple-kb-monitor/mqtt-bridge.py "$_akm_root"/usr/lib/apple-kb-monitor/mqtt-bridge.py.bak*; do
+        [ -f "$f" ] || [ -L "$f" ] || continue
+        if pacman -Qqo "$f" >/dev/null 2>&1; then continue; fi
+        rm -f "$f" && echo ">>> removed a leftover owned by no package: $f"
+    done
+    return 0
 }
 
 post_install() {
@@ -23,7 +53,8 @@ post_install() {
     fi
 
     _akm_setcap
-    _akm_enable
+    _akm_drop_etc_links
+    _akm_drop_orphans
     _akm_message
 }
 
@@ -47,10 +78,17 @@ post_upgrade() {
     fi
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
-    _akm_enable
+    _akm_drop_etc_links
+    _akm_drop_orphans
     # keyd: never reloaded nor restarted (#246).
     # fnmode is deliberately left alone (user choice / modprobe.d).
     _akm_setcap
+}
+
+# Before the unit files go: drop any /etc link to them (nothing may point to a
+# removed unit). The package's own .wants links leave with the package.
+pre_remove() {
+    _akm_drop_etc_links
 }
 
 post_remove() {
@@ -60,8 +98,8 @@ post_remove() {
         echo "      sudo rm /etc/udev/hwdb.d/90-apple-kb-monitor.hwdb* && sudo systemd-hwdb update"
         echo "      then switch the keyboard off and on (the kernel keeps the mapping until then)"
     fi
-    echo ">>> To disable the daemon:"
-    echo "      systemctl --user disable apple-kb-monitord.service"
+    echo ">>> The units left with the package (no link remains under /etc/systemd)."
+    echo "    A running daemon stops at the next logout, or now: systemctl --user stop apple-kb-monitord.service"
 }
 
 # Up to 3.1.0-9 the package shipped /etc/keyd/apple-keyboard.conf and ran

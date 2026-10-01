@@ -48,7 +48,7 @@ makepkg -si
 1. `udevadm control --reload-rules` and `udevadm trigger --subsystem-match=hidraw`: the `uaccess` ACL is applied to a keyboard that is already connected.
 2. On a first install only, writes `1` to `/sys/module/hid_apple/parameters/fnmode` (the packaged default). Upgrades never touch the mode you chose with `akmctl set fnmode`.
 3. Creates the group `akm` (`systemd-sysusers`), sets `rssi-helper` to `root:akm 0750`, then `setcap cap_net_admin+ep` on it. A warning is printed if either step fails, with the command to run by hand.
-4. **Enables** the units: `systemctl enable apple-kb-monitor-suspend.service apple-kb-monitor-resume.service` (system) and `systemctl --global enable apple-kb-monitord.service apple-kb-monitor-shutdown.service apple-kb-monitor-selfcheck.timer` (every user). Opt out of any of them with `systemctl [--user] mask <unit>`.
+4. Enables **nothing** by itself (#260): the units are enabled by the `*.target.wants/` links the package ships under `/usr/lib/systemd/{system,user}` (sleep/wake units for the system; daemon, shutdown notice and self-check timer for every user), which leave with the package. It removes the duplicate links an older scriptlet (up to 3.1.0-16) wrote under `/etc/systemd` and the orphaned `mqtt-bridge.py` leftovers of `/usr/lib/apple-kb-monitor` (only if no package owns them); `pre_remove` drops any `/etc/systemd` link to the units before they go. Opt out of any unit with `systemctl [--user] mask <unit>`.
 5. keyd is **never** reloaded nor restarted (`keyd reload` crashes keyd 2.6.0, [#246](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/246)).
 
 ## After the install

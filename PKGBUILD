@@ -73,13 +73,17 @@ package() {
 
     # ── systemd user service: apple-kb-monitord (single keyboard owner) ──
     install -Dm644 "$startdir/systemd/apple-kb-monitord.service"         "$pkgdir/usr/lib/systemd/user/apple-kb-monitord.service"
+    # Enabled for every user by the package's own .wants link (#260: never by
+    # `systemctl --global enable` in the scriptlet, whose /etc links outlived
+    # the package); opt out: systemctl --user mask apple-kb-monitord.service
+    install -dm755 "$pkgdir/usr/lib/systemd/user/default.target.wants"
+    ln -s ../apple-kb-monitord.service "$pkgdir/usr/lib/systemd/user/default.target.wants/apple-kb-monitord.service"
     install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor1.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor1.service"
     # ── WillShutdown at shutdown (what macOS sends, #191): the unit stays active
     #    and its ExecStop= asks the daemon; [apple] will_shutdown = false in
     #    config.toml sends nothing; opt out of the unit too:
     #    systemctl --user mask apple-kb-monitor-shutdown.service ──
     install -Dm644 "$startdir/systemd/apple-kb-monitor-shutdown.service" "$pkgdir/usr/lib/systemd/user/apple-kb-monitor-shutdown.service"
-    install -dm755 "$pkgdir/usr/lib/systemd/user/default.target.wants"
     ln -s ../apple-kb-monitor-shutdown.service "$pkgdir/usr/lib/systemd/user/default.target.wants/apple-kb-monitor-shutdown.service"
     # ── HID_CONTROL SUSPEND (0x13) before sleep / EXIT_SUSPEND (0x14) at wake,
     #    as macOS bluetoothd (#244, docs/VEILLE-HID.md): SYSTEM units (root,
