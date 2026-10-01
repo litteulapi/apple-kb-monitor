@@ -1,15 +1,15 @@
 # Renommer le clavier (#141, #192, #248)
 
-Deux noms existent. Le premier est la voie par défaut ; le second est préparé, mais son écriture réelle est **refusée** tant que la séquence exacte d'Apple n'est pas prouvée octet pour octet (§5).
+Deux noms existent. Le premier est la voie par défaut ; le second est préparé, sa trame est **établie octet pour octet par désassemblage** (E1, `RE-NOM-PROPRE-E1.md`), et son écriture réelle reste derrière **trois verrous** (§4) parce que deux risques matériels ne sont **pas mesurés** (§5.3).
 
 | | (a) Alias côté poste | (b) Nom propre, stocké dans le clavier |
 |---|---|---|
-| Commande | `akmctl rename <nom>` / `--reset` | `akmctl rename --device-name <nom>` (essai à blanc par défaut), `--show`, `--restore` |
-| Où | BlueZ, `org.bluez.Device1.Alias`, persisté dans `/var/lib/bluetooth/<adaptateur>/<MAC>/info` (`Alias=`) | micrologiciel du clavier (BCM2042) : lu dans `0x51-0x54` (4 × 8 o ASCII), écrit par Apple dans `0x55` `LongDeviceName` (64 o) |
-| Valeur actuelle | `Clavier de maria #1` | `Clavier de maria #1` (identique à `HID_NAME` et au nom distant BlueZ) [mesuré, docs/AUDIT-DECODAGE-HID.md] |
+| Commande | `akmctl rename <nom>` / `--reset` | `akmctl rename --device-name <nom>` (essai à blanc par défaut), `--show`, `--restore`, `--write-device-name` |
+| Où | BlueZ, `org.bluez.Device1.Alias`, persisté dans `/var/lib/bluetooth/<adaptateur>/<MAC>/info` (`Alias=`) | micrologiciel du clavier (BCM2042) : lu dans `0x51-0x54` (4 × 8 o ASCII), écrit par Apple dans `0x55` `LongDeviceName` (65 o : id + 64) |
+| Valeur actuelle | `alex` (alias BlueZ du gérant) | `Clavier de maria #1` (identique à `HID_NAME` et au nom distant BlueZ) [mesuré, docs/AUDIT-DECODAGE-HID.md] |
 | Visible par | ce poste uniquement (KDE Bluetooth, `bluetoothctl`, tray, widget, `akmctl`) | tout appareil qui s'appaire au clavier |
 | Risque | nul : propriété BlueZ réversible, ni déconnexion ni réappairage | §6 |
-| État | **implémenté, voie par défaut** | **préparation complète ; écriture réelle refusée (`NotProven`)** |
+| État | **implémenté, voie par défaut** | **trame établie (E1) ; écriture réelle derrière 3 verrous, verrou 1 fermé par défaut** |
 
 ## 1. (a) Alias : ce qui est livré
 
@@ -26,9 +26,9 @@ Deux noms existent. Le premier est la voie par défaut ; le second est préparé
 | Interface | Effet | Accès matériel |
 |---|---|---|
 | `akmctl rename --device-name --show` | nom lu dans `0x51-0x54` + octets, depuis le cache du démon | **aucun** (cache) |
-| `akmctl rename --device-name <nom> [--dry-run]` | valide le nom, affiche le pré-vol, **sauvegarde** le nom actuel, affiche chaque octet qui serait envoyé avec son niveau de preuve, les inconnues et les expériences | **aucun** |
-| `akmctl rename --device-name <nom> --write-device-name` | séquence gardée (§4) ; aujourd'hui : **refus `NotProven`** avant tout pré-vol, toute sauvegarde, toute confirmation | aucun aujourd'hui |
-| `akmctl rename --device-name --restore <sauvegarde.json> [--write-device-name]` | retour arrière : réécrit exactement les 32 octets sauvegardés (même protocole, nouvelle confirmation) ; refusé aussi tant que `NotProven` | aucun aujourd'hui |
+| `akmctl rename --device-name <nom> [--dry-run]` | valide le nom, affiche les 65 octets qui seraient envoyés (chaque champ **[désassemblage]** avec son adresse), le pré-vol (sans la MTU : elle demande `pkexec`), **sauvegarde** le nom actuel, l'état des trois verrous et les risques non mesurés | **aucun** |
+| `akmctl rename --device-name <nom> --write-device-name` | séquence gardée (§4) : refus immédiat si le verrou 1 est fermé (rien n'est touché) ; sinon pré-vol **avec lecture de la MTU** (verrou 2), sauvegarde, confirmation (verrou 3), **une** écriture, reconnexion, relecture | une écriture `0x55` (65 o) si les trois verrous sont levés |
+| `akmctl rename --device-name --restore <sauvegarde.json> [--write-device-name]` | retour arrière : réécrit exactement les 32 octets sauvegardés (même protocole, mêmes trois verrous, nouvelle confirmation) | idem |
 | D-Bus : propriété **lecture seule** `DeviceNameOnKeyboard` (s, `""` = pas encore lu) | nom propre du cache | aucun |
 | `akmctl status` : ligne `On kb:` ; `--json` : `name_on_keyboard` | idem | aucun |
 
@@ -36,103 +36,115 @@ Deux noms existent. Le premier est la voie par défaut ; le second est préparé
 * Le démon lit `0x51-0x54` **une fois par connexion**, après `0x4F` et `0x60`, en priorité basse : ce qui ne tient pas dans le budget de 4 s attend la rafale suivante sans marquer la lecture incomplète (`registry::DAEMON_DEFERRED_ONCE_IDS`). C'est la lecture qu'Apple fait aussi (`deviceNameFromHardware`, [décompilé]). Le cache est remis à zéro à chaque connexion : c'est ce qui permet la relecture après l'écriture.
 * `--device-name` et l'alias s'excluent : `akmctl rename Bureau --device-name x` est une erreur d'usage (64).
 
-## 3. Validation du nom propre (`akm-core::devname::validate`)
+## 3. Validation du nom propre (`akm-core::devname::validate`, puis `apple_name_bytes`)
 
-ASCII imprimable (`0x20`-`0x7E`), **1 à 32 caractères** (ce que `0x51-0x54` peuvent relire : 4 × 8 ; l'interface Apple autorise 64), **rien n'est rogné** (ce qui est validé est exactement ce qui serait écrit), pas d'espace en tête ni en fin, aucun caractère de contrôle ni non ASCII, refus de `\` (caractère d'échappement du fichier `info` de BlueZ, où `\s`, `\n`… seraient relus autrement). Tout autre ASCII imprimable est accepté par BlueZ (UTF-8 ≤ 248 o) et par SDP ; `#` reste permis (le nom actuel en contient un).
+Deux étages, le second modèle exactement Apple :
 
-## 4. Séquence gardée (`akm-core::devname::run`)
+1. **Notre validation** (plus stricte qu'Apple, pour que la relecture `0x51-0x54` vérifie le nom entier) : ASCII imprimable (`0x20`-`0x7E`), **1 à 32 caractères**, **rien n'est rogné**, pas d'espace en tête ni en fin, aucun caractère de contrôle ni non ASCII, refus de `\` (échappement du fichier `info` de BlueZ). `#` reste permis.
+2. **Le codage d'Apple** (`apple_name_bytes`, [désassemblage] `0x4d3b9`-`0x4d43f`) : `[nom length]` en unités UTF-16 doit valoir 1..=64, sinon `kIOReturnBadArgument` **avant toute trame** ; puis UTF-8 et suppression des derniers caractères un à un tant que `strlen > 64` (jamais de caractère coupé) ; pas de terminateur, le bourrage vient du `calloc`. Testé sur des noms UTF-8 (`é`×40 → 32 `é` = 64 o ; 32 emoji = 64 unités acceptées → 16 emoji = 64 o ; 33 emoji = 66 unités → refus ; 63 `a` + `é` → 63 o). Sur le sous-ensemble ASCII ≤ 32 que l'étage 1 laisse passer, les deux coïncident.
+
+## 4. Séquence gardée (`akm-core::devname::run`) et les trois verrous
 
 Ordre strict, arrêt au premier échec, aucune répétition automatique, chaque décision et chaque octet journalisés (`[devname] …` sur stderr, puis `[hid-write] …` à la porte matérielle) :
 
-1. nom validé, trames construites ;
-2. **preuve** : `SEQUENCE_PROOF` doit valoir `Proven` ; aujourd'hui `NotProven` → refus, **rien n'est touché** (pas même un pré-vol) ;
-3. **pré-vol** : clavier connecté ; batterie ≥ 20 % (ou état `0x30` « normal », non publié par le démon : le pourcentage décide) ; disjoncteur fermé (`keyboard.breaker_open`) ; aucune lecture récente en échec (`keyboard.incomplete`, `kb_error`) ; `akmctl doctor` vert (connecté, santé `connected`, verdict ok/info) ; stdin **et** stdout sont un terminal ;
-4. cache `0x51-0x54` complet de la connexion courante (sinon arrêt) ;
-5. **sauvegarde** avant toute écriture : `~/.local/state/apple-kb-monitor/devname-backup-<AAAAMMJJTHHMMSSZ>.json`, fichier neuf (`create_new`, jamais écrasé), **0600**, dossier 0700, `fsync` ; contenu : MAC, 4 fragments hex, nom, horodatage, source `daemon-cache` (octets lus une fois par le démon, espacement 1 s) ;
-6. **confirmation** : `--write-device-name` passé **et** le nom retapé exactement dans le terminal ; tout autre texte annule ; jamais en non interactif ;
-7. connexion revérifiée juste avant l'écriture (déconnecté → arrêt, rien écrit) ; ouverture du nœud hidraw sous le verrou HID partagé avec le démon (`hidraw::WriteDoor`), disjoncteur, espacement de 1 s après le dernier accès ;
-8. **une** écriture par trame via `WriteSession` (opération `DeviceName`, id `0x55`, exactement 64 octets de données, une seule fois par session) ;
-9. attente de la reconnexion (au plus 180 s) avec la consigne « éteignez le clavier (3 s), attendez 5 s, rallumez-le » : le nom ne se relit qu'après une reconnexion ;
-10. **vérification** : relecture `0x51-0x54` (cache de la nouvelle connexion) comparée octet pour octet aux 32 premiers octets écrits ; différence → **retour arrière guidé** affiché : `akmctl rename --device-name --restore <sauvegarde> --write-device-name` (nouvelle commande, donc nouvelle session, nouvelle confirmation).
+1. nom validé, trame construite (`frames_for` = la trame Apple, §5.2) ;
+2. **preuve** : `SEQUENCE_PROOF` vaut `EstablishedByDisassembly` (construction établie par E1) ; `NotProven` refuserait avant tout pré-vol. Ce n'est **pas** un verrou levé par l'utilisateur : c'est l'état de la connaissance ;
+3. **verrou 1 — configuration** : `[apple] allow_device_name_write = true` dans `$XDG_CONFIG_HOME/apple-kb-monitor/config.toml` (défaut **false**, `CONFIGURATION.md`). Fermé → `REFUSED (lock 1)` avec les deux lignes à ajouter ; **rien n'est touché** : ni pré-vol, ni `pkexec`, ni sauvegarde ;
+4. **pré-vol** : clavier connecté ; batterie ≥ 20 % (ou état `0x30` « normal », non publié par le démon : le pourcentage décide) ; disjoncteur fermé (`keyboard.breaker_open`) ; aucune lecture récente en échec (`keyboard.incomplete`, `kb_error`) ; `akmctl doctor` vert ; stdin **et** stdout sont un terminal ; **verrou 2 — MTU du canal de contrôle** : `akmctl` lance `pkexec /usr/lib/apple-kb-monitor/akm-hid-control inspect --mac <MAC>` (authentification administrateur, **une fois** par commande) ; le helper duplique (`pidfd_getfd`) la socket L2CAP PSM `0x0011` que `bluetoothd` tient vers ce clavier et lit `getsockopt(SOL_L2CAP, L2CAP_OPTIONS)` — **lecture seule**, aucun `setsockopt`, aucun octet envoyé (le verbe `inspect` n'atteint pas le chemin `send`) — puis imprime `mtu out N in M`. `akmctl` exige **`out` ≥ 66** (`MIN_CONTROL_MTU` : `0x53` + 65 octets). MTU inconnue (helper ancien sans `mtu`, socket absente ou double, `pkexec` refusé) ou < 66 → `REFUSED (lock 2)`, rien d'écrit. Pourquoi : `IOBluetoothHIDDriver::setReportWL` fragmente en DATC à `MTU − 1` [décompilé `0x5ad6`], mais `hidp` Linux envoie le rapport en **un** message L2CAP et le noyau refuse un message plus long que l'`omtu` négociée (`EMSGSIZE`), erreur que `hidp` traite comme fatale pour la session HID [source `net/bluetooth/hidp/core.c`, `l2cap_chan_send`]. La MTU négociée avec ce clavier **n'a jamais été capturée** (`RE-LIAISON-BLUETOOTH.md` §2 : canaux ouverts avant le début de `btmon`, « PSM 0 ») : elle est donc **lue au moment de l'écriture**, jamais supposée ;
+5. cache `0x51-0x54` complet de la connexion courante (sinon arrêt) ;
+6. **sauvegarde** avant toute écriture : `~/.local/state/apple-kb-monitor/devname-backup-<AAAAMMJJTHHMMSSZ>.json`, fichier neuf (`create_new`, jamais écrasé), **0600**, dossier 0700, `fsync` ; contenu : MAC, 4 fragments hex, nom, horodatage, source `daemon-cache` ;
+7. **verrou 3 — confirmation** : `--write-device-name` passé **et** le nom retapé exactement dans le terminal (l'invite rappelle les risques non mesurés U5 et U3) ; tout autre texte annule ; jamais en non interactif ;
+8. connexion revérifiée juste avant l'écriture (déconnecté → arrêt, rien écrit) ; ouverture du nœud hidraw sous le verrou HID partagé avec le démon (`hidraw::WriteDoor`), disjoncteur, espacement de 1 s après le dernier accès ;
+9. **une** écriture via `WriteSession` (opération `DeviceName`, id `0x55`, exactement 64 octets de données, une seule fois par session) et la **porte de 65 octets** de `hid_write_feature` (`HIDIOCSFEATURE` dimensionné à 65 = `_IOWR('H', 6, 65)`, tableau fixe `[u8; 65]`, réservé à `DeviceName` ; la porte d'un octet reste celle de `Shutdown`/`Forget`) ;
+10. attente de la reconnexion (au plus 180 s) avec la consigne « éteignez le clavier (3 s), attendez 5 s, rallumez-le » : le nom ne se relit qu'après une reconnexion ;
+11. **vérification** (U4) : relecture `0x51-0x54` (cache de la nouvelle connexion) comparée octet pour octet aux 32 premiers octets écrits — c'est le critère ; le `Device1.Name` de BlueZ après reconnexion est **affiché à titre d'information** (Apple, lui, lance un Remote Name Request HCI ; BlueZ peut servir son cache jusqu'à sa prochaine requête de nom) ; différence → **retour arrière guidé** affiché : `akmctl rename --device-name --restore <sauvegarde> --write-device-name` (nouvelle commande, nouvelle session, mêmes trois verrous).
 
-Barrières indépendantes contre une écriture de `0x55` aujourd'hui : (1) `NotProven` ; (2) la porte matérielle `hid_write_feature` n'a qu'un ioctl d'**un** octet et refuse toute opération qui porte des données ; (3) registre : `0x55` n'est écrivable que par l'opération `DeviceName`, 64 octets exactement, une fois.
+Barrières indépendantes : (1) verrou 1 fermé par défaut ; (2) verrou 2 mesuré sur la socket vivante, jamais constant ; (3) verrou 3 interactif ; (4) registre : `0x55` n'est écrivable que par l'opération `DeviceName`, 64 octets de données exactement, une fois par session ; (5) porte matérielle : deux ioctl de taille fixe seulement (1 octet ; 65 octets pour `DeviceName` + `0x55`), balayage des 256 ids × 3 opérations testé ; (6) aucun chemin D-Bus, fenêtre, tray ni widget.
 
-## 5. Ce qu'Apple envoie, et ce qui n'est pas prouvé
+## 5. Ce qu'Apple envoie : établi par désassemblage (E1)
 
 ### 5.1 Sources
 
-* **Lion 10.7** `-[AppleBluetoothHIDDevice setDeviceName:]` (RE-PILOTES-ANCIENS.md §5, ligne L11) [désassemblage] : si la personnalité déclare `LongDeviceName` (cas du PID 598 = `0x0256`) : **un SET Feature `0x55` de 64 octets** ; sinon `0x51`…`0x54` (8 o chacun) puis `0x50` `DeviceNameChange` ; ensuite une requête de nom distant HCI. `getMaxDeviceNameLength` = 64 si `0x55` est déclaré, 32 sinon.
+* **Lion 10.7.5** `IOBluetooth.framework` x86_64, `-[AppleBluetoothHIDDevice setDeviceName:]` à `0x4d2fe` (1 211 o), comparé à **10.5.8** i386 (`0x4fc10`) : `RE-NOM-PROPRE-E1.md` §3-4, instructions citées avec adresses, recontrôlées à l'`objdump`. Les 65 octets envoyés sont identiques d'un système à l'autre : protocole stable de 2009 à 2012.
 * Personnalité du 598 [plist] : `0x50` (sans taille), `0x51-0x54` (8 o), `0x55` (64 o). Mesures : `0x51-0x54` se lisent, `0x50`/`0x55` refusent le GET (`0x03`) [mesuré].
-* **macOS 26.5 n'écrit jamais le nom** : `setDeviceName:` ne change que le cache hôte (RE-MACOS-SILICON.md §3.4) ; le noyau n'a aucun appelant de `setExtendedReport` hors `WillShutdown` (RE-GHIDRA-KEXT.md §4) ; IOBluetooth ne fait que **lire** `0x51-0x54` (`deviceNameFromHardware`, tampon 10, délai 1000 ms, RE-GHIDRA-IOBLUETOOTH.md §2).
-* Délai : 1000 ms est le **délai d'attente** passé à `IOHIDDeviceInterface::setReport` [désassemblage], pas un espacement entre trames ; dans le noyau, 1000 ms est la marge de la minuterie de garde (RE-GHIDRA-KEXT.md §2.3). Sur le fil HIDP, le SET Feature est préfixé `0x53` par la pile.
+* **macOS 26.5 n'écrit jamais le nom** : `setDeviceName:` ne change que le cache hôte (RE-MACOS-SILICON.md §3.4) ; IOBluetooth ne fait que **lire** `0x51-0x54` (`deviceNameFromHardware`).
+* Délai : 1000 ms est le **délai d'attente** passé à `IOHIDDeviceInterface::setReport` [désassemblage `0x4d4ba`] (attente du HANDSHAKE), pas un espacement : il n'y a qu'une trame. Sur le fil HIDP, le SET Feature est préfixé `0x53` par la pile [décompilé `setReportWL`].
 
-### 5.2 Trame de référence générée (hypothèse U1) pour le nom mesuré
+### 5.2 Trames de référence (fixture `tests/fixtures/devname/lion_setdevicename_frames.json`)
 
-Octets remis au noyau (65) puis sur le fil (66), pour `Clavier de maria #1` ; test `devname::tests::frame_matches_the_documented_reference_byte_for_byte` :
+Test `devname::tests::frames_match_the_lion_fixture_byte_for_byte` : `frames_for(nom)` reproduit les deux exemples de la fixture octet pour octet (rapport de 65, fil de 66, relecture attendue) ; `three_locks_lifted_the_fixture_frame_is_sent_once_after_the_backup` vérifie que l'espion reçoit exactement ces octets, une fois, après la sauvegarde.
 
 ```
-report : 55 43 6c 61 76 69 65 72 20 64 65 20 6d 61 72 69 61 20 23 31 00 × 45
-wire   : 53 55 43 6c 61 76 69 65 72 20 64 65 20 6d 61 72 69 61 20 23 31 00 × 45
+« alex »
+report : 55 61 6c 65 78 00 × 60
+wire   : 53 55 61 6c 65 78 00 × 60
+
+« Clavier Apple A1314 du gerant 01 » (32 o)
+report : 55 43 6c 61 76 69 65 72 20 41 70 70 6c 65 20 41 31 33 31 34 20 64 75 20 67 65 72 61 6e 74 20 30 31 00 × 32
+wire   : 53 55 43 6c 61 76 69 65 72 20 41 70 70 6c 65 20 41 31 33 31 34 20 64 75 20 67 65 72 61 6e 74 20 30 31 00 × 32
 ```
 
 | Octets | Contenu | Preuve |
 |---|---|---|
-| fil 0 | `53` SET_REPORT Feature, ajouté par la pile | [désassemblage] `setReportWL` |
-| 0 | `55` `LongDeviceName` | [plist] + [désassemblage] L11 |
-| 1-64 | 64 octets de données | [plist] `size` = 64 ; [désassemblage] `getMaxDeviceNameLength` |
-| 1-n | le nom en ASCII | **[hypothèse]** (relecture ASCII [mesuré]) |
-| n+1-64 | bourrage NUL | **[hypothèse]** (`0x53`/`0x54` relus bourrés de NUL [mesuré]) |
-| après | aucune autre trame (pas de `0x50`, pas de `0x51-0x54`) | [désassemblage] L11 |
+| fil 0 | `53` SET_REPORT Feature, ajouté par la pile | [décompilé] `setReportWL` `0x5ad6` |
+| 0 | `55` `LongDeviceName` | [désassemblage] `movb %bl,(%r13)` `0x4d444` |
+| 1-n | le nom en **UTF-8**, caractères entiers, sans terminateur | [désassemblage] `_UTF8StringFromString` `0x4d416`, `strncpy(buf+1, utf8, strlen)` `0x4d43f` |
+| n+1-64 | bourrage **`0x00`** (`calloc(65, 1)`) | [désassemblage] `0x4d407` |
+| longueur | 65 octets remis à `setReport` | [désassemblage] `movzbl %r12b,%r8d` `0x4d4b1` |
+| après | aucune autre trame (pas de `0x50`, pas de `0x51-0x54`, aucune lecture) ; Remote Name Request HCI | [désassemblage] `0x4d4e6`-`0x4d4f8` |
 
-Ce n'est **pas** une trame Apple observée : c'est la construction de l'hypothèse U1. Elle deviendra la référence quand E1 l'aura confirmée.
+La trame d'hypothèse de l'ancien §5.2 (`Clavier de maria #1`) est confirmée octet pour octet ; elle reste un test (`frame_matches_the_documented_reference_byte_for_byte`), plus aucun champ n'est marqué `[hypothèse]`.
 
-### 5.3 Inconnues (pourquoi `NotProven`)
+### 5.3 Inconnues : tranchées et restantes
 
-| # | Inconnue |
-|---|---|
-| U1 | contenu des 64 octets de `0x55` : codage (ASCII, UTF-8, MacRoman), terminateur NUL, bourrage (NUL ? espace ?), préfixe de longueur. L11 donne l'id et la taille, **ni listing ni adresse** |
-| U2 | RE-MACOS-SILICON §3.4 qualifie l'ordre d'écriture de **déduction** (« non observé chez Apple ») alors que RE-PILOTES-ANCIENS L11 cite un désassemblage de Lion : le listing de `setDeviceName:` n'est pas dans le dépôt |
-| U3 | persistance : NVRAM ou volatile (le descripteur du Magic Keyboard déclare son Feature `0x55` *volatile*, RE-COMMANDES-VENDEUR §1.1) ; perdu au changement de piles ? |
-| U4 | `0x51-0x54` reflètent-ils une écriture de `0x55` (32 premiers octets ?), et quand (aussitôt, après un reset, après une reconnexion) ? |
-| U5 | le micrologiciel `0x0050` répond-il HANDSHAKE SUCCESSFUL à un SET `0x55` (le refus du GET ne dit rien du SET) ? |
-| U6 | chemin Linux : ioctl hidraw de 65 octets → `hidp` → 66 octets sur le canal de contrôle : MTU L2CAP négocié avec ce clavier inconnu (Apple fragmente en DATC, RE-GHIDRA-KEXT §2.5) |
-| U7 | rôle de `0x50` `DeviceNameChange` : seulement sur la voie à 4 fragments d'après L11 (jamais envoyé ici) ; jamais écrit par aucun macOS examiné |
-
-### 5.4 Expériences de validation passives (aucune écriture)
-
-| # | Lève | Expérience |
+| # | Inconnue | Verdict |
 |---|---|---|
-| E1 | U1, U2, U7 | Ghidra sur IOBluetooth.framework de Lion 10.7.5 : adresse de `-[AppleBluetoothHIDDevice setDeviceName:]`, conversion de chaîne (`getCString:maxLength:encoding:` et sa constante d'encodage), taille passée à `setReport`, `memset`/bourrage, délai, `0x50` ou non ; commiter la trame de référence de `Clavier de maria #1` ici (§5.2) |
-| E2 | U6 | capture `btmon` d'une reconnexion ordinaire : MTU des Configure Request/Response L2CAP du PSM 17 (contrôle) |
-| E3 | U3 | comparer `0x51-0x54` (cache), `HID_NAME` et le `Name` BlueZ avant et après un changement de piles |
-| E4 | U3, U5 | descripteurs HID publics de claviers Apple de la même génération déclarant `0x55` : drapeaux Feature (volatile ou non) et taille |
+| U1 | contenu des 64 octets | **tranchée [désassemblage]** : UTF-8, bourrage `0x00`, pas de préfixe de longueur, pas de terminateur explicite |
+| U2 | ordre des trames | **tranchée [désassemblage]** : une seule trame `0x55` de 65 o, puis HCI Remote Name Request ; nom vide ou > 64 unités UTF-16 refusé avant toute trame |
+| U7 | rôle de `0x50` | **tranchée [désassemblage]** : validation des 4 fragments uniquement, jamais envoyé à un clavier déclarant `LongDeviceName` |
+| U6 | MTU / fragmentation | **côté Apple tranchée** (1 trame de 66 o si MTU ≥ 66, sinon DATC) ; **côté Linux : lue au pré-vol** (verrou 2), jamais mesurée a priori pour ce clavier |
+| U4 | `0x51-0x54` reflètent-ils `0x55`, et quand | **partielle** : Apple ne relit pas `0x51-0x54`, il attend le nouveau nom HCI sans reconnexion. Décision : notre vérification est la **relecture `0x51-0x54` après reconnexion** (critère de réussite, retour arrière si différent) **et** l'affichage informatif du `Device1.Name` BlueZ. Que les fragments reflètent `0x55` ne sera su qu'à la première écriture |
+| U3 | persistance (piles) | **RISQUE NON MESURÉ** : Apple ne réécrit jamais le nom à la reconnexion (donc le clavier est censé le mémoriser, [déduction]) ; le descripteur du Magic Keyboard déclare son `0x55` *volatile*. Rien ne garantit la survie d'un changement de piles (E3) |
+| U5 | réponse du micrologiciel `0x0050` à un SET `0x55` | **RISQUE NON MESURÉ** : le refus du GET (`0x03`) ne dit rien du SET ; Apple attend un HANDSHAKE SUCCESSFUL dans les 1000 ms et traite tout autre résultat comme un échec sans réessai. Une réponse d'erreur serait visible dans `[hid-write] failed` ; un HANDSHAKE absent se traduirait par un délai d'attente du noyau |
 
-**Pour lever `NotProven`** : E1 fournit la trame de référence ; on remplace §5.2 par la trame Apple, on fait correspondre `devname::frames_for` octet pour octet (test de référence), on ajoute à la porte matérielle un ioctl de 65 octets réservé à `DeviceName`, puis on passe `SEQUENCE_PROOF` à `Proven` dans un commit relu, avec accord écrit du gérant. Un test refuse toute autre construction de `SequenceProof::Proven` dans le code de production.
+### 5.4 Expériences
+
+| # | Lève | État |
+|---|---|---|
+| E1 | U1, U2, U7, U6 (Apple) | **faite** : `RE-NOM-PROPRE-E1.md`, fixture §5.2 |
+| E2 | U6 (Linux) | **devenue un pré-vol** : `akm-hid-control inspect --mac <MAC>` (getsockopt lecture seule) ; une capture `btmon` d'une reconnexion donnerait la même valeur dans les `Configure Response` du PSM 17 et peut la documenter ici comme [mesuré] |
+| E3 | U3 | à faire après la première écriture : comparer `0x51-0x54` (cache), `HID_NAME` et le `Name` BlueZ avant/après un changement de piles |
+| E4 | U3, U5 | descripteurs HID publics de claviers Apple de la même génération déclarant `0x55` : drapeaux Feature (volatile ou non) |
 
 ## 6. Risques de l'écriture réelle
 
-1. **Brique / état micrologiciel** : écrire un rapport vendeur sur un micrologiciel ancien sans mode de récupération connu. Une erreur de numéro toucherait un voisin (`0x5A/0x60/0xEB` étalonnage, `0xD0-0xFB`) : le registre ne le permet pas (opération `DeviceName` = `0x55` seul).
-2. **Perte de pairage** : si le clavier redémarre ou si le nom entre dans les données de lien, le pairage peut sauter ; un clavier Bluetooth sans pairage ne se ré-appaire pas sans autre clavier.
-3. **Nom illisible ou tronqué** si U1 est faux (bourrage, codage) : retour arrière par la sauvegarde, sous réserve que l'écriture fonctionne.
-4. **Nom perdu** au changement de piles si `0x55` est volatile (U3).
+1. **Réponse du micrologiciel inconnue (U5)** : écrire un rapport vendeur sur un micrologiciel ancien sans mode de récupération connu. Une erreur de numéro toucherait un voisin (`0x5A/0x60/0xEB` étalonnage, `0xD0-0xFB`) : le registre ne le permet pas (opération `DeviceName` = `0x55` seul, 64 octets, porte de 65 octets).
+2. **Perte de pairage** : si le clavier redémarre ou si le nom entre dans les données de lien, le pairage peut sauter ; un clavier Bluetooth sans pairage ne se ré-appaire pas sans autre clavier. Avoir un **second clavier** fonctionnel.
+3. **Session HID coupée** si la trame dépasse la MTU : exclu par le verrou 2 (refus si inconnue ou < 66).
+4. **Nom perdu** au changement de piles si `0x55` est volatile (U3) : la sauvegarde permet de réécrire, sous réserve que l'écriture fonctionne.
 5. **Gain faible** : l'alias (a) donne déjà le même affichage sur ce poste.
 
 ## 7. Procédure pour le gérant
 
-Aujourd'hui (aucune écriture possible, rien n'est risqué) :
+Sans rien risquer (aucune écriture possible tant que le verrou 1 est fermé) :
 
 1. `akmctl rename --device-name --show` : nom propre actuel (cache du démon).
-2. `akmctl rename --device-name "<nom voulu>"` : vérifie le nom, affiche le pré-vol, **sauvegarde** le nom actuel (chemin affiché), montre les 66 octets qui seraient envoyés et leur niveau de preuve.
-3. Décider s'il faut lancer E1-E4 (§5.4). Tant que E1 n'est pas fait, `--write-device-name` répond `REFUSED (NotProven)`.
+2. `akmctl rename --device-name "<nom voulu>"` : vérifie le nom, montre les 66 octets avec leur preuve, le pré-vol (hors MTU), **sauvegarde** le nom actuel (chemin affiché), l'état des trois verrous et les risques.
 
-Le jour où la séquence est prouvée (`Proven`), avec accord écrit et nom choisi :
+Pour écrire réellement, en acceptant les risques U5 et U3 (§5.3, §6) :
 
-1. Avoir un second clavier fonctionnel, piles neuves (≥ 20 %).
-2. `akmctl doctor` doit être vert ; `akmctl rename --device-name --show` doit afficher le nom actuel.
-3. `akmctl rename --device-name "<nom>" --write-device-name` dans un terminal ; relire le résumé ; retaper le nom exactement.
-4. Quand la commande le demande : éteindre le clavier (3 s), attendre 5 s, le rallumer ; attendre la vérification (≤ 3 min).
-5. Résultat `✓` : terminé (la sauvegarde reste dans `~/.local/state/apple-kb-monitor/`). Résultat `✗ différent` : lancer la commande de retour arrière affichée.
+1. Avoir un second clavier fonctionnel, piles neuves (≥ 20 %), le paquet **réinstallé** avec cette version (le helper `akm-hid-control` doit connaître le verbe `inspect` ; sinon `REFUSED (lock 2)` « reinstall the package »).
+2. Lever le verrou 1 : ajouter à `~/.config/apple-kb-monitor/config.toml`
+   ```toml
+   [apple]
+   allow_device_name_write = true
+   ```
+3. `akmctl doctor` doit être vert ; `akmctl rename --device-name --show` doit afficher le nom actuel.
+4. Dans un terminal : `akmctl rename --device-name "<nom>" --write-device-name`. La commande affiche la trame, puis demande l'authentification administrateur (`pkexec`) pour lire la MTU du canal de contrôle (verrou 2, lecture seule) ; elle s'arrête là si la MTU est inconnue ou < 66.
+5. Relire le résumé et **retaper le nom exactement** (verrou 3). La trame unique part.
+6. Quand la commande le demande : éteindre le clavier (3 s), attendre 5 s, le rallumer ; attendre la vérification (≤ 3 min).
+7. Résultat `✓` : terminé (la sauvegarde reste dans `~/.local/state/apple-kb-monitor/`). Résultat `✗ différent` : lancer la commande de retour arrière affichée (§8). Puis remettre `allow_device_name_write = false`.
 
 ## 8. Retour arrière
 
-`akmctl rename --device-name --restore ~/.local/state/apple-kb-monitor/devname-backup-<horodatage>.json --write-device-name` : vérifie la sauvegarde (4 × 8 octets, ASCII puis NUL seulement, cohérente avec le nom), affiche les octets, puis suit **le même protocole** (pré-vol, confirmation en retapant le nom sauvegardé, une écriture, reconnexion, relecture). Sans `--write-device-name` : affichage seul. Aucune nouvelle sauvegarde n'est faite pendant un retour arrière ; aucun retour arrière n'est automatique.
+`akmctl rename --device-name --restore ~/.local/state/apple-kb-monitor/devname-backup-<horodatage>.json --write-device-name` : vérifie la sauvegarde (4 × 8 octets, ASCII puis NUL seulement, cohérente avec le nom), affiche les octets, puis suit **le même protocole** (verrou 1, pré-vol avec MTU, confirmation en retapant le nom sauvegardé, une écriture de 65 octets, reconnexion, relecture). Sans `--write-device-name` : affichage seul. Aucune nouvelle sauvegarde n'est faite pendant un retour arrière ; aucun retour arrière n'est automatique.
