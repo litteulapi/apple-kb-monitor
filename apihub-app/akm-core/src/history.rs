@@ -40,10 +40,20 @@ pub enum HistoryEvent {
     BatteryReplaced,
 }
 
+/// Current schema of the history lines. Lines without `schema` are legacy:
+/// their `voltage` was the constant `0xF5` x 3.3 / 1023, not a measurement
+/// (#136, #138, #180).
+pub const SCHEMA: u8 = 2;
+
 /// A single battery history entry. `voltage` is absent when the HID
 /// diagnostic report could not be read (kernel percentage only). `event`
 /// is absent on ordinary samples (older readers ignore the field).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+///
+/// Since [`SCHEMA`] 2 the real cell voltage is stored in mV (`mv_0x46`,
+/// `mv_0x49`) and `voltage` mirrors `mv_0x46 / 1000` for old readers. A legacy
+/// line keeps its `voltage` but carries `voltage_valid = false`: it is never
+/// used for the autonomy, the replacement detection or a chart (#180).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct HistoryEntry {
     pub ts: u64,
     pub pct: f64,
@@ -51,17 +61,64 @@ pub struct HistoryEntry {
     pub voltage: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<HistoryEvent>,
+    /// Layout version of the line (absent = legacy).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema: Option<u8>,
+    /// [mesuré] Report 0x46 (instantaneous cell voltage), mV.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mv_0x46: Option<u32>,
+    /// [mesuré] Report 0x49 (slow voltage, ~37 mV under 0x46), mV.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mv_0x49: Option<u32>,
+    /// `Some(false)` = the `voltage` field of this line is not a measurement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voltage_valid: Option<bool>,
 }
 
 impl HistoryEntry {
-    /// Ordinary sample.
+    /// Ordinary sample (voltage in volts, no millivolt detail). A caller that
+    /// passes a voltage vouches that it is a measurement: the line is written
+    /// with the current schema.
     pub fn sample(ts: u64, pct: f64, voltage: Option<f64>) -> Self {
         Self {
             ts,
             pct,
             voltage,
-            event: None,
+            schema: voltage.map(|_| SCHEMA),
+            ..Self::default()
         }
+    }
+
+    /// Sample of the current schema with the real voltages in mV (#180).
+    pub fn measured(ts: u64, pct: f64, mv_0x46: Option<u32>, mv_0x49: Option<u32>) -> Self {
+        Self {
+            ts,
+            pct,
+            voltage: mv_0x46.map(|mv| f64::from(mv) / 1000.0),
+            schema: Some(SCHEMA),
+            mv_0x46,
+            mv_0x49,
+            ..Self::default()
+        }
+    }
+
+    /// Is `voltage` a real measurement? False for legacy lines (#180).
+    pub fn voltage_reliable(&self) -> bool {
+        self.voltage_valid != Some(false)
+    }
+
+    /// The voltage when it is a real measurement.
+    pub fn reliable_voltage(&self) -> Option<f64> {
+        self.voltage.filter(|_| self.voltage_reliable())
+    }
+
+    /// Marks the legacy `voltage` as unreliable; true if the line changed.
+    fn mark_legacy(&mut self) -> bool {
+        if self.schema.is_none() && self.voltage.is_some() && self.voltage_valid.is_none() {
+            self.voltage_valid = Some(false);
+            return true;
+        }
+        false
     }
 }
 
@@ -118,21 +175,26 @@ pub fn legacy_path() -> PathBuf {
 }
 
 /// Parse JSONL content; malformed lines are skipped.
+/// Legacy lines come back with `voltage_valid = Some(false)` (#180).
 pub fn parse(content: &str) -> Vec<HistoryEntry> {
     content
         .lines()
-        .filter_map(|l| serde_json::from_str(l).ok())
+        .filter_map(|l| serde_json::from_str::<HistoryEntry>(l).ok())
+        .map(|mut e| {
+            e.mark_legacy();
+            e
+        })
         .collect()
 }
 
 /// Discharge rate (mV/h) and remaining hours down to 2.0 V, from the last 50
-/// entries that carry a voltage. `None` without enough data or if not discharging.
+/// entries that carry a **reliable** voltage (legacy lines are ignored, #180). `None` without enough data or if not discharging.
 pub fn estimate_remaining(entries: &[HistoryEntry]) -> Option<(f64, f64)> {
     let recent: Vec<(u64, f64)> = entries
         .iter()
         .rev()
         .filter_map(|e| {
-            e.voltage
+            e.reliable_voltage()
                 .filter(|v| v.is_finite() && *v > 0.0)
                 .map(|v| (e.ts, v))
         })
@@ -203,6 +265,49 @@ impl<C: Clock> History<C> {
         }
         std::fs::copy(legacy, &self.path)?;
         Ok(true)
+    }
+
+    /// Marks every legacy `voltage` as unreliable in the file (#180):
+    /// `voltage_valid = false` is written on the lines without `schema`.
+    /// Idempotent; a copy `history.jsonl.pre-schema2` is made once before the
+    /// rewrite. Malformed lines are kept as they are. Returns the number of
+    /// lines marked.
+    pub fn mark_legacy_voltages(&self) -> io::Result<usize> {
+        let content = match std::fs::read_to_string(&self.path) {
+            Ok(c) => c,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
+            Err(e) => return Err(e),
+        };
+        let mut changed = 0usize;
+        let mut out = String::with_capacity(content.len() + 64);
+        for line in content.lines() {
+            let marked = serde_json::from_str::<HistoryEntry>(line)
+                .ok()
+                .and_then(|mut e| e.mark_legacy().then_some(e));
+            match marked {
+                Some(e) => {
+                    changed += 1;
+                    out.push_str(&serde_json::to_string(&e).map_err(io::Error::other)?);
+                }
+                None => out.push_str(line),
+            }
+            out.push('\n');
+        }
+        if changed == 0 {
+            return Ok(0);
+        }
+        let backup = self.path.with_extension("jsonl.pre-schema2");
+        if !backup.exists() {
+            std::fs::copy(&self.path, &backup)?;
+        }
+        let tmp = self.path.with_extension("jsonl.tmp");
+        {
+            let mut f = std::fs::File::create(&tmp)?;
+            f.write_all(out.as_bytes())?;
+            f.sync_all()?;
+        }
+        std::fs::rename(&tmp, &self.path)?;
+        Ok(changed)
     }
 
     /// Append a sample stamped with the clock. `Ok(false)` if rejected as invalid.
@@ -407,7 +512,7 @@ mod tests {
         let j = serde_json::to_string(&m).unwrap();
         assert_eq!(
             j,
-            r#"{"ts":6,"pct":99.0,"voltage":3.0,"event":"battery_replaced"}"#
+            r#"{"ts":6,"pct":99.0,"voltage":3.0,"event":"battery_replaced","schema":2}"#
         );
         assert_eq!(parse(&j)[0], m);
         assert_eq!(parse(r#"{"ts":7,"pct":1.0,"future":true}"#).len(), 1);
@@ -482,6 +587,82 @@ mod tests {
                 .1,
             0.0
         );
+    }
+
+    #[test]
+    fn legacy_voltage_is_read_without_voltage_and_ignored_for_autonomy() {
+        // #180: the historised `voltage` was the constant 0xF5 * 3.3 / 1023.
+        let e = parse(r#"{"ts":100,"pct":90.0,"voltage":2.9032}"#);
+        assert_eq!(e[0].pct, 90.0);
+        assert!(!e[0].voltage_reliable());
+        assert_eq!(e[0].reliable_voltage(), None);
+        // Falling "voltages" of legacy lines give no autonomy.
+        let legacy: Vec<HistoryEntry> = (0..10)
+            .map(|i| {
+                parse(&format!(
+                    r#"{{"ts":{},"pct":90.0,"voltage":{}}}"#,
+                    i * 3600,
+                    3.0 - f64::from(i) * 0.01
+                ))
+                .remove(0)
+            })
+            .collect();
+        assert!(estimate_remaining(&legacy).is_none());
+        // The same slope on schema 2 lines does give one.
+        let real: Vec<HistoryEntry> = (0..10)
+            .map(|i| {
+                HistoryEntry::measured(u64::from(i) * 3600, 90.0, Some(3000 - i * 10), Some(2960 - i * 10))
+            })
+            .collect();
+        let (rate, _) = estimate_remaining(&real).unwrap();
+        assert!((rate - 10.0).abs() < 1e-6, "{rate}");
+        // Mixed: legacy lines are skipped, the real ones count.
+        let mut mixed = legacy;
+        mixed.extend(real);
+        assert!(estimate_remaining(&mixed).is_some());
+    }
+
+    #[test]
+    fn measured_entry_stores_real_millivolts() {
+        let e = HistoryEntry::measured(7, 99.0, Some(2986), Some(2945));
+        let j = serde_json::to_string(&e).unwrap();
+        assert_eq!(
+            j,
+            r#"{"ts":7,"pct":99.0,"voltage":2.986,"schema":2,"mv_0x46":2986,"mv_0x49":2945}"#
+        );
+        let back = parse(&j);
+        assert_eq!(back[0], e);
+        assert!(back[0].voltage_reliable());
+        // No voltage read: the line stays valid and carries no voltage.
+        let k = HistoryEntry::measured(8, 98.0, None, None);
+        assert_eq!(serde_json::to_string(&k).unwrap(), r#"{"ts":8,"pct":98.0,"schema":2}"#);
+    }
+
+    #[test]
+    fn migration_marks_legacy_lines_once_and_keeps_the_rest() {
+        let t = Tmp::new();
+        let path = t.0.join("h.jsonl");
+        std::fs::write(
+            &path,
+            "{\"ts\":1,\"pct\":98.0,\"voltage\":2.9806}\nnot json\n{\"ts\":2,\"pct\":97.0}\n{\"ts\":3,\"pct\":96.0,\"voltage\":2.986,\"schema\":2,\"mv_0x46\":2986}\n",
+        )
+        .unwrap();
+        let h = History::new(&path, FakeClock::at(10));
+        assert_eq!(h.mark_legacy_voltages().unwrap(), 1);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.lines().next().unwrap().contains("\"voltage_valid\":false"));
+        assert!(text.contains("not json"), "garbage line is kept");
+        assert!(t.0.join("h.jsonl.pre-schema2").exists());
+        // Idempotent: nothing more to mark, the real line is untouched.
+        assert_eq!(h.mark_legacy_voltages().unwrap(), 0);
+        let e = h.read();
+        assert_eq!(e.len(), 3);
+        assert_eq!(e[0].voltage, Some(2.9806), "legacy value kept, not deleted");
+        assert!(!e[0].voltage_reliable() && e[2].voltage_reliable());
+        assert_eq!(e[1].voltage_valid, None, "no voltage: nothing to mark");
+        // Missing file: no error.
+        let none = History::new(t.0.join("absent.jsonl"), FakeClock::at(1));
+        assert_eq!(none.mark_legacy_voltages().unwrap(), 0);
     }
 
     #[test]
