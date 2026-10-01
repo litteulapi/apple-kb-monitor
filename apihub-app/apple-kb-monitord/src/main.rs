@@ -213,6 +213,8 @@ fn run(opts: actor::Options, bus_name: Option<String>) -> ExitCode {
         opts.notify_connection
     );
     tray::spawn(watch.clone(), mailbox.clone(), conn.clone());
+    // What macOS tells the keyboard at shutdown (Feature 0x40, once), #191.
+    apple_kb_monitord::shutdown::install(opts.will_shutdown, watch.clone());
     // Passive listening to the keyboard's own input reports (never a request).
     apple_kb_monitord::passive::set_keyboard_alerts(opts.notify && opts.alerts_enabled);
     let _passive = conn.as_ref().and_then(|c| {

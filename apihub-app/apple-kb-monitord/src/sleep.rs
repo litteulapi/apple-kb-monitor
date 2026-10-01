@@ -8,11 +8,17 @@
 //!   [`RESUME_GRACE`] (the link is being rebuilt; a GET_REPORT now would only
 //!   time out), the inhibitor is taken again and listeners are told.
 //!
+//! * Shutdown / restart (#191): a second `delay` inhibitor (`shutdown`) is held
+//!   too. On `PrepareForShutdown(true)` the hook installed by
+//!   [`set_shutdown_hook`] runs (it sends `WillShutdown`, bounded to a few
+//!   seconds), then the inhibitor is released; on `PrepareForShutdown(false)`
+//!   (shutdown cancelled) the inhibitor is taken again.
+//!
 //! The actor checks [`paused`] before every hardware action; the link keeper
 //! ([`crate::repair`]) receives [`SleepEvent`]s.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use zbus::blocking::{fdo::DBusProxy, Connection, MessageIterator};
@@ -27,6 +33,14 @@ pub const RESUME_GRACE: Duration = Duration::from_secs(4);
 static SLEEPING: AtomicBool = AtomicBool::new(false);
 static IO_BUSY: AtomicUsize = AtomicUsize::new(0);
 static RESUMED_AT: Mutex<Option<Instant>> = Mutex::new(None);
+
+type Hook = Box<dyn Fn() + Send + Sync>;
+static SHUTDOWN_HOOK: OnceLock<Hook> = OnceLock::new();
+
+/// Register what runs on `PrepareForShutdown(true)` (once per process).
+pub fn set_shutdown_hook(f: impl Fn() + Send + Sync + 'static) {
+    let _ = SHUTDOWN_HOOK.set(Box::new(f));
+}
 
 /// What the link keeper is told.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,18 +98,17 @@ fn drain_io(max: Duration) -> bool {
 }
 
 fn take_inhibitor(calls: &Connection) -> zbus::Result<OwnedFd> {
+    take_inhibitor_for(calls, "sleep", "Pause keyboard reads before the Bluetooth link goes down")
+}
+
+fn take_inhibitor_for(calls: &Connection, what: &str, why: &str) -> zbus::Result<OwnedFd> {
     calls
         .call_method(
             Some("org.freedesktop.login1"),
             "/org/freedesktop/login1",
             Some("org.freedesktop.login1.Manager"),
             "Inhibit",
-            &(
-                "sleep",
-                "apple-kb-monitord",
-                "Pause keyboard reads before the Bluetooth link goes down",
-                "delay",
-            ),
+            &(what, "apple-kb-monitord", why, "delay"),
         )?
         .body()
         .deserialize()
@@ -124,6 +137,16 @@ pub fn spawn(on_event: impl Fn(SleepEvent) + Send + 'static) {
         });
 }
 
+fn take_shutdown_inhibitor(calls: &Connection) -> Option<OwnedFd> {
+    match take_inhibitor_for(calls, "shutdown", "Tell the keyboard the computer is shutting down (WillShutdown)") {
+        Ok(fd) => Some(fd),
+        Err(e) => {
+            tracing::warn!("no shutdown inhibitor ({e}): WillShutdown may be cut short");
+            None
+        }
+    }
+}
+
 fn watch_once(on_event: &dyn Fn(SleepEvent)) -> zbus::Result<()> {
     let conn = Connection::system()?;
     let calls = Connection::system()?;
@@ -133,7 +156,17 @@ fn watch_once(on_event: &dyn Fn(SleepEvent)) -> zbus::Result<()> {
         .interface("org.freedesktop.login1.Manager")?
         .member("PrepareForSleep")?
         .build();
-    DBusProxy::new(&conn)?.add_match_rule(rule)?;
+    let dbus = DBusProxy::new(&conn)?;
+    dbus.add_match_rule(rule)?;
+    dbus.add_match_rule(
+        MatchRule::builder()
+            .msg_type(zbus::message::Type::Signal)
+            .sender("org.freedesktop.login1")?
+            .interface("org.freedesktop.login1.Manager")?
+            .member("PrepareForShutdown")?
+            .build(),
+    )?;
+    let mut shutdown_inhibitor = take_shutdown_inhibitor(&calls);
     let mut inhibitor = match take_inhibitor(&calls) {
         Ok(fd) => Some(fd),
         Err(e) => {
@@ -148,12 +181,25 @@ fn watch_once(on_event: &dyn Fn(SleepEvent)) -> zbus::Result<()> {
     for msg in MessageIterator::from(conn) {
         let msg = msg?;
         let hdr = msg.header();
-        if hdr.member().map(|m| m.as_str()) != Some("PrepareForSleep") {
-            continue;
-        }
+        let member = hdr.member().map(|m| m.as_str().to_owned());
         let Ok(start) = msg.body().deserialize::<bool>() else {
             continue;
         };
+        if member.as_deref() == Some("PrepareForShutdown") {
+            if start {
+                // Shutdown or restart: tell the keyboard once, then let go.
+                if let Some(h) = SHUTDOWN_HOOK.get() {
+                    h();
+                }
+                shutdown_inhibitor = None;
+            } else if shutdown_inhibitor.is_none() {
+                shutdown_inhibitor = take_shutdown_inhibitor(&calls);
+            }
+            continue;
+        }
+        if member.as_deref() != Some("PrepareForSleep") {
+            continue;
+        }
         let now = Instant::now();
         if start {
             set_sleeping();
@@ -178,6 +224,7 @@ fn watch_once(on_event: &dyn Fn(SleepEvent)) -> zbus::Result<()> {
         }
     }
     drop(inhibitor);
+    drop(shutdown_inhibitor);
     Err(zbus::Error::Failure("logind signal stream ended".into()))
 }
 

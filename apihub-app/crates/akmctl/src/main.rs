@@ -14,6 +14,7 @@ mod passive;
 mod render;
 mod repair;
 mod selftest;
+mod shutdown_notify;
 mod status;
 mod when;
 
@@ -104,6 +105,7 @@ fn run(cmd: Command) -> u8 {
         }
         Command::Repair { mac, force } => repair::run(mac.as_deref(), force),
         Command::Selftest(a) => selftest::run_selftest(a),
+        Command::ShutdownNotify { only_if_stopping } => shutdown_notify::run(only_if_stopping),
         Command::Completions { shell } => {
             let mut c = Cli::command();
             clap_complete::generate(clap_complete::Shell::from(shell), &mut c, "akmctl", &mut std::io::stdout());

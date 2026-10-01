@@ -95,6 +95,7 @@ pub fn to_text(snap: Option<&Snapshot>, passive: &Value) -> String {
     out.push_str(
         "\nClasses: SafeRead = routine read; OncePerConnection = read once per connection; PassiveInput = listened to, never requested;\n\
 ManualOnly = readable, never requested by the daemon; NeverRead = never requested (secret or freezes the firmware);\n\
+WriteAppleParity = the one write, Feature 0x40 WillShutdown (id only, once per shutdown, what macOS sends);\n\
 NeverWrite = command / write-only register, no write path exists; Unknown = not understood.\n\
 Details per report: akmctl info --json (meaning, unit, endianness, decoder, proof, source).\n",
     );

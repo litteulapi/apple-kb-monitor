@@ -1,0 +1,23 @@
+[Unit]
+Description=Tell the Apple keyboard the computer is shutting down (WillShutdown, as macOS does)
+Documentation=https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/src/branch/main/docs/CONFIGURATION.md
+# Wants= starts the daemon; After= makes this unit stop BEFORE it, so the
+# daemon is still on the bus when ExecStop= runs at shutdown.
+Wants=apple-kb-monitord.service
+After=apple-kb-monitord.service
+
+[Service]
+# Stays active all session; does nothing until it is stopped.
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+# One Feature report, 0x40, id alone (wire 53 40): exactly what macOS sends at
+# every shutdown or restart (#191). --only-if-stopping: a logout or a restart of
+# the unit is not a shutdown, nothing is sent then. The daemon applies the rest:
+# [apple] will_shutdown, keyboard connected, once per run, breaker, 1 s spacing.
+# "-": a failure never blocks the shutdown.
+ExecStop=-/usr/bin/akmctl shutdown-notify --only-if-stopping
+TimeoutStopSec=6
+
+[Install]
+WantedBy=default.target

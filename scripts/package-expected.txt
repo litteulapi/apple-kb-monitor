@@ -8,6 +8,7 @@ usr/lib/apple-kb-monitor/rssi-helper
 usr/lib/sysusers.d/apple-kb-monitor.conf
 usr/lib/systemd/user/apple-kb-monitord.service
 usr/lib/systemd/user/apple-kb-monitor-selfcheck.service
+usr/lib/systemd/user/apple-kb-monitor-shutdown.service
 usr/lib/systemd/user/apple-kb-monitor-selfcheck.timer
 usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor1.service
 usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.service
@@ -22,4 +23,5 @@ usr/share/doc/apple-kb-monitor/QA-AUTOMATIQUE.md
 usr/share/doc/apple-kb-monitor/examples/keyd/apple-keyboard.conf
 usr/share/doc/apple-kb-monitor/KEYD.md
 etc/modprobe.d/hid_apple.conf
+usr/lib/systemd/user/default.target.wants/apple-kb-monitor-shutdown.service
 usr/lib/systemd/user/timers.target.wants/apple-kb-monitor-selfcheck.timer

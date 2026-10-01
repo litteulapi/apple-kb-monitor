@@ -63,6 +63,13 @@ package() {
     # ── systemd user service: apple-kb-monitord (single keyboard owner) ──
     install -Dm644 "$startdir/systemd/apple-kb-monitord.service"         "$pkgdir/usr/lib/systemd/user/apple-kb-monitord.service"
     install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor1.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor1.service"
+    # ── WillShutdown at shutdown (what macOS sends, #191): the unit stays active
+    #    and its ExecStop= asks the daemon; [apple] will_shutdown = false in
+    #    config.toml sends nothing; opt out of the unit too:
+    #    systemctl --user mask apple-kb-monitor-shutdown.service ──
+    install -Dm644 "$startdir/systemd/apple-kb-monitor-shutdown.service" "$pkgdir/usr/lib/systemd/user/apple-kb-monitor-shutdown.service"
+    install -dm755 "$pkgdir/usr/lib/systemd/user/default.target.wants"
+    ln -s ../apple-kb-monitor-shutdown.service "$pkgdir/usr/lib/systemd/user/default.target.wants/apple-kb-monitor-shutdown.service"
     # ── self-check every 15 min (akmctl selftest), enabled for every user;
     #    opt out: systemctl --user mask apple-kb-monitor-selfcheck.timer ──
     install -Dm644 "$startdir/systemd/apple-kb-monitor-selfcheck.service" "$pkgdir/usr/lib/systemd/user/apple-kb-monitor-selfcheck.service"

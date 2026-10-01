@@ -91,6 +91,16 @@ pub enum Command {
         #[arg(value_enum, ignore_case = true)]
         state: LedState,
     },
+    /// Ask the daemon to send WillShutdown (Feature 0x40, id only) to the
+    /// keyboard, as macOS does at shutdown: once, only if connected and
+    /// `[apple] will_shutdown` is on. Run by the shutdown unit
+    ShutdownNotify {
+        /// Do nothing unless the system is shutting down or restarting
+        /// (`systemctl is-system-running` = stopping): used by the unit, so
+        /// that a logout or a service restart never sends it
+        #[arg(long)]
+        only_if_stopping: bool,
+    },
     /// Register map of the keyboard (every known HID report: name, size,
     /// safety class) with the values the daemon has cached, "never read"
     /// otherwise. Never reads the keyboard

@@ -3,7 +3,7 @@
 use akm_core::Snapshot;
 use serde_json::{json, Value};
 
-use crate::fnmode;
+use crate::{fnmode, shutdown_notify};
 
 /// Version of the `akmctl` JSON output schema.
 pub const SCHEMA: u32 = 1;
@@ -60,6 +60,8 @@ pub fn to_json(s: &Snapshot, fn_mode: Option<u8>, revision: Option<u64>) -> Valu
         "kb_error": s.kb_error,
         "fnmode": fn_mode,
         "fnmode_label": fn_mode.map(fnmode::label),
+        // `[apple] will_shutdown`: what is sent to the keyboard at shutdown (#191).
+        "will_shutdown": shutdown_notify::status_json(shutdown_notify::configured()),
     })
 }
 
@@ -70,6 +72,7 @@ pub fn absent_json(fn_mode: Option<u8>) -> Value {
         "daemon": false,
         "fnmode": fn_mode,
         "fnmode_label": fn_mode.map(fnmode::label),
+        "will_shutdown": shutdown_notify::status_json(shutdown_notify::configured()),
     })
 }
 
@@ -138,6 +141,7 @@ pub fn to_text(s: &Snapshot, fn_mode: Option<u8>) -> String {
         "Fn mode:",
         fn_mode.map_or_else(|| "n/a".into(), |m| format!("{m} - {}", fnmode::label(m))),
     );
+    line("Shutdown:", shutdown_notify::status_text(shutdown_notify::configured()));
     if let Some(e) = s.kb_error.as_deref().or(s.last_error.as_deref()) {
         line("Error:", e.to_string());
     }
@@ -146,8 +150,9 @@ pub fn to_text(s: &Snapshot, fn_mode: Option<u8>) -> String {
 
 pub fn absent_text(fn_mode: Option<u8>) -> String {
     format!(
-        "Daemon:    not running (com.agenceapi.AppleKbMonitor1 absent on the session bus)\nFn mode:   {}\n",
-        fn_mode.map_or_else(|| "n/a".into(), |m| format!("{m} - {}", fnmode::label(m)))
+        "Daemon:    not running (com.agenceapi.AppleKbMonitor1 absent on the session bus)\nFn mode:   {}\nShutdown:  {}\n",
+        fn_mode.map_or_else(|| "n/a".into(), |m| format!("{m} - {}", fnmode::label(m))),
+        shutdown_notify::status_text(shutdown_notify::configured())
     )
 }
 

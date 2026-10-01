@@ -25,7 +25,7 @@
 //! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `SetAlias(s mac, s name) -> s`
 //! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (JSON array of
 //! `{ts,pct,voltage?,event?,schema?,mv_0x46?,mv_0x49?,voltage_valid?}`, `voltage_valid=false` = legacy value, #180); since API 2 `GetDevices() -> ao`,
-//! `BatterySets() -> s`. Signal: `StateChanged(t revision, s json)`.
+//! `BatterySets() -> s`, `NotifyShutdown() -> (b, s)` (the one write macOS does: `WillShutdown`, #191). Signal: `StateChanged(t revision, s json)`.
 //!
 //! API 2 adds one object per keyboard and `org.freedesktop.DBus.ObjectManager`
 //! on this path: see [`crate::devices`]. Everything above is unchanged from
@@ -196,6 +196,19 @@ impl Monitor {
     /// Ask for a full read now (no effect while the keyboard is disconnected).
     fn refresh(&self) -> zbus::fdo::Result<()> {
         self.shared.refresh()
+    }
+
+    /// Tell the keyboard the computer is shutting down: the one write macOS
+    /// does, Feature `0x40` (`WillShutdown`, the id alone), at most once per
+    /// run, only if `[apple] will_shutdown` is on and the keyboard connected
+    /// (#191). Returns `(sent, explanation)`; "nothing sent" is not an error.
+    /// Called by `akmctl shutdown-notify` (user unit `ExecStop=`).
+    async fn notify_shutdown(&self) -> (bool, String) {
+        // The write may wait for the 1 s spacing and the HIDP answer: off the bus executor.
+        let o = std::thread::spawn(|| crate::shutdown::notify("NotifyShutdown (D-Bus)"))
+            .join()
+            .unwrap_or_else(|_| akm_core::parity::Outcome::Failed("writer panicked".into()));
+        (o.is_sent(), o.describe())
     }
 
     /// Rename the keyboard `mac` on this computer (BlueZ alias; nothing is
