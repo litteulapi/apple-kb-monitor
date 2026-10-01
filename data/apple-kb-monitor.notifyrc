@@ -55,6 +55,22 @@ Comment[fr]=Le clavier est de nouveau connecté
 Icon=input-keyboard
 Action=Popup
 
+[Event/KeyboardRemoved]
+Name=Keyboard removed from this computer
+Name[fr]=Clavier supprimé du poste
+Comment=The keyboard was forgotten from outside (Plasma Forget, bluetoothctl remove): pair it again
+Comment[fr]=Le clavier a été oublié depuis l'extérieur (Oublier de Plasma, bluetoothctl remove) : réappairez-le
+Icon=input-keyboard-virtual-off
+Action=Popup
+
+[Event/BatteryEstimate]
+Name=Battery estimate (reminder)
+Name[fr]=Estimation des piles (rappel)
+Comment=One reminder drawn from the battery estimate; KDE PowerDevil already warns about this keyboard
+Comment[fr]=Un rappel tiré de l'estimation des piles ; KDE PowerDevil prévient déjà pour ce clavier
+Icon=battery-caution
+Action=Popup
+
 [Event/KeyboardOff]
 Name=Keyboard switched off
 Name[fr]=Clavier éteint
