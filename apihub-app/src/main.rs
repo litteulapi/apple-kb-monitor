@@ -515,7 +515,13 @@ impl ApiHubApp {
             for (t, label) in &model.x_ticks {
                 let x = x_of(*t);
                 painter.line_segment([egui::Pos2::new(x, plot_rect.min.y), egui::Pos2::new(x, plot_rect.max.y)], grid);
-                let align = if x > plot_rect.max.x - 30.0 { egui::Align2::RIGHT_TOP } else { egui::Align2::CENTER_TOP };
+                let align = if x > plot_rect.max.x - 30.0 {
+                    egui::Align2::RIGHT_TOP
+                } else if x < plot_rect.min.x + 30.0 {
+                    egui::Align2::LEFT_TOP
+                } else {
+                    egui::Align2::CENTER_TOP
+                };
                 painter.text(egui::Pos2::new(x, plot_rect.max.y + 4.0), align, label, small.clone(), vis.weak_text_color());
             }
 
