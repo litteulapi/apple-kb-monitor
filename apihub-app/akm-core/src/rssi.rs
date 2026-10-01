@@ -104,6 +104,16 @@ fn read_rssi_cached(mac: &str) -> Result<(i8, Option<i8>), RssiError> {
     res
 }
 
+/// The helper is `root:akm 0750` (#209): a refusal means the user is not in
+/// the `akm` group yet.
+fn spawn_error_text(e: &std::io::Error) -> String {
+    if e.kind() == std::io::ErrorKind::PermissionDenied {
+        "permission denied: add your user to the 'akm' group (sudo usermod -aG akm $USER, then log in again)".to_string()
+    } else {
+        e.to_string()
+    }
+}
+
 /// Run the helper once (no cache) and interpret its result.
 fn run_helper(path: &str, mac: &str, timeout: Duration) -> Result<(i8, Option<i8>), RssiError> {
     parse_mac(mac).ok_or(RssiError::BadMac)?;
@@ -129,7 +139,7 @@ fn run_helper(path: &str, mac: &str, timeout: Duration) -> Result<(i8, Option<i8
             other => Some(other),
         })
         .expect("last attempt always returns")
-        .map_err(|e| RssiError::HelperSpawn(e.to_string()))?;
+        .map_err(|e| RssiError::HelperSpawn(spawn_error_text(&e)))?;
     let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {

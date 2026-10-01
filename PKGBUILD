@@ -1,7 +1,7 @@
 # Maintainer: Han <han@agenceapi.com>
 pkgname=apple-kb-monitor
 pkgver=3.1.0
-pkgrel=6
+pkgrel=7
 pkgdesc="Telemetry and key mapping for Apple Bluetooth keyboards (BCM2042/BCM20733): battery, voltage, RSSI, BlueZ battery provider, KDE integration"
 arch=('x86_64')
 url="https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
@@ -52,9 +52,12 @@ package() {
     # polkit action for the privileged fnmode helper (pkexec akm-helper)
     install -Dm644 "$startdir/polkit/com.agenceapi.AppleKbMonitor.policy" "$pkgdir/usr/share/polkit-1/actions/com.agenceapi.AppleKbMonitor.policy"
 
-    # ── RSSI helper (cap_net_admin set in post_install, not here: setcap is
-    #    not possible under fakeroot and xattrs are not reliably kept) ────
+    # ── RSSI helper (cap_net_admin, root:akm 0750 and setcap are applied in
+    #    post_install, not here: setcap is not possible under fakeroot, xattrs
+    #    are not reliably kept and the group does not exist at build time) ──
     install -Dm755 "$startdir/rssi-helper"                          "$pkgdir/usr/lib/apple-kb-monitor/rssi-helper"
+    # group "akm" (#209): only its members may run the capability-carrying helper
+    install -Dm644 "$startdir/sysusers/apple-kb-monitor.conf"       "$pkgdir/usr/lib/sysusers.d/apple-kb-monitor.conf"
 
     # ── systemd user service: apple-kb-monitord (single keyboard owner) ──
     install -Dm644 "$startdir/systemd/apple-kb-monitord.service"         "$pkgdir/usr/lib/systemd/user/apple-kb-monitord.service"

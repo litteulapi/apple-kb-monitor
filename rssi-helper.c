@@ -6,6 +6,14 @@
  * that carries CAP_NET_ADMIN (file capability set by the .install script).
  * The GUI (apihub-app) stays unprivileged and runs this helper as a child.
  *
+ * Access control (#209): installed root:akm 0750 by the .install script, so only
+ * the members of the "akm" group (the user who reads the signal) can run it.
+ * Compromise: the group must be joined once (usermod -aG akm) and a new login is
+ * needed; in return a local account that is not in it can no longer probe the
+ * presence and proximity (RSSI, TX power) of the phones / headsets connected to
+ * this machine. The code itself is strict (MAC format, paired answer, AT_SECURE)
+ * and does not read the MGMT events that follow the command.
+ *
  * Usage:   rssi-helper AA:BB:CC:DD:EE:FF [hci_index]
  * Success: stdout = {"rssi":-5,"tx_power":4,"max_tx_power":4}, exit 0
  * Failure: stdout empty, stderr = "rssi-helper: <reason>", exit code:
