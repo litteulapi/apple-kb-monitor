@@ -824,5 +824,96 @@ class TestApihubSettings(unittest.TestCase):
             w.assert_called_once_with(16, 40)
 
 
+class TestAuditFixes(unittest.TestCase):
+    FIX = Path(__file__).parent / "fixtures" / "a1314_iso"
+    MAC = "04:db:56:ca:42:ee"
+
+    def test_ps_path_matches_suffix(self):  # #70
+        name = (self.FIX / "power_supply.uevent").read_text()
+        ps_name = [l.split("=", 1)[1] for l in name.splitlines()
+                   if l.startswith("POWER_SUPPLY_NAME=")][0]
+        self.assertEqual(ps_name, f"hid-{self.MAC}-battery-71")
+        with mock.patch.object(kb.glob, "glob",
+                               side_effect=lambda pat: [f"/sys/class/power_supply/{ps_name}"]
+                               if "-battery*" in pat else []):
+            self.assertEqual(kb.find_power_supply(self.MAC),
+                             f"/sys/class/power_supply/{ps_name}")
+        self.assertIsNone(kb.find_power_supply(""))
+
+    def test_sysfs_fallback_when_hid_unreadable(self):  # #71
+        import asyncio
+        with tempfile.TemporaryDirectory() as tmp:
+            for f in ("capacity", "status"):
+                (Path(tmp) / f).write_text((self.FIX / f"ps_{f}").read_text())
+            dev = {"path": "/dev/null", "mac": "", "ps_path": tmp, "model": "m",
+                   "name": "kb", "chip": "c", "driver": "d"}
+            with mock.patch.object(kb, "read_all_reports", return_value={}), \
+                    mock.patch.object(kb, "get_conn_info", return_value=None), \
+                    mock.patch.object(kb, "read_input_caps", return_value={}), \
+                    mock.patch.object(kb, "read_leds", return_value={}), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                rep = asyncio.run(kb.collect_report(None, dev))
+        self.assertEqual(rep["battery"]["percentage"], 90)
+        self.assertEqual(rep["battery"]["percentage_source"], "sysfs")
+
+    def test_no_zero_percent_published_without_reading(self):  # #78
+        import asyncio
+        if not kb.HAS_DBUS_FAST:
+            self.skipTest("dbus-fast missing")
+        prov = mock.MagicMock()
+
+        async def ok():
+            return True
+
+        prov.register.return_value = ok()
+        dev = {"mac": "AA:BB:CC:DD:EE:FF", "path": "/dev/null"}
+        with mock.patch.object(kb, "find_devices", return_value=[dev]), \
+                mock.patch.object(kb, "read_all_reports", return_value={}), \
+                contextlib.redirect_stderr(io.StringIO()):
+            asyncio.run(kb._setup_provider(mock.MagicMock(), prov))
+        prov.add_device.assert_not_called()
+        self.assertEqual(kb.best_level({"battery_pct": 0}), 0)
+        self.assertIsNone(kb.best_level({}))
+
+    def _mgmt_sock(self, packets):
+        sock = mock.MagicMock()
+        sock.recv.side_effect = packets
+        return sock
+
+    @staticmethod
+    def _evt(ev, op, status, rssi=-40, tx=4, mx=8):
+        return struct.pack("<HHHHB", ev, 0, 10, op, status) + b"\0" * 7 \
+            + struct.pack("<bbb", rssi, tx, mx)
+
+    def test_mgmt_rejects_127(self):  # #77
+        sock = self._mgmt_sock([self._evt(1, 0x31, 0, rssi=127)])
+        with mock.patch.object(Path, "is_file", return_value=False), \
+                mock.patch.object(kb.socket, "socket", return_value=sock):
+            self.assertIsNone(kb.get_conn_info("aa:bb:cc:dd:ee:ff"))
+
+    def test_mgmt_skips_foreign_event(self):  # #77
+        foreign = self._evt(1, 0x0004, 0, rssi=-1)
+        sock = self._mgmt_sock([foreign, self._evt(1, 0x31, 0, rssi=-40)])
+        with mock.patch.object(Path, "is_file", return_value=False), \
+                mock.patch.object(kb.socket, "socket", return_value=sock):
+            res = kb.get_conn_info("aa:bb:cc:dd:ee:ff")
+        self.assertEqual(res["rssi_dbm"], -40)
+
+    def test_calibration_validation(self):  # #80
+        self.assertTrue(kb.calibration_valid([2900, 2450, 2350, 2000]))
+        self.assertFalse(kb.calibration_valid([0, 0, 0, 0]))
+        self.assertFalse(kb.calibration_valid([2000, 2450, 2350, 2900]))
+        self.assertFalse(kb.calibration_valid([2900, 2900, 2350, 2000]))
+        bad = bytes([kb.REP_CALIB_CURVE, 0, 0, 0, 0, 0, 0, 0, 0])
+
+        def fake(devpath, rid, *a, **k):
+            if rid == kb.REP_CALIB_CURVE:
+                return bad
+            return None
+        with mock.patch.object(kb, "hid_get_feature", side_effect=fake):
+            r = kb.read_all_reports("/dev/null")
+        self.assertFalse(r["calib_valid"])
+
+
 if __name__ == "__main__":
     unittest.main()

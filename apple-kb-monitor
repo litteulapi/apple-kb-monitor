@@ -117,6 +117,7 @@ BTPROTO_HCI = 1
 HCI_CHANNEL_CONTROL = 3
 MGMT_OP_GET_CONN_INFO = 0x0031
 MGMT_EV_CMD_COMPLETE = 0x0001
+MGMT_EV_CMD_STATUS = 0x0002
 
 # ADC parameters (BCM2042: 10-bit ADC, 3.3V internal reference)
 ADC_BITS = 10
@@ -183,6 +184,19 @@ def identify_chip(pid):
 # Device discovery
 # ---------------------------------------------------------------------------
 
+def find_power_supply(mac):
+    """Kernel power_supply dir for a HID battery: hid-<mac>-battery[-NN].
+
+    The kernel appends a unique -NN suffix, so match by pattern (#70)."""
+    if not mac:
+        return None
+    base = "/sys/class/power_supply"
+    cands = sorted(glob.glob(f"{base}/hid-{glob.escape(mac)}-battery*"))
+    if not cands:
+        cands = sorted(glob.glob(f"{base}/hid-{glob.escape(mac.lower())}-battery*"))
+    return cands[0] if cands else None
+
+
 def find_devices():
     """Find all Apple Bluetooth keyboards via hidraw sysfs."""
     devices = []
@@ -214,7 +228,7 @@ def find_devices():
 
         mac = props.get("HID_UNIQ", "")
         devnode = f"/dev/{os.path.basename(hidraw)}"
-        ps_path = f"/sys/class/power_supply/hid-{mac}-battery" if mac else None
+        ps_path = find_power_supply(mac)
 
         # Find evdev input
         evdev = None
@@ -258,6 +272,15 @@ def hid_get_feature(devpath, report_id, length=16):
             os.close(fd)
 
 
+DEFAULT_CALIBRATION_MV = (2900, 2450, 2350, 2000)
+
+
+def calibration_valid(t):
+    """Same rule as apihub-app keyboard.rs: strictly decreasing, last > 0."""
+    return (len(t) == 4 and t[3] > 0
+            and t[0] > t[1] > t[2] > t[3])
+
+
 def read_all_reports(devpath):
     """Read all known Feature Reports and return decoded dict."""
     r = {}
@@ -294,6 +317,7 @@ def read_all_reports(devpath):
             thresholds_mv.append((d[off] << 8) | d[off + 1])
         r["calib_thresholds_mv"] = thresholds_mv
         r["calib_voltages"] = [round(t / 1000, 3) for t in thresholds_mv]
+        r["calib_valid"] = calibration_valid(thresholds_mv)
 
     # Voltage reference pair
     d = hid_get_feature(devpath, REP_VOLT_REF)
@@ -382,6 +406,8 @@ def read_all_reports(devpath):
     volts = r.get("voltage")
     thresholds = r.get("calib_thresholds_mv")
     if volts is not None and thresholds and len(thresholds) == 4:
+        if not calibration_valid(thresholds):
+            thresholds = list(DEFAULT_CALIBRATION_MV)  # same fallback as Rust
         mv = int(volts * 1000)
         # Thresholds: [100%, 75%, 50%, 25%] in mV (descending)
         # Interpolate linearly between segments
@@ -559,18 +585,35 @@ def get_conn_info(mac):
 
         header = struct.pack("<HHH", MGMT_OP_GET_CONN_INFO, 0, len(payload))
         sock.send(header + payload)
-        data = sock.recv(1024)
 
-        if len(data) < 19:
+        # The control channel also carries unrelated events: read until the
+        # reply to our own opcode arrives (bounded, like rssi-helper.c).
+        deadline = time.monotonic() + 0.4
+        data = None
+        while time.monotonic() < deadline:
+            try:
+                buf = sock.recv(1024)
+            except (socket.timeout, InterruptedError):
+                break
+            if len(buf) < 9:
+                continue
+            ev, _idx, _ln, op = struct.unpack_from("<HHHH", buf, 0)
+            if ev in (MGMT_EV_CMD_COMPLETE, MGMT_EV_CMD_STATUS) \
+                    and op == MGMT_OP_GET_CONN_INFO:
+                data = buf
+                break
+        if data is None:
             return None
         if struct.unpack_from("<H", data, 0)[0] != MGMT_EV_CMD_COMPLETE:
             return None
-        if data[8] != 0:
+        if data[8] != 0 or len(data) < 19:
             return None
 
         rssi = struct.unpack_from("<b", data, 16)[0]
         tx_power = struct.unpack_from("<b", data, 17)[0]
         max_tx = struct.unpack_from("<b", data, 18)[0]
+        if rssi == 127 or tx_power == 127:  # MGMT "not available" marker
+            return None
 
         return {"rssi_dbm": rssi, "tx_power_dbm": tx_power, "max_tx_power_dbm": max_tx}
     except (OSError, ValueError, struct.error):
@@ -986,6 +1029,20 @@ async def collect_report(bus, dev):
     sdp = await get_sdp_records(bus, dev["mac"]) if dev["mac"] else []
     leds = read_leds(dev.get("evdev"))
 
+    battery_source = "hid"
+    pct_report = reps.get("battery_pct")
+    if best_level(reps) is None:
+        cap = sysfs.get("capacity", "")
+        if cap.isdigit() and 0 <= int(cap) <= 100:
+            pct_report = int(cap)  # kernel/UPower fallback (#71)
+            battery_source = "sysfs"
+        else:
+            battery_source = None
+        if not reps:
+            print(f"warning: cannot read HID reports from {dev['path']} "
+                  f"(permissions? install udev/70-apple-kb-hidraw.rules)",
+                  file=sys.stderr)
+
     report = {
         "timestamp": datetime.now().isoformat(),
         "device": {
@@ -1004,7 +1061,8 @@ async def collect_report(bus, dev):
             "modalias": fw_modal,
         },
         "battery": {
-            "percentage": reps.get("battery_pct"),
+            "percentage": pct_report,
+            "percentage_source": battery_source,
             "percentage_fine": reps.get("battery_fine"),
             "percentage_interpolated": reps.get("battery_interpolated"),
             "adc_raw": reps.get("adc_raw"),
@@ -2048,6 +2106,12 @@ if HAS_DBUS_FAST:
 # Async daemon
 # ---------------------------------------------------------------------------
 
+def best_level(reps):
+    """Measured battery level (fine first), or None. 0 is a valid reading."""
+    fine = reps.get("battery_fine")
+    return fine if fine is not None else reps.get("battery_pct")
+
+
 async def _setup_provider(bus, provider=None):
     """Create (or reset and reuse) the Battery Provider and register it.
 
@@ -2060,7 +2124,13 @@ async def _setup_provider(bus, provider=None):
     devices = find_devices()
     for dev in devices:
         reps = read_all_reports(dev["path"])
-        pct = reps.get("battery_fine") or reps.get("battery_pct") or 0
+        pct = best_level(reps)
+        if pct is None:
+            # no measurement: never publish a fake 0 % (#78); _poll_device
+            # adds the keyboard on its first valid reading
+            print(f"[provider] {dev['mac']}: no battery reading, not exposed",
+                  file=sys.stderr)
+            continue
         provider.add_device(dev["mac"], pct)
 
     ok = await provider.register()
@@ -2080,7 +2150,7 @@ def _poll_device(dev, provider, threshold):
     volts = reps.get("voltage")
     adc = reps.get("adc_raw")
 
-    level = pct_fine if pct_fine is not None else pct
+    level = best_level(reps)
     if level is None:
         return
 
@@ -2211,7 +2281,9 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
                     for d in new_devs:
                         if d["mac"].upper() == mac.upper():
                             reps = read_all_reports(d["path"])
-                            pct = reps.get("battery_fine") or reps.get("battery_pct") or 0
+                            pct = best_level(reps)
+                            if pct is None:
+                                break
                             prov.add_device(mac, pct)
                             print(f"[event] {mac} appeared (connected) — battery {pct}%", file=sys.stderr)
                             break
@@ -2255,7 +2327,9 @@ async def daemon_loop(threshold, interval, no_provider=False, mqtt_host=None, mq
                 for d in new_devs:
                     if d["mac"].upper() == mac.upper():
                         reps = read_all_reports(d["path"])
-                        pct = reps.get("battery_fine") or reps.get("battery_pct") or 0
+                        pct = best_level(reps)
+                        if pct is None:
+                            break
                         prov.add_device(mac, pct)
                         print(f"[event] {mac} connected — battery {pct}%", file=sys.stderr)
                         break
