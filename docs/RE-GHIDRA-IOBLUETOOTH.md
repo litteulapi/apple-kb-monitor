@@ -122,7 +122,7 @@ Et dans IOBluetooth même, **aucune** de ces méthodes n'a d'appelant **[décomp
 
 **Conséquence** : sur macOS 26.5, les envois L9 (`0x4A` sur lien SCO) et L10 (`0x44` à la suppression du clavier) de
 `RE-PILOTES-ANCIENS.md` §5 **ne sont plus faits par la couche IOBluetooth** ; ce sont des faits de 10.7.5.
-Reste à vérifier si `bluetoothd` les a repris en C++ (§4).
+**`bluetoothd` les a repris en C++, sous une autre forme** : `0x4A = 03` à chaque réajustement du sniff, et `0x41` (pas `0x44`) à l'oubli (§5.1, §5.2).
 
 ## 3. Noyau arm64e : `IOBluetoothHIDDriver` 9.0.0 et `AppleBluetoothHIDKeyboard` 9410.2 au décompilateur
 
