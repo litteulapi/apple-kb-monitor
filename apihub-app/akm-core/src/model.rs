@@ -242,10 +242,20 @@ pub fn is_keyboard_device(modalias: &str, class: Option<u32>) -> bool {
     model_from_modalias(modalias).is_some() && class.is_none_or(is_keyboard_class)
 }
 
-/// UPower object paths embed the MAC with underscores or `o`: match a keyboard battery.
+/// UPower object path that may be a keyboard battery. Generic: it does not
+/// say WHICH keyboard (a `mouse_hid_...` or gamepad path no longer matches, #171);
+/// prefer [`upower_path_matches_mac`] when the followed MAC is known.
 pub fn is_keyboard_upower_path(path: &str) -> bool {
     let p = path.to_ascii_lowercase();
-    p.contains("/devices/keyboard_") || p.contains("/devices/battery_hid") || p.contains("hid_")
+    p.contains("/devices/keyboard_") || p.contains("/devices/battery_hid")
+}
+
+/// Does this UPower object path belong to the device `mac` (`AA:BB:CC:DD:EE:FF`)?
+/// UPower embeds the address with underscores (`hid_aa_bb_cc_dd_ee_ff_battery`).
+pub fn upower_path_matches_mac(path: &str, mac: &str) -> bool {
+    let tail = path.rsplit('/').next().unwrap_or("").to_ascii_lowercase();
+    let want = mac.to_ascii_lowercase().replace(':', "_");
+    want.len() == 17 && tail.contains(&want)
 }
 
 #[cfg(test)]
@@ -377,6 +387,17 @@ mod tests {
         assert!(!is_keyboard_upower_path(
             "/org/freedesktop/UPower/devices/battery_BAT0"
         ));
+        // #171: other HID devices are not keyboards.
+        let mouse = "/org/freedesktop/UPower/devices/mouse_hid_ec_2e_ee_a1_b2_c3_battery";
+        assert!(!is_keyboard_upower_path(mouse));
+        assert!(!is_keyboard_upower_path(
+            "/org/freedesktop/UPower/devices/gaming_input_hid_aa_bb_battery"
+        ));
+        let kb = "/org/freedesktop/UPower/devices/keyboard_hid_04_DB_56_CA_42_EE_battery";
+        assert!(upower_path_matches_mac(kb, "04:DB:56:CA:42:EE"));
+        assert!(!upower_path_matches_mac(kb, "EC:2E:EE:A1:B2:C3"));
+        assert!(!upower_path_matches_mac(mouse, "04:DB:56:CA:42:EE"));
+        assert!(!upower_path_matches_mac(kb, ""));
     }
 
     #[test]
