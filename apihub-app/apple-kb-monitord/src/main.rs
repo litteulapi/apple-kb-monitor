@@ -17,6 +17,8 @@ use akm_core::history::History;
 use akm_core::Watch;
 use apple_kb_monitord::{actor, client, service};
 
+mod tray;
+
 const USAGE: &str = "usage: apple-kb-monitord [--json [--daemon-only]] [--no-bluez-provider] [--no-notify] [--no-history] [--threshold N] [--version]";
 
 static STOP: AtomicBool = AtomicBool::new(false);
@@ -135,6 +137,7 @@ fn run(opts: actor::Options) -> ExitCode {
         opts.notify,
         opts.history
     );
+    tray::spawn(watch.clone(), mailbox.clone(), conn.clone());
     let handle = actor::spawn(watch, mailbox, opts);
     while !STOP.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(300));
