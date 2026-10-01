@@ -57,8 +57,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -195,8 +194,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -333,8 +331,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -471,8 +468,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -609,8 +605,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -747,8 +742,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -885,8 +879,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -1023,8 +1016,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -1161,8 +1153,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -1299,8 +1290,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -1437,8 +1427,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -1575,8 +1564,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",
@@ -1713,8 +1701,7 @@
      "bonded_host": "6c:94:66:52:7c:0d",
      "first": "4c03",
      "len": 20,
-     "masked": true,
-     "sha256_8": "f34626564fca9676"
+     "masked": true
     },
     "4f": {
      "hex": "4f5000",

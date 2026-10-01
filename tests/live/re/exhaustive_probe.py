@@ -58,7 +58,7 @@ def record(rid, data, rtype=None):
         r = {"len": len(data), "first": data[:2].hex(), "masked": True}
         # a hash of a short prefix (e.g. 9 bytes = 8 known + 1 secret) would be
         # brute-forceable: only the complete 20-byte report is fingerprinted
-        if len(data) >= 20:
+        if len(data) >= 20 and os.environ.get("AKM_RE_FINGERPRINT"):  # #210: opt-in, never committed
             r["sha256_8"] = hashlib.sha256(data).hexdigest()[:16]
         return r
     return {"len": len(data), "hex": data.hex()}

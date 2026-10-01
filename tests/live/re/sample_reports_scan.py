@@ -75,8 +75,10 @@ def mask(rid, r):
         # 0x4C = type (1 o) + BD_ADDR de l'hôte appairé (6 o, petit-boutiste)
         # + 12 o secrets. Seule l'adresse de l'hôte (publique) est conservée.
         host = ":".join(f"{x:02x}" for x in raw[2:8][::-1]) if len(raw) >= 8 else None
-        return {"len": r["len"], "first": raw[:2].hex(), "bonded_host": host,
-                "sha256_8": hashlib.sha256(raw).hexdigest()[:16], "masked": True}
+        out = {"len": r["len"], "first": raw[:2].hex(), "bonded_host": host, "masked": True}
+        if os.environ.get("AKM_RE_FINGERPRINT"):  # #210: opt-in, never committed
+            out["sha256_8"] = hashlib.sha256(raw).hexdigest()[:16]
+        return out
     return {"len": r["len"], "hex": raw.hex()}
 
 

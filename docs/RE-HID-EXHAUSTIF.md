@@ -144,7 +144,7 @@ par un seul lecteur. `0x5A`, `0x4F` et `0x51-0x54` au plus une fois par connexio
   * La tension baisse : la décharge est mesurable en quelques heures.
   * `0x47` vaut désormais `0xEA` : l'écart d'un point du matin s'est résorbé.
   * La relation « `0x47` = troncature de l'interpolation de `0x49` sur `0x5A` » est **mise en défaut** : elle donne 99,5 → 99, le clavier rend 98 (#179).
-* Constants **[mesuré]** : `0x09`, `0x4A`, `0x4B`, `0x4C` (même empreinte qu'à 03:57 : `f34626564fca9676`), `0x4F`, `0x51-0x54`,
+* Constants **[mesuré]** : `0x09`, `0x4A`, `0x4B`, `0x4C` (même contenu qu'à 03:57 ; empreinte non conservée, #210), `0x4F`, `0x51-0x54`,
   `0x5A`/`0x60`/`0xEB`, `0x5B`, `0x5C`/`0x5D`, `0xD1`/`0xD8`, `0xF4`-`0xF7`, `0xFE` (zéros).
 
 ### 2.2 Input (GET_REPORT type 1)

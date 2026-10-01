@@ -70,7 +70,8 @@ def round_reads(dev, gap, slow):
             elif rid == 0x4C:
                 d = bytes(buf[:n])
                 res[key] = {"len": n, "first": d[:2].hex(), "ms": ms,
-                            "sha256_8": hashlib.sha256(d).hexdigest()[:16] if n >= 20 else None}
+                            "sha256_8": hashlib.sha256(d).hexdigest()[:16]
+                            if n >= 20 and os.environ.get("AKM_RE_FINGERPRINT") else None}  # #210: opt-in
             else:
                 res[key] = {"hex": bytes(buf[:n]).hex(), "ms": ms}
             time.sleep(gap)
