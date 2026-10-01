@@ -2,6 +2,7 @@
 name = "akmctl"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Command-line client of the Apple keyboard monitor (status, Fn mode, watch)"
 
 [dependencies]

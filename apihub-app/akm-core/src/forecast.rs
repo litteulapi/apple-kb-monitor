@@ -23,6 +23,8 @@ pub const MIN_RATE_PCT_PER_DAY: f64 = 0.05;
 /// Minimum number of distinct hourly buckets.
 const MIN_BUCKETS: usize = 3;
 const BUCKET_S: u64 = 3600;
+/// Longest horizon of an estimate (s).
+const MAX_HORIZON_S: f64 = 1e10;
 
 /// Result of a successful estimate.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -72,7 +74,9 @@ impl std::fmt::Display for Unavailable {
 pub fn estimate(entries: &[HistoryEntry]) -> Result<Forecast, Unavailable> {
     let mut sorted: Vec<&HistoryEntry> = entries
         .iter()
-        .filter(|e| e.pct.is_finite() && (0.0..=100.0).contains(&e.pct))
+        .filter(|e| {
+            e.pct.is_finite() && (0.0..=100.0).contains(&e.pct) && e.ts <= crate::history::MAX_TS
+        })
         .collect();
     sorted.sort_by_key(|e| e.ts);
     let Some(last) = sorted.last() else {
@@ -124,7 +128,10 @@ pub fn estimate(entries: &[HistoryEntry]) -> Result<Forecast, Unavailable> {
         return Err(Unavailable::NotDischarging);
     }
     let fitted = (my + slope * (span_s as f64 - mx)).clamp(0.0, 100.0);
-    let empty_at = last_ts + (fitted / rate * 86_400.0).round() as u64;
+    // Bounded (~317 years) and saturating: a corrupt timestamp near u64::MAX
+    // must not wrap `empty_at` to a date in 1970 ("empty now", #223).
+    let secs_left = (fitted / rate * 86_400.0).clamp(0.0, MAX_HORIZON_S);
+    let empty_at = last_ts.saturating_add(secs_left.round() as u64);
     Ok(Forecast {
         rate_pct_per_day: rate,
         empty_at,

@@ -31,16 +31,36 @@ impl std::fmt::Display for AliasError {
 
 impl std::error::Error for AliasError {}
 
-/// Invisible characters that could spoof or hide a name (bidi overrides,
-/// zero-width, BOM, line/paragraph separators).
+/// Invisible, formatting or unassigned characters that could spoof or hide a
+/// name. Covers the Unicode general categories Cf (format), Zl, Zp (line and
+/// paragraph separators), Co (private use) and Cn (unassigned: the ranges
+/// below stand for the non-characters and the stable unassigned blocks), plus
+/// the "blank" fillers that are letters or symbols (Hangul fillers, Braille
+/// blank) and the variation selectors / combining grapheme joiner.
 fn is_invisible(c: char) -> bool {
     matches!(
         c,
-        '\u{200B}'..='\u{200F}'
+        '\u{00AD}'               // soft hyphen (Cf)
+            | '\u{034F}'         // combining grapheme joiner
+            | '\u{061C}'         // arabic letter mark (Cf)
+            | '\u{115F}'..='\u{1160}' // hangul choseong/jungseong fillers
+            | '\u{17B4}'..='\u{17B5}' // khmer inherent vowels (Cf)
+            | '\u{180B}'..='\u{180F}' // mongolian free variation selectors, vowel sep.
+            | '\u{200B}'..='\u{200F}'
             | '\u{2028}'..='\u{202E}'
-            | '\u{2060}'..='\u{2064}'
-            | '\u{2066}'..='\u{2069}'
+            | '\u{2060}'..='\u{206F}' // word joiner .. deprecated formatting (incl. unassigned 2065)
+            | '\u{2800}'         // braille pattern blank
+            | '\u{3164}'         // hangul filler
+            | '\u{E000}'..='\u{F8FF}' // private use (Co)
+            | '\u{FE00}'..='\u{FE0F}' // variation selectors
             | '\u{FEFF}'
+            | '\u{FFA0}'         // halfwidth hangul filler
+            | '\u{FFF0}'..='\u{FFFB}' // unassigned + interlinear annotation (Cf)
+            | '\u{FFFE}'..='\u{FFFF}' // non-characters
+            | '\u{1BCA0}'..='\u{1BCA3}' // shorthand format controls
+            | '\u{1D173}'..='\u{1D17A}' // musical formatting
+            | '\u{E0000}'..='\u{E0FFF}' // tags + variation selectors supplement
+            | '\u{F0000}'..='\u{10FFFF}' // supplementary private use planes (Co)
     )
 }
 
@@ -80,6 +100,26 @@ mod tests {
     fn rejects_control_and_invisible() {
         for bad in ["a\nb", "a\tb", "a\0b", "\u{7f}", "x\u{85}y", "a\u{202E}b", "a\u{200B}b", "a\u{2028}b", "\u{FEFF}a"] {
             assert!(matches!(validate(bad), Err(AliasError::BadChar(_))), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn rejects_bidi_fillers_and_format_characters() {
+        for c in [
+            '\u{061C}', '\u{3164}', '\u{FFA0}', '\u{2800}', '\u{00AD}', '\u{180E}', '\u{034F}',
+            '\u{2065}', '\u{E0041}', '\u{115F}', '\u{17B4}', '\u{FE0F}', '\u{FFF9}', '\u{E000}',
+            '\u{FFFF}', '\u{F0000}', '\u{206A}', '\u{1D173}',
+        ] {
+            let s = format!("a{c}b");
+            assert_eq!(validate(&s), Err(AliasError::BadChar(c)), "U+{:04X}", u32::from(c));
+            assert_eq!(validate(&c.to_string()), Err(AliasError::BadChar(c)));
+        }
+    }
+
+    #[test]
+    fn keeps_legitimate_non_ascii_names() {
+        for ok in ["\u{e9}t\u{e9}", "\u{4e2d}\u{6587}", "\u{627}\u{644}\u{639}\u{631}\u{628}\u{64a}\u{629}", "\u{1F3B9}", "\u{1100}\u{1161}"] {
+            assert!(validate(ok).is_ok(), "{ok:?}");
         }
     }
 

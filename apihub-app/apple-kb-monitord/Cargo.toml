@@ -2,6 +2,7 @@
 name = "apple-kb-monitord"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 description = "Headless Apple Bluetooth keyboard monitor: single owner of the hardware, BlueZ battery provider, session D-Bus interface"
 
 [lib]

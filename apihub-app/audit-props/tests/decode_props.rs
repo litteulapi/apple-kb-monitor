@@ -102,7 +102,6 @@ proptest! {
 
     /// Le chargeur de dumps hexa ne doit pas paniquer sur une entrée quelconque.
     #[test]
-    #[ignore = "bug confirmé : issue #220 (from_hex_dump panique sur UTF-8 multi-octets)"]
     fn hex_dump_parser_never_panics(s in "[0-9a-fA-F \\n#é€]{0,40}") {
         let _ = Fixture::from_hex_dump(&s);
     }
@@ -135,7 +134,6 @@ fn real_frames_truncated_at_every_length() {
 /// Reproducteur déterministe : un caractère multi-octets fait paniquer
 /// `Fixture::from_hex_dump` (tranchage `&hex[i..i + 2]` hors frontière de char).
 #[test]
-#[ignore = "bug confirmé : issue #220 : from_hex_dump panique sur UTF-8 multi-octets"]
 fn hex_dump_multibyte_char_does_not_panic() {
     let r = std::panic::catch_unwind(|| Fixture::from_hex_dump("aéa"));
     assert!(r.is_ok(), "from_hex_dump a paniqué");

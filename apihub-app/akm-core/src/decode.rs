@@ -149,6 +149,12 @@ impl Fixture {
                 continue;
             }
             let hex: String = line.chars().filter(|c| !c.is_whitespace()).collect();
+            if let Some(c) = hex.chars().find(|c| !c.is_ascii_hexdigit()) {
+                return Err(format!(
+                    "line {}: non-hexadecimal character {c:?}",
+                    n + 1
+                ));
+            }
             if !hex.len().is_multiple_of(2) {
                 return Err(format!("line {}: odd number of hex digits", n + 1));
             }
