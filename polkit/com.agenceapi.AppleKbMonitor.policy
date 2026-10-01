@@ -4,9 +4,10 @@
 <!--
   Install: /usr/share/polkit-1/actions/com.agenceapi.AppleKbMonitor.policy
 
-  allow_active = auth_admin (not "yes", not "_keep"): hid_apple.fnmode is a kernel
-  module parameter global to EVERY Apple keyboard of the machine, and the persist
-  option edits /etc/modprobe.d. A local active session must prove administrator
+  allow_active = auth_admin (not "yes", not "_keep"): the hid_apple parameters
+  (fnmode, iso_layout, swap_*) are global to EVERY Apple keyboard of the machine,
+  the persist option edits /etc/modprobe.d and install-keymap writes a udev hwdb
+  file in /etc/udev/hwdb.d (#247). A local active session must prove administrator
   rights at every change. "keep" is deliberately NOT used (#203): the daemon is a
   long-lived process that polkit sees as the subject, so a retained authorization
   would let any application of the session change the mode through D-Bus without
@@ -17,13 +18,30 @@
   <vendor_url>https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor</vendor_url>
 
   <action id="com.agenceapi.AppleKbMonitor.set-fnmode">
-    <description>Change the Fn key mode of Apple keyboards</description>
-    <message>Authentication is required to change the Fn key mode of all Apple keyboards</message>
+    <description>Change the Fn key mode and the hid_apple parameters of Apple keyboards</description>
+    <message>Authentication is required to change the Fn key mode or the hid_apple parameters of all Apple keyboards</message>
     <defaults>
       <allow_any>no</allow_any>
       <allow_inactive>no</allow_inactive>
       <allow_active>auth_admin</allow_active>
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-helper</annotate>
+  </action>
+
+  <!-- #247: one program per action (pkexec picks the action from the path). The
+       helper takes no path and no value: it reads the hwdb file of the caller
+       (/run/user/$PKEXEC_UID/apple-kb-monitor/keymap.hwdb), validates it line by
+       line against a whitelist, installs /etc/udev/hwdb.d/90-apple-kb-monitor.hwdb
+       (0644 root:root, previous file kept as .akm-bak) and runs systemd-hwdb update
+       + udevadm trigger. -->
+  <action id="com.agenceapi.AppleKbMonitor.install-keymap">
+    <description>Install the key mapping of Apple keyboards (udev hwdb)</description>
+    <message>Authentication is required to change the key mapping of all Apple aluminium keyboards</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-keymap-helper</annotate>
   </action>
 </policyconfig>

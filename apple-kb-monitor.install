@@ -40,6 +40,11 @@ post_upgrade() {
 
 post_remove() {
     udevadm control --reload-rules 2>/dev/null || true
+    if [ -e /etc/udev/hwdb.d/90-apple-kb-monitor.hwdb ]; then
+        echo ">>> Your key mapping (akmctl keymap apply) is still installed. To drop it:"
+        echo "      sudo rm /etc/udev/hwdb.d/90-apple-kb-monitor.hwdb* && sudo systemd-hwdb update"
+        echo "      then switch the keyboard off and on (the kernel keeps the mapping until then)"
+    fi
     echo ">>> To disable the daemon:"
     echo "      systemctl --user disable apple-kb-monitord.service"
 }
@@ -51,7 +56,8 @@ post_remove() {
 # memory until its next restart: tell the user, do not touch the service.
 _akm_keyd_notice() {
     echo ">>> keyd is now optional (#246): /etc/keyd/apple-keyboard.conf is no longer installed."
-    echo "    F3-F6 are mapped by the udev hwdb file (akmctl keymap). keyd is left untouched."
+    echo "    The kernel (hid_apple fnmode=1) already sends brightness, Expose, media and volume;"
+    echo "    optional remapping without keyd: akmctl keymap (udev hwdb). keyd is left untouched."
     echo "    - keep keyd off (recommended):  sudo systemctl disable --now keyd"
     echo "    - or keep the keyd macros:      sudo install -Dm644 /usr/share/doc/apple-kb-monitor/examples/keyd/apple-keyboard.conf /etc/keyd/"
     echo "                                    sudo systemctl restart keyd   (never 'keyd reload': it crashes keyd 2.6.0)"
@@ -101,6 +107,7 @@ _akm_message() {
     echo "      apihub-app                     # from terminal"
     echo "      # or search 'ApiHub' in KDE application menu"
     echo ""
-    echo ">>> Special keys: mapped by the udev hwdb file (akmctl keymap). keyd is optional:"
+    echo ">>> Special keys: akmctl keys --check shows what each key does in KDE; optional"
+    echo "    remapping: akmctl keymap (udev hwdb, nothing installed by default). keyd is optional:"
     echo "      example config in /usr/share/doc/apple-kb-monitor/examples/keyd/ (see KEYD.md)"
 }
