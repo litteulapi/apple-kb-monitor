@@ -96,12 +96,12 @@ PlasmoidItem {
         return i18n("Critical, replace");
     }
 
-    // RSSI is unknown when absent, null, the 127 sentinel or >= 0 dBm (the
-    // daemon reports 0 when it has no reading; a real link never reads 0 dBm).
+    // RSSI is unknown when absent, null or the 127 sentinel. 0 dBm is a valid
+    // measurement (keyboard right next to the adapter); a positive value is not.
     function rssiOf(radio) {
         if (!radio || radio.rssi_dbm === null || radio.rssi_dbm === undefined) return NaN;
         var v = Number(radio.rssi_dbm);
-        return (isNaN(v) || v >= 0) ? NaN : v;
+        return (isNaN(v) || v > 0) ? NaN : v;
     }
 
     function apply(json) {

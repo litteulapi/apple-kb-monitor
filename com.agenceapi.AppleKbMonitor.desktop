@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=ApiHub
+Name=Apple Keyboard Monitor
 GenericName=Keyboard Monitor
 Comment=Apple Bluetooth keyboard telemetry and battery
 Exec=apihub-app
@@ -8,4 +8,5 @@ Terminal=false
 Type=Application
 Categories=System;Monitor;
 Keywords=keyboard;apple;bluetooth;battery;rssi;
-StartupWMClass=apihub
+StartupWMClass=com.agenceapi.AppleKbMonitor
+DBusActivatable=true
