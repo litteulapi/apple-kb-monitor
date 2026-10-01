@@ -767,7 +767,12 @@ fn open_window(state: &State, raise: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBoo
             .with_app_id(instance::APP_ID)
             .with_inner_size([720.0, 600.0])
             .with_min_inner_size([500.0, 400.0]),
-        vsync: true,
+        // Never block in eglSwapBuffers: with vsync on, Mesa waits for a
+        // Wayland frame callback that a minimized or hidden window never
+        // gets, the main thread stops answering pings ("Not responding") and
+        // ignores Activate/Quit (#231). Repaints are timer-driven (2 s) or
+        // input-driven anyway, so there is nothing to tear.
+        vsync: false,
         // Return to main() on close, which then ends the process (#226).
         run_and_return: true,
         ..Default::default()
