@@ -479,7 +479,7 @@ fn r7_will_shutdown_once_and_only_when_allowed() {
     use std::sync::Mutex;
     struct Sink(std::cell::RefCell<Vec<Vec<u8>>>);
     impl FeatureSink for Sink {
-        fn set_feature(&self, r: &[u8]) -> io::Result<()> {
+        fn set_feature(&self, _op: crate::registry::WriteOp, r: &[u8]) -> io::Result<()> {
             self.0.borrow_mut().push(r.to_vec());
             Ok(())
         }
