@@ -1,0 +1,60 @@
+{
+ "schema": 1,
+ "version": 1,
+ "connected": true,
+ "keyboard": {
+  "wake": {
+   "last_age_s": null,
+   "count": 0
+  },
+  "device": {
+   "model": "Apple Wireless Keyboard (A1314, aluminum, ISO)",
+   "name": "Test keyboard",
+   "alias": "Test keyboard",
+   "mac": "AA:BB:CC:00:11:22",
+   "chip": "BCM2042",
+   "driver": "hid-apple"
+  },
+  "battery": {
+   "percentage": 96.0,
+   "percentage_fine": 96.0,
+   "percentage_estimate": null,
+   "percentage_interpolated": null,
+   "voltage": null,
+   "voltage_mv": null,
+   "voltage_filtered_mv": null,
+   "voltage_doubtful": false,
+   "adc_raw": null,
+   "charge_estimate": null,
+   "new_batteries": false
+  },
+  "bluetooth": {
+   "connected": true,
+   "paired": false,
+   "rssi_dbus": null,
+   "tx_power_dbus": null,
+   "paired_host_addr": null
+  },
+  "radio": {
+   "rssi_dbm": 0,
+   "rssi_rel_db": 0,
+   "rssi_kind": "bredr-golden-range",
+   "rssi_quality": "excellent",
+   "tx_power_dbm": 8
+  },
+  "firmware": {
+   "version": null
+  },
+  "raw": {},
+  "incomplete": false
+ },
+ "kb_error": null,
+ "caps_lock": false,
+ "num_lock": false,
+ "remaining_display": null,
+ "rssi_at": 1790860275,
+ "last_update": 1790855370,
+ "last_error": null,
+ "forecast": null,
+ "batteries_installed_at": null
+}

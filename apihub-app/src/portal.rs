@@ -86,14 +86,15 @@ fn follow(ctx: &egui::Context, shared: &Shared) -> zbus::Result<()> {
     let conn = Connection::session()?;
     let proxy = Proxy::new(&conn, DEST, PATH, IFACE)?;
     let signals = proxy.receive_signal("SettingChanged")?;
-    {
-        let mut a = shared.lock().unwrap_or_else(|e| e.into_inner());
-        for key in ["color-scheme", "accent-color"] {
-            if let Some(v) = read(&conn, key) {
-                apply(&mut a, key, v);
-            }
+    // D-Bus reads on a copy, lock held only to store it: the UI locks the
+    // same mutex in every frame and must never wait for the portal (#232).
+    let mut a = *shared.lock().unwrap_or_else(|e| e.into_inner());
+    for key in ["color-scheme", "accent-color"] {
+        if let Some(v) = read(&conn, key) {
+            apply(&mut a, key, v);
         }
     }
+    *shared.lock().unwrap_or_else(|e| e.into_inner()) = a;
     ctx.request_repaint();
     for msg in signals {
         let Ok((ns, key, value)) = msg.body().deserialize::<(String, String, OwnedValue)>() else {
