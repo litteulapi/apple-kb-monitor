@@ -124,26 +124,25 @@ La trame d'hypothèse de l'ancien §5.2 (`Clavier de maria #1`) est confirmée o
 4. **Nom perdu** au changement de piles si `0x55` est volatile (U3) : la sauvegarde permet de réécrire, sous réserve que l'écriture fonctionne.
 5. **Gain faible** : l'alias (a) donne déjà le même affichage sur ce poste.
 
-## 7. Procédure pour le gérant
+## 7. Procédure pour le gérant : quatre commandes
 
-Sans rien risquer (aucune écriture possible tant que le verrou 1 est fermé) :
+Préalables : un second clavier fonctionnel, piles ≥ 20 %, `akmctl doctor` vert, le paquet **réinstallé** avec cette version (le helper `akm-hid-control` doit connaître le verbe `inspect`, sinon `REFUSÉ (verrou 2)` « reinstall the package »). Tout se passe **dans un terminal** (konsole) ; les messages sont en français si `LANG` commence par `fr`, en anglais sinon. **Rien à éditer dans `config.toml`.**
 
-1. `akmctl rename --device-name --show` : nom propre actuel (cache du démon).
-2. `akmctl rename --device-name "<nom voulu>"` : vérifie le nom, montre les 66 octets avec leur preuve, le pré-vol (hors MTU), **sauvegarde** le nom actuel (chemin affiché), l'état des trois verrous et les risques.
+| # | Commande | Effet | Écrit ? |
+|---|---|---|---|
+| 1 | `akmctl rename --device-name --show` | nom propre actuel (cache du démon) et ses 32 octets | non |
+| 2 | `akmctl rename --device-name "<nom>" --check` | **tout le pré-vol** : doctor, batterie, disjoncteur, lecture récente, puis **une seule** demande `pkexec` (authentification administrateur) pour lire la MTU du canal de contrôle (verrou 2, lecture seule) ; **sauvegarde** du nom actuel ; affichage du **plan** (65 octets du rapport, 66 sur le fil, chemin de la sauvegarde, commande de retour arrière, risques U5/U3) ; s'arrête **avant** toute demande de consentement. Code 0 = tout serait accepté ; 11 = refusé (la raison est affichée) | non |
+| 3 | `akmctl rename --device-name "<nom>" --write-device-name` | même pré-vol et même plan, puis : taper exactement **`ECRIRE`** (verrou 1, consentement pour **cette exécution seulement**, rien n'est écrit dans `config.toml`), **retaper le nom** (verrou 3), **une** écriture, puis la consigne « **éteignez le clavier 3 s, attendez 5 s, rallumez-le** » avec compte à rebours (≤ 180 s), relecture `0x51-0x54`, verdict `✓` ou `✗` | **oui, une trame `0x55`**, seulement après `ECRIRE` + nom |
+| 4 | *(seulement si `✗`)* `akmctl rename --device-name --restore ~/.local/state/apple-kb-monitor/devname-backup-<horodatage>.json --write-device-name` | retour arrière : la commande **exacte** est affichée dans le plan et dans le verdict `✗` (§8) ; même protocole, nouvelle confirmation | oui, les 32 octets sauvegardés |
 
-Pour écrire réellement, en acceptant les risques U5 et U3 (§5.3, §6) :
+Ce qui reste verrouillé, et comment chaque verrou se lève :
 
-1. Avoir un second clavier fonctionnel, piles neuves (≥ 20 %), le paquet **réinstallé** avec cette version (le helper `akm-hid-control` doit connaître le verbe `inspect` ; sinon `REFUSED (lock 2)` « reinstall the package »).
-2. Lever le verrou 1 : ajouter à `~/.config/apple-kb-monitor/config.toml`
-   ```toml
-   [apple]
-   allow_device_name_write = true
-   ```
-3. `akmctl doctor` doit être vert ; `akmctl rename --device-name --show` doit afficher le nom actuel.
-4. Dans un terminal : `akmctl rename --device-name "<nom>" --write-device-name`. La commande affiche la trame, puis demande l'authentification administrateur (`pkexec`) pour lire la MTU du canal de contrôle (verrou 2, lecture seule) ; elle s'arrête là si la MTU est inconnue ou < 66.
-5. Relire le résumé et **retaper le nom exactement** (verrou 3). La trame unique part.
-6. Quand la commande le demande : éteindre le clavier (3 s), attendre 5 s, le rallumer ; attendre la vérification (≤ 3 min).
-7. Résultat `✓` : terminé (la sauvegarde reste dans `~/.local/state/apple-kb-monitor/`). Résultat `✗ différent` : lancer la commande de retour arrière affichée (§8). Puis remettre `allow_device_name_write = false`.
+* **Verrou 1 (consentement).** Deux formes, au choix : (a) dans un terminal **interactif** (stdin **et** stdout sont un TTY), taper exactement `ECRIRE` (sensible à la casse, sans accent) après l'affichage du plan, de la sauvegarde et des risques : ce consentement vaut pour l'exécution en cours seulement, **aucune écriture dans `config.toml`** ; (b) pour l'automatisation sans terminal, la clé `[apple] allow_device_name_write = true` reste la seule voie. Sans TTY et sans la clé : `REFUSÉ (verrou 1)` avant tout pré-vol, tout `pkexec`, toute sauvegarde (code 10), exactement comme avant. Avec la clé, `ECRIRE` n'est pas redemandé mais le nom retapé l'est toujours.
+* **Verrou 2 (MTU ≥ 66)** : inchangé, lu sur la socket vivante par **une seule** demande `pkexec` par commande (`--check` comme `--write-device-name` ; `--dry-run` ne la lit pas).
+* **Verrou 3 (nom retapé)** : inchangé ; `ECRIRE` ne le remplace pas.
+* Barrières fixes : preuve `EstablishedByDisassembly`, registre (`0x55` seul, 64 octets, une fois par session), porte matérielle de 65 octets, aucun chemin D-Bus/fenêtre/tray/widget. Le module des Paramètres système (onglet « Nom ») n'écrit rien : ses boutons « **Vérifier (sans écrire)** » et « **Écrire le nom dans le clavier…** » ouvrent un terminal (`konsole`, sinon `xterm`, sinon `x-terminal-emulator`) sur les commandes 2 et 3 avec le nom validé (ASCII imprimable, 1-32) passé en **un seul argument** (`--device-name=<nom>`, `QProcess`, jamais de shell) ; tout le reste (plan, `ECRIRE`, nom, écriture) se passe dans ce terminal.
+
+Codes de sortie de `--device-name` : 0 réussi (ou `--check` vert) · 1 erreur générique · 2 démon absent · **10** refusé verrou 1 · **11** refusé pré-vol (verrou 2 compris) · **12** annulé au clavier (`ECRIRE` ou nom incorrect ; rien d'écrit, la sauvegarde reste) · **13** écrit mais pas de reconnexion dans le délai · **14** écrit, relecture différente (retour arrière affiché) · 64 usage.
 
 ## 8. Retour arrière
 
