@@ -11,7 +11,7 @@
                 "Email": "han@agenceapi.com"
             }
         ],
-        "Version": "2.4.0",
+        "Version": "3.0.0",
         "License": "GPL-2.0-or-later",
         "Website": "https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
     },
