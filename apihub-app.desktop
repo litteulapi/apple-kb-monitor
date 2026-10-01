@@ -6,6 +6,6 @@ Exec=apihub-app
 Icon=apihub-scarab
 Terminal=false
 Type=Application
-Categories=Utility;System;HardwareSettings;
+Categories=System;Monitor;
 Keywords=keyboard;monitor;ddc;brightness;apple;bluetooth;mqtt;
 StartupWMClass=apihub
