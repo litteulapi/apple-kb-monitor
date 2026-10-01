@@ -70,40 +70,40 @@ Valeur : ★★★ forte · ★★ moyenne · ★ faible. Effort : S ≤ 1 j, M 
 
 | ID | Fonctionnalité | Valeur | Faisab. | Risque | Effort | Jalon | Issue |
 |---|---|---|---|---|---|---|---|
-| F01 | Alertes batterie multi-seuils configurables (défaut 30/15/5 %) avec hystérésis | ★★★ | certaine | B | S | 1 | à créer |
-| F02 | Prévision d'autonomie en jours (régression sur l'historique), tray + tooltip + D-Bus | ★★★ | certaine | M (bruit des mesures) | M | 1 | à créer |
-| F03 | Notifications connexion / déconnexion / reconnexion (silencieuses par défaut) | ★★★ | certaine | B | S | 1 | à créer |
-| F04 | Détection de remplacement de piles / recharge + journal « durée de vie par jeu de piles » | ★★★ | probable | M | M | 1 | à créer |
-| F05 | Menu tray riche : %, autonomie, connexion, RSSI, modèle + actions (Fn, rafraîchir, copier diagnostic, réglages) | ★★★ | certaine | B | M | 1 | à créer |
-| F06 | Icône tray dynamique symbolique (paliers, critique, déconnecté, en charge), compatible Breeze clair/sombre | ★★★ | certaine | B | S | 1 | à créer |
-| F07 | Helper privilégié polkit + bascule Fn lock (fnmode 1↔2) depuis le tray, persistée dans modprobe.d | ★★★ | certaine | M (root) | M | 1 | à créer |
-| F08 | Inversions Option/Cmd (0/1/2), Ctrl/Cmd, Fn/Ctrl gauche depuis les réglages | ★★ | certaine | M | S | 1 | à créer |
-| F09 | Disposition ISO/ANSI (`iso_layout` -1/0/1) depuis les réglages | ★★ | certaine | B | S | 1 | à créer |
-| F10 | Mode ne-pas-déranger : respect du DND Plasma + plages horaires ; le seuil critique passe toujours | ★★ | certaine | B | S | 1 | à créer |
-| F11 | CLI Rust `akmctl` : `status --json`, `get/set fnmode`, `watch` (flux JSON des signaux), codes retour | ★★★ | certaine | B | M | 1 | à créer (waybar/CSV/Prometheus : #22) |
-| F12 | API D-Bus v2 : multi-appareils (`/devices/<mac>`), méthodes d'écriture, signaux `BatteryLevelCrossed`, `ConnectionChanged` | ★★★ | certaine | M (compat v1) | M | 1 | à créer |
-| F13 | Multi-claviers simultanés ; tray = appareil le plus faible (modèle Solaar) | ★★★ | certaine | M | M | 2 | à créer |
-| F14 | Magic Trackpad 2 / Magic Mouse 2 : batterie BT via rapport `0x90` tant que le noyau ne la publie pas | ★★ | probable | M | M | 2 | à créer |
-| F15 | Historique 7/30/90 j : graphes % et tension, rotation/rétention bornée | ★★ | certaine | B | M | 2 | à créer |
+| F01 | Alertes batterie multi-seuils configurables (défaut 30/15/5 %) avec hystérésis | ★★★ | certaine | B | S | 1 | #82 |
+| F02 | Prévision d'autonomie en jours (régression sur l'historique), tray + tooltip + D-Bus | ★★★ | certaine | M (bruit des mesures) | M | 1 | #83 |
+| F03 | Notifications connexion / déconnexion / reconnexion (silencieuses par défaut) | ★★★ | certaine | B | S | 1 | #84 |
+| F04 | Détection de remplacement de piles / recharge + journal « durée de vie par jeu de piles » | ★★★ | probable | M | M | 1 | #85 |
+| F05 | Menu tray riche : %, autonomie, connexion, RSSI, modèle + actions (Fn, rafraîchir, copier diagnostic, réglages) | ★★★ | certaine | B | M | 1 | #86 |
+| F06 | Icône tray dynamique symbolique (paliers, critique, déconnecté, en charge), compatible Breeze clair/sombre | ★★★ | certaine | B | S | 1 | #87 |
+| F07 | Helper privilégié polkit + bascule Fn lock (fnmode 1↔2) depuis le tray, persistée dans modprobe.d | ★★★ | certaine | M (root) | M | 1 | #88 |
+| F08 | Inversions Option/Cmd (0/1/2), Ctrl/Cmd, Fn/Ctrl gauche depuis les réglages | ★★ | certaine | M | S | 1 | #89 |
+| F09 | Disposition ISO/ANSI (`iso_layout` -1/0/1) depuis les réglages | ★★ | certaine | B | S | 1 | #90 |
+| F10 | Mode ne-pas-déranger : respect du DND Plasma + plages horaires ; le seuil critique passe toujours | ★★ | certaine | B | S | 1 | #91 |
+| F11 | CLI Rust `akmctl` : `status --json`, `get/set fnmode`, `watch` (flux JSON des signaux), codes retour | ★★★ | certaine | B | M | 1 | #92 (waybar/CSV/Prometheus : #22) |
+| F12 | API D-Bus v2 : multi-appareils (`/devices/<mac>`), méthodes d'écriture, signaux `BatteryLevelCrossed`, `ConnectionChanged` | ★★★ | certaine | M (compat v1) | M | 1 | #93 |
+| F13 | Multi-claviers simultanés ; tray = appareil le plus faible (modèle Solaar) | ★★★ | certaine | M | M | 2 | #94 |
+| F14 | Magic Trackpad 2 / Magic Mouse 2 : batterie BT via rapport `0x90` tant que le noyau ne la publie pas | ★★ | probable | M | M | 2 | #95 |
+| F15 | Historique 7/30/90 j : graphes % et tension, rotation/rétention bornée | ★★ | certaine | B | M | 2 | #96 |
 | F16 | Export historique CSV/JSON + archive de diagnostic | ★★ | certaine | B | S | 2 | #22 |
-| F17 | Widget Plasma enrichi : jauge, sparkline 7 j, autonomie, bouton Fn lock | ★★★ | certaine | B | M | 2 | à créer |
-| F18 | Runner KRunner (« clavier », « fn lock », « batterie clavier ») | ★★ | certaine | B | M | 2 | à créer |
-| F19 | Raccourcis globaux KGlobalAccel : bascule Fn lock, afficher l'état | ★★ | certaine | B | S | 2 | à créer (F1/F2 : #68) |
-| F20 | OSD Plasma (`org.kde.osdService`) au changement de Fn mode / disposition | ★★ | certaine | B | S | 2 | à créer |
-| F21 | Indicateur CapsLock à l'écran (OSD) et dans le tray | ★ | certaine | B | S | 2 | à créer |
-| F22 | Remappage keyd par profils (Mac, PC, Dev, Eject→Suppr) : éditeur, `keyd check`, rechargement, retour arrière | ★★★ | certaine | H (clavier inutilisable si erreur) | L | 2 | à créer |
-| F23 | Réglages par clavier (MAC) mémorisés et réappliqués à la reconnexion | ★★★ | probable (hid_apple global) | M | M | 2 | à créer |
-| F24 | Actions Bluetooth depuis le tray : reconnecter, déconnecter, oublier, ré-appairer guidé | ★★ | certaine | M | M | 2 | à créer |
-| F25 | Qualité de liaison : historique RSSI, compteur de déconnexions, alerte liaison instable | ★★ | certaine | B | M | 2 | à créer |
-| F26 | Assistant de diagnostic guidé avec correctifs en un clic (udev, hidraw, keyd, BlueZ, UPower, helper) | ★★ | certaine | M | M | 2 | à créer |
-| F27 | Profils keyd par application (couches selon la fenêtre active, KWin) | ★★ | probable (Wayland) | M | L | 3 | à créer |
-| F28 | Santé des piles : tension vs %, type de piles (alcaline/NiMH), recommandations | ★★ | probable | M | M | 3 | à créer |
-| F29 | Statistiques d'usage sans keylogging (heures actives via événements de réveil) | ★ | probable | M (vie privée) | M | 3 | à créer |
-| F30 | Notifications actionnables (« Me rappeler demain », « Ouvrir l'historique ») | ★★ | certaine | B | S | 3 | à créer |
-| F31 | Module KCM dans Configuration du système (Matériel → Clavier Apple) | ★★ | certaine | M | L | 3 | à créer |
-| F32 | Mode filaire USB/Lightning/USB-C : détection câble, état de charge, bascule de source | ★ | certaine | B | S | 3 | à créer |
-| F33 | Visualiseur d'événements de touches (codes HID → evdev → keyd), à la Karabiner EventViewer | ★★ | certaine | B | M | 3 | à créer |
-| F34 | Internationalisation FR/EN (gettext / fluent) de l'appli, du tray et des notifications | ★★ | certaine | B | M | 3 | à créer |
+| F17 | Widget Plasma enrichi : jauge, sparkline 7 j, autonomie, bouton Fn lock | ★★★ | certaine | B | M | 2 | #97 |
+| F18 | Runner KRunner (« clavier », « fn lock », « batterie clavier ») | ★★ | certaine | B | M | 2 | #98 |
+| F19 | Raccourcis globaux KGlobalAccel : bascule Fn lock, afficher l'état | ★★ | certaine | B | S | 2 | #99 (F1/F2 : #68) |
+| F20 | OSD Plasma (`org.kde.osdService`) au changement de Fn mode / disposition | ★★ | certaine | B | S | 2 | #100 |
+| F21 | Indicateur CapsLock à l'écran (OSD) et dans le tray | ★ | certaine | B | S | 2 | #101 |
+| F22 | Remappage keyd par profils (Mac, PC, Dev, Eject→Suppr) : éditeur, `keyd check`, rechargement, retour arrière | ★★★ | certaine | H (clavier inutilisable si erreur) | L | 2 | #102 |
+| F23 | Réglages par clavier (MAC) mémorisés et réappliqués à la reconnexion | ★★★ | probable (hid_apple global) | M | M | 2 | #103 |
+| F24 | Actions Bluetooth depuis le tray : reconnecter, déconnecter, oublier, ré-appairer guidé | ★★ | certaine | M | M | 2 | #104 |
+| F25 | Qualité de liaison : historique RSSI, compteur de déconnexions, alerte liaison instable | ★★ | certaine | B | M | 2 | #105 |
+| F26 | Assistant de diagnostic guidé avec correctifs en un clic (udev, hidraw, keyd, BlueZ, UPower, helper) | ★★ | certaine | M | M | 2 | #106 |
+| F27 | Profils keyd par application (couches selon la fenêtre active, KWin) | ★★ | probable (Wayland) | M | L | 3 | #107 |
+| F28 | Santé des piles : tension vs %, type de piles (alcaline/NiMH), recommandations | ★★ | probable | M | M | 3 | #108 |
+| F29 | Statistiques d'usage sans keylogging (heures actives via événements de réveil) | ★ | probable | M (vie privée) | M | 3 | #109 |
+| F30 | Notifications actionnables (« Me rappeler demain », « Ouvrir l'historique ») | ★★ | certaine | B | S | 3 | #110 |
+| F31 | Module KCM dans Configuration du système (Matériel → Clavier Apple) | ★★ | certaine | M | L | 3 | #111 |
+| F32 | Mode filaire USB/Lightning/USB-C : détection câble, état de charge, bascule de source | ★ | certaine | B | S | 3 | #112 |
+| F33 | Visualiseur d'événements de touches (codes HID → evdev → keyd), à la Karabiner EventViewer | ★★ | certaine | B | M | 3 | #113 |
+| F34 | Internationalisation FR/EN (gettext / fluent) de l'appli, du tray et des notifications | ★★ | certaine | B | M | 3 | #114 |
 | F35 | Exporteur Prometheus et module waybar natifs Rust | ★ | certaine | B | S | 3 | #22 |
 
 **Non retenus** (matériel ou risque) : rétroéclairage, Touch ID, mise à jour firmware, réglage du délai de veille, capteur de température (cf. §3).
