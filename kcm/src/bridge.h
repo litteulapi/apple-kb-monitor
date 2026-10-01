@@ -64,6 +64,16 @@ public:
     Q_INVOKABLE int writeConfig(const QString &text);
 
     Q_INVOKABLE void copyText(const QString &text);
+    // "Name" tab (#248): open a terminal emulator (konsole, else xterm, else
+    // x-terminal-emulator) running `akmctl rename --device-name=<name>
+    // --write-device-name` (checkOnly: `--check`, nothing written). The module
+    // itself writes NOTHING: akmctl, in that terminal, shows the plan, makes
+    // the backup and demands the typed consent and the name again. The name
+    // is validated (printable ASCII, 1-32, akm_core rules) and passed as one
+    // argv element through QProcess::startDetached, never a shell. Returns ""
+    // when the terminal started, else the reason. Test hook: AKM_KCM_TERMINAL
+    // = absolute path of a fake terminal (tests only; unset otherwise).
+    Q_INVOKABLE QString openDeviceNameTerminal(const QString &name, bool checkOnly);
     // Ask the bus again whether the daemon is there (asynchronous).
     Q_INVOKABLE void checkDaemon();
 

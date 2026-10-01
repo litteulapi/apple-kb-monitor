@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "bridge.h"
+#include "terminal.h"
 
 #include <QClipboard>
 #include <QDBusArgument>
@@ -442,6 +443,30 @@ void AkmBridge::copyText(const QString &text)
     if (auto *cb = QGuiApplication::clipboard()) {
         cb->setText(text);
     }
+}
+
+QString AkmBridge::openDeviceNameTerminal(const QString &name, bool checkOnly)
+{
+    const QStringList args = AkmTerminal::akmctlArgs(name, checkOnly);
+    if (args.isEmpty()) {
+        return QStringLiteral("name refused: 1 to 32 printable ASCII characters, no leading or trailing space, no backslash");
+    }
+    const QString akmctl = QStandardPaths::findExecutable(QStringLiteral("akmctl"));
+    if (akmctl.isEmpty()) {
+        return QStringLiteral("akmctl not found in PATH");
+    }
+    const QString terminal = AkmTerminal::findTerminal(qEnvironmentVariable("AKM_KCM_TERMINAL"));
+    if (terminal.isEmpty()) {
+        return QStringLiteral("no terminal emulator found (konsole, xterm or x-terminal-emulator)");
+    }
+    const AkmTerminal::Launch l = AkmTerminal::launchFor(terminal, akmctl, args);
+    if (l.program.isEmpty()) {
+        return QStringLiteral("refused");
+    }
+    if (!QProcess::startDetached(l.program, l.args)) {
+        return QStringLiteral("%1 could not be started").arg(l.program);
+    }
+    return {};
 }
 
 void AkmBridge::onStateChanged(qulonglong revision, const QString &)

@@ -29,10 +29,19 @@ ecm_find_qmlmodule(org.kde.kcmutils 1.0)
 
 add_definitions(-DTRANSLATION_DOMAIN=\"kcm_applekeyboard\")
 
-kcmutils_add_qml_kcm(kcm_applekeyboard SOURCES src/kcm.cpp src/bridge.cpp src/bridge.h)
+kcmutils_add_qml_kcm(kcm_applekeyboard SOURCES src/kcm.cpp src/bridge.cpp src/bridge.h src/terminal.cpp src/terminal.h)
 target_link_libraries(kcm_applekeyboard PRIVATE
     Qt6::Core Qt6::Gui Qt6::DBus Qt6::Qml Qt6::Quick Qt6::Concurrent
     KF6::KCMUtilsQuick KF6::I18n KF6::CoreAddons)
+
+# Unit test of the terminal launch (#248): the name never goes through a
+# shell. `ctest --test-dir build` (BUILD_TESTING, on by default with ECM).
+if(BUILD_TESTING)
+    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Test)
+    add_executable(test_terminal tests/test_terminal.cpp src/terminal.cpp src/terminal.h)
+    target_link_libraries(test_terminal PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME kcm_terminal COMMAND test_terminal)
+endif()
 
 # Translations: po/<lang>/kcm_applekeyboard.po -> <lang>/LC_MESSAGES/*.mo
 find_package(Gettext REQUIRED)

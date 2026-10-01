@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: kcm_applekeyboard\n"
 "Report-Msgid-Bugs-To: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-"
 "monitor/issues\n"
-"POT-Creation-Date: 2026-10-01 18:48+0200\n"
+"POT-Creation-Date: 2026-10-01 22:00+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -636,174 +636,209 @@ msgstr ""
 msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
 msgstr ""
 
-#: ui/main.qml:26
-msgid ""
-"The keyboard service (apple-kb-monitord) is not running: the state, the name "
-"and the reconnection are unavailable. The keys and the notifications can "
-"still be set."
-msgstr ""
-
-#: ui/main.qml:30
-msgid "Starting…"
-msgstr ""
-
-#: ui/main.qml:30
-msgid "Start the service"
-msgstr ""
-
-#: ui/main.qml:38
-msgid "The service could not be started: %1"
-msgstr ""
-
-#: ui/main.qml:49
-msgid "Sections of the Apple keyboard settings"
-msgstr ""
-
-#: ui/main.qml:51
-msgctxt "@title:tab"
-msgid "State"
-msgstr ""
-
-#: ui/main.qml:52
-msgctxt "@title:tab"
-msgid "Keys"
-msgstr ""
-
-#: ui/main.qml:53
-msgctxt "@title:tab"
-msgid "Notifications"
-msgstr ""
-
-#: ui/main.qml:54
-msgctxt "@title:tab"
-msgid "Name"
-msgstr ""
-
-#: ui/main.qml:55
-msgctxt "@title:tab"
-msgid "Diagnostics"
-msgstr ""
-
-#: ui/NamePage.qml:31
+#: ui/NamePage.qml:42
 msgctxt "placeholder in a command"
 msgid "NAME"
 msgstr ""
 
-#: ui/NamePage.qml:52
+#: ui/NamePage.qml:56
+msgid "Terminal not opened: %1"
+msgstr ""
+
+#: ui/NamePage.qml:60
+msgid ""
+"A terminal was opened: akmctl runs the whole pre-flight there (one "
+"administrator authentication to read the Bluetooth channel size) and writes "
+"nothing."
+msgstr ""
+
+#: ui/NamePage.qml:61
+msgid ""
+"A terminal was opened: nothing is written until you type ECRIRE and the name "
+"again there."
+msgstr ""
+
+#: ui/NamePage.qml:79
 msgctxt "@title:group"
 msgid "Name on this computer"
 msgstr ""
 
-#: ui/NamePage.qml:55
+#: ui/NamePage.qml:82
 msgid "Shown as:"
 msgstr ""
 
-#: ui/NamePage.qml:61
+#: ui/NamePage.qml:88
 msgid "Keyboard's own name:"
 msgstr ""
 
-#: ui/NamePage.qml:69
+#: ui/NamePage.qml:96
 msgid "New name:"
 msgstr ""
 
-#: ui/NamePage.qml:73
+#: ui/NamePage.qml:100
 msgid "e.g. Office keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:75
+#: ui/NamePage.qml:102
 msgid "New name of the keyboard on this computer"
 msgstr ""
 
-#: ui/NamePage.qml:81
+#: ui/NamePage.qml:108
 msgid "Rename"
 msgstr ""
 
-#: ui/NamePage.qml:89
+#: ui/NamePage.qml:116
 msgid "Renamed to “%1” on this computer."
 msgstr ""
 
-#: ui/NamePage.qml:89
+#: ui/NamePage.qml:116
 msgid "no answer in time"
 msgstr ""
 
-#: ui/NamePage.qml:89 ui/NamePage.qml:104
+#: ui/NamePage.qml:116 ui/NamePage.qml:131
 msgid "Not renamed: %1"
 msgstr ""
 
-#: ui/NamePage.qml:96
+#: ui/NamePage.qml:123
 msgid "Use the keyboard's own name"
 msgstr ""
 
-#: ui/NamePage.qml:104
+#: ui/NamePage.qml:131
 msgid "The keyboard's own name is used again."
 msgstr ""
 
-#: ui/NamePage.qml:115
+#: ui/NamePage.qml:142
 msgid "Renaming needs the keyboard service."
 msgstr ""
 
-#: ui/NamePage.qml:116
+#: ui/NamePage.qml:143
 msgid "No keyboard is known yet."
 msgstr ""
 
-#: ui/NamePage.qml:117
+#: ui/NamePage.qml:144
 msgid ""
 "Only this computer sees this name (Bluetooth alias); the keyboard itself is "
 "not changed."
 msgstr ""
 
-#: ui/NamePage.qml:126
+#: ui/NamePage.qml:149
 msgctxt "@title:group"
-msgid "Inside the keyboard: terminal only"
-msgstr ""
-
-#: ui/NamePage.qml:133
-msgid ""
-"This module never writes into the keyboard. Writing the name stored in the "
-"keyboard, or making it forget its pairings, changes the keyboard itself: "
-"these operations stay in a terminal, where they show what they will send and "
-"ask you to type a confirmation."
-msgstr ""
-
-#: ui/NamePage.qml:142
-msgid "Name stored in the keyboard now: %1"
-msgstr ""
-
-#: ui/NamePage.qml:143
-msgid ""
-"Name stored in the keyboard: not read yet (the service reads it once per "
-"connection)."
-msgstr ""
-
-#: ui/NamePage.qml:148
-msgid "Name stored in the keyboard, preview (shows the bytes, writes nothing):"
-msgstr ""
-
-#: ui/NamePage.qml:150
-msgid ""
-"Then the write itself (pre-flight checks, backup, name typed again; refused "
-"while the sequence is not proven, issue #248):"
+msgid "Name stored inside the keyboard"
 msgstr ""
 
 #: ui/NamePage.qml:152
+msgid "Stored now:"
+msgstr ""
+
+#: ui/NamePage.qml:153
+msgid "not read yet (the service reads it once per connection)"
+msgstr ""
+
+#: ui/NamePage.qml:159
+msgid "Name to write:"
+msgstr ""
+
+#: ui/NamePage.qml:163
+msgid "1 to 32 ASCII characters"
+msgstr ""
+
+#: ui/NamePage.qml:165
+msgid "Name to write into the keyboard"
+msgstr ""
+
+#: ui/NamePage.qml:166
+msgid ""
+"1 to 32 printable ASCII characters, no leading or trailing space, no "
+"backslash; the write itself happens in a terminal"
+msgstr ""
+
+#: ui/NamePage.qml:171
+msgid "Check (nothing written)"
+msgstr ""
+
+#: ui/NamePage.qml:174
+msgid ""
+"Opens a terminal on akmctl rename --device-name --check: whole pre-flight, "
+"backup and plan, nothing written"
+msgstr ""
+
+#: ui/NamePage.qml:179
+msgid "Write the name into the keyboard…"
+msgstr ""
+
+#: ui/NamePage.qml:182
+msgid ""
+"Opens a terminal on akmctl rename --device-name --write-device-name: the "
+"write happens there, only after you type ECRIRE and the name again"
+msgstr ""
+
+#: ui/NamePage.qml:192
+msgid ""
+"Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
+"no backslash."
+msgstr ""
+
+#: ui/NamePage.qml:193
+msgid ""
+"This module writes nothing into the keyboard. Both buttons only open a "
+"terminal where akmctl shows the exact bytes, saves the current name, runs "
+"the pre-flight (one administrator authentication to read the Bluetooth "
+"channel size), then asks you to type ECRIRE and the name again before its "
+"single write."
+msgstr ""
+
+#: ui/NamePage.qml:203
+msgid ""
+"Writing into the keyboard's firmware carries two risks that are not "
+"measured: how the firmware answers the write (U5), and whether the name "
+"survives a battery change (U3). Have a second working keyboard at hand. The "
+"terminal saves the current name first and shows the exact rollback command; "
+"the keyboard must be switched off and on afterwards so the name is read "
+"back. Details: docs/RENOMMER-CLAVIER.md §5.3 and §6."
+msgstr ""
+
+#: ui/NamePage.qml:211
+msgctxt "@title:group"
+msgid "Same operations, to copy into a terminal"
+msgstr ""
+
+#: ui/NamePage.qml:216
+msgid ""
+"Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
+"authentication):"
+msgstr ""
+
+#: ui/NamePage.qml:218
+msgid ""
+"Whole pre-flight, backup and plan (one administrator authentication, writes "
+"nothing):"
+msgstr ""
+
+#: ui/NamePage.qml:220
+msgid ""
+"The write itself (pre-flight, backup, ECRIRE typed, name typed again, one "
+"frame, then switch the keyboard off and on; issue #248):"
+msgstr ""
+
+#: ui/NamePage.qml:222
 msgid ""
 "Forget the keyboard cleanly, as macOS does, then pair it again (only after "
 "typing the confirmation word, issue #217):"
 msgstr ""
 
-#: ui/NamePage.qml:173
+#: ui/NamePage.qml:243
 msgid "Command: %1"
 msgstr ""
 
-#: ui/NamePage.qml:176
+#: ui/NamePage.qml:246
 msgid "Copy"
 msgstr ""
 
-#: ui/NamePage.qml:178
+#: ui/NamePage.qml:248
 msgid "Copy the command"
 msgstr ""
 
-#: ui/NamePage.qml:182
+#: ui/NamePage.qml:252
 msgid "Command copied."
 msgstr ""
 
@@ -1046,4 +1081,52 @@ msgstr ""
 
 #: ui/StatePage.qml:243
 msgid "Last error:"
+msgstr ""
+
+#: ui/main.qml:26
+msgid ""
+"The keyboard service (apple-kb-monitord) is not running: the state, the name "
+"and the reconnection are unavailable. The keys and the notifications can "
+"still be set."
+msgstr ""
+
+#: ui/main.qml:30
+msgid "Starting…"
+msgstr ""
+
+#: ui/main.qml:30
+msgid "Start the service"
+msgstr ""
+
+#: ui/main.qml:38
+msgid "The service could not be started: %1"
+msgstr ""
+
+#: ui/main.qml:49
+msgid "Sections of the Apple keyboard settings"
+msgstr ""
+
+#: ui/main.qml:51
+msgctxt "@title:tab"
+msgid "State"
+msgstr ""
+
+#: ui/main.qml:52
+msgctxt "@title:tab"
+msgid "Keys"
+msgstr ""
+
+#: ui/main.qml:53
+msgctxt "@title:tab"
+msgid "Notifications"
+msgstr ""
+
+#: ui/main.qml:54
+msgctxt "@title:tab"
+msgid "Name"
+msgstr ""
+
+#: ui/main.qml:55
+msgctxt "@title:tab"
+msgid "Diagnostics"
 msgstr ""

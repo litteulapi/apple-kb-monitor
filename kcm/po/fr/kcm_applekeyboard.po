@@ -1,22 +1,33 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: kcm_applekeyboard\n"
-"Language: fr\n"
-"Language-Team: French\n"
-"Last-Translator: AgenceAPI\n"
+"Report-Msgid-Bugs-To: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-"
+"monitor/issues\n"
+"POT-Creation-Date: 2026-10-01 22:00+0200\n"
 "PO-Revision-Date: 2026-10-01 19:00+0200\n"
+"Last-Translator: AgenceAPI\n"
+"Language-Team: French\n"
+"Language: fr\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 
 #: ui/AlertsPage.qml:116
-msgid "Not saved: the thresholds must be whole numbers between 1 and 95, separated by commas."
-msgstr "Non enregistré : les seuils doivent être des nombres entiers entre 1 et 95, séparés par des virgules."
+msgid ""
+"Not saved: the thresholds must be whole numbers between 1 and 95, separated "
+"by commas."
+msgstr ""
+"Non enregistré : les seuils doivent être des nombres entiers entre 1 et 95, "
+"séparés par des virgules."
 
 #: ui/AlertsPage.qml:136
-msgid "Saved. The service reads these settings when it starts: restart it to use them now."
-msgstr "Enregistré. Le service lit ces réglages à son démarrage : redémarrez-le pour les appliquer tout de suite."
+msgid ""
+"Saved. The service reads these settings when it starts: restart it to use "
+"them now."
+msgstr ""
+"Enregistré. Le service lit ces réglages à son démarrage : redémarrez-le pour "
+"les appliquer tout de suite."
 
 #: ui/AlertsPage.qml:137
 msgid "Saved. They will be used when the service starts."
@@ -40,11 +51,17 @@ msgstr "Le service n'a pas pu être redémarré : %1"
 
 #: ui/AlertsPage.qml:178
 msgid "The settings file could not be read (%1): the defaults are shown."
-msgstr "Le fichier de réglages n'a pas pu être lu (%1) : les valeurs par défaut sont affichées."
+msgstr ""
+"Le fichier de réglages n'a pas pu être lu (%1) : les valeurs par défaut sont "
+"affichées."
 
 #: ui/AlertsPage.qml:179
-msgid "Some lines of the settings file are not understood (%1); they are kept as they are."
-msgstr "Certaines lignes du fichier de réglages ne sont pas comprises (%1) ; elles sont conservées telles quelles."
+msgid ""
+"Some lines of the settings file are not understood (%1); they are kept as "
+"they are."
+msgstr ""
+"Certaines lignes du fichier de réglages ne sont pas comprises (%1) ; elles "
+"sont conservées telles quelles."
 
 #: ui/AlertsPage.qml:188
 msgctxt "@title:group"
@@ -129,8 +146,12 @@ msgid "Battery type"
 msgstr "Type de piles"
 
 #: ui/AlertsPage.qml:255
-msgid "Used for the estimated charge and its range; the keyboard's own indication does not depend on it."
-msgstr "Sert à la charge estimée et à sa fourchette ; l'indication du clavier lui-même n'en dépend pas."
+msgid ""
+"Used for the estimated charge and its range; the keyboard's own indication "
+"does not depend on it."
+msgstr ""
+"Sert à la charge estimée et à sa fourchette ; l'indication du clavier lui-"
+"même n'en dépend pas."
 
 #: ui/AlertsPage.qml:259
 msgid "Display:"
@@ -175,8 +196,12 @@ msgid "Tell the keyboard when the computer shuts down or restarts"
 msgstr "Prévenir le clavier quand l'ordinateur s'éteint ou redémarre"
 
 #: ui/AlertsPage.qml:296
-msgid "What macOS sends at every shutdown (one message, nothing else is written). Off = the keyboard is left untouched."
-msgstr "Ce que macOS envoie à chaque extinction (un seul message, rien d'autre n'est écrit). Désactivé = le clavier n'est pas touché."
+msgid ""
+"What macOS sends at every shutdown (one message, nothing else is written). "
+"Off = the keyboard is left untouched."
+msgstr ""
+"Ce que macOS envoie à chaque extinction (un seul message, rien d'autre n'est "
+"écrit). Désactivé = le clavier n'est pas touché."
 
 #: ui/AlertsPage.qml:303
 msgid "File:"
@@ -211,28 +236,39 @@ msgid "Check the link"
 msgstr "Vérifier la liaison"
 
 #: ui/DiagPage.qml:102
-msgid "Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. Reads only."
-msgstr "Lance akmctl doctor : Bluetooth, appairage, configuration, journal, service. Lecture seule."
+msgid ""
+"Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. "
+"Reads only."
+msgstr ""
+"Lance akmctl doctor : Bluetooth, appairage, configuration, journal, service. "
+"Lecture seule."
 
 #: ui/DiagPage.qml:106
 msgid "Self-check"
 msgstr "Autotest"
 
 #: ui/DiagPage.qml:108
-msgid "Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
-msgstr "Lance akmctl selftest : service, liaison, journal, plantages, disque. Lecture seule."
+msgid ""
+"Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
+msgstr ""
+"Lance akmctl selftest : service, liaison, journal, plantages, disque. "
+"Lecture seule."
 
 #: ui/DiagPage.qml:113
 msgid "Reconnect"
 msgstr "Reconnecter"
 
 #: ui/DiagPage.qml:116
-msgid "Asks the service to page the keyboard now (at most once every 20 seconds)"
-msgstr "Demande au service d'appeler le clavier maintenant (au plus une fois toutes les 20 secondes)"
+msgid ""
+"Asks the service to page the keyboard now (at most once every 20 seconds)"
+msgstr ""
+"Demande au service d'appeler le clavier maintenant (au plus une fois toutes "
+"les 20 secondes)"
 
 #: ui/DiagPage.qml:122
 msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
-msgstr "Reconnexion demandée. Appuyez sur une touche du clavier s'il est en veille."
+msgstr ""
+"Reconnexion demandée. Appuyez sur une touche du clavier s'il est en veille."
 
 #: ui/DiagPage.qml:123
 msgid "refused by the service (asleep, too soon, or pairing refused)"
@@ -295,8 +331,12 @@ msgid "%1 — %2"
 msgstr "%1 — %2"
 
 #: ui/KeysPage.qml:31
-msgid "No answer in time: nothing was confirmed. Check the state before trying again."
-msgstr "Pas de réponse à temps : rien n'a été confirmé. Vérifiez l'état avant de réessayer."
+msgid ""
+"No answer in time: nothing was confirmed. Check the state before trying "
+"again."
+msgstr ""
+"Pas de réponse à temps : rien n'a été confirmé. Vérifiez l'état avant de "
+"réessayer."
 
 #: ui/KeysPage.qml:33 ui/main.qml:38
 msgid "unknown error"
@@ -354,8 +394,12 @@ msgid "What each key does now"
 msgstr "Ce que fait chaque touche actuellement"
 
 #: ui/KeysPage.qml:99
-msgid "Fn mode %1. Read from the kernel and the installed mapping; no key press is read."
-msgstr "Mode Fn %1. Lu dans le noyau et le mapping installé ; aucune frappe n'est lue."
+msgid ""
+"Fn mode %1. Read from the kernel and the installed mapping; no key press is "
+"read."
+msgstr ""
+"Mode Fn %1. Lu dans le noyau et le mapping installé ; aucune frappe n'est "
+"lue."
 
 #: ui/KeysPage.qml:100
 msgid "Reading the key table…"
@@ -386,8 +430,11 @@ msgid "* = changed by the installed manual mapping."
 msgstr "* = modifiée par le mapping manuel installé."
 
 #: ui/KeysPage.qml:159
-msgid "The active profile differs from what is installed: use “Install the mapping”."
-msgstr "Le profil actif diffère de ce qui est installé : utilisez « Installer le mapping »."
+msgid ""
+"The active profile differs from what is installed: use “Install the mapping”."
+msgstr ""
+"Le profil actif diffère de ce qui est installé : utilisez « Installer le "
+"mapping »."
 
 #: ui/KeysPage.qml:168
 msgctxt "@title:group"
@@ -395,8 +442,14 @@ msgid "Fn key and modifier keys"
 msgstr "Touche fn et touches de modification"
 
 #: ui/KeysPage.qml:175
-msgid "These are parameters of the kernel driver hid_apple: they apply to ALL Apple keyboards of this computer, are kept after a restart, and each change asks for the administrator password."
-msgstr "Ce sont des paramètres du pilote noyau hid_apple : ils s'appliquent à TOUS les claviers Apple de cet ordinateur, sont conservés après un redémarrage, et chaque modification demande le mot de passe administrateur."
+msgid ""
+"These are parameters of the kernel driver hid_apple: they apply to ALL Apple "
+"keyboards of this computer, are kept after a restart, and each change asks "
+"for the administrator password."
+msgstr ""
+"Ce sont des paramètres du pilote noyau hid_apple : ils s'appliquent à TOUS "
+"les claviers Apple de cet ordinateur, sont conservés après un redémarrage, "
+"et chaque modification demande le mot de passe administrateur."
 
 #: ui/KeysPage.qml:179
 msgid "Fn mode:"
@@ -509,7 +562,9 @@ msgstr "Utiliser ce préréglage"
 
 #: ui/KeysPage.qml:299
 msgid "Preset saved in the profile; use “Install the mapping” to apply it."
-msgstr "Préréglage enregistré dans le profil ; utilisez « Installer le mapping » pour l'appliquer."
+msgstr ""
+"Préréglage enregistré dans le profil ; utilisez « Installer le mapping » "
+"pour l'appliquer."
 
 #: ui/KeysPage.qml:305
 msgid "Remapped keys:"
@@ -554,15 +609,21 @@ msgstr "Ajouter"
 
 #: ui/KeysPage.qml:364
 msgid "Mapping saved in the profile; use “Install the mapping” to apply it."
-msgstr "Mapping enregistré dans le profil ; utilisez « Installer le mapping » pour l'appliquer."
+msgstr ""
+"Mapping enregistré dans le profil ; utilisez « Installer le mapping » pour "
+"l'appliquer."
 
 #: ui/KeysPage.qml:371
 msgid "Install the mapping…"
 msgstr "Installer le mapping…"
 
 #: ui/KeysPage.qml:374
-msgid "Installs the active profile (udev hwdb and its parameters); asks for the administrator password"
-msgstr "Installe le profil actif (hwdb udev et ses paramètres) ; demande le mot de passe administrateur"
+msgid ""
+"Installs the active profile (udev hwdb and its parameters); asks for the "
+"administrator password"
+msgstr ""
+"Installe le profil actif (hwdb udev et ses paramètres) ; demande le mot de "
+"passe administrateur"
 
 #: ui/KeysPage.qml:379
 msgid "Mapping installed."
@@ -590,8 +651,12 @@ msgid "Bind F4 to the application launcher"
 msgstr "Lier F4 au lanceur d'applications"
 
 #: ui/KeysPage.qml:408
-msgid "Adds the missing KDE shortcut for the Launch (D) key, never replacing an existing one"
-msgstr "Ajoute le raccourci KDE manquant pour la touche Launch (D), sans jamais remplacer un raccourci existant"
+msgid ""
+"Adds the missing KDE shortcut for the Launch (D) key, never replacing an "
+"existing one"
+msgstr ""
+"Ajoute le raccourci KDE manquant pour la touche Launch (D), sans jamais "
+"remplacer un raccourci existant"
 
 #: ui/KeysPage.qml:413
 msgid "KDE shortcuts updated."
@@ -601,159 +666,213 @@ msgstr "Raccourcis KDE mis à jour."
 msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
 msgstr "Pour annuler, dans un terminal : akmctl keymap kde-apply --undo"
 
-#: ui/main.qml:26
-msgid "The keyboard service (apple-kb-monitord) is not running: the state, the name and the reconnection are unavailable. The keys and the notifications can still be set."
-msgstr "Le service du clavier (apple-kb-monitord) n'est pas lancé : l'état, le nom et la reconnexion sont indisponibles. Les touches et les notifications restent réglables."
-
-#: ui/main.qml:30
-msgid "Starting…"
-msgstr "Démarrage…"
-
-#: ui/main.qml:30
-msgid "Start the service"
-msgstr "Lancer le service"
-
-#: ui/main.qml:38
-msgid "The service could not be started: %1"
-msgstr "Le service n'a pas pu être lancé : %1"
-
-#: ui/main.qml:49
-msgid "Sections of the Apple keyboard settings"
-msgstr "Sections des réglages du clavier Apple"
-
-#: ui/main.qml:51
-msgctxt "@title:tab"
-msgid "State"
-msgstr "État"
-
-#: ui/main.qml:52
-msgctxt "@title:tab"
-msgid "Keys"
-msgstr "Touches"
-
-#: ui/main.qml:53
-msgctxt "@title:tab"
-msgid "Notifications"
-msgstr "Notifications"
-
-#: ui/main.qml:54
-msgctxt "@title:tab"
-msgid "Name"
-msgstr "Nom"
-
-#: ui/main.qml:55
-msgctxt "@title:tab"
-msgid "Diagnostics"
-msgstr "Diagnostic"
-
-#: ui/NamePage.qml:31
+#: ui/NamePage.qml:42
 msgctxt "placeholder in a command"
 msgid "NAME"
 msgstr "NOM"
 
-#: ui/NamePage.qml:52
+#: ui/NamePage.qml:56
+msgid "Terminal not opened: %1"
+msgstr "Terminal non ouvert : %1"
+
+#: ui/NamePage.qml:60
+msgid ""
+"A terminal was opened: akmctl runs the whole pre-flight there (one "
+"administrator authentication to read the Bluetooth channel size) and writes "
+"nothing."
+msgstr "Un terminal a été ouvert : akmctl y exécute tout le pré-vol (une authentification administrateur pour lire la taille du canal Bluetooth) et n'écrit rien."
+
+#: ui/NamePage.qml:61
+msgid ""
+"A terminal was opened: nothing is written until you type ECRIRE and the name "
+"again there."
+msgstr "Un terminal a été ouvert : rien n'est écrit tant que vous n'y avez pas tapé ECRIRE puis le nom à nouveau."
+
+#: ui/NamePage.qml:79
 msgctxt "@title:group"
 msgid "Name on this computer"
 msgstr "Nom sur cet ordinateur"
 
-#: ui/NamePage.qml:55
+#: ui/NamePage.qml:82
 msgid "Shown as:"
 msgstr "Affiché comme :"
 
-#: ui/NamePage.qml:61
+#: ui/NamePage.qml:88
 msgid "Keyboard's own name:"
 msgstr "Nom propre du clavier :"
 
-#: ui/NamePage.qml:69
+#: ui/NamePage.qml:96
 msgid "New name:"
 msgstr "Nouveau nom :"
 
-#: ui/NamePage.qml:73
+#: ui/NamePage.qml:100
 msgid "e.g. Office keyboard"
 msgstr "par ex. Clavier du bureau"
 
-#: ui/NamePage.qml:75
+#: ui/NamePage.qml:102
 msgid "New name of the keyboard on this computer"
 msgstr "Nouveau nom du clavier sur cet ordinateur"
 
-#: ui/NamePage.qml:81
+#: ui/NamePage.qml:108
 msgid "Rename"
 msgstr "Renommer"
 
-#: ui/NamePage.qml:89
+#: ui/NamePage.qml:116
 msgid "Renamed to “%1” on this computer."
 msgstr "Renommé « %1 » sur cet ordinateur."
 
-#: ui/NamePage.qml:89
+#: ui/NamePage.qml:116
 msgid "no answer in time"
 msgstr "pas de réponse à temps"
 
-#: ui/NamePage.qml:89 ui/NamePage.qml:104
+#: ui/NamePage.qml:116 ui/NamePage.qml:131
 msgid "Not renamed: %1"
 msgstr "Non renommé : %1"
 
-#: ui/NamePage.qml:96
+#: ui/NamePage.qml:123
 msgid "Use the keyboard's own name"
 msgstr "Reprendre le nom propre du clavier"
 
-#: ui/NamePage.qml:104
+#: ui/NamePage.qml:131
 msgid "The keyboard's own name is used again."
 msgstr "Le nom propre du clavier est de nouveau utilisé."
 
-#: ui/NamePage.qml:115
+#: ui/NamePage.qml:142
 msgid "Renaming needs the keyboard service."
 msgstr "Le renommage nécessite le service du clavier."
 
-#: ui/NamePage.qml:116
+#: ui/NamePage.qml:143
 msgid "No keyboard is known yet."
 msgstr "Aucun clavier n'est encore connu."
 
-#: ui/NamePage.qml:117
-msgid "Only this computer sees this name (Bluetooth alias); the keyboard itself is not changed."
-msgstr "Seul cet ordinateur voit ce nom (alias Bluetooth) ; le clavier lui-même n'est pas modifié."
+#: ui/NamePage.qml:144
+msgid ""
+"Only this computer sees this name (Bluetooth alias); the keyboard itself is "
+"not changed."
+msgstr ""
+"Seul cet ordinateur voit ce nom (alias Bluetooth) ; le clavier lui-même "
+"n'est pas modifié."
 
-#: ui/NamePage.qml:126
+#: ui/NamePage.qml:149
 msgctxt "@title:group"
-msgid "Inside the keyboard: terminal only"
-msgstr "Dans le clavier : en terminal uniquement"
-
-#: ui/NamePage.qml:133
-msgid "This module never writes into the keyboard. Writing the name stored in the keyboard, or making it forget its pairings, changes the keyboard itself: these operations stay in a terminal, where they show what they will send and ask you to type a confirmation."
-msgstr "Ce module n'écrit jamais dans le clavier. Écrire le nom stocké dans le clavier, ou lui faire oublier ses appairages, modifie le clavier lui-même : ces opérations restent en terminal, où elles montrent ce qu'elles vont envoyer et demandent de taper une confirmation."
-
-#: ui/NamePage.qml:142
-msgid "Name stored in the keyboard now: %1"
-msgstr "Nom stocké dans le clavier actuellement : %1"
-
-#: ui/NamePage.qml:143
-msgid "Name stored in the keyboard: not read yet (the service reads it once per connection)."
-msgstr "Nom stocké dans le clavier : pas encore lu (le service le lit une fois par connexion)."
-
-#: ui/NamePage.qml:148
-msgid "Name stored in the keyboard, preview (shows the bytes, writes nothing):"
-msgstr "Nom stocké dans le clavier, aperçu (montre les octets, n'écrit rien) :"
-
-#: ui/NamePage.qml:150
-msgid "Then the write itself (pre-flight checks, backup, name typed again; refused while the sequence is not proven, issue #248):"
-msgstr "Puis l'écriture elle-même (vérifications préalables, sauvegarde, nom retapé ; refusée tant que la séquence n'est pas prouvée, ticket #248) :"
+msgid "Name stored inside the keyboard"
+msgstr "Nom stocké dans le clavier"
 
 #: ui/NamePage.qml:152
-msgid "Forget the keyboard cleanly, as macOS does, then pair it again (only after typing the confirmation word, issue #217):"
-msgstr "Oublier proprement le clavier comme macOS, puis le réappairer (seulement après avoir tapé le mot de confirmation, ticket #217) :"
+msgid "Stored now:"
+msgstr "Stocké actuellement :"
 
-#: ui/NamePage.qml:173
+#: ui/NamePage.qml:153
+msgid "not read yet (the service reads it once per connection)"
+msgstr "pas encore lu (le service le lit une fois par connexion)"
+
+#: ui/NamePage.qml:159
+msgid "Name to write:"
+msgstr "Nom à écrire :"
+
+#: ui/NamePage.qml:163
+msgid "1 to 32 ASCII characters"
+msgstr "1 à 32 caractères ASCII"
+
+#: ui/NamePage.qml:165
+msgid "Name to write into the keyboard"
+msgstr "Nom à écrire dans le clavier"
+
+#: ui/NamePage.qml:166
+msgid ""
+"1 to 32 printable ASCII characters, no leading or trailing space, no "
+"backslash; the write itself happens in a terminal"
+msgstr "1 à 32 caractères ASCII imprimables, sans espace en tête ni en fin, sans barre oblique inversée ; l'écriture elle-même se fait dans un terminal"
+
+#: ui/NamePage.qml:171
+msgid "Check (nothing written)"
+msgstr "Vérifier (sans écrire)"
+
+#: ui/NamePage.qml:174
+msgid ""
+"Opens a terminal on akmctl rename --device-name --check: whole pre-flight, "
+"backup and plan, nothing written"
+msgstr "Ouvre un terminal sur akmctl rename --device-name --check : pré-vol complet, sauvegarde et plan, rien n'est écrit"
+
+#: ui/NamePage.qml:179
+msgid "Write the name into the keyboard…"
+msgstr "Écrire le nom dans le clavier…"
+
+#: ui/NamePage.qml:182
+msgid ""
+"Opens a terminal on akmctl rename --device-name --write-device-name: the "
+"write happens there, only after you type ECRIRE and the name again"
+msgstr "Ouvre un terminal sur akmctl rename --device-name --write-device-name : l'écriture s'y fait, seulement après que vous avez tapé ECRIRE puis le nom à nouveau"
+
+#: ui/NamePage.qml:192
+msgid ""
+"Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
+"no backslash."
+msgstr "Refusé : 1 à 32 caractères ASCII imprimables, sans espace en tête ni en fin, sans barre oblique inversée."
+
+#: ui/NamePage.qml:193
+msgid ""
+"This module writes nothing into the keyboard. Both buttons only open a "
+"terminal where akmctl shows the exact bytes, saves the current name, runs "
+"the pre-flight (one administrator authentication to read the Bluetooth "
+"channel size), then asks you to type ECRIRE and the name again before its "
+"single write."
+msgstr "Ce module n'écrit rien dans le clavier. Les deux boutons ne font qu'ouvrir un terminal où akmctl affiche les octets exacts, sauvegarde le nom actuel, exécute le pré-vol (une authentification administrateur pour lire la taille du canal Bluetooth), puis vous demande de taper ECRIRE et le nom à nouveau avant son unique écriture."
+
+#: ui/NamePage.qml:203
+msgid ""
+"Writing into the keyboard's firmware carries two risks that are not "
+"measured: how the firmware answers the write (U5), and whether the name "
+"survives a battery change (U3). Have a second working keyboard at hand. The "
+"terminal saves the current name first and shows the exact rollback command; "
+"the keyboard must be switched off and on afterwards so the name is read "
+"back. Details: docs/RENOMMER-CLAVIER.md §5.3 and §6."
+msgstr "Écrire dans le micrologiciel du clavier comporte deux risques non mesurés : la réponse du micrologiciel à l'écriture (U5) et la survie du nom à un changement de piles (U3). Ayez un second clavier fonctionnel sous la main. Le terminal sauvegarde d'abord le nom actuel et affiche la commande exacte de retour arrière ; le clavier doit ensuite être éteint puis rallumé pour que le nom soit relu. Détails : docs/RENOMMER-CLAVIER.md §5.3 et §6."
+
+#: ui/NamePage.qml:211
+msgctxt "@title:group"
+msgid "Same operations, to copy into a terminal"
+msgstr "Les mêmes opérations, à copier dans un terminal"
+
+#: ui/NamePage.qml:216
+msgid ""
+"Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
+"authentication):"
+msgstr "Nom stocké dans le clavier, aperçu (montre les octets, n'écrit rien, aucune authentification) :"
+
+#: ui/NamePage.qml:218
+msgid ""
+"Whole pre-flight, backup and plan (one administrator authentication, writes "
+"nothing):"
+msgstr "Pré-vol complet, sauvegarde et plan (une authentification administrateur, n'écrit rien) :"
+
+#: ui/NamePage.qml:220
+msgid ""
+"The write itself (pre-flight, backup, ECRIRE typed, name typed again, one "
+"frame, then switch the keyboard off and on; issue #248):"
+msgstr "L'écriture elle-même (pré-vol, sauvegarde, ECRIRE tapé, nom retapé, une trame, puis éteindre et rallumer le clavier ; issue #248) :"
+
+#: ui/NamePage.qml:222
+msgid ""
+"Forget the keyboard cleanly, as macOS does, then pair it again (only after "
+"typing the confirmation word, issue #217):"
+msgstr ""
+"Oublier proprement le clavier comme macOS, puis le réappairer (seulement "
+"après avoir tapé le mot de confirmation, ticket #217) :"
+
+#: ui/NamePage.qml:243
 msgid "Command: %1"
 msgstr "Commande : %1"
 
-#: ui/NamePage.qml:176
+#: ui/NamePage.qml:246
 msgid "Copy"
 msgstr "Copier"
 
-#: ui/NamePage.qml:178
+#: ui/NamePage.qml:248
 msgid "Copy the command"
 msgstr "Copier la commande"
 
-#: ui/NamePage.qml:182
+#: ui/NamePage.qml:252
 msgid "Command copied."
 msgstr "Commande copiée."
 
@@ -812,7 +931,8 @@ msgstr "à jour"
 
 #: ui/StatePage.qml:68
 msgid "a newer version exists (this module never updates the firmware)"
-msgstr "une version plus récente existe (ce module ne met jamais le firmware à jour)"
+msgstr ""
+"une version plus récente existe (ce module ne met jamais le firmware à jour)"
 
 #: ui/StatePage.qml:69
 msgid "model not in the table"
@@ -831,12 +951,20 @@ msgid "Looking for the keyboard service…"
 msgstr "Recherche du service du clavier…"
 
 #: ui/StatePage.qml:80
-msgid "Use “Start the service” above, or run: systemctl --user start apple-kb-monitord.service"
-msgstr "Utilisez « Lancer le service » ci-dessus, ou exécutez : systemctl --user start apple-kb-monitord.service"
+msgid ""
+"Use “Start the service” above, or run: systemctl --user start apple-kb-"
+"monitord.service"
+msgstr ""
+"Utilisez « Lancer le service » ci-dessus, ou exécutez : systemctl --user "
+"start apple-kb-monitord.service"
 
 #: ui/StatePage.qml:89
-msgid "The keyboard service did not answer within 5 seconds. It is busy or stuck; the values shown may be old."
-msgstr "Le service du clavier n'a pas répondu en 5 secondes. Il est occupé ou bloqué ; les valeurs affichées peuvent être anciennes."
+msgid ""
+"The keyboard service did not answer within 5 seconds. It is busy or stuck; "
+"the values shown may be old."
+msgstr ""
+"Le service du clavier n'a pas répondu en 5 secondes. Il est occupé ou "
+"bloqué ; les valeurs affichées peuvent être anciennes."
 
 #: ui/StatePage.qml:90
 msgid "The keyboard service answered with an error: %1"
@@ -993,3 +1121,54 @@ msgstr "Service"
 #: ui/StatePage.qml:243
 msgid "Last error:"
 msgstr "Dernière erreur :"
+
+#: ui/main.qml:26
+msgid ""
+"The keyboard service (apple-kb-monitord) is not running: the state, the name "
+"and the reconnection are unavailable. The keys and the notifications can "
+"still be set."
+msgstr ""
+"Le service du clavier (apple-kb-monitord) n'est pas lancé : l'état, le nom "
+"et la reconnexion sont indisponibles. Les touches et les notifications "
+"restent réglables."
+
+#: ui/main.qml:30
+msgid "Starting…"
+msgstr "Démarrage…"
+
+#: ui/main.qml:30
+msgid "Start the service"
+msgstr "Lancer le service"
+
+#: ui/main.qml:38
+msgid "The service could not be started: %1"
+msgstr "Le service n'a pas pu être lancé : %1"
+
+#: ui/main.qml:49
+msgid "Sections of the Apple keyboard settings"
+msgstr "Sections des réglages du clavier Apple"
+
+#: ui/main.qml:51
+msgctxt "@title:tab"
+msgid "State"
+msgstr "État"
+
+#: ui/main.qml:52
+msgctxt "@title:tab"
+msgid "Keys"
+msgstr "Touches"
+
+#: ui/main.qml:53
+msgctxt "@title:tab"
+msgid "Notifications"
+msgstr "Notifications"
+
+#: ui/main.qml:54
+msgctxt "@title:tab"
+msgid "Name"
+msgstr "Nom"
+
+#: ui/main.qml:55
+msgctxt "@title:tab"
+msgid "Diagnostics"
+msgstr "Diagnostic"
