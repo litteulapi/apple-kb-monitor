@@ -741,6 +741,9 @@ fn parse_key_token(s: &str, line: usize) -> Result<(String, &str), KeymapError> 
     Ok((s[..end].to_string(), &s[end..]))
 }
 
+/// Profile being parsed: preset, models, params, keys.
+type RawProfile = (Option<Preset>, Option<Vec<u16>>, BTreeMap<String, i32>, BTreeMap<u32, u16>);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Section {
     Root,
@@ -760,7 +763,7 @@ impl Keymap {
         let mut sec = Section::Root;
         let mut schema = None;
         let mut active: Option<String> = None;
-        let mut profiles: BTreeMap<String, (Option<Preset>, Option<Vec<u16>>, BTreeMap<String, i32>, BTreeMap<u32, u16>)> =
+        let mut profiles: BTreeMap<String, RawProfile> =
             BTreeMap::new();
         let mut seen_sections = Vec::new();
         for (i, raw) in src.lines().enumerate() {
@@ -877,7 +880,7 @@ impl Keymap {
             })
             .collect();
         let active = active.unwrap_or_else(|| "default".into());
-        if !profiles.contains_key(&active) && !(active == "default" && profiles.is_empty()) {
+        if !(profiles.contains_key(&active) || active == "default" && profiles.is_empty()) {
             return Err(KeymapError::new(format!("active profile {active:?} is not defined")));
         }
         let mut km = Keymap { active, profiles };
@@ -1400,7 +1403,7 @@ evdev:input:b0005v05ACp0256*\n KEYBOARD_KEY_70039=leftctrl\n KEYBOARD_KEY_7003f=
         assert!(parse_hwdb(&ok).is_ok());
         let h = HWDB_HEADER;
         let bad = [
-            format!("evdev:input:b0005v05ACp0256*\n KEYBOARD_KEY_7003f=f6\n"),            // no header
+            "evdev:input:b0005v05ACp0256*\n KEYBOARD_KEY_7003f=f6\n".to_string(),            // no header
             format!("{h}\nevdev:input:b0005v05ACp0256*\n KEYBOARD_KEY_7003f=f6"),         // no final newline
             format!("{h}\nevdev:input:b0003v05ACp0256*\n KEYBOARD_KEY_7003f=f6\n"),       // USB bus
             format!("{h}\nevdev:input:b0005v046Dp0256*\n KEYBOARD_KEY_7003f=f6\n"),       // other vendor

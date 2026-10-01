@@ -5,6 +5,7 @@ mod heartbeat;
 mod history_view;
 mod instance;
 mod keyboard;
+mod keys_tab;
 mod portal;
 mod rename;
 mod source;
@@ -32,6 +33,7 @@ fn unix_now() -> u64 {
 #[derive(PartialEq)]
 enum Tab {
     Keyboard,
+    Keys,
     Diag,
 }
 
@@ -156,6 +158,7 @@ impl ApiHubApp {
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.tab, Tab::Keyboard, "Keyboard");
+                ui.selectable_value(&mut self.tab, Tab::Keys, "Touches");
                 ui.selectable_value(&mut self.tab, Tab::Diag, "Diag");
             });
         });
@@ -163,6 +166,7 @@ impl ApiHubApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             match self.tab {
                 Tab::Keyboard => self.tab_keyboard(ui, &snap),
+                Tab::Keys => keys_tab::show(ui),
                 Tab::Diag => self.tab_diag(ui),
             }
         });
@@ -584,7 +588,6 @@ impl ApiHubApp {
 
             let checks: Vec<(&str, Vec<String>, &str)> = vec![
                 ("apple-kb-monitord", vec!["--version".into()], "Monitor daemon binary"),
-                ("keyd", vec!["-v".into()], "Key remapping daemon"),
                 ("bluetoothctl", vec!["--version".into()], "BlueZ CLI"),
             ];
 
@@ -658,19 +661,21 @@ impl ApiHubApp {
             };
             out.push(DiagResult { label: "hidraw readable".into(), ok: hid_ok, detail: hid_detail });
 
-            // keyd config
-            let keyd_conf = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
-            let keyd_running = diag::run_bounded(Command::new("systemctl").args(["is-active", "--quiet", "keyd.service"]), diag::COMMAND_TIMEOUT)
+            // Key mapping (#247): udev hwdb written by `akmctl keymap apply`;
+            // none = kernel mapping (the default). keyd is optional (#246).
+            let hwdb = akm_core::keymap::HWDB_PATH;
+            let (km_ok, mut km_detail) = match akm_core::keymap::read_installed(std::path::Path::new(hwdb)) {
+                Ok(r) if r.is_empty() => (true, "kernel mapping, no hwdb installed (optional: akmctl keymap; check: akmctl keys --check)".to_string()),
+                Ok(r) => (true, format!("{hwdb}: {} model(s) remapped (akmctl keys --check)", r.len())),
+                Err(e) => (false, format!("{e} - reinstall: akmctl keymap apply, or remove: akmctl keymap reset")),
+            };
+            let keyd_active = diag::run_bounded(Command::new("systemctl").args(["is-active", "--quiet", "keyd.service"]), diag::COMMAND_TIMEOUT)
                 .map(|o| o.status.success())
                 .unwrap_or(false);
-            out.push(DiagResult {
-                label: "keyd config".into(), ok: keyd_conf && keyd_running,
-                detail: match (keyd_conf, keyd_running) {
-                    (true, true) => "/etc/keyd/apple-keyboard.conf, keyd.service active".into(),
-                    (true, false) => "/etc/keyd/apple-keyboard.conf present but keyd.service is NOT active".into(),
-                    (false, _) => "NOT FOUND".into(),
-                },
-            });
+            if keyd_active && std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists() {
+                km_detail.push_str(" · keyd also active with /etc/keyd/apple-keyboard.conf (optional, see KEYD.md)");
+            }
+            out.push(DiagResult { label: "Key mapping".into(), ok: km_ok, detail: km_detail });
 
             // udev rules
             let udev_ok = std::path::Path::new("/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules").exists();

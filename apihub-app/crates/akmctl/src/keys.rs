@@ -20,8 +20,8 @@ pub fn resolve(table: &Value, lookup: impl Fn(u32) -> Result<Option<Action>, Str
     for r in table["rows"].as_array().into_iter().flatten() {
         for side in ["plain", "fn"] {
             if let Some(q) = r[side]["qt_key"].as_u64() {
-                if !m.contains_key(&q) {
-                    m.insert(q, lookup(q as u32)?);
+                if let std::collections::btree_map::Entry::Vacant(e) = m.entry(q) {
+                    e.insert(lookup(q as u32)?);
                 }
             }
         }
