@@ -156,6 +156,7 @@ impl Menu {
             id::COPY => Action::Copy,
             id::BLUETOOTH => Action::Bluetooth,
             id::RENAME => Action::Rename,
+            id::REPAIR => Action::Repair,
             id::QUIT => Action::Hide,
             _ => return,
         };

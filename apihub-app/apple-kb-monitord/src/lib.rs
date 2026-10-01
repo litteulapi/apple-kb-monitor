@@ -10,6 +10,8 @@
 //! * [`notify`]  desktop notifications (zbus, no notify-rust)
 //! * [`devices`] D-Bus API v2: one object per keyboard (#93)
 //! * [`events`]  in-process event hub (alerts, replacements, link changes)
+//! * [`repair`]  link keeper: health, reconnection, repair launcher (#144)
+//! * [`sleep`]   logind sleep / resume (#145)
 //! * [`settings`] `hid_apple` write path through the privileged helper
 //! * [`alias`]   keyboard name on this computer (BlueZ `Alias`, #141)
 //!
@@ -22,6 +24,8 @@ pub mod client;
 pub mod devices;
 pub mod events;
 pub mod notify;
+pub mod repair;
 pub mod service;
 pub mod settings;
+pub mod sleep;
 pub mod watcher;

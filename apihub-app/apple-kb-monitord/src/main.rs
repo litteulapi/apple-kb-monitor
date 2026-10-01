@@ -213,7 +213,15 @@ fn run(opts: actor::Options, bus_name: Option<String>) -> ExitCode {
         opts.notify_connection
     );
     tray::spawn(watch.clone(), mailbox.clone(), conn.clone());
+    let (link_mailbox, link_notify) = (mailbox.clone(), opts.notify);
     let handle = actor::spawn(watch, mailbox, opts);
+    // Link keeper: reconnection, system sleep, health, reconciliation (#144, #145, #165).
+    let link = apple_kb_monitord::repair::spawn(link_mailbox, link_notify);
+    if let Some(c) = conn.as_ref() {
+        if let Err(e) = apple_kb_monitord::repair::export(c, link) {
+            tracing::warn!("link object not exported: {e}");
+        }
+    }
     while !STOP.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(300));
     }

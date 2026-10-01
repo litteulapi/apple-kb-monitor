@@ -136,6 +136,8 @@ pub(crate) enum Action {
     Copy,
     Bluetooth,
     Rename,
+    /// `akmctl repair` in a terminal (#147).
+    Repair,
     Hide,
 }
 
@@ -682,6 +684,11 @@ impl Tray {
                 let _ = std::thread::Builder::new()
                     .name("tray-bt".into())
                     .spawn(actions::open_bluetooth_settings);
+            }
+            Action::Repair => {
+                let _ = std::thread::Builder::new()
+                    .name("tray-repair".into())
+                    .spawn(apple_kb_monitord::repair::launch_repair);
             }
             Action::Rename => {
                 let snap = self.watch.get();

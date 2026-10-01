@@ -226,12 +226,14 @@ pub mod id {
     pub const COPY: i32 = 13;
     pub const BLUETOOTH: i32 = 14;
     pub const RENAME: i32 = 15;
+    /// Guided repair of the Bluetooth link (#147).
+    pub const REPAIR: i32 = 16;
     pub const SEP2: i32 = 20;
     pub const QUIT: i32 = 21;
     #[cfg(test)]
-    pub const ALL: [i32; 14] = [
+    pub const ALL: [i32; 15] = [
         HEADER, BATTERY, CONNECTION, SIGNAL, AUTONOMY, CAPS, SEP1, OPEN, REFRESH, COPY, BLUETOOTH,
-        RENAME, SEP2, QUIT,
+        RENAME, REPAIR, SEP2, QUIT,
     ];
 }
 
@@ -491,6 +493,12 @@ impl View {
                 lang.t("Re_nommer le clavier…", "Re_name keyboard…"),
                 "edit-rename-symbolic",
                 snap.mac().is_some(),
+            ),
+            action(
+                id::REPAIR,
+                lang.t("Ré_parer la liaison…", "Re_pair the link…"),
+                "network-wireless-disconnected-symbolic",
+                true,
             ),
             sep(id::SEP2),
             action(

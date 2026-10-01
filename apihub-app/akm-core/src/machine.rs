@@ -17,6 +17,12 @@ pub const RSSI_MAX_AGE: Duration = Duration::from_secs(100);
 pub const KERNEL_MIN_SPACING: Duration = Duration::from_secs(20);
 /// Upper bound of the acquisition retry backoff (hidraw not there yet).
 const RETRY_CAP: Duration = Duration::from_secs(60);
+/// `NoBluez` probing (keyboard assumed present while BlueZ is unreachable)
+/// gives up after this many failed acquisitions (#165): ~8 min of backoff.
+pub const NOBLUEZ_MAX_PROBES: u32 = 12;
+/// A `Reconcile` never drops a keyboard whose `Connected` arrived this
+/// recently: the snapshot may predate the signal (two bus threads, #165).
+pub const RECONCILE_GRACE: Duration = Duration::from_secs(3);
 
 // ── Pure state machine ──────────────────────────────────────────────────────
 
@@ -29,8 +35,14 @@ pub enum Event {
     Disconnected(String),
     /// UPower / power_supply reported a change for a keyboard battery.
     BatterySignal,
-    /// BlueZ is unreachable: assume present and probe sysfs with backoff.
+    /// BlueZ is unreachable: assume present and probe sysfs with backoff
+    /// (bounded by [`NOBLUEZ_MAX_PROBES`]).
     NoBluez,
+    /// Authoritative set of keyboards BlueZ reports connected, from a fresh
+    /// enumeration (BlueZ back, bus resynchronisation, periodic check). Drops
+    /// a followed keyboard that is gone, leaves the `NoBluez` probing, follows
+    /// a connected keyboard nobody announced (#165).
+    Reconcile(Vec<String>),
 }
 
 /// What the actor must do now.
@@ -53,6 +65,8 @@ pub struct Machine {
     /// Other keyboards connected while `mac` is followed (#124): taken over,
     /// in connection order, when the current one disconnects.
     standby: Vec<String>,
+    /// When the followed keyboard was announced connected.
+    connected_at: Option<Instant>,
     acquired: bool,
     attempt: u32,
     next_acquire: Option<Instant>,
@@ -80,6 +94,7 @@ impl Machine {
             connected: false,
             mac: None,
             standby: Vec::new(),
+            connected_at: None,
             acquired: false,
             attempt: 0,
             next_acquire: None,
@@ -149,6 +164,7 @@ impl Machine {
                 self.reset_timers();
                 self.connected = true;
                 self.mac = Some(mac.clone());
+                self.connected_at = Some(now);
                 self.next_acquire = Some(now);
                 None
             }
@@ -180,6 +196,7 @@ impl Machine {
                 }
                 None
             }
+            Event::Reconcile(macs) => self.reconcile(macs, now),
             Event::BatterySignal => {
                 if self.connected && self.acquired {
                     let due = self.last_kernel.map_or(now, |t| t + KERNEL_MIN_SPACING);
@@ -188,6 +205,47 @@ impl Machine {
                 None
             }
         }
+    }
+
+    fn reconcile(&mut self, macs: &[String], now: Instant) -> Option<Action> {
+        self.standby.retain(|m| macs.contains(m));
+        let followed = self.mac.as_ref().is_some_and(|m| macs.contains(m));
+        let fresh = self
+            .connected_at
+            .is_some_and(|t| now.saturating_duration_since(t) < RECONCILE_GRACE);
+        if self.connected && self.mac.is_some() && (followed || fresh) {
+            for m in macs {
+                if self.mac.as_ref() != Some(m) && !self.standby.contains(m) {
+                    self.standby.push(m.clone());
+                }
+            }
+            return None;
+        }
+        let was_active = self.connected;
+        self.reset_timers();
+        // Prefer a keyboard already queued, then BlueZ's order.
+        let next = self.standby.first().cloned().or_else(|| macs.first().cloned());
+        match next {
+            Some(n) => {
+                self.standby.retain(|m| *m != n);
+                for m in macs {
+                    if *m != n && !self.standby.contains(m) {
+                        self.standby.push(m.clone());
+                    }
+                }
+                self.connected = true;
+                self.mac = Some(n);
+                self.connected_at = Some(now);
+                self.next_acquire = Some(now);
+            }
+            None => {
+                self.connected = false;
+                self.mac = None;
+                self.connected_at = None;
+                self.standby.clear();
+            }
+        }
+        was_active.then_some(Action::Clear)
     }
 
     /// Actions due at `now`. Empty whenever the keyboard is disconnected.
@@ -238,6 +296,12 @@ impl Machine {
             self.next_rssi = None;
             self.next_acquire = Some(now + backoff(self.attempt));
             self.attempt = self.attempt.saturating_add(1);
+            if self.mac.is_none() && self.attempt >= NOBLUEZ_MAX_PROBES {
+                // NoBluez probing found nothing: stop touching the hardware
+                // until BlueZ (Reconcile / Connected) says otherwise (#165).
+                self.reset_timers();
+                self.connected = false;
+            }
         }
     }
 
@@ -460,5 +524,106 @@ mod tests {
             Some(Action::Clear)
         );
         assert!(!m.is_connected());
+    }
+
+    // ── #165: NoBluez is bounded, reconciliation drops vanished keyboards ──
+
+    #[test]
+    fn no_bluez_probing_gives_up_without_a_keyboard() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::NoBluez, t0);
+        let mut t = t0;
+        let mut acquires = 0;
+        for _ in 0..(100 * 60) {
+            if m.due(t).contains(&Action::Acquire) {
+                acquires += 1;
+                m.acquire_done(false, t);
+            }
+            t += s(1);
+        }
+        assert_eq!(acquires, NOBLUEZ_MAX_PROBES as usize, "bounded probing");
+        assert!(!m.is_connected());
+        assert_eq!(m.next_deadline(), None);
+        // BlueZ comes back with the keyboard: followed again.
+        m.on_event(&Event::Reconcile(vec![MAC.into()]), t);
+        assert_eq!(m.mac(), Some(MAC));
+        assert_eq!(m.due(t), vec![Action::Acquire]);
+    }
+
+    #[test]
+    fn bluez_back_without_keyboard_ends_no_bluez_mode() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::NoBluez, t0);
+        m.acquire_done(false, t0);
+        assert_eq!(
+            m.on_event(&Event::Reconcile(vec![]), t0 + s(30)),
+            Some(Action::Clear)
+        );
+        assert!(!m.is_connected());
+        assert!(m.due(t0 + s(100_000)).is_empty());
+    }
+
+    #[test]
+    fn resync_reports_a_disconnection_missed_by_the_watcher() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        m.acquire_done(true, t0);
+        // the keyboard left during a bus outage: no Disconnected ever came
+        assert_eq!(
+            m.on_event(&Event::Reconcile(vec![]), t0 + s(60)),
+            Some(Action::Clear)
+        );
+        assert!(!m.is_connected());
+        // the next Connected of the same MAC is not swallowed
+        m.on_event(&Event::Connected(MAC.into()), t0 + s(70));
+        assert_eq!(m.due(t0 + s(70)), vec![Action::Acquire]);
+    }
+
+    #[test]
+    fn reconcile_keeps_a_followed_keyboard_and_queues_others() {
+        const OTHER: &str = "AA:BB:CC:DD:EE:02";
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        m.acquire_done(true, t0);
+        assert_eq!(
+            m.on_event(&Event::Reconcile(vec![OTHER.into(), MAC.into()]), t0 + s(10)),
+            None
+        );
+        assert_eq!(m.mac(), Some(MAC));
+        assert!(m.is_acquired(), "no re-acquisition for a consistent snapshot");
+        assert_eq!(m.standby(), [OTHER.to_string()]);
+        // followed one gone, other still there: hand over
+        assert_eq!(
+            m.on_event(&Event::Reconcile(vec![OTHER.into()]), t0 + s(20)),
+            Some(Action::Clear)
+        );
+        assert_eq!(m.mac(), Some(OTHER));
+        assert!(m.standby().is_empty());
+    }
+
+    #[test]
+    fn stale_snapshot_never_drops_a_fresh_connection() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        assert_eq!(m.on_event(&Event::Reconcile(vec![]), t0 + s(1)), None);
+        assert!(m.is_connected());
+        assert_eq!(
+            m.on_event(&Event::Reconcile(vec![]), t0 + RECONCILE_GRACE),
+            Some(Action::Clear)
+        );
+    }
+
+    #[test]
+    fn reconcile_while_idle_follows_an_unannounced_keyboard() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        assert_eq!(m.on_event(&Event::Reconcile(vec![MAC.into()]), t0), None);
+        assert_eq!(m.due(t0), vec![Action::Acquire]);
+        assert_eq!(m.on_event(&Event::Reconcile(vec![]), t0 + s(1)), None, "fresh");
     }
 }

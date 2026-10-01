@@ -535,9 +535,13 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             break;
         }
         let now = Instant::now();
-        let wait = machine
-            .next_deadline()
-            .map_or(TICK, |d| d.saturating_duration_since(now).min(TICK));
+        let wait = if crate::sleep::paused() {
+            TICK // system sleep (#145): nothing is due, never spin
+        } else {
+            machine
+                .next_deadline()
+                .map_or(TICK, |d| d.saturating_duration_since(now).min(TICK))
+        };
         match rx.recv_timeout(wait) {
             Ok(Msg::Bus(ev)) => {
                 if machine.on_event(&ev, Instant::now()) == Some(Action::Clear) {
@@ -551,7 +555,16 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
         }
-        for action in machine.due(Instant::now()) {
+        // System sleep (#145): no hardware access; the sleep handler waits
+        // for this guard before letting the system go down.
+        let paused = crate::sleep::paused();
+        let _io = (!paused).then(crate::sleep::io_guard);
+        let due = if paused {
+            Vec::new()
+        } else {
+            machine.due(Instant::now())
+        };
+        for action in due {
             match action {
                 Action::Acquire => {
                     let mac = machine.mac().map(str::to_string);
