@@ -66,7 +66,7 @@ pub enum Command {
     /// Rename the keyboard on this computer (BlueZ alias; nothing is written
     /// into the keyboard). With --device-name: the name stored IN the keyboard
     #[command(
-        after_help = "TWO NAMES:\n  akmctl rename <name>                 alias of THIS computer (BlueZ Alias): default, no risk\n  akmctl rename --device-name <name>   name stored IN the keyboard (0x51-0x55): dry run by default;\n                                       --write-device-name sends the ONE frame Lion sends (SET Feature 0x55,\n                                       65 bytes, established by disassembly) after pre-flight and backup,\n                                       only if THREE locks are lifted:\n                                         1. [apple] allow_device_name_write = true in config.toml (default false)\n                                         2. outgoing MTU of the L2CAP control channel >= 66, read on the live\n                                            socket (pkexec akm-hid-control inspect --mac MAC, read-only)\n                                         3. the name typed again in the terminal\n                                       RISKS NOT MEASURED: firmware HANDSHAKE to SET 0x55, persistence across\n                                       a battery change (docs/RENOMMER-CLAVIER.md §5.3, §6)\n  akmctl rename --device-name --show   name stored in the keyboard, from the daemon's cache\n  akmctl rename --device-name --restore <backup.json> [--write-device-name]"
+        after_help = "TWO NAMES:\n  akmctl rename <name>                 alias of THIS computer (BlueZ Alias): default, no risk\n  akmctl rename --device-name <name>   name stored IN the keyboard (0x51-0x55): dry run by default;\n                                       --check runs the WHOLE pre-flight (MTU read via ONE pkexec), makes the\n                                       backup, shows the plan, writes nothing, asks nothing;\n                                       --write-device-name sends the ONE frame Lion sends (SET Feature 0x55,\n                                       65 bytes, established by disassembly) after pre-flight, backup and plan,\n                                       only if THREE locks are lifted:\n                                         1. consent: in an interactive terminal, type ECRIRE exactly (this run\n                                            only, config.toml untouched); without a terminal, only\n                                            [apple] allow_device_name_write = true in config.toml (default false)\n                                         2. outgoing MTU of the L2CAP control channel >= 66, read on the live\n                                            socket (pkexec akm-hid-control inspect --mac MAC, read-only)\n                                         3. the name typed again in the terminal\n                                       then: switch the keyboard off 3 s, wait 5 s, on; read back; verdict.\n                                       RISKS NOT MEASURED: firmware HANDSHAKE to SET 0x55, persistence across\n                                       a battery change (docs/RENOMMER-CLAVIER.md §5.3, §6)\n                                       Exit codes: 10 lock 1, 11 pre-flight (lock 2 included), 12 cancelled,\n                                       13 no reconnection, 14 read back different (rollback printed)\n  akmctl rename --device-name --show   name stored in the keyboard, from the daemon's cache\n  akmctl rename --device-name --restore <backup.json> [--check|--write-device-name]"
     )]
     Rename {
         /// New alias (max 64 characters, no control characters)
@@ -485,7 +485,12 @@ mod tests {
         // --check: whole pre-flight, nothing written; exclusive with the others.
         assert!(matches!(
             c(&["--device-name", "x", "--check"]).unwrap().command,
-            Command::Rename { check: true, write_device_name: false, dry_run: false, .. }
+            Command::Rename {
+                check: true,
+                write_device_name: false,
+                dry_run: false,
+                ..
+            }
         ));
         // A name starting with a dash goes through `--device-name=`: what the
         // Settings module passes.
