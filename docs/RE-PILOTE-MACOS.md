@@ -215,3 +215,15 @@ Les registres que nous balayons (`0xFE` notamment) ne sont jamais sollicités pa
 4. `bluetoothd` (tranche x86_64, sans symboles) : xrefs de la chaîne `HIDProfile::prepareForSleep()`. Les prédicats lisent l'octet `[appareil + 0x310]`,
    rempli par la fonction qui journalise `Updating HID Device Types`. Sa table (VID source, VID, PID, n° de bit) se reconstruit en émulant (unicorn)
    l'initialiseur qui remplit le vecteur à `0x100b51740` (build 25F71).
+
+## 11. Suivi Gitea
+
+| Issue | Objet |
+|---|---|
+| #189 | F37 — alertes batterie pilotées par le clavier (Input `0x30`, écoute passive) |
+| #190 | F38 — détection d'extinction (Input `0x13` bit 1) |
+| #191 | F39 — `WillShutdown` (SET Feature `0x40`) à l'arrêt, accord du gérant requis |
+| #192 | F40 — nom dans le micrologiciel (`0x50`-`0x55`) |
+| #193 | docs — carte des rapports avec les noms Apple |
+| #194 | docs — batterie : pas de conversion mV → % côté macOS |
+| commentaires | #130, #146, #175, #179, #181, #182, #187, #188 |
