@@ -13,7 +13,9 @@ Le rapport 0x4C (clé d'identité, SENSIBLE) n'est JAMAIS écrit en clair :
 seuls sa longueur, son premier octet et une empreinte SHA-256 tronquée (8 o)
 sont enregistrés — suffisant pour détecter un changement, pas pour la reconstruire.
 
-Garde-fou radio : intervalle minimum 60 s entre deux échantillons.
+Garde-fous : intervalle minimum 60 s (5 min recommandé) ; lecture seulement si
+`bluetoothctl info` affiche « Connected: yes » ; arrêt définitif (code 2) au
+premier clavier absent ou à la première erreur d'E/S, sans relance.
 
 Exemples :
   sample_reports.py --once
@@ -70,7 +72,10 @@ def mask(rid, r):
         return r
     raw = r["raw"]
     if rid in SENSITIVE:
-        return {"len": r["len"], "first": raw[:2].hex(),
+        # 0x4C = type (1 o) + BD_ADDR de l'hôte appairé (6 o, petit-boutiste)
+        # + 12 o secrets. Seule l'adresse de l'hôte (publique) est conservée.
+        host = ":".join(f"{x:02x}" for x in raw[2:8][::-1]) if len(raw) >= 8 else None
+        return {"len": r["len"], "first": raw[:2].hex(), "bonded_host": host,
                 "sha256_8": hashlib.sha256(raw).hexdigest()[:16], "masked": True}
     return {"len": r["len"], "hex": raw.hex()}
 
@@ -132,6 +137,15 @@ def host_battery(mac):
     except (OSError, subprocess.SubprocessError, ValueError):
         pass
     return res
+
+
+def bluez_connected(mac):
+    try:
+        o = subprocess.run(["bluetoothctl", "info", mac], capture_output=True,
+                           text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "\tConnected: yes" in o
 
 
 def sample(dev, mac, ids):
@@ -198,11 +212,11 @@ def main():
     n = 1 if (a.once or a.scan_once) else a.count
     out = open(a.out, "a") if a.out else sys.stdout
     for i in range(n):
-        # Le clavier se déconnecte quand il dort : on re-cherche le nœud à
-        # chaque tour et on journalise l'absence au lieu de le réveiller.
+        # Ne lit QUE si BlueZ voit le clavier connecté ; sinon journalise
+        # l'absence et s'arrête (jamais de relance en boucle sur un lien mort).
         dev = a.dev or find_hidraw(a.mac)
         s = None
-        if dev:
+        if dev and bluez_connected(a.mac):
             try:
                 s = sample(dev, a.mac, ids)
             except OSError as e:
@@ -214,6 +228,11 @@ def main():
             s["reports"] = {k: v for k, v in s["reports"].items() if "err" not in v}
         out.write(json.dumps(s, sort_keys=True) + "\n")
         out.flush()
+        io_err = s.get("absent") or (not a.scan_once and any(
+            "err" in v for v in s["reports"].values()))
+        if io_err:
+            print("arrêt : clavier absent ou erreur d'E/S (pas de relance)", file=sys.stderr)
+            sys.exit(2)
         if i + 1 < n:
             time.sleep(a.interval)
 
