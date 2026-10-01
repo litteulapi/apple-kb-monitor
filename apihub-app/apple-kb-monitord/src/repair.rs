@@ -416,7 +416,11 @@ impl<B: LinkBus> Keeper<B> {
                 }
             }
             if d.rec.health() != before {
-                tracing::info!("link: {mac} {} -> {}", before.as_str(), d.rec.health().as_str());
+                tracing::info!(
+                    "link: {mac} {} -> {}",
+                    before.as_str(),
+                    d.rec.health().as_str()
+                );
             }
         }
         for (path, mac) in connects {
@@ -501,8 +505,8 @@ pub fn enumerate(calls: &Connection) -> zbus::Result<Vec<DevInfo>> {
         else {
             continue;
         };
-        let keyboard = prop_str(d, "Modalias")
-            .is_some_and(|m| is_keyboard_device(&m, prop_u32(d, "Class")));
+        let keyboard =
+            prop_str(d, "Modalias").is_some_and(|m| is_keyboard_device(&m, prop_u32(d, "Class")));
         let Some(mac) = prop_str(d, "Address").map(|a| a.to_ascii_uppercase()) else {
             continue;
         };
@@ -649,9 +653,18 @@ fn listen_once(tx: &Sender<KMsg>) -> zbus::Result<()> {
     for msg in it {
         let msg = msg?;
         let hdr = msg.header();
-        let member = hdr.member().map(|m| m.as_str().to_string()).unwrap_or_default();
-        let path = hdr.path().map(|p| p.as_str().to_string()).unwrap_or_default();
-        let iface = hdr.interface().map(|i| i.as_str().to_string()).unwrap_or_default();
+        let member = hdr
+            .member()
+            .map(|m| m.as_str().to_string())
+            .unwrap_or_default();
+        let path = hdr
+            .path()
+            .map(|p| p.as_str().to_string())
+            .unwrap_or_default();
+        let iface = hdr
+            .interface()
+            .map(|i| i.as_str().to_string())
+            .unwrap_or_default();
         let out = match (member.as_str(), iface.as_str()) {
             ("NameOwnerChanged", _) => {
                 let Ok((_, _, new)) = msg.body().deserialize::<(String, String, String)>() else {
@@ -671,7 +684,10 @@ fn listen_once(tx: &Sender<KMsg>) -> zbus::Result<()> {
                 let Ok((name, _)) = msg.body().deserialize::<(String, String)>() else {
                     continue;
                 };
-                vec![KMsg::Disconnected(path, DisconnectReason::from_bluez(&name))]
+                vec![KMsg::Disconnected(
+                    path,
+                    DisconnectReason::from_bluez(&name),
+                )]
             }
             ("PropertiesChanged", _) => {
                 let Ok((i, changed, _)) = msg.body().deserialize::<(String, Props, Vec<String>)>()
@@ -746,9 +762,9 @@ pub fn spawn(mailbox: Arc<Mailbox>, notify: bool) -> KeeperHandle {
 fn run<B: LinkBus>(mut k: Keeper<B>, rx: Receiver<KMsg>) {
     loop {
         let now = Instant::now();
-        let wait = k
-            .next_deadline()
-            .map_or(IDLE_WAIT, |d| d.saturating_duration_since(now).min(IDLE_WAIT));
+        let wait = k.next_deadline().map_or(IDLE_WAIT, |d| {
+            d.saturating_duration_since(now).min(IDLE_WAIT)
+        });
         match rx.recv_timeout(wait) {
             Ok(KMsg::Quit) | Err(RecvTimeoutError::Disconnected) => return,
             Ok(m) => k.handle(m, Instant::now()),
@@ -768,7 +784,12 @@ pub struct LinkIface {
 impl LinkIface {
     /// JSON array of [`LinkStatus`], one per paired keyboard.
     fn status(&self) -> String {
-        let s = self.handle.shared.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let s = self
+            .handle
+            .shared
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         serde_json::Value::Array(s.iter().map(LinkStatus::to_json).collect()).to_string()
     }
 
@@ -859,7 +880,11 @@ mod tests {
             self.notes.push((summary.to_string(), u));
         }
         fn reconcile(&mut self, connected: Vec<String>) {
-            if self.machine.on_event(&Event::Reconcile(connected), self.now) == Some(MAction::Clear) {
+            if self
+                .machine
+                .on_event(&Event::Reconcile(connected), self.now)
+                == Some(MAction::Clear)
+            {
                 self.clears += 1;
             }
         }
@@ -951,14 +976,23 @@ mod tests {
         let w = k.bus().world.clone();
         k.handle(KMsg::Sync(w), t0);
         k.bus().world = vec![kb(false)];
-        k.handle(KMsg::Disconnected(PATH.into(), DisconnectReason::Authentication), t0);
+        k.handle(
+            KMsg::Disconnected(PATH.into(), DisconnectReason::Authentication),
+            t0,
+        );
         k.handle(KMsg::Connected(PATH.into(), false), t0);
         let t = run_for(&mut k, t0, 6 * 3600);
         assert_eq!(health(&k, t), "auth-failed");
         assert_eq!(k.bus().connects.len(), 0);
         let n = &k.bus().notes;
         assert_eq!(n.len(), 1);
-        assert_eq!(n[0], ("Clavier : ré-appairage nécessaire".into(), Urgency::Critical));
+        assert_eq!(
+            n[0],
+            (
+                "Clavier : ré-appairage nécessaire".into(),
+                Urgency::Critical
+            )
+        );
     }
 
     #[test]
@@ -968,7 +1002,10 @@ mod tests {
         let w = k.bus().world.clone();
         k.handle(KMsg::Sync(w), t0);
         k.handle(KMsg::Sleep(SleepEvent::Sleeping), t0);
-        k.handle(KMsg::Disconnected(PATH.into(), DisconnectReason::Suspend), t0);
+        k.handle(
+            KMsg::Disconnected(PATH.into(), DisconnectReason::Suspend),
+            t0,
+        );
         let t = run_for(&mut k, t0, 8 * 3600);
         assert_eq!(health(&k, t), "suspended");
         assert!(k.bus().connects.is_empty(), "nothing while asleep");
@@ -976,7 +1013,11 @@ mod tests {
         k.handle(KMsg::Sleep(SleepEvent::Resumed), t);
         assert_eq!(health(&k, t), "dormant");
         run_for(&mut k, t, 10);
-        assert_eq!(k.bus().connects.len(), 1, "first page within the grace delay");
+        assert_eq!(
+            k.bus().connects.len(),
+            1,
+            "first page within the grace delay"
+        );
     }
 
     #[test]
@@ -986,7 +1027,10 @@ mod tests {
         let w = k.bus().world.clone();
         k.handle(KMsg::Sync(w), t0);
         k.bus().world = vec![kb(false)];
-        k.handle(KMsg::Disconnected(PATH.into(), DisconnectReason::Remote), t0);
+        k.handle(
+            KMsg::Disconnected(PATH.into(), DisconnectReason::Remote),
+            t0,
+        );
         k.handle(KMsg::Connected(PATH.into(), false), t0);
         let t = run_for(&mut k, t0, 12 * 3600);
         assert_eq!(health(&k, t), "dormant");
@@ -1007,7 +1051,10 @@ mod tests {
         k.bus().bluez_up = true;
         let w = k.bus().world.clone();
         k.handle(KMsg::Sync(w), t0 + Duration::from_secs(30));
-        assert!(!k.bus().machine.is_connected(), "reconciled: nothing connected");
+        assert!(
+            !k.bus().machine.is_connected(),
+            "reconciled: nothing connected"
+        );
         assert_eq!(k.bus().clears, 1);
     }
 
@@ -1021,8 +1068,15 @@ mod tests {
         assert!(k.bus().machine.is_connected());
         // the keyboard leaves while every signal is lost (bus outage)
         k.bus().world = vec![kb(false)];
-        let t = run_for(&mut k, t0 + Duration::from_secs(5), RECONCILE_PERIOD.as_secs());
-        assert!(!k.bus().machine.is_connected(), "machine reconciled within one period");
+        let t = run_for(
+            &mut k,
+            t0 + Duration::from_secs(5),
+            RECONCILE_PERIOD.as_secs(),
+        );
+        assert!(
+            !k.bus().machine.is_connected(),
+            "machine reconciled within one period"
+        );
         assert_eq!(health(&k, t), "dormant", "keeper recovering");
     }
 
@@ -1052,15 +1106,15 @@ mod tests {
     #[test]
     fn notice_texts_are_explicit() {
         let t = Instant::now();
-        let (s, b, u) = notice_text(
-            &Notice::RepairNeeded { why: "x".into() },
-            "Kb",
-            t,
-            false,
-        );
+        let (s, b, u) = notice_text(&Notice::RepairNeeded { why: "x".into() }, "Kb", t, false);
         assert!(s.contains("re-pairing") && b.contains("akmctl repair"));
         assert_eq!(u, Urgency::Critical);
-        let (_, b, _) = notice_text(&Notice::Unreachable { since: t }, "Kb", t + Duration::from_secs(660), true);
+        let (_, b, _) = notice_text(
+            &Notice::Unreachable { since: t },
+            "Kb",
+            t + Duration::from_secs(660),
+            true,
+        );
         assert!(b.contains("11 min") && b.contains("akmctl doctor"));
     }
 }

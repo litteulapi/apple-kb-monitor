@@ -111,7 +111,9 @@ pub fn spawn(on_event: impl Fn(SleepEvent) + Send + 'static) {
             loop {
                 if let Err(e) = watch_once(&on_event) {
                     if !warned {
-                        tracing::warn!("logind unavailable ({e}): sleep handling off, retry every 60 s");
+                        tracing::warn!(
+                            "logind unavailable ({e}): sleep handling off, retry every 60 s"
+                        );
                         warned = true;
                     }
                     // never leave the hardware paused because logind vanished
@@ -139,7 +141,10 @@ fn watch_once(on_event: &dyn Fn(SleepEvent)) -> zbus::Result<()> {
             None
         }
     };
-    tracing::info!("sleep handling active (logind delay inhibitor: {})", inhibitor.is_some());
+    tracing::info!(
+        "sleep handling active (logind delay inhibitor: {})",
+        inhibitor.is_some()
+    );
     for msg in MessageIterator::from(conn) {
         let msg = msg?;
         let hdr = msg.header();
@@ -156,7 +161,11 @@ fn watch_once(on_event: &dyn Fn(SleepEvent)) -> zbus::Result<()> {
             let drained = drain_io(IO_DRAIN);
             tracing::info!(
                 "system going to sleep: keyboard access paused{}",
-                if drained { "" } else { " (a read was still running)" }
+                if drained {
+                    ""
+                } else {
+                    " (a read was still running)"
+                }
             );
             inhibitor = None; // release: the system may sleep now
         } else {
@@ -184,7 +193,10 @@ mod tests {
         set_sleeping();
         assert!(paused_at(t0 + Duration::from_secs(3600)));
         set_resumed(t0 + Duration::from_secs(10));
-        assert!(paused_at(t0 + Duration::from_secs(12)), "grace after resume");
+        assert!(
+            paused_at(t0 + Duration::from_secs(12)),
+            "grace after resume"
+        );
         assert!(!paused_at(t0 + Duration::from_secs(10) + RESUME_GRACE));
         // io drain
         let g = io_guard();

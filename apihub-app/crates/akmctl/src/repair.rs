@@ -46,7 +46,12 @@ pub enum Plan {
     BluezDown,
 }
 
-pub fn plan(kb: Option<&KbFacts>, adapter_powered: Option<bool>, health: Option<&str>, force: bool) -> Plan {
+pub fn plan(
+    kb: Option<&KbFacts>,
+    adapter_powered: Option<bool>,
+    health: Option<&str>,
+    force: bool,
+) -> Plan {
     if adapter_powered != Some(true) {
         return Plan::BluezDown;
     }
@@ -101,15 +106,21 @@ fn connected(conn: &Connection, path: &str) -> bool {
 }
 
 fn page(conn: &Connection, path: &str) -> Result<(), String> {
-    conn.call_method(Some("org.bluez"), path, Some("org.bluez.Device1"), "Connect", &())
-        .map(|_| ())
-        .map_err(|e| match e {
-            zbus::Error::MethodError(n, m, _) => {
-                akm_core::recovery::ConnectError::classify(n.as_str(), m.as_deref().unwrap_or(""))
-                    .describe()
-            }
-            o => o.to_string(),
-        })
+    conn.call_method(
+        Some("org.bluez"),
+        path,
+        Some("org.bluez.Device1"),
+        "Connect",
+        &(),
+    )
+    .map(|_| ())
+    .map_err(|e| match e {
+        zbus::Error::MethodError(n, m, _) => {
+            akm_core::recovery::ConnectError::classify(n.as_str(), m.as_deref().unwrap_or(""))
+                .describe()
+        }
+        o => o.to_string(),
+    })
 }
 
 fn wait_connected(conn: &Connection, path: &str, max: Duration) -> bool {
@@ -212,9 +223,13 @@ fn pairing_assistant() -> Option<Vec<&'static str>> {
         &["gnome-control-center", "bluetooth"],
     ];
     let in_path = |b: &str| {
-        std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(b).is_file()))
+        std::env::var_os("PATH")
+            .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(b).is_file()))
     };
-    CANDIDATES.iter().find(|c| in_path(c[0])).map(|c| c.to_vec())
+    CANDIDATES
+        .iter()
+        .find(|c| in_path(c[0]))
+        .map(|c| c.to_vec())
 }
 
 fn find_kb(conn: &Connection, mac: &str) -> Option<KbFacts> {
@@ -227,10 +242,19 @@ fn find_kb(conn: &Connection, mac: &str) -> Option<KbFacts> {
 
 fn re_pair(conn: &Connection, k: Option<&KbFacts>) -> bool {
     if let Some(k) = k {
-        let adapter = k.path.rsplit_once('/').map_or("/org/bluez/hci0", |(a, _)| a);
+        let adapter = k
+            .path
+            .rsplit_once('/')
+            .map_or("/org/bluez/hci0", |(a, _)| a);
         let obj = zbus::zvariant::ObjectPath::try_from(k.path.as_str()).ok();
         let r = obj.map(|o| {
-            conn.call_method(Some("org.bluez"), adapter, Some("org.bluez.Adapter1"), "RemoveDevice", &(o,))
+            conn.call_method(
+                Some("org.bluez"),
+                adapter,
+                Some("org.bluez.Adapter1"),
+                "RemoveDevice",
+                &(o,),
+            )
         });
         match r {
             Some(Ok(_)) => say("  pairage supprimé.", "  pairing removed."),
@@ -259,7 +283,10 @@ fn re_pair(conn: &Connection, k: Option<&KbFacts>) -> bool {
         ),
     }
     let Some(mac) = k.map(|k| k.mac.clone()) else {
-        say("  (attente de l'appairage dans l'assistant…)", "  (waiting for the assistant…)");
+        say(
+            "  (attente de l'appairage dans l'assistant…)",
+            "  (waiting for the assistant…)",
+        );
         return true;
     };
     let end = Instant::now() + PAIR_WAIT;
@@ -275,7 +302,10 @@ fn re_pair(conn: &Connection, k: Option<&KbFacts>) -> bool {
                         &("org.bluez.Device1", "Trusted", Value::from(true)),
                     );
                 }
-                say("\u{2713} Clavier ré-appairé, connecté et approuvé.", "\u{2713} Keyboard re-paired, connected and trusted.");
+                say(
+                    "\u{2713} Clavier ré-appairé, connecté et approuvé.",
+                    "\u{2713} Keyboard re-paired, connected and trusted.",
+                );
                 return true;
             }
         }
@@ -339,7 +369,10 @@ pub fn run(mac: Option<&str>, force: bool) -> u8 {
             if ask_confirmation(why, Some(&k)) && re_pair(&conn, Some(&k)) {
                 crate::cli::EXIT_OK
             } else {
-                say("Annulé : rien n'a été modifié.", "Cancelled: nothing was changed.");
+                say(
+                    "Annulé : rien n'a été modifié.",
+                    "Cancelled: nothing was changed.",
+                );
                 crate::cli::EXIT_ERROR
             }
         }
@@ -347,12 +380,18 @@ pub fn run(mac: Option<&str>, force: bool) -> u8 {
             if ask_confirmation(&why, kb.as_ref()) && re_pair(&conn, kb.as_ref()) {
                 crate::cli::EXIT_OK
             } else {
-                say("Annulé : rien n'a été modifié.", "Cancelled: nothing was changed.");
+                say(
+                    "Annulé : rien n'a été modifié.",
+                    "Cancelled: nothing was changed.",
+                );
                 crate::cli::EXIT_ERROR
             }
         }
         Plan::PairNew => {
-            say("Aucun clavier Apple appairé : lancement de l'assistant.", "No paired Apple keyboard: starting the assistant.");
+            say(
+                "Aucun clavier Apple appairé : lancement de l'assistant.",
+                "No paired Apple keyboard: starting the assistant.",
+            );
             if re_pair(&conn, None) {
                 crate::cli::EXIT_OK
             } else {
@@ -381,15 +420,49 @@ mod tests {
 
     #[test]
     fn plans() {
-        assert_eq!(plan(Some(&kb(true, true)), Some(true), Some("connected"), false), Plan::Healthy);
-        assert_eq!(plan(Some(&kb(true, false)), Some(true), Some("dormant"), false), Plan::WakeAndPage);
-        assert_eq!(plan(Some(&kb(true, false)), Some(true), Some("unreachable"), false), Plan::WakeAndPage);
-        assert!(matches!(plan(Some(&kb(true, false)), Some(true), Some("auth-failed"), false), Plan::Repair(_)));
-        assert!(matches!(plan(Some(&kb(false, false)), Some(true), None, false), Plan::Repair(_)));
-        assert!(matches!(plan(Some(&kb(true, true)), Some(true), None, true), Plan::Repair(_)));
+        assert_eq!(
+            plan(Some(&kb(true, true)), Some(true), Some("connected"), false),
+            Plan::Healthy
+        );
+        assert_eq!(
+            plan(Some(&kb(true, false)), Some(true), Some("dormant"), false),
+            Plan::WakeAndPage
+        );
+        assert_eq!(
+            plan(
+                Some(&kb(true, false)),
+                Some(true),
+                Some("unreachable"),
+                false
+            ),
+            Plan::WakeAndPage
+        );
+        assert!(matches!(
+            plan(
+                Some(&kb(true, false)),
+                Some(true),
+                Some("auth-failed"),
+                false
+            ),
+            Plan::Repair(_)
+        ));
+        assert!(matches!(
+            plan(Some(&kb(false, false)), Some(true), None, false),
+            Plan::Repair(_)
+        ));
+        assert!(matches!(
+            plan(Some(&kb(true, true)), Some(true), None, true),
+            Plan::Repair(_)
+        ));
         assert_eq!(plan(None, Some(true), None, false), Plan::PairNew);
-        assert_eq!(plan(Some(&kb(true, false)), Some(false), None, false), Plan::BluezDown);
-        assert_eq!(plan(Some(&kb(true, false)), None, None, false), Plan::BluezDown);
+        assert_eq!(
+            plan(Some(&kb(true, false)), Some(false), None, false),
+            Plan::BluezDown
+        );
+        assert_eq!(
+            plan(Some(&kb(true, false)), None, None, false),
+            Plan::BluezDown
+        );
     }
 
     #[test]

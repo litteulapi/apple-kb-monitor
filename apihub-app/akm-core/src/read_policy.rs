@@ -301,7 +301,10 @@ mod tests {
     #[test]
     fn only_the_allow_list_reaches_the_device() {
         let f = fixture();
-        let spy = Spy { inner: &f, log: RefCell::new(Vec::new()) };
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(Vec::new()),
+        };
         let safe = SafeSource::new(&spy);
         for id in [0xFE, 0xEA, 0x4C, 0x09, 0xF5, 0x00, 0x13] {
             let e = safe.feature(id).unwrap_err();
@@ -329,10 +332,17 @@ mod tests {
     #[test]
     fn safe_read_decodes_percentage_and_voltage() {
         let f = fixture();
-        let spy = Spy { inner: &f, log: RefCell::new(Vec::new()) };
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(Vec::new()),
+        };
         let mut r = KbReport::default();
         assert_eq!(read_safe(&spy, &mut r), SafeRead::Complete);
-        assert_eq!(*spy.log.borrow(), vec![0x47, 0x46, 0x49], "3 requests, no probe, no scan");
+        assert_eq!(
+            *spy.log.borrow(),
+            vec![0x47, 0x46, 0x49],
+            "3 requests, no probe, no scan"
+        );
         assert_eq!(r.battery.percentage, Some(99.0));
         assert_eq!(r.battery.voltage, Some(3.002));
         assert!(!r.incomplete);
@@ -341,7 +351,10 @@ mod tests {
     #[test]
     fn first_failure_stops_the_read() {
         let f = Fixture::new().with(&[0x47, 80]); // 0x46 missing -> error
-        let spy = Spy { inner: &f, log: RefCell::new(Vec::new()) };
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(Vec::new()),
+        };
         let mut r = KbReport::default();
         assert_eq!(read_safe(&spy, &mut r), SafeRead::Partial);
         assert_eq!(*spy.log.borrow(), vec![0x47, 0x46]);
@@ -359,9 +372,13 @@ mod tests {
         assert!(last_input_age(t + Duration::from_secs(10)).unwrap() >= Duration::from_secs(9));
         // build_report_safe on an idle keyboard: no I/O at all
         let f = fixture();
-        let spy = Spy { inner: &f, log: RefCell::new(Vec::new()) };
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(Vec::new()),
+        };
         let uevent = "HID_ID=0005:000005AC:00000256\nHID_NAME=Kb\nHID_UNIQ=04:db:56:ca:42:ee\n";
-        let (r, o) = build_report_safe(uevent, None, &spy, KbWake::default(), t + ACTIVE_WINDOW * 2);
+        let (r, o) =
+            build_report_safe(uevent, None, &spy, KbWake::default(), t + ACTIVE_WINDOW * 2);
         assert_eq!(o, SafeRead::Skipped(Gate::Idle));
         assert!(spy.log.borrow().is_empty());
         assert!(r.bluetooth.connected);

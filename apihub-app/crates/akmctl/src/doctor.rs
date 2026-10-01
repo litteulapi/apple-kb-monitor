@@ -107,8 +107,16 @@ pub fn check_main_conf(text: &str) -> Vec<Finding> {
             format!("ignored by bluetoothd: {}", misplaced.join(", ")),
             Some("sudo bluetooth/akm-conf.py bluez --apply && sudo systemctl restart bluetooth"),
         ));
-    } else if e.iter().any(|(s, k, _)| s == "Policy" && k == "ReconnectAttempts") {
-        out.push(f(Level::Ok, "bluez-conf", "[Policy] Reconnect* in place", None));
+    } else if e
+        .iter()
+        .any(|(s, k, _)| s == "Policy" && k == "ReconnectAttempts")
+    {
+        out.push(f(
+            Level::Ok,
+            "bluez-conf",
+            "[Policy] Reconnect* in place",
+            None,
+        ));
     }
     let fast = e
         .iter()
@@ -133,7 +141,12 @@ pub fn check_upower(text: &str) -> Finding {
         .iter()
         .any(|(_, k, v)| k == "NoPollBatteries" && v.eq_ignore_ascii_case("true"));
     if no_poll {
-        f(Level::Ok, "upower", "NoPollBatteries = true (no 30 s HID polling)", None)
+        f(
+            Level::Ok,
+            "upower",
+            "NoPollBatteries = true (no 30 s HID polling)",
+            None,
+        )
     } else {
         f(
             Level::Info,
@@ -156,7 +169,12 @@ pub struct UsbPower {
 
 pub fn check_usb_power(p: Option<&UsbPower>, rule_installed: bool) -> Finding {
     let Some(p) = p else {
-        return f(Level::Info, "adapter-pm", "adapter is not on USB (or not found)", None);
+        return f(
+            Level::Info,
+            "adapter-pm",
+            "adapter is not on USB (or not found)",
+            None,
+        );
     };
     if p.control == "on" {
         f(
@@ -190,7 +208,9 @@ pub fn summarize_journal(lines: &[String], mac: Option<&str>) -> Vec<(JournalKin
     let mut map: HashMap<JournalKind, (usize, String)> = HashMap::new();
     for l in lines {
         let about_other_device = mac.is_some_and(|m| {
-            l.contains(':') && contains_mac(l) && !l.to_ascii_uppercase().contains(&m.to_ascii_uppercase())
+            l.contains(':')
+                && contains_mac(l)
+                && !l.to_ascii_uppercase().contains(&m.to_ascii_uppercase())
         });
         if about_other_device {
             continue;
@@ -305,7 +325,12 @@ pub fn keyboard_findings(k: Option<&KbFacts>, adapter_powered: Option<bool>) -> 
         return out;
     };
     if !(k.paired || k.bonded) {
-        out.push(f(Level::Bad, "pairing", format!("{} is not paired", k.mac), Some("akmctl repair")));
+        out.push(f(
+            Level::Bad,
+            "pairing",
+            format!("{} is not paired", k.mac),
+            Some("akmctl repair"),
+        ));
     } else {
         out.push(f(
             Level::Ok,
@@ -329,7 +354,12 @@ pub fn keyboard_findings(k: Option<&KbFacts>, adapter_powered: Option<bool>) -> 
         ));
     }
     if k.blocked {
-        out.push(f(Level::Bad, "pairing", "blocked in BlueZ", Some(&format!("bluetoothctl unblock {}", k.mac))));
+        out.push(f(
+            Level::Bad,
+            "pairing",
+            "blocked in BlueZ",
+            Some(&format!("bluetoothctl unblock {}", k.mac)),
+        ));
     }
     out.push(if k.connected {
         f(Level::Ok, "link", "connected", None)
@@ -386,7 +416,12 @@ pub fn key_finding(stored: Option<&str>, kernel: Option<&str>, root: bool) -> Fi
 pub fn fingerprint(hex: &str) -> String {
     // FNV-1a 64 — enough to compare two copies, useless to recover the key.
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in hex.trim().trim_start_matches("0x").to_ascii_lowercase().bytes() {
+    for b in hex
+        .trim()
+        .trim_start_matches("0x")
+        .to_ascii_lowercase()
+        .bytes()
+    {
         h ^= u64::from(b);
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
@@ -396,13 +431,20 @@ pub fn fingerprint(hex: &str) -> String {
 /// Overall verdict: (level, one-line advice).
 pub fn verdict(findings: &[Finding], health: Option<&str>, connected: bool) -> (Level, String) {
     let worst = findings.iter().map(|x| x.level).max().unwrap_or(Level::Ok);
-    if health == Some("auth-failed") || findings.iter().any(|x| x.topic == "link-key" && x.level == Level::Bad) {
+    if health == Some("auth-failed")
+        || findings
+            .iter()
+            .any(|x| x.topic == "link-key" && x.level == Level::Bad)
+    {
         return (
             Level::Bad,
             "the pairing is refused or missing: run `akmctl repair`".into(),
         );
     }
-    if findings.iter().any(|x| x.topic == "pairing" && x.level == Level::Bad) {
+    if findings
+        .iter()
+        .any(|x| x.topic == "pairing" && x.level == Level::Bad)
+    {
         return (Level::Bad, "no usable pairing: run `akmctl repair`".into());
     }
     if connected {
@@ -426,10 +468,13 @@ Re-pair only if `akmctl doctor` reports auth-failed"
 type Props = HashMap<String, OwnedValue>;
 
 fn pb(p: &Props, k: &str) -> bool {
-    p.get(k).and_then(|v| bool::try_from(v).ok()).unwrap_or(false)
+    p.get(k)
+        .and_then(|v| bool::try_from(v).ok())
+        .unwrap_or(false)
 }
 fn ps(p: &Props, k: &str) -> Option<String> {
-    p.get(k).and_then(|v| <&str>::try_from(v).ok().map(str::to_string))
+    p.get(k)
+        .and_then(|v| <&str>::try_from(v).ok().map(str::to_string))
 }
 
 /// Paired Apple keyboards and the adapter's Powered flag.
@@ -451,7 +496,9 @@ pub fn bluez_facts(conn: &Connection) -> zbus::Result<(Vec<KbFacts>, Option<bool
                     }
                     let mac = ps(p, "Address").unwrap_or_default().to_ascii_uppercase();
                     kbs.push(KbFacts {
-                        name: ps(p, "Alias").or_else(|| ps(p, "Name")).unwrap_or_else(|| mac.clone()),
+                        name: ps(p, "Alias")
+                            .or_else(|| ps(p, "Name"))
+                            .unwrap_or_else(|| mac.clone()),
                         mac,
                         path: path.to_string(),
                         paired: pb(p, "Paired"),
@@ -476,8 +523,16 @@ pub fn bluez_facts(conn: &Connection) -> zbus::Result<(Vec<KbFacts>, Option<bool
 pub fn usb_power(sys: &Path, hci: &str) -> Option<UsbPower> {
     let dev = std::fs::canonicalize(sys.join("class/bluetooth").join(hci).join("device")).ok()?;
     // .../1-14/1-14:1.0 -> the interface; the device is its parent.
-    let usb = if dev.join("idVendor").exists() { dev } else { dev.parent()?.to_path_buf() };
-    let rd = |n: &str| std::fs::read_to_string(usb.join(n)).ok().map(|s| s.trim().to_string());
+    let usb = if dev.join("idVendor").exists() {
+        dev
+    } else {
+        dev.parent()?.to_path_buf()
+    };
+    let rd = |n: &str| {
+        std::fs::read_to_string(usb.join(n))
+            .ok()
+            .map(|s| s.trim().to_string())
+    };
     Some(UsbPower {
         id: format!("{}:{}", rd("idVendor")?, rd("idProduct")?),
         control: rd("power/control").unwrap_or_default(),
@@ -494,10 +549,10 @@ pub fn hidraw_of(sys: &Path, mac: &str) -> Option<(PathBuf, bool)> {
     let want = mac.to_ascii_lowercase();
     for e in std::fs::read_dir(sys.join("class/hidraw")).ok()?.flatten() {
         let ue = std::fs::read_to_string(e.path().join("device/uevent")).unwrap_or_default();
-        if ue
-            .lines()
-            .any(|l| l.strip_prefix("HID_UNIQ=").is_some_and(|u| u.eq_ignore_ascii_case(&want)))
-        {
+        if ue.lines().any(|l| {
+            l.strip_prefix("HID_UNIQ=")
+                .is_some_and(|u| u.eq_ignore_ascii_case(&want))
+        }) {
             let dev = Path::new("/dev").join(e.file_name());
             let ok = std::fs::File::open(&dev).is_ok();
             return Some((dev, ok));
@@ -538,7 +593,17 @@ fn key_fingerprints(mac: &str) -> (Option<String>, Option<String>) {
 
 fn journal_lines() -> Option<Vec<String>> {
     let out = Command::new("journalctl")
-        .args(["-u", "bluetooth", "-b", "--no-pager", "-o", "short-iso", "-n", "5000", "-q"])
+        .args([
+            "-u",
+            "bluetooth",
+            "-b",
+            "--no-pager",
+            "-o",
+            "short-iso",
+            "-n",
+            "5000",
+            "-q",
+        ])
         .output()
         .ok()?;
     if !out.status.success() {
@@ -572,10 +637,9 @@ pub struct Report {
 /// Gather everything (read-only).
 pub fn gather(mac: Option<&str>) -> Report {
     let mut fs = Vec::new();
-    let (kbs, powered) = match Connection::system().and_then(|c| bluez_facts(&c)) {
-        Ok(x) => x,
-        Err(_) => (Vec::new(), None),
-    };
+    let (kbs, powered) = Connection::system()
+        .and_then(|c| bluez_facts(&c))
+        .unwrap_or_default();
     let kb = match mac {
         Some(m) => kbs.iter().find(|k| k.mac.eq_ignore_ascii_case(m)).cloned(),
         None => kbs.first().cloned(),
@@ -583,10 +647,19 @@ pub fn gather(mac: Option<&str>) -> Report {
     fs.extend(keyboard_findings(kb.as_ref(), powered));
     let root = is_root();
     if let Some(k) = kb.as_ref() {
-        let (s, kn) = if root { key_fingerprints(&k.mac) } else { (None, None) };
+        let (s, kn) = if root {
+            key_fingerprints(&k.mac)
+        } else {
+            (None, None)
+        };
         fs.push(key_finding(s.as_deref(), kn.as_deref(), root));
         match hidraw_of(Path::new("/sys"), &k.mac) {
-            Some((dev, true)) => fs.push(f(Level::Ok, "hidraw", format!("{} readable", dev.display()), None)),
+            Some((dev, true)) => fs.push(f(
+                Level::Ok,
+                "hidraw",
+                format!("{} readable", dev.display()),
+                None,
+            )),
             Some((dev, false)) => fs.push(f(
                 Level::Warn,
                 "hidraw",
@@ -603,7 +676,10 @@ pub fn gather(mac: Option<&str>) -> Report {
         }
     }
     let rule = Path::new(UDEV_RULE).exists();
-    fs.push(check_usb_power(usb_power(Path::new("/sys"), "hci0").as_ref(), rule));
+    fs.push(check_usb_power(
+        usb_power(Path::new("/sys"), "hci0").as_ref(),
+        rule,
+    ));
     if let Ok(v) = std::fs::read_to_string("/sys/module/btusb/parameters/enable_autosuspend") {
         fs.push(f(
             Level::Info,
@@ -614,7 +690,12 @@ pub fn gather(mac: Option<&str>) -> Report {
     }
     match std::fs::read_to_string(MAIN_CONF) {
         Ok(t) => fs.extend(check_main_conf(&t)),
-        Err(e) => fs.push(f(Level::Info, "bluez-conf", format!("{MAIN_CONF}: {e}"), None)),
+        Err(e) => fs.push(f(
+            Level::Info,
+            "bluez-conf",
+            format!("{MAIN_CONF}: {e}"),
+            None,
+        )),
     }
     if let Ok(t) = std::fs::read_to_string(UPOWER_CONF) {
         fs.push(check_upower(&t));
@@ -623,7 +704,12 @@ pub fn gather(mac: Option<&str>) -> Report {
         Some(lines) => {
             let s = summarize_journal(&lines, kb.as_ref().map(|k| k.mac.as_str()));
             if s.is_empty() {
-                fs.push(f(Level::Ok, "journal", "no bluetoothd error this boot", None));
+                fs.push(f(
+                    Level::Ok,
+                    "journal",
+                    "no bluetoothd error this boot",
+                    None,
+                ));
             }
             fs.extend(journal_findings(&s));
         }
@@ -638,7 +724,9 @@ pub fn gather(mac: Option<&str>) -> Report {
     let health = daemon.as_ref().and_then(|v| {
         let arr = v.as_array()?;
         let e = match kb.as_ref() {
-            Some(k) => arr.iter().find(|e| e["mac"].as_str() == Some(k.mac.as_str())),
+            Some(k) => arr
+                .iter()
+                .find(|e| e["mac"].as_str() == Some(k.mac.as_str())),
             None => arr.first(),
         }?;
         e["health"].as_str().map(str::to_string)
@@ -660,7 +748,12 @@ pub fn gather(mac: Option<&str>) -> Report {
             format!("link health: {h}"),
             (h == "auth-failed").then_some("akmctl repair"),
         )),
-        (Some(_), None) => fs.push(f(Level::Info, "daemon", "keeper running, keyboard not tracked", None)),
+        (Some(_), None) => fs.push(f(
+            Level::Info,
+            "daemon",
+            "keeper running, keyboard not tracked",
+            None,
+        )),
     }
     let connected = kb.as_ref().is_some_and(|k| k.connected);
     let verdict = verdict(&fs, health.as_deref(), connected);
@@ -681,7 +774,11 @@ pub fn to_text(r: &Report) -> String {
             s.push_str(&format!("{:>20}\u{2192} {fix}\n", ""));
         }
     }
-    s.push_str(&format!("\nverdict: {} {}\n", r.verdict.0.tag(), r.verdict.1));
+    s.push_str(&format!(
+        "\nverdict: {} {}\n",
+        r.verdict.0.tag(),
+        r.verdict.1
+    ));
     s
 }
 
@@ -711,16 +808,26 @@ mod tests {
     #[test]
     fn main_conf_detects_the_advmon_mistake() {
         let v = check_main_conf(BAD_CONF);
-        assert!(v.iter().any(|x| x.level == Level::Bad && x.text.contains("ReconnectAttempts in [AdvMon]")));
-        assert!(v.iter().any(|x| x.level == Level::Warn && x.text.contains("FastConnectable")));
+        assert!(v
+            .iter()
+            .any(|x| x.level == Level::Bad && x.text.contains("ReconnectAttempts in [AdvMon]")));
+        assert!(v
+            .iter()
+            .any(|x| x.level == Level::Warn && x.text.contains("FastConnectable")));
         let v = check_main_conf(GOOD_CONF);
         assert!(v.iter().all(|x| x.level == Level::Ok), "{v:?}");
     }
 
     #[test]
     fn upower_polling() {
-        assert_eq!(check_upower("[UPower]\nNoPollBatteries=false\n").level, Level::Info);
-        assert_eq!(check_upower("[UPower]\nNoPollBatteries = true\n").level, Level::Ok);
+        assert_eq!(
+            check_upower("[UPower]\nNoPollBatteries=false\n").level,
+            Level::Info
+        );
+        assert_eq!(
+            check_upower("[UPower]\nNoPollBatteries = true\n").level,
+            Level::Ok
+        );
     }
 
     #[test]
@@ -735,7 +842,10 @@ mod tests {
         let x = check_usb_power(Some(&p), false);
         assert_eq!(x.level, Level::Warn);
         assert!(x.text.contains("430 s") && x.fix.unwrap().contains("61-akm"));
-        let on = UsbPower { control: "on".into(), ..p };
+        let on = UsbPower {
+            control: "on".into(),
+            ..p
+        };
         assert_eq!(check_usb_power(Some(&on), true).level, Level::Ok);
         assert_eq!(check_usb_power(None, false).level, Level::Info);
     }
@@ -783,7 +893,9 @@ mod tests {
         assert_eq!(get(JournalKind::GetReportTimeout), Some(1));
         assert_eq!(get(JournalKind::ConfigIgnored), Some(1));
         let fs = journal_findings(&s);
-        assert!(fs.iter().any(|x| x.level == Level::Bad && x.text.contains("ignored")));
+        assert!(fs
+            .iter()
+            .any(|x| x.level == Level::Bad && x.text.contains("ignored")));
     }
 
     #[test]

@@ -652,31 +652,74 @@ mod tests {
     fn classify_bluez_errors() {
         use ConnectError::*;
         let c = ConnectError::classify;
-        assert_eq!(c("org.bluez.Error.Failed", "br-connection-create-socket"), NoAnswer);
-        assert_eq!(c("org.bluez.Error.Failed", "br-connection-page-timeout"), NoAnswer);
+        assert_eq!(
+            c("org.bluez.Error.Failed", "br-connection-create-socket"),
+            NoAnswer
+        );
+        assert_eq!(
+            c("org.bluez.Error.Failed", "br-connection-page-timeout"),
+            NoAnswer
+        );
         assert_eq!(c("org.bluez.Error.Failed", "Host is down"), NoAnswer);
-        assert_eq!(c("org.bluez.Error.Failed", "br-connection-key-missing"), Auth);
+        assert_eq!(
+            c("org.bluez.Error.Failed", "br-connection-key-missing"),
+            Auth
+        );
         assert_eq!(c("org.bluez.Error.AuthenticationFailed", ""), Auth);
         assert_eq!(c("org.bluez.Error.AuthenticationRejected", "x"), Auth);
         assert_eq!(c("org.bluez.Error.InProgress", "In Progress"), Busy);
         assert_eq!(c("org.bluez.Error.Failed", "br-connection-busy"), Busy);
         assert_eq!(c("org.bluez.Error.AlreadyConnected", ""), AlreadyConnected);
-        assert_eq!(c("org.bluez.Error.NotReady", "Resource Not Ready"), AdapterOff);
-        assert_eq!(c("org.bluez.Error.Failed", "br-connection-adapter-not-powered"), AdapterOff);
-        assert_eq!(c("org.freedesktop.DBus.Error.UnknownObject", "no such path"), DeviceGone);
+        assert_eq!(
+            c("org.bluez.Error.NotReady", "Resource Not Ready"),
+            AdapterOff
+        );
+        assert_eq!(
+            c(
+                "org.bluez.Error.Failed",
+                "br-connection-adapter-not-powered"
+            ),
+            AdapterOff
+        );
+        assert_eq!(
+            c("org.freedesktop.DBus.Error.UnknownObject", "no such path"),
+            DeviceGone
+        );
         assert_eq!(c("org.bluez.Error.Failed", "weird"), Other("weird".into()));
     }
 
     #[test]
     fn disconnect_reasons_from_bluez() {
         use DisconnectReason::*;
-        assert_eq!(DisconnectReason::from_bluez("org.bluez.Reason.Timeout"), Timeout);
-        assert_eq!(DisconnectReason::from_bluez("org.bluez.Reason.Remote"), Remote);
-        assert_eq!(DisconnectReason::from_bluez("org.bluez.Reason.Authentication"), Authentication);
-        assert_eq!(DisconnectReason::from_bluez("org.bluez.Reason.Suspend"), Suspend);
-        assert_eq!(DisconnectReason::from_bluez("org.bluez.Reason.Local"), Local);
+        assert_eq!(
+            DisconnectReason::from_bluez("org.bluez.Reason.Timeout"),
+            Timeout
+        );
+        assert_eq!(
+            DisconnectReason::from_bluez("org.bluez.Reason.Remote"),
+            Remote
+        );
+        assert_eq!(
+            DisconnectReason::from_bluez("org.bluez.Reason.Authentication"),
+            Authentication
+        );
+        assert_eq!(
+            DisconnectReason::from_bluez("org.bluez.Reason.Suspend"),
+            Suspend
+        );
+        assert_eq!(
+            DisconnectReason::from_bluez("org.bluez.Reason.Local"),
+            Local
+        );
         assert_eq!(DisconnectReason::from_bluez("garbage"), Unknown);
-        for h in ["connected", "dormant", "unreachable", "auth-failed", "suspended", "unknown"] {
+        for h in [
+            "connected",
+            "dormant",
+            "unreachable",
+            "auth-failed",
+            "suspended",
+            "unknown",
+        ] {
             assert_eq!(Health::parse(h).unwrap().as_str(), h);
         }
     }
@@ -703,11 +746,18 @@ mod tests {
         // 24 h asleep: slow attempts only, never "unreachable", no notice
         let at = run_unanswered(&mut r, t0 + s(10), s(24 * 3600));
         assert_eq!(r.health(), Health::Dormant);
-        assert!(at.len() > 10 && at.len() < 24 * 4 + 12 + 2, "{} attempts", at.len());
+        assert!(
+            at.len() > 10 && at.len() < 24 * 4 + 12 + 2,
+            "{} attempts",
+            at.len()
+        );
         for w in at.windows(2) {
             assert!(w[1] - w[0] >= MEDIUM_PERIOD, "dormant cadence too fast");
         }
-        assert!(!r.poll(t0 + s(24 * 3600 + 20)).iter().any(|a| matches!(a, Action::Notify(_))));
+        assert!(!r
+            .poll(t0 + s(24 * 3600 + 20))
+            .iter()
+            .any(|a| matches!(a, Action::Notify(_))));
     }
 
     #[test]
@@ -743,7 +793,10 @@ mod tests {
             assert!(w[1] - w[0] >= MIN_SPACING);
         }
         // first hour: initial schedule then 5 min; afterwards 15 min
-        let late: Vec<_> = at.iter().filter(|x| **x >= t0 + SLOW_AFTER + SLOW_PERIOD).collect();
+        let late: Vec<_> = at
+            .iter()
+            .filter(|x| **x >= t0 + SLOW_AFTER + SLOW_PERIOD)
+            .collect();
         for w in late.windows(2) {
             assert!(*w[1] - *w[0] >= SLOW_PERIOD);
         }
@@ -786,8 +839,14 @@ mod tests {
         r.on_disconnected(DisconnectReason::Authentication, t0 + s(1));
         assert_eq!(r.health(), Health::AuthFailed);
         let a = r.poll(t0 + s(1));
-        assert!(matches!(a.as_slice(), [Action::Notify(Notice::RepairNeeded { .. })]));
-        assert!(r.poll(t0 + s(100_000)).is_empty(), "no attempt, no repeated notice");
+        assert!(matches!(
+            a.as_slice(),
+            [Action::Notify(Notice::RepairNeeded { .. })]
+        ));
+        assert!(
+            r.poll(t0 + s(100_000)).is_empty(),
+            "no attempt, no repeated notice"
+        );
         r.on_disconnected(DisconnectReason::Authentication, t0 + s(2));
         assert!(r.poll(t0 + s(3)).is_empty());
         // resume does not leave auth-failed
@@ -807,7 +866,10 @@ mod tests {
         assert_eq!(connects(&r.poll(t0 + RESUME_GRACE)), 1);
         r.on_connect_result(Err(ConnectError::Auth), t0 + s(6));
         assert_eq!(r.health(), Health::AuthFailed);
-        assert!(matches!(r.poll(t0 + s(6)).as_slice(), [Action::Notify(Notice::RepairNeeded { .. })]));
+        assert!(matches!(
+            r.poll(t0 + s(6)).as_slice(),
+            [Action::Notify(Notice::RepairNeeded { .. })]
+        ));
         assert_eq!(r.next_deadline(), None);
     }
 
@@ -861,7 +923,11 @@ mod tests {
         r.on_disconnected(DisconnectReason::Unknown, t0);
         assert_eq!(r.next_deadline(), Some(t0 + LOSS_GRACE));
         r.on_disconnected(DisconnectReason::Remote, t0);
-        assert_eq!(r.next_deadline(), Some(t0 + DORMANT_GRACE), "sleep, not loss");
+        assert_eq!(
+            r.next_deadline(),
+            Some(t0 + DORMANT_GRACE),
+            "sleep, not loss"
+        );
         // a second known reason does not restart anything
         r.on_disconnected(DisconnectReason::Timeout, t0 + s(1));
         assert_eq!(r.next_deadline(), Some(t0 + DORMANT_GRACE));
@@ -918,7 +984,10 @@ mod tests {
             c("src/device.c:store_device_info_cb() Unable set contents for /var/lib/bluetooth/x/info: (No space left on device)"),
             Some(StorageError)
         );
-        assert_eq!(c("connect to 04:DB:56:CA:42:EE: Connection reset by peer (104)"), Some(Refused));
+        assert_eq!(
+            c("connect to 04:DB:56:CA:42:EE: Connection reset by peer (104)"),
+            Some(Refused)
+        );
         assert_eq!(c("Endpoint registered: sender=:1.100"), None);
     }
 }

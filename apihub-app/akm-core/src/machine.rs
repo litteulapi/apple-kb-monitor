@@ -224,7 +224,11 @@ impl Machine {
         let was_active = self.connected;
         self.reset_timers();
         // Prefer a keyboard already queued, then BlueZ's order.
-        let next = self.standby.first().cloned().or_else(|| macs.first().cloned());
+        let next = self
+            .standby
+            .first()
+            .cloned()
+            .or_else(|| macs.first().cloned());
         match next {
             Some(n) => {
                 self.standby.retain(|m| *m != n);
@@ -590,11 +594,17 @@ mod tests {
         m.on_event(&Event::Connected(MAC.into()), t0);
         m.acquire_done(true, t0);
         assert_eq!(
-            m.on_event(&Event::Reconcile(vec![OTHER.into(), MAC.into()]), t0 + s(10)),
+            m.on_event(
+                &Event::Reconcile(vec![OTHER.into(), MAC.into()]),
+                t0 + s(10)
+            ),
             None
         );
         assert_eq!(m.mac(), Some(MAC));
-        assert!(m.is_acquired(), "no re-acquisition for a consistent snapshot");
+        assert!(
+            m.is_acquired(),
+            "no re-acquisition for a consistent snapshot"
+        );
         assert_eq!(m.standby(), [OTHER.to_string()]);
         // followed one gone, other still there: hand over
         assert_eq!(
@@ -624,6 +634,10 @@ mod tests {
         let mut m = Machine::new();
         assert_eq!(m.on_event(&Event::Reconcile(vec![MAC.into()]), t0), None);
         assert_eq!(m.due(t0), vec![Action::Acquire]);
-        assert_eq!(m.on_event(&Event::Reconcile(vec![]), t0 + s(1)), None, "fresh");
+        assert_eq!(
+            m.on_event(&Event::Reconcile(vec![]), t0 + s(1)),
+            None,
+            "fresh"
+        );
     }
 }
