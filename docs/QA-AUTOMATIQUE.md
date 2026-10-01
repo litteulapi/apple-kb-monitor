@@ -42,7 +42,8 @@ dernier. `scripts/out/` n'est jamais commité. `CARGO_TARGET_DIR` est respecté.
 | `deny` | oui | `cargo deny check advisories bans sources` (politique `apihub-app/deny.toml`) |
 | `audit` | non | `cargo audit` (base locale si hors ligne) |
 | `udev` | oui | `udevadm verify` sur `udev/*.rules` |
-| `qml` | oui | `qmllint` (erreurs de syntaxe ; les imports Plasma ne sont pas résolubles hors session) |
+| `qml` | oui | `qmllint` (erreurs de syntaxe ; les imports Plasma ne sont pas résolubles hors session) + `kcm/lint/qmllint.sh` sur les pages du KCM (tout avertissement échoue, #259) |
+| `kcm` | oui (`--fast` aussi) | `cmake` + build du C++ du KCM + `ctest`, puis `kcm/tests/toml_js_test.py` (sorties de `Toml.js` relues par `tomllib`, #258) ; ignorée si cmake/ECM absents |
 | `shell` | oui | `bash -n` / `sh -n` sur chaque script (+ `.install`, hooks) ; `shellcheck -S warning` s'il est installé |
 | `c` | oui | `gcc -Wall -Wextra -Werror rssi-helper.c` |
 | `security` | oui | `tests/check-security-files.sh` + texte brut du widget |

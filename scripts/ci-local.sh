@@ -163,8 +163,31 @@ s_qml() {
     out=$(qmllint --unqualified disable --import disable --unused-imports disable "$f" 2>&1)
     if echo "$out" | grep -qiE 'error|syntax'; then echo "$out" | head -20; rc=1; fi
   done
-  [ $rc = 0 ] && echo "qml: no syntax error"
+  # The KCM pages (#259): kcm/lint/qmllint.sh fails on any warning (syntax
+  # included) except the run-time context properties; 77 = qmllint missing.
+  local krc=0
+  bash kcm/lint/qmllint.sh 2>&1 | tail -20; krc=${PIPESTATUS[0]}
+  case $krc in 0) ;; 77) echo "kcm qmllint skipped (qt6 qmllint missing)" ;; *) rc=1 ;; esac
+  [ $rc = 0 ] && echo "qml: no syntax error (plasma + kcm)"
   return $rc
+}
+
+s_kcm() {
+  # The KCM C++ is otherwise only compiled by makepkg (#259): configure, build
+  # and run its unit tests when cmake + ECM are present, then check Toml.js
+  # (the config.toml editor) with node + tomllib (#258).
+  have cmake || { echo "cmake missing"; return 77; }
+  [ -d /usr/share/ECM ] || { echo "extra-cmake-modules (ECM) missing"; return 77; }
+  local b="${AKM_CI_KCM_BUILD:-${CARGO_TARGET_DIR:-$top/apihub-app/target}-kcm}" rc
+  mkdir -p "$b"
+  cmake -S kcm -B "$b" -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON > "$out/logs/kcm-cmake.log" 2>&1 \
+    || { tail -30 "$out/logs/kcm-cmake.log"; return 1; }
+  timeout 1200 cmake --build "$b" -j"$(nproc)" > "$out/logs/kcm-build.log" 2>&1 \
+    || { grep -E 'error|Error' "$out/logs/kcm-build.log" | head -30; return 1; }
+  (cd "$b" && timeout 300 ctest --output-on-failure 2>&1 | tail -15; exit "${PIPESTATUS[0]}") || return 1
+  python3 kcm/tests/toml_js_test.py | tail -20; rc=${PIPESTATUS[0]}
+  case $rc in 0) ;; 77) echo "Toml.js check skipped (node or tomllib missing)" ;; *) return 1 ;; esac
+  echo "kcm: C++ builds, ctest passes, Toml.js output is valid TOML"
 }
 
 s_shell() {
@@ -241,6 +264,7 @@ step deny       1 ""   -- s_deny
 step audit      0 ""   -- s_audit
 step udev       1 ""   -- s_udev
 step qml        1 ""   -- s_qml
+step kcm        1 fast -- s_kcm
 step shell      1 fast -- s_shell
 step c          1 ""   -- s_c
 step security   1 ""   -- s_security

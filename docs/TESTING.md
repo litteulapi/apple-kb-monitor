@@ -28,7 +28,8 @@ The 18 steps (`--list`; "required" = fails the pipeline):
 | `deny` | yes | `cargo deny` with the policy and justified ignores of `apihub-app/deny.toml` |
 | `audit` | no | `cargo audit` (advisory, network) |
 | `udev` | yes | `udevadm verify` on the rules |
-| `qml` | yes | `qmllint` on the widget's QML files (`plasma/com.agenceapi.devicehub/contents/ui/*.qml`, `plasma/tests/*.qml`) |
+| `qml` | yes | `qmllint` on the widget's QML files (`plasma/com.agenceapi.devicehub/contents/ui/*.qml`, `plasma/tests/*.qml`) and `kcm/lint/qmllint.sh` on the KCM pages (any warning fails, #259) |
+| `kcm` | yes (also `--fast`) | configure + build the KCM C++ with cmake, `ctest`, then `kcm/tests/toml_js_test.py` (`Toml.js` output read back by `tomllib`, #258); skipped without cmake/ECM |
 | `shell` | yes | `bash -n` / `sh -n` on every script and hook, plus `shellcheck -S warning` when installed |
 | `c` | yes | `gcc -Wall -Wextra -Werror rssi-helper.c` |
 | `security` | yes | `tests/check-security-files.sh` (unit hardening, polkit `auth_admin` without `_keep`, `rssi-helper` group) and `plasma/tests/check_plaintext.py` (names shown as plain text in the widget) |
