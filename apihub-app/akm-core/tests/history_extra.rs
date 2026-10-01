@@ -57,6 +57,16 @@ fn format_utc_known_dates() {
     assert_eq!(format_utc(1_790_000_000), "2026-09-21 14:13");
     assert_eq!(format_utc(1_700_000_000), "2023-11-14 22:13");
     assert_eq!(format_utc(4_102_444_800), "2100-01-01 00:00");
+    for (t, want) in [
+        (4_107_542_340u64, "2100-02-28 23:59"), // 2100 n'est pas bissextile
+        (4_107_542_400, "2100-03-01 00:00"),
+        (3_981_357_000, "2096-02-29 12:30"),
+        (4_102_444_740, "2099-12-31 23:59"),
+        (2_147_483_640, "2038-01-19 03:14"),
+        (978_307_200, "2001-01-01 00:00"),
+    ] {
+        assert_eq!(format_utc(t), want);
+    }
     assert_eq!(format_utc(3_600 * 5 + 60 * 7 + 59), "1970-01-01 05:07");
 }
 
@@ -395,4 +405,29 @@ fn unreadable_path_is_an_error_not_a_panic() {
     assert!(h.rotate(10).is_err());
     assert!(h.mark_legacy_voltages().is_err());
     assert!(h.read().is_empty());
+}
+
+#[test]
+fn store_estimate_remaining_reads_the_file() {
+    let d = Dir::new();
+    let h = History::new(d.file(), Fixed(100_000));
+    for (ts, v) in [(0u64, 3.0), (36_000, 2.9)] {
+        assert!(h.append_entry(&HistoryEntry::sample(ts, 50.0, Some(v))).unwrap());
+    }
+    let (rate, hours) = h.estimate_remaining().unwrap();
+    assert!((rate - 10.0).abs() < 1e-6 && (hours - 90.0).abs() < 1e-6, "{rate} {hours}");
+}
+
+#[test]
+fn blank_lines_are_not_kept_as_corrupt() {
+    let d = Dir::new();
+    let mut data = Vec::new();
+    data.extend_from_slice(line(1_000_000, 90).as_bytes());
+    data.extend_from_slice(b"   \n\n\t\n");
+    data.extend_from_slice(b"junk\n");
+    std::fs::write(d.file(), &data).unwrap();
+    let h = History::new(d.file(), Fixed(2_000_000));
+    assert_eq!(h.rotate(RETENTION_S).unwrap(), 4);
+    assert_eq!(std::fs::read(d.with_ext("jsonl.corrupt")).unwrap(), b"junk\n");
+    assert_eq!(h.read().len(), 1);
 }
