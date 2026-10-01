@@ -1,3 +1,4 @@
+mod fnmode_diag;
 mod instance;
 mod keyboard;
 mod portal;
@@ -664,10 +665,19 @@ impl ApiHubApp {
             out.push(DiagResult { label: "hidraw readable".into(), ok: hid_ok, detail: hid_detail });
 
             // keyd config
-            let keyd_ok = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
+            let keyd_conf = std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists();
+            let keyd_running = Command::new("systemctl")
+                .args(["is-active", "--quiet", "keyd.service"])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
             out.push(DiagResult {
-                label: "keyd config".into(), ok: keyd_ok,
-                detail: if keyd_ok { "/etc/keyd/apple-keyboard.conf".into() } else { "NOT FOUND".into() },
+                label: "keyd config".into(), ok: keyd_conf && keyd_running,
+                detail: match (keyd_conf, keyd_running) {
+                    (true, true) => "/etc/keyd/apple-keyboard.conf, keyd.service active".into(),
+                    (true, false) => "/etc/keyd/apple-keyboard.conf present but keyd.service is NOT active".into(),
+                    (false, _) => "NOT FOUND".into(),
+                },
             });
 
             // udev rules
@@ -677,12 +687,9 @@ impl ApiHubApp {
                 detail: if udev_ok { "70-apple-kb-hidraw.rules installed".into() } else { "NOT FOUND".into() },
             });
 
-            // modprobe
-            let mod_ok = std::path::Path::new("/etc/modprobe.d/hid_apple.conf").exists();
-            out.push(DiagResult {
-                label: "hid_apple fnmode".into(), ok: mod_ok,
-                detail: if mod_ok { "fnmode=1 configured".into() } else { "NOT FOUND — media keys won't be default".into() },
-            });
+            // hid_apple fnmode: applied value (sysfs) vs configured (modprobe.d)
+            let (fn_ok, fn_detail) = fnmode_diag::diagnose();
+            out.push(DiagResult { label: "hid_apple fnmode".into(), ok: fn_ok, detail: fn_detail });
 
             // rssi-helper caps
             let rssi_ok = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper").exists();
