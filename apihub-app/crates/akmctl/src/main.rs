@@ -14,6 +14,21 @@ use clap::{CommandFactory, Parser};
 use cli::*;
 
 const HELPER: &str = "/usr/lib/apple-kb-monitor/akm-helper";
+/// Absolute path: never resolved through `$PATH` (the program runs as root).
+const PKEXEC: &str = "/usr/bin/pkexec";
+
+/// Program handed to pkexec. The path is a constant of the binary: no
+/// environment variable can redirect it in a release build (#154). Only
+/// the unit-test build honours `AKM_HELPER`.
+#[cfg(not(test))]
+fn helper_path() -> String {
+    HELPER.to_string()
+}
+
+#[cfg(test)]
+fn helper_path() -> String {
+    std::env::var("AKM_HELPER").unwrap_or_else(|_| HELPER.to_string())
+}
 
 fn main() -> ExitCode {
     let cli = match Cli::try_parse() {
@@ -101,9 +116,8 @@ fn cmd_status(json: bool) -> u8 {
 }
 
 fn cmd_set_fnmode(mode: u8, persist: bool) -> u8 {
-    let helper = std::env::var("AKM_HELPER").unwrap_or_else(|_| HELPER.to_string());
-    let mut c = Proc::new("pkexec");
-    c.arg(&helper).arg("set-fnmode").arg(mode.to_string());
+    let mut c = Proc::new(PKEXEC);
+    c.arg(helper_path()).arg("set-fnmode").arg(mode.to_string());
     if persist {
         c.arg("--persist");
     }
@@ -112,6 +126,12 @@ fn cmd_set_fnmode(mode: u8, persist: bool) -> u8 {
             match fnmode::read() {
                 Ok(m) if m == mode => println!("Fn mode: {m} - {}", fnmode::label(m)),
                 Ok(m) => return fail(&format!("write accepted but fnmode reads {m}, expected {mode}")),
+                // --persist with hid_apple not loaded: the helper saved the
+                // setting, nothing to read back yet (#153).
+                Err(_) if persist && !std::path::Path::new(fnmode::SYSFS_FNMODE).exists() => {
+                    println!("Fn mode {mode} saved ({}); hid_apple is not loaded, applied at next module load", fnmode::label(mode));
+                    return EXIT_OK;
+                }
                 Err(e) => return fail(&e),
             }
             if !persist {
@@ -212,4 +232,26 @@ fn cmd_watch() -> u8 {
     }
     // Stream ended: the bus connection dropped.
     fail("connection to the session bus lost")
+}
+
+#[cfg(test)]
+mod helper_tests {
+    use super::*;
+
+    #[test]
+    fn pkexec_is_absolute_and_helper_is_the_packaged_path() {
+        assert!(PKEXEC.starts_with('/'));
+        assert!(HELPER.starts_with("/usr/lib/apple-kb-monitor/"));
+    }
+
+    /// The release source must not read AKM_HELPER outside `cfg(test)`.
+    #[test]
+    fn env_override_is_test_only() {
+        let src = include_str!("main.rs");
+        let (head, _) = src.split_once("#[cfg(not(test))]").unwrap();
+        assert!(!head.contains("env::var(\"AKM_HELPER\")"));
+        let after = src.split_once("#[cfg(not(test))]").unwrap().1;
+        let release_fn = after.split_once("#[cfg(test)]").unwrap().0;
+        assert!(!release_fn.contains("env::var"));
+    }
 }

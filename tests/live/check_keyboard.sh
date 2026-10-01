@@ -2,18 +2,20 @@
 # Vérification de bout en bout, EN LECTURE SEULE, du clavier Bluetooth Apple connecté.
 # Aucune écriture sur le clavier, aucun sudo, aucun service touché.
 #
-# Usage : tests/live/check_keyboard.sh [--mac AA:BB:..] [--tolerance N] [--strict] [--bin PATH] [--quiet]
-# Sortie : une ligne PASS/FAIL/WARN/SKIP par contrôle. Code retour : 0 si aucun FAIL
+# Usage : tests/live/check_keyboard.sh [--mac AA:BB:..] [--tolerance N] [--strict] [--bin PATH] [--akmctl PATH] [--quiet]
+# Sans --mac : le premier clavier Apple Bluetooth vu dans /sys/class/hidraw (KB_MAC en variable).
+# Sortie : une ligne PASS/FAIL/WARN/SKIP par contrôle (--quiet : seulement FAIL/WARN + RESULT). Code retour : 0 si aucun FAIL
 # (avec --strict, WARN compte aussi comme échec) ; 1 sinon ; 2 erreur d'usage/clavier absent.
 set -u
 
-MAC="${KB_MAC:-04:DB:56:CA:42:EE}"
+MAC="${KB_MAC:-}"
+QUIET=0
 TOL="${KB_TOLERANCE:-5}"          # écart max toléré entre sources, en points de %
 STRICT=0
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 BIN="${KB_BIN:-$ROOT/apple-kb-monitor}"
-RUST_BIN="${KB_RUST_BIN:-$ROOT/apihub-app/target/release/apihub-app}"
+AKMCTL="${KB_AKMCTL:-}"
 UDEV_RULE="$ROOT/udev/70-apple-kb-hidraw.rules"
 NPASS=0; NFAIL=0; NWARN=0; NSKIP=0
 
@@ -23,21 +25,40 @@ while [ $# -gt 0 ]; do
     --tolerance) TOL="$2"; shift 2 ;;
     --strict) STRICT=1; shift ;;
     --bin) BIN="$2"; shift 2 ;;
+    --akmctl) AKMCTL="$2"; shift 2 ;;
+    --quiet) QUIET=1; shift ;;
     -h|--help) sed -n '2,8p' "$0"; exit 0 ;;
     *) echo "option inconnue: $1" >&2; exit 2 ;;
   esac
 done
 case "$TOL" in ''|*[!0-9]*) echo "tolerance invalide: $TOL" >&2; exit 2 ;; esac
 
+# MAC auto-détecté : premier hidraw Bluetooth d'un vendeur Apple (05AC / 004C).
+if [ -z "$MAC" ]; then
+  for h in /sys/class/hidraw/hidraw*; do
+    [ -e "$h" ] || continue
+    case "$(sed -n 's/^HID_ID=//p' "$h/device/uevent" 2>/dev/null)" in
+      0005:0000004C:*|0005:000005AC:*) MAC="$(sed -n 's/^HID_UNIQ=//p' "$h/device/uevent" 2>/dev/null)"; break ;;
+    esac
+  done
+  [ -n "$MAC" ] || { echo "aucun clavier Apple Bluetooth détecté (utiliser --mac)" >&2; echo "RESULT pass=0 fail=1 warn=0 skip=0"; exit 2; }
+fi
 MAC_UP="$(printf '%s' "$MAC" | tr 'a-f' 'A-F')"
 MAC_LO="$(printf '%s' "$MAC" | tr 'A-F' 'a-f')"
 MAC_US="${MAC_UP//:/_}"                         # 04_DB_56_...
 MAC_UPOWER="$(printf '%s' "$MAC_LO" | sed 's/:/o/g')"  # 04odbo56...
 
-pass() { NPASS=$((NPASS+1)); printf 'PASS  %-28s %s\n' "$1" "${2:-}"; }
+pass() { NPASS=$((NPASS+1)); [ "$QUIET" -eq 1 ] || printf 'PASS  %-28s %s\n' "$1" "${2:-}"; }
 fail() { NFAIL=$((NFAIL+1)); printf 'FAIL  %-28s %s\n' "$1" "${2:-}"; }
 warn() { NWARN=$((NWARN+1)); printf 'WARN  %-28s %s\n' "$1" "${2:-}"; }
-skip() { NSKIP=$((NSKIP+1)); printf 'SKIP  %-28s %s\n' "$1" "${2:-}"; }
+skip() { NSKIP=$((NSKIP+1)); [ "$QUIET" -eq 1 ] || printf 'SKIP  %-28s %s\n' "$1" "${2:-}"; }
+# Démon Rust (propriétaire unique du clavier) ou, à défaut, ancien service Python.
+daemon_state() { # -> rust | python | none
+  if systemctl --user is-active --quiet apple-kb-monitord 2>/dev/null; then echo rust
+  elif systemctl --user is-active --quiet apple-kb-monitor 2>/dev/null || systemctl is-active --quiet apple-kb-monitor 2>/dev/null; then echo python
+  else echo none; fi
+}
+DAEMON="$(daemon_state)"
 is_num() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
 
 # ---- 1. connexion BlueZ -------------------------------------------------
@@ -115,14 +136,16 @@ BZOUT="$(busctl --system get-property org.bluez "/org/bluez/hci0/dev_$MAC_US" or
 case "$BZOUT" in
   "y "*) BZ="${BZOUT#y }"; pass battery_bluez "${BZ}%" ;;
   *"No such interface"*)
-    if systemctl --user is-active --quiet apple-kb-monitor 2>/dev/null || systemctl is-active --quiet apple-kb-monitor 2>/dev/null; then
-      fail battery_bluez "daemon actif mais Battery1 non enregistré"
-    else warn battery_bluez "Battery1 absent (daemon apple-kb-monitor inactif : fournisseur non enregistré)"; fi ;;
+    if [ "$DAEMON" != none ]; then
+      fail battery_bluez "démon ($DAEMON) actif mais Battery1 non enregistré"
+    else warn battery_bluez "Battery1 absent (ni apple-kb-monitord ni apple-kb-monitor actif : fournisseur non enregistré)"; fi ;;
   *) warn battery_bluez "lecture D-Bus impossible: ${BZOUT:0:80}" ;;
 esac
 
 JSON=""
-if [ -x "$BIN" ] && command -v python3 >/dev/null 2>&1; then
+if [ "$DAEMON" = rust ]; then
+  skip script_json "apple-kb-monitord est propriétaire unique du clavier (A2) : script Python non lancé"
+elif [ -x "$BIN" ] && command -v python3 >/dev/null 2>&1; then
   JSON="$(timeout 30 "$BIN" --json 2>/dev/null)"
   PYOUT="$(printf '%s' "$JSON" | python3 -c '
 import json,sys
@@ -154,8 +177,35 @@ else
   skip script_json "$BIN absent ou python3 manquant"
 fi
 
-if [ -x "$RUST_BIN" ]; then skip battery_rust "binaire présent mais sans mode CLI --json (GUI/tray) : non interrogé"
-else skip battery_rust "binaire Rust non compilé ($RUST_BIN)"; fi
+# Démon Rust : akmctl status --json (lecture D-Bus session, aucune écriture).
+RS=""
+if [ -z "$AKMCTL" ]; then
+  if command -v akmctl >/dev/null 2>&1; then AKMCTL="$(command -v akmctl)"
+  elif [ -x "$ROOT/apihub-app/target/release/akmctl" ]; then AKMCTL="$ROOT/apihub-app/target/release/akmctl"; fi
+fi
+if [ "$DAEMON" != rust ]; then
+  skip battery_rust "apple-kb-monitord inactif"
+elif [ -z "$AKMCTL" ] || [ ! -x "$AKMCTL" ]; then
+  skip battery_rust "akmctl introuvable"
+else
+  if busctl --user status com.agenceapi.AppleKbMonitor1 >/dev/null 2>&1; then pass daemon_dbus_name "com.agenceapi.AppleKbMonitor1 sur le bus session"
+  else fail daemon_dbus_name "apple-kb-monitord actif mais nom D-Bus absent"; fi
+  RSOUT="$(timeout 15 "$AKMCTL" status --json 2>/dev/null | python3 -c '
+import json,sys
+try: d=json.load(sys.stdin)
+except Exception as e: print("ERR json invalide: %s"%e); sys.exit()
+print("DAEMON", d.get("daemon")); print("CONN", d.get("connected")); print("PCT", d.get("battery_pct") if d.get("battery_pct") is not None else "null"); print("MAC", d.get("mac"))
+' 2>&1)"
+  case "$RSOUT" in
+    ERR*|"") fail rust_status_json "${RSOUT:-sortie vide}" ;;
+    *)
+      RS="$(printf '%s\n' "$RSOUT" | sed -n 's/^PCT //p')"
+      RMAC="$(printf '%s\n' "$RSOUT" | sed -n 's/^MAC //p' | tr 'a-f' 'A-F')"
+      pass rust_status_json "akmctl status --json valide"
+      [ "$RMAC" = "$MAC_UP" ] && pass rust_mac_agrees "$RMAC" || warn rust_mac_agrees "démon=$RMAC attendu=$MAC_UP"
+      if is_num "$RS"; then pass battery_rust "${RS}%"; else fail battery_rust "battery_pct=null"; RS=""; fi ;;
+  esac
+fi
 
 # comparaison des sources à la référence sysfs
 cmp_src() { # nom valeur
@@ -164,16 +214,18 @@ cmp_src() { # nom valeur
   d=$(( $2 > SYS ? $2 - SYS : SYS - $2 ))
   if [ "$d" -le "$TOL" ]; then pass "agree_$1_vs_sysfs" "écart ${d} <= ${TOL}"; else fail "agree_$1_vs_sysfs" "$1=$2% sysfs=${SYS}% écart ${d} > ${TOL}"; fi
 }
-cmp_src upower "$UP"; cmp_src bluez "$BZ"; cmp_src script "$PYV"
+cmp_src upower "$UP"; cmp_src bluez "$BZ"; cmp_src script "$PYV"; cmp_src rust "$RS"
 
 # ---- 5. keyd, services --------------------------------------------------
 if command -v systemctl >/dev/null 2>&1; then
   systemctl is-active --quiet keyd && pass keyd_active || fail keyd_active "keyd inactif"
   systemctl is-active --quiet bluetooth && pass bluetooth_active || fail bluetooth_active "bluetooth inactif"
   systemctl is-active --quiet upower && pass upower_active || warn upower_active "upower inactif"
-  if systemctl --user is-active --quiet apple-kb-monitor 2>/dev/null || systemctl is-active --quiet apple-kb-monitor 2>/dev/null; then
-    pass daemon_apple_kb_monitor active
-  else warn daemon_apple_kb_monitor "service apple-kb-monitor inactif"; fi
+  case "$DAEMON" in
+    rust) pass daemon_apple_kb_monitord "apple-kb-monitord actif (session)" ;;
+    python) pass daemon_apple_kb_monitor "ancien service Python actif (remplaçable par apple-kb-monitord)" ;;
+    *) warn daemon_apple_kb_monitord "ni apple-kb-monitord ni apple-kb-monitor actif (systemctl --user enable --now apple-kb-monitord)" ;;
+  esac
 fi
 if [ -r /etc/keyd/apple-keyboard.conf ] || ls /etc/keyd/*.conf >/dev/null 2>&1; then
   if grep -qi '05ac:0256\|05ac:\*' /etc/keyd/*.conf 2>/dev/null; then pass keyd_config_ids "id Apple présent"

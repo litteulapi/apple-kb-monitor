@@ -3,32 +3,56 @@ post_install() {
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
 
-    # Reload keyd config
-    systemctl restart keyd 2>/dev/null || true
+    # keyd: touch it only if the user runs it (never start a disabled unit)
+    _akm_keyd_reload
 
-    # Apply fnmode immediately (persistent via modprobe.d)
-    echo 1 > /sys/module/hid_apple/parameters/fnmode 2>/dev/null || true
+    # Initial install only: apply the packaged default (modprobe.d, fnmode=1)
+    # right away. post_upgrade never does it: it would overwrite the mode the
+    # user chose with `akmctl set fnmode N`.
+    if [ -w /sys/module/hid_apple/parameters/fnmode ]; then
+        echo 1 > /sys/module/hid_apple/parameters/fnmode 2>/dev/null || true
+    fi
 
-    # RSSI helper: file capability so the GUI itself needs no privilege.
-    # Re-applied on every install/upgrade (pacman rewrites the file).
+    _akm_setcap
+    _akm_message
+}
+
+post_upgrade() {
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
+    _akm_keyd_reload
+    # fnmode is deliberately left alone (user choice / modprobe.d).
+    _akm_setcap
+}
+
+post_remove() {
+    udevadm control --reload-rules 2>/dev/null || true
+    echo ">>> To disable the legacy CLI daemon:"
+    echo "      systemctl --user disable apple-kb-monitor.service"
+}
+
+_akm_keyd_reload() {
+    if systemctl is-active --quiet keyd 2>/dev/null; then
+        keyd reload 2>/dev/null || systemctl try-restart keyd 2>/dev/null || true
+    fi
+}
+
+# RSSI helper: file capability so the GUI itself needs no privilege.
+# Re-applied on every install/upgrade (pacman rewrites the file).
+_akm_setcap() {
     if ! setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper 2>/dev/null; then
         echo ">>> WARNING: setcap failed, RSSI disabled. Run: sudo setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper"
     fi
+}
 
-    # KDE Bluedevil patch (backup + apply)
-    local qml="/usr/share/plasma/plasmoids/org.kde.plasma.bluetooth/contents/ui/DeviceItem.qml"
-    if [ -f "$qml" ] && ! grep -q "model.Battery" "$qml" 2>/dev/null; then
-        cp "$qml" "${qml}.orig"
-        cp /usr/share/apple-kb-monitor/kde/DeviceItem.qml "$qml"
-        echo ">>> KDE Bluedevil panel patched (backup at DeviceItem.qml.orig)"
-    fi
-
-    echo ""
+_akm_message() {
     echo ""
     echo ">>> apple-kb-monitor installed"
     echo ""
     echo ">>> Keyboard access: no group needed. The udev rule 70-apple-kb-hidraw.rules"
-    echo "    tags Apple hidraw devices 'uaccess' (ACL for the active seat user)."
+    echo "    tags the hidraw node of Apple Bluetooth KEYBOARDS 'uaccess' (ACL for the"
+    echo "    active seat user). Accepted trade-off: any process of that user can read"
+    echo "    the keystrokes of that keyboard (see /usr/share/doc/apple-kb-monitor/udev-README.md)."
     echo "    If a keyboard was already connected, reconnect it or run:"
     echo "      sudo udevadm trigger --subsystem-match=hidraw"
     echo ""
@@ -39,22 +63,4 @@ post_install() {
     echo ">>> Special keys (via keyd, device 05ac:0256):"
     echo "      F3 = Overview, F4 = Grid View, F5 = Lock Screen, F6 = Show Desktop"
     echo "      F1/F2 and the other keys are passed through to the system"
-}
-
-post_upgrade() {
-    post_install
-}
-
-post_remove() {
-    udevadm control --reload-rules 2>/dev/null || true
-
-    # Restore original Bluedevil QML
-    local qml="/usr/share/plasma/plasmoids/org.kde.plasma.bluetooth/contents/ui/DeviceItem.qml"
-    if [ -f "${qml}.orig" ]; then
-        mv "${qml}.orig" "$qml"
-        echo ">>> KDE Bluedevil panel restored to original"
-    fi
-
-    echo ">>> To disable the legacy CLI daemon:"
-    echo "      systemctl --user disable apple-kb-monitor.service"
 }

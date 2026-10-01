@@ -148,6 +148,9 @@ dependencies = [
 [[package]]
 name = "akm-helper"
 version = "3.1.0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "akmctl"

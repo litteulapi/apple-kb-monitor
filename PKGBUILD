@@ -1,12 +1,16 @@
 # Maintainer: Han <han@agenceapi.com>
 pkgname=apple-kb-monitor
 pkgver=3.1.0
-pkgrel=4
+pkgrel=5
 pkgdesc="Telemetry and key mapping for Apple Bluetooth keyboards (BCM2042/BCM20733): battery, voltage, RSSI, BlueZ battery provider, KDE integration"
 arch=('x86_64')
 url="https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
 license=('GPL-2.0-or-later')
-depends=('python' 'python-dbus-fast' 'bluez' 'keyd' 'polkit' 'dbus')
+# apihub-app (eframe/winit) loads wayland/xkbcommon/EGL/GL/X11 with dlopen, so
+# ldd does not show them: declared by hand (#156). libcap = setcap in the .install.
+depends=('python' 'python-dbus-fast' 'bluez' 'keyd' 'polkit' 'dbus' 'systemd' 'libcap'
+         'wayland' 'libxkbcommon' 'libxkbcommon-x11' 'libglvnd'
+         'libx11' 'libxcursor' 'libxi' 'libxrandr')
 makedepends=('rust' 'gcc')
 optdepends=(
     'bluez-utils: bluetoothctl CLI for BT management'
@@ -62,11 +66,11 @@ package() {
 
     # ── udev + keyd + modprobe ──────────────────────────────────────────
     install -Dm644 "$startdir/udev/70-apple-kb-hidraw.rules"          "$pkgdir/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules"
+    install -Dm644 "$startdir/udev/README.md"                         "$pkgdir/usr/share/doc/apple-kb-monitor/udev-README.md"
     install -Dm644 "$startdir/keyd/apple-keyboard.conf"               "$pkgdir/etc/keyd/apple-keyboard.conf"
     install -Dm644 "$startdir/modprobe/hid_apple.conf"                    "$pkgdir/etc/modprobe.d/hid_apple.conf"
 
-    # ── KDE integration ─────────────────────────────────────────────────
-    install -Dm644 "$startdir/kde/DeviceItem.qml"                    "$pkgdir/usr/share/apple-kb-monitor/kde/DeviceItem.qml"
+    # ── Icons ───────────────────────────────────────────────────────────
     install -Dm644 "$startdir/icons/apihub-scarab.svg"                 "$pkgdir/usr/share/icons/hicolor/scalable/apps/apihub-scarab.svg"
     # dynamic tray icons (battery level steps, charging, disconnected, ...)
     for svg in "$startdir"/icons/hicolor/scalable/status/*.svg; do
@@ -76,9 +80,6 @@ package() {
     # ── Desktop entry ───────────────────────────────────────────────────
     install -Dm644 "$srcdir/com.agenceapi.AppleKbMonitor.desktop"                "$pkgdir/usr/share/applications/com.agenceapi.AppleKbMonitor.desktop"
     install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.service"
-
-    # ── D-Bus policy ────────────────────────────────────────────────────
-    install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor.conf" "$pkgdir/etc/dbus-1/system.d/com.agenceapi.AppleKbMonitor.conf"
 
     # ── Plasma widget ───────────────────────────────────────────────────
     local plasma_dir="$pkgdir/usr/share/plasma/plasmoids/com.agenceapi.devicehub"

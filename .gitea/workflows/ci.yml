@@ -1,33 +1,40 @@
 ---
 name: CI
 
+# Runs on every push to main, audit/**, integration/** and roadmap/**, and on
+# pull requests towards main or integration/**. Needs Actions enabled on the
+# repository and a runner labelled ubuntu-latest (repository settings, not
+# enabled by this file).
 on:
   push:
-    branches: [main, "audit/**"]
+    branches: [main, "audit/**", "integration/**", "roadmap/**", "fix/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "integration/**"]
 
 jobs:
   rust:
-    name: Rust build, clippy, test
+    name: Rust build, clippy, test (workspace)
     runs-on: ubuntu-latest
     container: rust:1-bookworm
     steps:
+      # actions/checkout is a JavaScript action: the rust image has no Node.
+      - name: Install Node (for JavaScript actions)
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends nodejs ca-certificates git
       - uses: actions/checkout@v4
       - name: Install components
         run: rustup component add clippy
-      - name: Build, clippy (warnings = errors), test for every crate
+      - name: Build, clippy (warnings = errors), test, once for the whole workspace
+        working-directory: apihub-app
         run: |
           set -eu
-          for manifest in $(find . -name Cargo.toml -not -path '*/target/*'); do
-            dir=$(dirname "$manifest")
-            echo "::group::$dir"
-            (cd "$dir" && cargo build --locked && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked)
-            echo "::endgroup::"
-          done
+          cargo build --locked --workspace
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo test --locked --workspace
 
   python-shell-c:
-    name: Python, shell, C, udev (no hardware)
+    name: Python, shell, C, udev, version (no hardware)
     runs-on: ubuntu-latest
     container: debian:bookworm
     steps:
@@ -37,6 +44,15 @@ jobs:
           apt-get install -y --no-install-recommends git ca-certificates nodejs \
             python3 python3-pytest python3-dbus-fast shellcheck gcc libc6-dev udev
       - uses: actions/checkout@v4
+      - name: Single version (Cargo workspace = PKGBUILD = .SRCINFO = CHANGELOG)
+        run: |
+          set -eu
+          cargo_v=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version *= *"\(.*\)"/\1/p' apihub-app/Cargo.toml | head -1)
+          pkg_v=$(sed -n 's/^pkgver=//p' PKGBUILD)
+          src_v=$(sed -n 's/^[[:space:]]*pkgver = //p' .SRCINFO)
+          log_v=$(sed -n 's/^## \[\([0-9][^]]*\)\].*/\1/p' CHANGELOG.md | head -1)
+          echo "cargo=$cargo_v pkgbuild=$pkg_v srcinfo=$src_v changelog=$log_v"
+          [ -n "$cargo_v" ] && [ "$cargo_v" = "$pkg_v" ] && [ "$cargo_v" = "$src_v" ] && [ "$cargo_v" = "$log_v" ]
       - name: py_compile
         run: |
           for f in apple-kb-monitor apihub-settings mqtt-bridge.py; do
@@ -48,7 +64,7 @@ jobs:
       - name: shellcheck
         run: |
           files="tests/live/check_keyboard.sh"
-          for f in $(find kde systemd -type f 2>/dev/null); do
+          for f in $(find systemd -type f 2>/dev/null); do
             head -1 "$f" | grep -Eq '^#!.*(ba)?sh' && files="$files $f"
           done
           shellcheck -S warning $files

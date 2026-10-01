@@ -4,9 +4,9 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [3.1.0] - Unreleased (branch audit/debug-complet)
+## [3.1.0] - Unreleased
 
-Audit and debug pass (tracking issue #8), then scope reduction: the repository is now keyboard-only. Bugs are tracked one per Gitea issue (label `bug`); "Fixes #N" is in the commit messages of `617c3db..HEAD`. Version strings in `Cargo.toml` and `PKGBUILD` still read 3.0.0 (`pkgrel=2`) until the release is cut.
+Audit and debug pass (tracking issue #8), then scope reduction: the repository is now keyboard-only. Bugs are tracked one per Gitea issue (label `bug`); "Fixes #N" is in the commit messages of `617c3db..HEAD`. Single version source: `[workspace.package] version` in `apihub-app/Cargo.toml` = `pkgver` in `PKGBUILD`/`.SRCINFO` = first entry of this file (checked by CI, #10).
 
 ### Removed (breaking)
 - **Display / DDC / MQTT / Home Assistant**: `ddc.rs`, `brightness.rs`, `mqtt.rs`, `ddc-tool`, `mqtt-bridge.py`, DDC tests, display docs, `config.toml.example`, KDE brightness shortcuts, the `i2c` group step, the `python-paho-mqtt` optional dependency (#59, #74). `apihub-app` now has two tabs: Keyboard and Diag. The code lives in the private repository `lg-ddc-control` (this repository keeps the tag `archive/avec-ecran`).

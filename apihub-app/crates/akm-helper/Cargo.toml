@@ -4,4 +4,6 @@ version.workspace = true
 edition.workspace = true
 description = "Minimal privileged helper (run through pkexec): sets the hid_apple fnmode parameter"
 
-# No dependencies on purpose: this binary runs as root.
+# Runs as root: only `libc` (O_NOFOLLOW, fchown, geteuid), nothing else.
+[dependencies]
+libc = "0.2"
