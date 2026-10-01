@@ -105,6 +105,11 @@ Abréviations **[chaîne + désassemblage]** : `MV` MeasuredVoltages, `LT` Latch
   Le suffixe `3` suggère que `0x5A` et `0xEB` (copies mesurées) sont les jeux 1 et 2 **[déduction]**.
 * `0x49` est la grandeur qu'Apple appelle **`Latched`** (tension « verrouillée », mesurée puis figée par le micrologiciel),
   ce qui explique qu'elle varie par paliers et sans bruit (`HARDWARE-RAPPORTS-HID.md` §4) **[plist + déduction]**.
+* **Pourcentage affiché par l'interface (IOBluetooth.framework 10.7.5)** : `-[AppleBluetoothHIDDevice batteryPercent]` lit la
+  propriété `BatteryPercent` puis, pour les PID `0x0239-0x023B` et `0x0255-0x0257`, **remappe** la valeur brute `r` :
+  `r ≥ 54` → 100 ; `21 ≤ r ≤ 53` → `21 + (r − 21) × 2,4375` ; sinon `r` (constantes 54 / 21 / 53 / 2,4375)
+  **[désassemblage]**. Même courbe que celle relevée dans macOS 26.5 (#213) : elle existe **depuis Lion**. Le pilote
+  noyau, lui, publie toujours `0x47` brut.
 * **Cadence et sûreté** : Lion lisait `0x47`, `0x49` et `0x60` à **chaque** relevé batterie (60 s après connexion,
   puis toutes les 4 h) **[désassemblage]**. Ces trois lectures font donc partie du trafic de production d'Apple
   pour notre PID : elles sont **validées par Apple au rythme d'Apple** (au plus une série toutes les 4 h), ce qui ne garantit rien pour des rafales. `0xFE`, `0xEA`, `0xF4`-`0xFF`,
@@ -286,3 +291,13 @@ Par opposition aux fonctions du Magic Keyboard (`0x90`, `0x35`, rétro-éclairag
    chaîne `sending sendSCOLinkACTIVE` dans `blued`, `kRemoveDevice` dans `Bluetooth.prefPane`, `sendCommand:withAck:param:pLength:` et
    `ackReceived:` dans `bfu`.
 5. **Ne pas** analyser `FWDecrypt` ni tenter de déchiffrer `config.hex`.
+
+## 11. Suivi Gitea
+
+| Issue | Objet |
+|---|---|
+| #215 | F44 — tension `Latched` (`0x49`) et seuils `Full/Low/Critical/Empty` (`0x60`), au rythme Apple |
+| #216 | F45 — notification de lien SCO (`0x4A` = `03`/`04`), accord du gérant requis |
+| #217 | F46 — oublier le clavier proprement (`0x44` puis désappairage), accord explicite requis |
+| #218 | docs — corrections du §9 à reporter dans les documents existants |
+| commentaires | #182, #188, #189, #192, #193, #194, #213 |
