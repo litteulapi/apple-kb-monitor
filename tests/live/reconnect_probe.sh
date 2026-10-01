@@ -13,7 +13,7 @@
 # Recovery if it does not come back: press a key again; `akmctl repair`.
 set -euo pipefail
 
-MAC=04:DB:56:CA:42:EE
+MAC=AA:BB:CC:DD:EE:F1
 OUT="${XDG_STATE_HOME:-$HOME/.local/state}/apple-kb-monitor/probe-$(date +%Y%m%d-%H%M%S)"
 IDLE=60     # seconds of silence before the key press (lets the adapter autosuspend)
 WAIT=180    # max seconds to wait for the reconnection after the prompt

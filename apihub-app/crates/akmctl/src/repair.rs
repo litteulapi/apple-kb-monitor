@@ -642,9 +642,9 @@ mod tests {
 
     fn kb(paired: bool, connected: bool) -> KbFacts {
         KbFacts {
-            mac: "04:DB:56:CA:42:EE".into(),
+            mac: "AA:BB:CC:DD:EE:F1".into(),
             name: "Clavier".into(),
-            path: "/org/bluez/hci0/dev_04_DB_56_CA_42_EE".into(),
+            path: "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_F1".into(),
             paired,
             bonded: paired,
             trusted: true,

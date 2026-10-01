@@ -174,13 +174,13 @@ mod tests {
         (mb, rx)
     }
 
-    const MAC: &str = "04:DB:56:CA:42:EE";
+    const MAC: &str = "AA:BB:CC:DD:EE:F1";
 
     #[test]
     fn rename_validates_writes_and_notifies() {
         let f = Fake::default();
         let (mb, rx) = mailbox();
-        let r = rename(&f, &mb, "04:db:56:ca:42:ee", "  Bureau  ").unwrap();
+        let r = rename(&f, &mb, "aa:bb:cc:dd:ee:f1", "  Bureau  ").unwrap();
         assert_eq!(r.as_deref(), Some("Bureau"));
         assert_eq!(
             rx.try_recv().unwrap(),

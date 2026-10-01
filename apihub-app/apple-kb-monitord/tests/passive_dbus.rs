@@ -20,8 +20,8 @@ use zbus::zvariant::OwnedValue;
 use zbus::MatchRule;
 
 const INNER: &str = "AKM_PASSIVE_INNER";
-const MAC: &str = "04:DB:56:CA:42:EE";
-const DEV: &str = "/com/agenceapi/AppleKbMonitor1/devices/04_DB_56_CA_42_EE";
+const MAC: &str = "AA:BB:CC:DD:EE:F1";
+const DEV: &str = "/com/agenceapi/AppleKbMonitor1/devices/AA_BB_CC_DD_EE_F1";
 
 fn hex(s: &str) -> Vec<u8> {
     let c: String = s.split_whitespace().collect();

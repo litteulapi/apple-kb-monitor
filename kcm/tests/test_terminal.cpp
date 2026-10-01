@@ -19,7 +19,7 @@ private Q_SLOTS:
     void validation()
     {
         QVERIFY(validDeviceName(QStringLiteral("Bureau")));
-        QVERIFY(validDeviceName(QStringLiteral("Clavier de maria #1")));
+        QVERIFY(validDeviceName(QStringLiteral("Clavier de alice #1")));
         QVERIFY(validDeviceName(QStringLiteral("a; rm -rf ~")));
         QVERIFY(validDeviceName(QStringLiteral("$(reboot)")));
         QVERIFY(validDeviceName(QStringLiteral("it's \"ok\"")));

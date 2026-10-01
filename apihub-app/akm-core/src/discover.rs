@@ -334,12 +334,12 @@ mod tests {
         s.hidraw(
             "hidraw3",
             "0005:000005AC:00000256",
-            "04:db:56:ca:42:ee",
+            "aa:bb:cc:dd:ee:f1",
             Some(&a1314),
         );
         let k = select_keyboard_in(&s.0, None).unwrap();
         assert_eq!(k.hidraw, "/dev/hidraw3");
-        assert_eq!(k.mac.as_deref(), Some("04:DB:56:CA:42:EE"));
+        assert_eq!(k.mac.as_deref(), Some("AA:BB:CC:DD:EE:F1"));
         assert!(k.wake_supported());
     }
 
@@ -370,16 +370,16 @@ mod tests {
         s.hidraw(
             "hidraw1",
             "0005:000005AC:00000256",
-            "04:db:56:ca:42:ee",
+            "aa:bb:cc:dd:ee:f1",
             Some(&a1314),
         );
         assert_eq!(list_keyboards_in(&s.0).len(), 2);
         let first = select_keyboard_in(&s.0, None).unwrap();
         assert_eq!(first.model.pid, 0x029c);
         assert!(!first.wake_supported());
-        let a = select_keyboard_in(&s.0, Some("04:DB:56:CA:42:EE")).unwrap();
+        let a = select_keyboard_in(&s.0, Some("AA:BB:CC:DD:EE:F1")).unwrap();
         assert_eq!(a.hidraw, "/dev/hidraw1");
-        assert!(wake_supported_in(&s.0, Some("04:db:56:ca:42:ee")));
+        assert!(wake_supported_in(&s.0, Some("aa:bb:cc:dd:ee:f1")));
         assert!(!wake_supported_in(&s.0, Some("AA:BB:CC:DD:EE:02")));
         assert!(select_keyboard_in(&s.0, Some("11:22:33:44:55:66")).is_none());
         assert!(!wake_supported_in(&s.0, Some("11:22:33:44:55:66")));

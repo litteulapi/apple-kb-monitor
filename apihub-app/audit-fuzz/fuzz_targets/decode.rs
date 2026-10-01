@@ -7,7 +7,7 @@ use libfuzzer_sys::fuzz_target;
 use std::io;
 use std::time::Instant;
 
-const UEVENT: &str = "DRIVER=apple\nHID_ID=0005:000005AC:00000256\nHID_NAME=K\nHID_UNIQ=04:db:56:ca:42:ee\n";
+const UEVENT: &str = "DRIVER=apple\nHID_ID=0005:000005AC:00000256\nHID_NAME=K\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n";
 
 /// data = suite de blocs [id, len, octets...] : la première occurrence d'un id gagne.
 struct Src(Vec<(u8, Vec<u8>)>);

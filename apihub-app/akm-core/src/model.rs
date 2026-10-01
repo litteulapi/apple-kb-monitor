@@ -283,13 +283,13 @@ mod tests {
 
     #[test]
     fn real_a1314_iso_uevent() {
-        let u = "DRIVER=hid-generic\nHID_ID=0005:000005AC:00000256\nHID_NAME=Clavier de maria #1\nHID_PHYS=44:af:28:00:00:01\nHID_UNIQ=04:db:56:ca:42:ee\n";
+        let u = "DRIVER=hid-generic\nHID_ID=0005:000005AC:00000256\nHID_NAME=Clavier de alice #1\nHID_PHYS=44:af:28:00:00:01\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n";
         let mi = model_from_uevent(u).unwrap();
         assert_eq!(mi.pid, 0x0256);
         assert_eq!(mi.family, Family::Bcm2042);
         assert!(mi.model.contains("A1314") && mi.model.contains("ISO"));
-        assert_eq!(mac_from_uevent(u).as_deref(), Some("04:DB:56:CA:42:EE"));
-        assert_eq!(name_from_uevent(u).as_deref(), Some("Clavier de maria #1"));
+        assert_eq!(mac_from_uevent(u).as_deref(), Some("AA:BB:CC:DD:EE:F1"));
+        assert_eq!(name_from_uevent(u).as_deref(), Some("Clavier de alice #1"));
         assert_eq!(family_from_uevent(u), Family::Bcm2042);
     }
 
@@ -393,10 +393,10 @@ mod tests {
         assert!(!is_keyboard_upower_path(
             "/org/freedesktop/UPower/devices/gaming_input_hid_aa_bb_battery"
         ));
-        let kb = "/org/freedesktop/UPower/devices/keyboard_hid_04_DB_56_CA_42_EE_battery";
-        assert!(upower_path_matches_mac(kb, "04:DB:56:CA:42:EE"));
+        let kb = "/org/freedesktop/UPower/devices/keyboard_hid_AA_BB_CC_DD_EE_F1_battery";
+        assert!(upower_path_matches_mac(kb, "AA:BB:CC:DD:EE:F1"));
         assert!(!upower_path_matches_mac(kb, "EC:2E:EE:A1:B2:C3"));
-        assert!(!upower_path_matches_mac(mouse, "04:DB:56:CA:42:EE"));
+        assert!(!upower_path_matches_mac(mouse, "AA:BB:CC:DD:EE:F1"));
         assert!(!upower_path_matches_mac(kb, ""));
     }
 

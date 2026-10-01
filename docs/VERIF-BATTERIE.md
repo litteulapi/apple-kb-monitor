@@ -1,6 +1,6 @@
 # Vérification contradictoire du pourcentage de batterie — A1314 ISO (BCM2042)
 
-Date : 2026-10-01. Appareil : Apple Wireless Keyboard A1314 ISO, `04:DB:56:CA:42:EE`, `0005:05AC:0256`,
+Date : 2026-10-01. Appareil : Apple Wireless Keyboard A1314 ISO, `AA:BB:CC:DD:EE:F1`, `0005:05AC:0256`,
 firmware `0x0050`, 2 piles AA posées vers 03:00 (clavier hors ligne 02:55 → 03:06).
 Question du gérant : le 98-99 % affiché quelques heures après le changement est-il exact ?
 Démarche : essayer de **réfuter** ce chiffre.
@@ -317,7 +317,7 @@ python3 tests/live/re/verif_battery_model.py                      # tableau tens
 python3 tests/live/re/verif_battery_model.py --mv 2945 2775       # points précis
 python3 tests/live/re/verif_battery_series.py --analyze tests/live/re/verif_series_20261001.jsonl
 # mode léger, attend Connected: yes, 4 rapports / 5 min, arrêt à la 1re erreur :
-python3 tests/live/re/verif_battery_series.py 04:DB:56:CA:42:EE '' --rounds 36 --period 300 --wait-node --out s.jsonl
+python3 tests/live/re/verif_battery_series.py AA:BB:CC:DD:EE:F1 '' --rounds 36 --period 300 --wait-node --out s.jsonl
 ```
 
 Sources : [hid-input.c](https://github.com/torvalds/linux/blob/master/drivers/hid/hid-input.c)

@@ -161,7 +161,7 @@ fn inner() {
 
     // 5. Link slot: disconnection then reconnection replace each other;
     //    transient, low urgency.
-    let mac = "04:DB:56:CA:42:EE".to_string();
+    let mac = "AA:BB:CC:DD:EE:F1".to_string();
     notify::link(&LinkEvent::Disconnected { mac: mac.clone() });
     let down = calls.recv_timeout(WAIT).unwrap();
     assert_eq!(down.hints["x-kde-eventId"], "KeyboardDisconnected");

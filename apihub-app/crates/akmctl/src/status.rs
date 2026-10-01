@@ -195,7 +195,7 @@ pub fn absent_text(fn_mode: Option<u8>) -> String {
 mod tests {
     use super::*;
 
-    const SAMPLE: &str = r#"{"schema":1,"version":28,"connected":true,"keyboard":{"device":{"model":"Apple Wireless Keyboard (A1314)","mac":"04:DB:56:CA:42:EE","alias":"Clavier de maria #1"},"battery":{"percentage":99.0,"voltage":2.9},"radio":{"rssi_dbm":0}},"last_update":1790000000}"#;
+    const SAMPLE: &str = r#"{"schema":1,"version":28,"connected":true,"keyboard":{"device":{"model":"Apple Wireless Keyboard (A1314)","mac":"AA:BB:CC:DD:EE:F1","alias":"Clavier de alice #1"},"battery":{"percentage":99.0,"voltage":2.9},"radio":{"rssi_dbm":0}},"last_update":1790000000}"#;
 
     #[test]
     fn json_fields_and_nulls() {
@@ -210,9 +210,9 @@ mod tests {
         assert_eq!(v["rssi_kind"], "bredr-golden-range");
         assert_eq!(v["rssi_quality"], "excellent");
         assert!(v["battery_estimate_pct"].is_null(), "no estimate in this sample");
-        assert_eq!(v["mac"], "04:DB:56:CA:42:EE");
-        assert_eq!(v["name"], "Clavier de maria #1");
-        assert_eq!(v["alias"], "Clavier de maria #1");
+        assert_eq!(v["mac"], "AA:BB:CC:DD:EE:F1");
+        assert_eq!(v["name"], "Clavier de alice #1");
+        assert_eq!(v["alias"], "Clavier de alice #1");
         assert_eq!(v["fnmode"], 2);
         assert!(v["fnmode_label"].as_str().unwrap().starts_with("fkeysfirst"));
         assert!(v["last_error"].is_null());
@@ -227,16 +227,16 @@ mod tests {
             d.name = Some(name.into());
             s
         };
-        let s = mk("alex", "Clavier de maria #1");
+        let s = mk("alex", "Clavier de alice #1");
         let note = kernel_name_note(&s).expect("names differ");
-        assert!(note.starts_with("Clavier de maria #1") && note.contains("alex") && note.contains("reconnects"));
+        assert!(note.starts_with("Clavier de alice #1") && note.contains("alex") && note.contains("reconnects"));
         let text = to_text(&s, None);
         assert!(text.contains("Kernel:") && text.contains("KWin"), "{text}");
-        assert_eq!(to_json(&s, None, None)["kernel_name"], "Clavier de maria #1");
-        let same = mk("Clavier de maria #1", "Clavier de maria #1");
+        assert_eq!(to_json(&s, None, None)["kernel_name"], "Clavier de alice #1");
+        let same = mk("Clavier de alice #1", "Clavier de alice #1");
         assert!(kernel_name_note(&same).is_none());
         assert!(!to_text(&same, None).contains("Kernel:"));
-        let mut no_alias = mk("x", "Clavier de maria #1");
+        let mut no_alias = mk("x", "Clavier de alice #1");
         no_alias.keyboard.as_mut().unwrap().device.alias = None;
         assert!(kernel_name_note(&no_alias).is_none());
     }
@@ -291,7 +291,7 @@ mod tests {
         assert!(!t.contains("dBm"));
         assert!(t.contains("Updated:"));
         assert!(t.contains("Connected: yes"));
-        assert!(t.contains("Name:      Clavier de maria #1"));
+        assert!(t.contains("Name:      Clavier de alice #1"));
         assert!(t.contains("Fn mode:   1 - fkeyslast"));
         assert!(to_text(&Snapshot::default(), None).contains("Battery:   n/a"));
     }
@@ -313,13 +313,13 @@ mod tests {
         assert!(v["name_on_keyboard"].is_null());
         assert!(to_text(&s, None).contains("On kb:     n/a (not read yet)"));
         let mut s2 = s.clone();
-        s2.keyboard.as_mut().unwrap().device.name_on_keyboard = Some("Clavier de maria #1".into());
+        s2.keyboard.as_mut().unwrap().device.name_on_keyboard = Some("Clavier de alice #1".into());
         assert_eq!(
             to_json(&s2, None, None)["name_on_keyboard"],
-            "Clavier de maria #1"
+            "Clavier de alice #1"
         );
         assert!(to_text(&s2, None)
-            .contains("On kb:     Clavier de maria #1 (name stored in the keyboard)"));
+            .contains("On kb:     Clavier de alice #1 (name stored in the keyboard)"));
         assert_eq!(v["firmware"]["latest_known"], "0x0050");
         assert_eq!(v["battery_apple_display_pct"], 100);
         assert_eq!(v["battery_thresholds"]["low_mv"], 2506);

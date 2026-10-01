@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use akm_helper::breaker_state::{self, Allow, BreakerState, Refuse, Verdict, Writer};
 use akm_helper::hidctl::{self, Env, Mac};
 
-const KB: &str = "04:DB:56:CA:42:EE";
+const KB: &str = "AA:BB:CC:DD:EE:F1";
 
 fn uid() -> u32 {
     // SAFETY: getuid(2) has no failure mode.

@@ -11,7 +11,7 @@ use akm_core::machine::{Action, Event, Machine, FORCE_REFRESH_FLOOR};
 fn refresh_cannot_defeat_slow_read_period() {
     let t0 = Instant::now();
     let mut m = Machine::new();
-    m.on_event(&Event::Connected("04:DB:56:CA:42:EE".into()), t0);
+    m.on_event(&Event::Connected("AA:BB:CC:DD:EE:F1".into()), t0);
     assert_eq!(m.due(t0), vec![Action::Acquire]);
     m.acquire_done(true, t0);
     let _ = m.due(t0); // RSSI

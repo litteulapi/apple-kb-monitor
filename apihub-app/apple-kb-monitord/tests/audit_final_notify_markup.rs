@@ -65,8 +65,8 @@ fn firmware_and_generic_bodies_are_escaped_too() {
 fn escape_is_exact_and_leaves_plain_text_alone() {
     assert_eq!(escape_markup(r#"a&b<c>"d"#), "a&amp;b&lt;c&gt;&quot;d");
     assert_eq!(
-        escape_markup("Clavier de maria #1 \u{2014} 99 % « ok »"),
-        "Clavier de maria #1 \u{2014} 99 % « ok »"
+        escape_markup("Clavier de alice #1 \u{2014} 99 % « ok »"),
+        "Clavier de alice #1 \u{2014} 99 % « ok »"
     );
     // plain body: unchanged by construction
     let n = removed_notification("Magic Keyboard", Lang::En);

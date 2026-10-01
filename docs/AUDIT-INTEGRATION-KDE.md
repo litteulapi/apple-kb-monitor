@@ -31,9 +31,9 @@ sources ; **[non mesuré]** = connaissance amont non vérifiable sans action int
 | Point | Valeur affichée | Source | Preuve |
 |---|---|---|---|
 | Nom | **alex** | `Device1.Alias` (bluez-qt `name` = Alias) | `busctl get-property … Device1 Alias` → `"alex"` |
-| Détail « Nom distant » | **Clavier de maria #1** (ligne affichée car Name ≠ Alias) | `Device1.Name` | QML `DeviceItem.qml` : `if (model.Name !== model.RemoteName)` |
+| Détail « Nom distant » | **Clavier de alice #1** (ligne affichée car Name ≠ Alias) | `Device1.Name` | QML `DeviceItem.qml` : `if (model.Name !== model.RemoteName)` |
 | Icône | `input-keyboard` | `Device1.Icon` | `busctl` |
-| Batterie | **96 %** (sous-titre « 96 % Batterie » et infobulle « alex connecté · 96 % Batterie ») | **`org.bluez.Battery1` publié par notre fournisseur**, `Source="apple-kb-monitord (kernel power_supply)"` | `busctl introspect org.bluez /org/bluez/hci0/dev_04_DB_56_CA_42_EE` ; QML `model.Battery.percentage` |
+| Batterie | **96 %** (sous-titre « 96 % Batterie » et infobulle « alex connecté · 96 % Batterie ») | **`org.bluez.Battery1` publié par notre fournisseur**, `Source="apple-kb-monitord (kernel power_supply)"` | `busctl introspect org.bluez /org/bluez/hci0/dev_AA_BB_CC_DD_EE_F1` ; QML `model.Battery.percentage` |
 | État | connecté, appairé, de confiance | `Device1` | `busctl` |
 | Actions | Connecter/Déconnecter, **Oublier** (dialogue `ForgetDeviceDialog` → `Adapter1.RemoveDevice`) ; envoi de fichier/parcourir masqués (pas d'OBEX) | QML extrait | — |
 
@@ -75,7 +75,7 @@ zéro `Connect`.
 ### Constats [mesuré]
 
 * UPower ne publie **qu'un** appareil pour ce clavier : `battery_hid_04odbo56ocao42oee_battery_71`
-  (native-path `hid-04:db:56:ca:42:ee-battery-71`, type **keyboard**, `model: alex`, 96 %,
+  (native-path `hid-aa:bb:cc:dd:ee:f1-battery-71`, type **keyboard**, `model: alex`, 96 %,
   `discharging`). Aucun doublon `bluez` : UPower masque la batterie BlueZ de même numéro de série,
   comme prévu dans `bluez.rs`. → **Le clavier figure dans l'applet Batterie avec 96 % et le nom
   « alex »**, source = noyau (pas notre fournisseur).
@@ -102,7 +102,7 @@ couvre), soit proposer dans le KCM « Laisser KDE gérer l'alerte basse » ; doc
 
 [mesuré] Applet Bluetooth et applet Batterie : « alex » (Alias). KWin
 `/org/kde/KWin/InputDevice/event28` `name`, `power_supply/model_name` et `/proc/bus/input/devices` :
-« Clavier de maria #1 » (nom HID/firmware). Paramètres › Clavier / Périphériques d'entrée affichent donc
+« Clavier de alice #1 » (nom HID/firmware). Paramètres › Clavier / Périphériques d'entrée affichent donc
 l'ancien nom. Pour #248 (écriture du nom dans le firmware) : KWin indexe les réglages par périphérique
 (`kcminputrc [Libinput][vendor][product][nom]`) sur ce nom ; aujourd'hui aucune section n'existe
 [mesuré], mais un renommage firmware ferait perdre de tels réglages s'ils étaient créés plus tard.
@@ -235,5 +235,5 @@ KDE Connect : sans objet.
 | 8 | Notifications sans `desktop-entry`, sans notifyrc, Critical par défaut | moyenne | #249 en cours | commentaire #249 |
 | 7 | Langue : 5 surfaces sur 6 en anglais sous `fr_FR` | faible | #114 | commentaire #114 |
 | 4 | F4 (Launch (D)) et Éjecter liés à rien ; `kde-apply` non appliqué | faible | #247 | commentaire #247 |
-| 2.b | Nom « alex » (BT/Batterie) vs « Clavier de maria #1 » (KWin/Paramètres Clavier) | faible | #248 | commentaire #248 |
+| 2.b | Nom « alex » (BT/Batterie) vs « Clavier de alice #1 » (KWin/Paramètres Clavier) | faible | #248 | commentaire #248 |
 | 6 | Linger + uaccess : démon hors session sans hidraw (à vérifier) | faible | doc | — |

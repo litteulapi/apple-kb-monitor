@@ -159,7 +159,7 @@ Command::new("pkexec")                  // résolu par $PATH
 ### 3.10 Résidu #123 (S2-09)
 
 * `apple-kb-monitor` (Python, installé dans `/usr/bin`) lit toujours 0x4C. Il publie `identity.key` dans `--json` (lignes 1308-1310) et affiche « Key (128-bit) » dans `--status` (lignes 1444-1448). `apihub-settings` appelle `apple-kb-monitor --json`.
-* `tests/test_apple_kb.py:83` contient `4c030d7c5266946c` suivi de 12 octets de forte entropie. Les octets 2 à 7 correspondent à l'adresse réelle de l'adaptateur de l'hôte (`6c:94:66:52:7c:0d`, cf. `docs/HARDWARE-RAPPORTS-HID.md`). L'empreinte SHA-256 (20 octets : `4396240337911cdf`) diffère de la valeur actuelle mesurée (`f34626564fca9676`) : il s'agit probablement d'un appairage antérieur (commit `98f90c8`, 2026-04-01), donc périmé. Il est néanmoins présent dans l'historique git et sur le remote `origin` (GitHub).
+* `tests/test_apple_kb.py:83` contient `4c03f2eeddccbbaa` suivi de 12 octets de forte entropie. Les octets 2 à 7 correspondent à l'adresse réelle de l'adaptateur de l'hôte (`aa:bb:cc:dd:ee:f2`, cf. `docs/HARDWARE-RAPPORTS-HID.md`). L'empreinte SHA-256 (20 octets : `4396240337911cdf`) diffère de la valeur actuelle mesurée (`f34626564fca9676`) : il s'agit probablement d'un appairage antérieur (commit `98f90c8`, 2026-04-01), donc périmé. Il est néanmoins présent dans l'historique git et sur le remote `origin` (GitHub).
 * Correctif : masquer 0x4C dans le CLI Python comme dans le Rust, remplacer la valeur du test par une donnée synthétique et décider d'une purge de l'historique.
 
 ### 3.11 Dépendances (S2-11)

@@ -29,7 +29,7 @@ fn keyboard(pct: f64) -> Snapshot {
     k.battery.percentage_fine = Some(pct);
     k.battery.voltage = Some(2.81);
     k.radio.rssi_dbm = Some(-52);
-    k.device.mac = Some("04:DB:56:CA:42:EE".into());
+    k.device.mac = Some("AA:BB:CC:DD:EE:F1".into());
     k.device.model = Some("Apple Wireless Keyboard (A1314, aluminum, ISO)".into());
     Snapshot {
         connected: true,

@@ -625,7 +625,7 @@ mod tests {
         k.radio.rssi_dbm = rssi;
         k.device.model = Some("Apple Wireless Keyboard (A1314, aluminum, ISO)".into());
         k.device.name = Some("Clavier_test".into());
-        k.device.mac = Some("04:DB:56:CA:42:EE".into());
+        k.device.mac = Some("AA:BB:CC:DD:EE:F1".into());
         Snapshot {
             connected,
             keyboard: Some(k),
@@ -943,26 +943,26 @@ mod tests {
     fn clipboard_block() {
         let t = clipboard_text(&snap(Some(99.0), true, Some(-3)), false, Lang::En, 1_030);
         assert!(t.starts_with("Clavier_test \u{2014} 99%"), "{t}");
-        assert!(t.contains("MAC: 04:DB:56:CA:42:EE"), "{t}");
+        assert!(t.contains("MAC: AA:BB:CC:DD:EE:F1"), "{t}");
         assert!(t.contains("Updated 30\u{a0}s ago"), "{t}");
         let t = clipboard_text(&snap(Some(99.0), true, None), false, Lang::Fr, 1_030);
-        assert!(t.contains("MAC\u{a0}: 04:DB:56:CA:42:EE"), "{t}");
+        assert!(t.contains("MAC\u{a0}: AA:BB:CC:DD:EE:F1"), "{t}");
         assert!(!t.contains("127"));
     }
 
     #[test]
     fn alias_wins_everywhere_and_rename_is_offered() {
         let mut s = snap(Some(99.0), true, Some(-3));
-        s.keyboard.as_mut().unwrap().device.alias = Some("Clavier de maria #1".into());
+        s.keyboard.as_mut().unwrap().device.alias = Some("Clavier de alice #1".into());
         let v = View::build(&s, false, None, Lang::En);
-        assert_eq!(v.tooltip_title, "Clavier de maria #1 \u{2014} 99%");
+        assert_eq!(v.tooltip_title, "Clavier de alice #1 \u{2014} 99%");
         assert_eq!(
             v.tooltip_lines[0],
-            "Apple Wireless Keyboard (A1314, aluminum, ISO) \u{b7} Clavier de maria #1"
+            "Apple Wireless Keyboard (A1314, aluminum, ISO) \u{b7} Clavier de alice #1"
         );
         assert_eq!(
             v.entry(id::HEADER).unwrap().get("label"),
-            Some(&Prop::Str("Clavier de maria #1".into()))
+            Some(&Prop::Str("Clavier de alice #1".into()))
         );
         let r = v.entry(id::RENAME).unwrap();
         assert_eq!(r.get("label"), Some(&Prop::Str("Re_name keyboard\u{2026}".into())));

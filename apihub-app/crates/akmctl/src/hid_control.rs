@@ -179,14 +179,14 @@ mod tests {
             ["suspend"]
         );
         assert_eq!(
-            helper_args(HidControlOp::ExitSuspend, Some("04:db:56:ca:42:ee"), true).unwrap(),
-            ["exit-suspend", "--mac", "04:DB:56:CA:42:EE", "--dry-run"]
+            helper_args(HidControlOp::ExitSuspend, Some("aa:bb:cc:dd:ee:f1"), true).unwrap(),
+            ["exit-suspend", "--mac", "AA:BB:CC:DD:EE:F1", "--dry-run"]
         );
         for bad in [
             "",
-            "04:db:56:ca:42",
-            "04-db-56-ca-42-ee",
-            "04:db:56:ca:42:ee;id",
+            "aa:bb:cc:dd:ee",
+            "aa-bb-cc-dd-ee-f1",
+            "aa:bb:cc:dd:ee:f1;id",
             "--dry-run",
         ] {
             assert!(
@@ -196,14 +196,14 @@ mod tests {
             assert!(inspect_args(bad).is_err(), "{bad:?}");
         }
         assert_eq!(
-            inspect_args("04:db:56:ca:42:ee").unwrap(),
-            ["inspect", "--mac", "04:DB:56:CA:42:EE"]
+            inspect_args("aa:bb:cc:dd:ee:f1").unwrap(),
+            ["inspect", "--mac", "AA:BB:CC:DD:EE:F1"]
         );
     }
 
-    const KB: &str = "04:DB:56:CA:42:EE";
-    const CTRL: &str = "akm-hid-control:   04:DB:56:CA:42:EE fd 23: psm local 0x0000 peer 0x0011 cid 0x0041 state connected (hci handle 0x000b) mtu out 672 in 672";
-    const INTR: &str = "akm-hid-control:   04:DB:56:CA:42:EE fd 24: psm local 0x0000 peer 0x0013 cid 0x0042 state connected (hci handle 0x000b) mtu out 48 in 672";
+    const KB: &str = "AA:BB:CC:DD:EE:F1";
+    const CTRL: &str = "akm-hid-control:   AA:BB:CC:DD:EE:F1 fd 23: psm local 0x0000 peer 0x0011 cid 0x0041 state connected (hci handle 0x000b) mtu out 672 in 672";
+    const INTR: &str = "akm-hid-control:   AA:BB:CC:DD:EE:F1 fd 24: psm local 0x0000 peer 0x0013 cid 0x0042 state connected (hci handle 0x000b) mtu out 48 in 672";
 
     #[test]
     fn control_mtu_is_read_from_the_connected_control_socket_line_only() {
@@ -211,7 +211,7 @@ mod tests {
             "akm-hid-control: inspect (read-only) for {KB}\nakm-hid-control: bluetoothd pid 1144 (/usr/lib/bluetooth/bluetoothd): 2 L2CAP socket(s)\n{CTRL}\n{INTR}\nakm-hid-control: {KB} (A1314 0x0256): control channel pid 1144 fd 23 psm 0x0011 hci 0x000b mtu out 672 in 672: inspected, nothing sent\n"
         );
         assert_eq!(parse_control_mtu(&text, KB), Ok(672));
-        assert_eq!(parse_control_mtu(&text, "04:db:56:ca:42:ee"), Ok(672));
+        assert_eq!(parse_control_mtu(&text, "aa:bb:cc:dd:ee:f1"), Ok(672));
         // A small MTU is reported as is (the pre-flight decides).
         assert_eq!(parse_control_mtu(&CTRL.replace("out 672", "out 48"), KB), Ok(48));
         // The interrupt channel's MTU is never taken.

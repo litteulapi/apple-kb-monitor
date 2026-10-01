@@ -14,7 +14,7 @@ use akm_core::model::{family_from_uevent, Family};
 use akm_core::power::{kernel_battery_in, BatteryStatus};
 use akm_core::report::KbWake;
 
-const MAC: &str = "04:DB:56:CA:42:EE";
+const MAC: &str = "AA:BB:CC:DD:EE:F1";
 
 fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
@@ -45,7 +45,7 @@ impl FakeSys {
             "bus/hid/devices/0005:05AC:0256.0014/uevent",
             &read("a1314_iso/hid_device.uevent"),
         );
-        let ps = "class/power_supply/hid-04:db:56:ca:42:ee-battery-71";
+        let ps = "class/power_supply/hid-aa:bb:cc:dd:ee:f1-battery-71";
         for attr in [
             "capacity",
             "status",
@@ -100,7 +100,7 @@ fn sysfs_only_report_without_hidraw() {
     assert!(hid_uevent_for_mac_in(&sys.0, MAC).is_some());
     let r = report_from_sysfs_in(&sys.0, MAC).expect("report");
     assert_eq!(r.battery_pct(), Some(90.0));
-    assert_eq!(r.device.name.as_deref(), Some("Clavier de maria #1"));
+    assert_eq!(r.device.name.as_deref(), Some("Clavier de alice #1"));
     assert!(r
         .device
         .model

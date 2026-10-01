@@ -23,7 +23,7 @@ usage: exhaustive_probe.py --type feature --out pass.jsonl [--dev /dev/hidraw7]
 """
 import argparse, errno, fcntl, hashlib, json, os, subprocess, sys, time
 
-MAC = "04:DB:56:CA:42:EE"
+MAC = "AA:BB:CC:DD:EE:F1"
 # length 1 removed: refused locally by hidraw (count < 2), no radio traffic,
 # only floods the kernel log ("passed too short report"). The device never
 # receives the buffer size (BlueZ sends no BufferSize), see docs/RE-HID-EXHAUSTIF.md.

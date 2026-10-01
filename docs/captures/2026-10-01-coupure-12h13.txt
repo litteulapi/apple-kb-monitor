@@ -1,4 +1,4 @@
-# btmon -T, 2026-10-01 12:12:55-12:16:40, A1314 04:DB:56:CA:42:EE / AX201 hci0.
+# btmon -T, 2026-10-01 12:12:55-12:16:40, A1314 AA:BB:CC:DD:EE:F1 / AX201 hci0.
 # Extrait assaini : les rapports d'entrée du clavier (a1 ..., frappes) sont supprimés (0 blocs).
 # Voir docs/RECONNEXION-PAIRAGE.md §3.6.
 < ACL: Handle 256 flags 0x00 dlen 6    #31354 [hci0] 2026-10-01 12:12:57.251977
@@ -280,7 +280,7 @@
         Interval: 0.000 msec (0x0000)
 > ACL: Handle 256 flags 0x02 dlen 14   #31432 [hci0] 2026-10-01 12:13:02.396534
       Channel: 65 len 10 [PSM 0 mode Basic (0x00)] {chan 65535}
-        a3 52 64 65 20 6d 61 72 69 61                    .Rde maria      
+        a3 52 64 65 20 61 6c 69 63 65                    .Rde alice      
 > HCI Event: Mode Cha.. (0x14) plen 6  #31433 [hci0] 2026-10-01 12:13:02.427993
         Status: Success (0x00)
         Handle: 256
@@ -665,7 +665,7 @@
         Handle: 256
         Reason: Connection Timeout (0x08)
 @ MGMT Event: Dev.. (0x000c) plen 8  {0x0001} [hci0] 2026-10-01 12:13:28.823278
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Reason: Connection timeout (0x01)
 < HCI Command:.. (0x03|0x001a) plen 1  #31539 [hci0] 2026-10-01 12:13:28.850598
         Scan enable: Page Scan (0x02)
@@ -673,7 +673,7 @@
       Write Scan Enable (0x03|0x001a) ncmd 2
         Status: Success (0x00)
 < HCI Command.. (0x01|0x0005) plen 13  #31541 [hci0] 2026-10-01 12:13:30.071573
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Packet type: 0xcc18
           DM1 may be used
           DH1 may be used
@@ -691,15 +691,15 @@
 > HCI Event: Connect.. (0x03) plen 11  #31543 [hci0] 2026-10-01 12:13:35.194340
         Status: Page Timeout (0x04)
         Handle: 65535
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Link type: ACL (0x01)
         Encryption: Disabled (0x00)
 @ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:13:35.194368
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Status: Connect Failed (0x04)
 = bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:13:35.194573
 < HCI Command.. (0x01|0x0005) plen 13  #31544 [hci0] 2026-10-01 12:13:37.072572
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Packet type: 0xcc18
           DM1 may be used
           DH1 may be used
@@ -717,15 +717,15 @@
 > HCI Event: Connect.. (0x03) plen 11  #31546 [hci0] 2026-10-01 12:13:42.194421
         Status: Page Timeout (0x04)
         Handle: 65535
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Link type: ACL (0x01)
         Encryption: Disabled (0x00)
 @ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:13:42.194452
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Status: Connect Failed (0x04)
 = bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:13:42.194583
 < HCI Command.. (0x01|0x0005) plen 13  #31547 [hci0] 2026-10-01 12:13:46.071658
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Packet type: 0xcc18
           DM1 may be used
           DH1 may be used
@@ -743,15 +743,15 @@
 > HCI Event: Connect.. (0x03) plen 11  #31549 [hci0] 2026-10-01 12:13:51.286526
         Status: Page Timeout (0x04)
         Handle: 65535
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Link type: ACL (0x01)
         Encryption: Disabled (0x00)
 @ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:13:51.286547
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Status: Connect Failed (0x04)
 = bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:13:51.286745
 < HCI Command.. (0x01|0x0005) plen 13  #31550 [hci0] 2026-10-01 12:13:59.071626
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Packet type: 0xcc18
           DM1 may be used
           DH1 may be used
@@ -771,17 +771,17 @@
 > HCI Event: Connect.. (0x03) plen 11  #31552 [hci0] 2026-10-01 12:14:04.287632
         Status: Page Timeout (0x04)
         Handle: 65535
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Link type: ACL (0x01)
         Encryption: Disabled (0x00)
 @ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:14:04.287648
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Status: Connect Failed (0x04)
 = bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:14:04.287874
 = bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:14:18.956908
 = bluetoothd: Adv Monitor app :1.745 disc..   [hci0] 2026-10-01 12:14:18.957576
 < HCI Command.. (0x01|0x0005) plen 13  #31553 [hci0] 2026-10-01 12:14:29.071591
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Packet type: 0xcc18
           DM1 may be used
           DH1 may be used
@@ -799,17 +799,17 @@
 > HCI Event: Connect.. (0x03) plen 11  #31555 [hci0] 2026-10-01 12:14:34.286944
         Status: Page Timeout (0x04)
         Handle: 65535
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Link type: ACL (0x01)
         Encryption: Disabled (0x00)
 @ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:14:34.286982
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Status: Connect Failed (0x04)
 = bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:14:34.287168
 = bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:14:52.434226
 = bluetoothd: Adv Monitor app :1.746 disc..   [hci0] 2026-10-01 12:14:52.434709
 < HCI Command.. (0x01|0x0005) plen 13  #31556 [hci0] 2026-10-01 12:14:59.071599
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Packet type: 0xcc18
           DM1 may be used
           DH1 may be used
@@ -827,15 +827,15 @@
 > HCI Event: Connect.. (0x03) plen 11  #31558 [hci0] 2026-10-01 12:15:04.287236
         Status: Page Timeout (0x04)
         Handle: 65535
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Link type: ACL (0x01)
         Encryption: Disabled (0x00)
 @ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:15:04.287268
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Status: Connect Failed (0x04)
 = bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:15:04.287461
 < HCI Command.. (0x01|0x0005) plen 13  #31559 [hci0] 2026-10-01 12:15:29.071576
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Packet type: 0xcc18
           DM1 may be used
           DH1 may be used
@@ -853,17 +853,17 @@
 > HCI Event: Connect.. (0x03) plen 11  #31561 [hci0] 2026-10-01 12:15:34.289550
         Status: Page Timeout (0x04)
         Handle: 65535
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Link type: ACL (0x01)
         Encryption: Disabled (0x00)
 @ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:15:34.289567
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Status: Connect Failed (0x04)
 = bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:15:34.289757
 = bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:15:53.836992
 = bluetoothd: Adv Monitor app :1.765 disc..   [hci0] 2026-10-01 12:15:53.837366
 < HCI Command.. (0x01|0x0005) plen 13  #31562 [hci0] 2026-10-01 12:15:59.071599
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Packet type: 0xcc18
           DM1 may be used
           DH1 may be used
@@ -881,11 +881,11 @@
 > HCI Event: Connect.. (0x03) plen 11  #31564 [hci0] 2026-10-01 12:16:04.287835
         Status: Page Timeout (0x04)
         Handle: 65535
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Link type: ACL (0x01)
         Encryption: Disabled (0x00)
 @ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:16:04.287871
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Status: Connect Failed (0x04)
 = bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:16:04.288060
 = bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:07.060107
@@ -904,7 +904,7 @@
 = bluetoothd: Path / reserved for Adv Mon..   [hci0] 2026-10-01 12:16:21.102805
 = bluetoothd: Adv Monitor app :1.782 disc..   [hci0] 2026-10-01 12:16:21.103521
 < HCI Command.. (0x01|0x0005) plen 13  #31565 [hci0] 2026-10-01 12:16:29.071568
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Packet type: 0xcc18
           DM1 may be used
           DH1 may be used
@@ -924,10 +924,10 @@
 > HCI Event: Connect.. (0x03) plen 11  #31567 [hci0] 2026-10-01 12:16:34.287136
         Status: Page Timeout (0x04)
         Handle: 65535
-        Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Link type: ACL (0x01)
         Encryption: Disabled (0x00)
 @ MGMT Event: Con.. (0x000d) plen 8  {0x0001} [hci0] 2026-10-01 12:16:34.287148
-        BR/EDR Address: 04:DB:56:CA:42:EE (Apple, Inc.)
+        BR/EDR Address: AA:BB:CC:DD:EE:F1 (Apple, Inc.)
         Status: Connect Failed (0x04)
 = bluetoothd: profiles/input/device.c:control_co..   2026-10-01 12:16:34.287284

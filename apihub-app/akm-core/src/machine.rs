@@ -423,7 +423,7 @@ impl Machine {
 mod tests {
     use super::*;
 
-    const MAC: &str = "04:DB:56:CA:42:EE";
+    const MAC: &str = "AA:BB:CC:DD:EE:F1";
 
     fn s(n: u64) -> Duration {
         Duration::from_secs(n)

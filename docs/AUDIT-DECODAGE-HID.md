@@ -10,7 +10,7 @@ ses réponses.
 - le script Python `apple-kb-monitor` (`hid_get_feature`, `read_all_reports`,
   `dump_all_reports`, tables de modèles).
 
-Matériel : A1314 ISO, `HID_ID=0005:05AC:0256`, 04:DB:56:CA:42:EE, `/dev/hidraw7`,
+Matériel : A1314 ISO, `HID_ID=0005:05AC:0256`, AA:BB:CC:DD:EE:F1, `/dev/hidraw7`,
 noyau 7.1.13. Accès en **lecture seule** : `HIDIOCGFEATURE` uniquement, sans
 `SET_REPORT`/`SET_FEATURE`, sans écriture, sans sudo, avec 0,4 s entre deux requêtes.
 
@@ -77,9 +77,9 @@ même période, le `capacity` noyau valait **99**.
 | 0x49 | 3 | `49 89 0b` | stable |
 | 0x4A | 2 | `4a 12` | stable |
 | 0x4B | 3 | `4b 00 08` | stable |
-| 0x4C | 20 | `4c 03 0d 7c 52 66 94 6c` + 12 octets | — |
+| 0x4C | 20 | `4c 03 f2 ee dd cc bb aa` + 12 octets | — |
 | 0x4F | 3 | `4f 50 00` | stable |
-| 0x51/52/53 | 9 | « Clavier » / « de maria » / « #1 » | — |
+| 0x51/52/53 | 9 | « Clavier » / « de alice » / « #1 » | — |
 | 0x5A / 0x60 / 0xEB | 9 | `0b8a 09ca 0964 0806` | identiques entre eux |
 | 0x5B | 9 | `06cc 0384 00 00 00 00` | = 0xF4 ‖ 0xF5 |
 | 0xEA | 2 | `ea 62` (98) | stable |
@@ -120,11 +120,11 @@ Verdict : ✅ correct · ❌ faux · ⚠️ non prouvé (présenté comme certai
 | `firmware.build` (0xFF) | `decode.rs:173-177`, Py `335-338`, UI `main.rs:341-345` | u16 BE = « build number » | **2991** (2982 une minute plus tôt) | ❌ | La valeur **change entre deux lectures** (0x0BA6 puis 0x0BAF) et égale le u16 LE de 0x46 au même instant [mesuré]. Un numéro de build ne varie pas | Ne plus exposer comme build ; champ brut `raw_0xFF` → **#131** |
 | `bluetooth.conn_interval_ms` / `slave_latency` (0x46) | `decode.rs:193-199`, Py `361-364`, UI `main.rs:270-278` | `buf[1]×1,25 ms`, `buf[2]` = latence (paramètres LE) | 218,75 ms, latence 11, UI « eff=2625 ms » | ❌ | Lien **BR/EDR** (§1.3) : l'intervalle de connexion en 1,25 ms et la latence esclave sont des paramètres de la couche liaison **LE** (Core Spec Vol 6 Part B), absents en BR/EDR [source]. Les 2 octets `af 0b` lus en u16 LE donnent 2991, la valeur de 0xFF [mesuré] | Supprimer l'interprétation LE ; champ brut → **#132** |
 | `bluetooth.supervision_timeout_s` (0x49) | `decode.rs:201-206`, Py `366-370` | Rust : u16 LE × 10 ms ; Python : `d[1]` seul | Rust **29,53 s**, Python **137** | ❌ | Unités LE sur un lien BR/EDR [source]. Rust et Python décodent différemment la même trame [mesuré]. 0x0B89=2953 ≈ 1er seuil de 0x5A (2954) [hypothèse mV] | Idem → **#132** |
-| `device.name` (0x51-0x53) | `decode.rs:179-191`, Py `341-347` | 3 blocs de 8 octets, coupés au NUL | « Clavier de maria #1 » | ✅ | Identique à `HID_NAME` et à BlueZ [mesuré]. Limite de 24 octets ; décodage `from_utf8_lossy` (Rust) contre `ascii, replace` (Python) | Python : décoder en UTF-8 |
-| `bluetooth.identity_key` (0x4C) | `decode.rs:40-41,214-219`, Py `349-353`, UI `main.rs:317-321` | « BCM2042 internal identity key (NOT the BT MAC) » ; Rust = 19 octets dont l'octet de type ; Python = type + `d[2:16]` | Rust 19 octets ; Python **14 octets sur 18** | ❌ | Les octets 2-7 `0d 7c 52 66 94 6c`, inversés, donnent **6c:94:66:52:7c:0d = `HID_PHYS`, l'adresse de l'adaptateur de l'hôte appairé** [mesuré]. Ce n'est pas une clé d'identité de l'appareil, ni une IRK (notion propre au LE). Les 12 octets restants ne sont pas identifiés [hypothèse : élément d'appairage]. La troncature Python a été rejouée [mesuré] | Exposer `paired_host` (adresse) et ne plus publier le reste (#123) → **#133** |
+| `device.name` (0x51-0x53) | `decode.rs:179-191`, Py `341-347` | 3 blocs de 8 octets, coupés au NUL | « Clavier de alice #1 » | ✅ | Identique à `HID_NAME` et à BlueZ [mesuré]. Limite de 24 octets ; décodage `from_utf8_lossy` (Rust) contre `ascii, replace` (Python) | Python : décoder en UTF-8 |
+| `bluetooth.identity_key` (0x4C) | `decode.rs:40-41,214-219`, Py `349-353`, UI `main.rs:317-321` | « BCM2042 internal identity key (NOT the BT MAC) » ; Rust = 19 octets dont l'octet de type ; Python = type + `d[2:16]` | Rust 19 octets ; Python **14 octets sur 18** | ❌ | Les octets 2-7 `f2 ee dd cc bb aa`, inversés, donnent **aa:bb:cc:dd:ee:f2 = `HID_PHYS`, l'adresse de l'adaptateur de l'hôte appairé** [mesuré]. Ce n'est pas une clé d'identité de l'appareil, ni une IRK (notion propre au LE). Les 12 octets restants ne sont pas identifiés [hypothèse : élément d'appairage]. La troncature Python a été rejouée [mesuré] | Exposer `paired_host` (adresse) et ne plus publier le reste (#123) → **#133** |
 | `device.model` / `chip` (Rust) | `model.rs:42-145` | table PID | « A1314, aluminum, ISO », BCM2042 | ✅ PID / ⚠️ puce | PID conformes à `hid-ids.h` [source]. Puce BCM2042 pour l'A1314 de 2011 : [hypothèse], sans démontage cité | Citer la source |
 | `device.model` / `chip` (Python) | Py `142-165,176-180,226` | table PID + plages de puces | — | ❌ | 0x0220 = ALU filaire (pas « A1016 ») ; 0x0229 = GEYSER4 ; 0x022C = ANSI (pas JIS) ; 0x024F/0x0250 = ALU_REVB filaire (pas « Magic Keyboard A1644 ») ; 0x0267/0x026C = Magic Keyboard 2015 et 2015 pavé numérique (pas « Touch ID A2449 ») ; 0x022D/E et 0x0239-B absents ; VID 0x004C refusé [source hid-ids.h]. Le correctif #64 n'a pas été porté | Aligner sur `model.rs` → **#135** |
-| `device.mac` | `model.rs:190-197` | `HID_UNIQ` | 04:DB:56:CA:42:EE | ✅ | [mesuré] | — |
+| `device.mac` | `model.rs:190-197` | `HID_UNIQ` | AA:BB:CC:DD:EE:F1 | ✅ | [mesuré] | — |
 | `battery_pct()` | `report.rs:79-85` | fine > interpolé > 0x47, puis `filter(is_finite)` **après** les `or` | 98 sans noyau (contre 99 pour 0x47 et le noyau) | ❌ mineur | Un NaN en tête ne passe pas au champ suivant (test `report.rs:102-105`). La priorité donnée à 0xEA repose sur l'affirmation réfutée | Ordre 0x47 > 0xEA ; filtrer chaque terme → #136 |
 
 ## 3. Couche d'accès (ioctl, fd, délais d'expiration)

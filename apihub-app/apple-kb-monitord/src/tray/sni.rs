@@ -203,6 +203,6 @@ mod escape_tests {
             e,
             "&lt;img src=&quot;http://127.0.0.1:9/x&quot;&gt;Clavier &amp; &lt;b&gt;co&lt;/b&gt;"
         );
-        assert_eq!(escape_markup("Clavier de maria #1 \u{2014} 99%"), "Clavier de maria #1 \u{2014} 99%");
+        assert_eq!(escape_markup("Clavier de alice #1 \u{2014} 99%"), "Clavier de alice #1 \u{2014} 99%");
     }
 }

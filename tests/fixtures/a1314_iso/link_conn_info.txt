@@ -1,2 +1,2 @@
-Connection Information for 04:DB:56:CA:42:EE (BR/EDR)
+Connection Information for AA:BB:CC:DD:EE:F1 (BR/EDR)
 	RSSI 0	TX power 8	maximum TX power 8

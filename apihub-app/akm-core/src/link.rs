@@ -205,7 +205,7 @@ mod tests {
         assert!(!m.take(t0));
     }
 
-    const MAC: &str = "04:DB:56:CA:42:EE";
+    const MAC: &str = "AA:BB:CC:DD:EE:F1";
 
     #[test]
     fn startup_is_silent_then_disconnect_and_reconnect_notify() {

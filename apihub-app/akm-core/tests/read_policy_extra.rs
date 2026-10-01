@@ -69,7 +69,7 @@ impl HidSource for Src {
     }
 }
 
-const BCM: &str = "HID_ID=0005:000005AC:00000256\nHID_NAME=Kb\nHID_UNIQ=04:db:56:ca:42:ee\n";
+const BCM: &str = "HID_ID=0005:000005AC:00000256\nHID_NAME=Kb\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n";
 
 #[test]
 fn constants_are_the_documented_policy() {

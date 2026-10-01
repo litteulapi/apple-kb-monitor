@@ -183,7 +183,7 @@ mod tests {
         }
     }
 
-    const MAC: &str = "04:DB:56:CA:42:EE";
+    const MAC: &str = "AA:BB:CC:DD:EE:F1";
 
     #[test]
     fn capacity_parsing() {
@@ -208,33 +208,33 @@ mod tests {
 
     #[test]
     fn mac_normalisation_is_strict() {
-        assert_eq!(normalize_mac(MAC).as_deref(), Some("04:db:56:ca:42:ee"));
+        assert_eq!(normalize_mac(MAC).as_deref(), Some("aa:bb:cc:dd:ee:f1"));
         assert_eq!(
-            normalize_mac("04:db:56:ca:42:ee").as_deref(),
-            Some("04:db:56:ca:42:ee")
+            normalize_mac("aa:bb:cc:dd:ee:f1").as_deref(),
+            Some("aa:bb:cc:dd:ee:f1")
         );
-        assert!(normalize_mac("04:db:56:ca:42").is_none());
-        assert!(normalize_mac("04:db:56:ca:42:zz").is_none());
+        assert!(normalize_mac("aa:bb:cc:dd:ee").is_none());
+        assert!(normalize_mac("aa:bb:cc:dd:ee:zz").is_none());
         assert!(normalize_mac("../../etc:passwd:x:y:z:1").is_none());
         assert!(normalize_mac("").is_none());
     }
 
     #[test]
     fn name_matching() {
-        let m = "04:db:56:ca:42:ee";
-        assert!(mac_matches_name("hid-04:db:56:ca:42:ee-battery", m));
-        assert!(mac_matches_name("hid-04:db:56:ca:42:ee-battery-71", m));
-        assert!(mac_matches_name("HID-04:DB:56:CA:42:EE-BATTERY-71", m));
-        assert!(!mac_matches_name("hid-04:db:56:ca:42:ee-battery-", m));
-        assert!(!mac_matches_name("hid-04:db:56:ca:42:ee-battery-x1", m));
-        assert!(!mac_matches_name("hid-04:db:56:ca:42:ef-battery-71", m));
+        let m = "aa:bb:cc:dd:ee:f1";
+        assert!(mac_matches_name("hid-aa:bb:cc:dd:ee:f1-battery", m));
+        assert!(mac_matches_name("hid-aa:bb:cc:dd:ee:f1-battery-71", m));
+        assert!(mac_matches_name("HID-AA:BB:CC:DD:EE:F1-BATTERY-71", m));
+        assert!(!mac_matches_name("hid-aa:bb:cc:dd:ee:f1-battery-", m));
+        assert!(!mac_matches_name("hid-aa:bb:cc:dd:ee:f1-battery-x1", m));
+        assert!(!mac_matches_name("hid-aa:bb:cc:dd:ee:ef-battery-71", m));
         assert!(!mac_matches_name("BAT0", m));
     }
 
     #[test]
     fn reads_by_name_fallback() {
         let t = Tmp::new();
-        let d = "class/power_supply/hid-04:db:56:ca:42:ee-battery-71";
+        let d = "class/power_supply/hid-aa:bb:cc:dd:ee:f1-battery-71";
         t.write(&format!("{d}/capacity"), "90\n");
         t.write(&format!("{d}/status"), "Discharging\n");
         t.write(&format!("{d}/present"), "1\n");
@@ -265,7 +265,7 @@ mod tests {
         let t = Tmp::new();
         t.write(
             "bus/hid/devices/0005:05AC:0256.0014/uevent",
-            "HID_ID=0005:000005AC:00000256\nHID_UNIQ=04:db:56:ca:42:ee\n",
+            "HID_ID=0005:000005AC:00000256\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n",
         );
         // Name the fallback would never match.
         t.write(
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn missing_status_is_unknown_and_bad_capacity_is_none() {
         let t = Tmp::new();
-        let d = "class/power_supply/hid-04:db:56:ca:42:ee-battery";
+        let d = "class/power_supply/hid-aa:bb:cc:dd:ee:f1-battery";
         t.write(&format!("{d}/capacity"), "40\n");
         assert_eq!(
             kernel_battery_in(&t.0, MAC).unwrap().status,
@@ -301,7 +301,7 @@ mod tests {
     fn absent_device_and_missing_tree_give_none() {
         let t = Tmp::new();
         assert!(kernel_battery_in(&t.0, MAC).is_none());
-        let d = "class/power_supply/hid-04:db:56:ca:42:ee-battery-71";
+        let d = "class/power_supply/hid-aa:bb:cc:dd:ee:f1-battery-71";
         t.write(&format!("{d}/capacity"), "90\n");
         t.write(&format!("{d}/present"), "0\n");
         assert!(kernel_battery_in(&t.0, MAC).is_none());
@@ -309,7 +309,7 @@ mod tests {
     }
 
     /// Live read-only check against the real kernel tree:
-    /// `KB_MAC=04:DB:56:CA:42:EE cargo test -- --ignored live_kernel_battery --nocapture`
+    /// `KB_MAC=AA:BB:CC:DD:EE:F1 cargo test -- --ignored live_kernel_battery --nocapture`
     #[test]
     #[ignore]
     fn live_kernel_battery() {

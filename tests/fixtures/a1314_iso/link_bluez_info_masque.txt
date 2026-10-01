@@ -1,5 +1,5 @@
 [General]
-Name=Clavier de maria #1
+Name=Clavier de alice #1
 Class=0x002540
 SupportedTechnologies=BR/EDR;
 Trusted=true
@@ -7,7 +7,7 @@ Blocked=false
 CablePairing=false
 WakeAllowed=true
 Services=00001124-0000-1000-8000-00805f9b34fb;00001200-0000-1000-8000-00805f9b34fb;
-Alias=Clavier de maria #1
+Alias=Clavier de alice #1
 
 [LinkKey]
 Key=<masqué>

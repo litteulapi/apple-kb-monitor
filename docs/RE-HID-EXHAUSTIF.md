@@ -1,6 +1,6 @@
 # Rétro-ingénierie HID exhaustive — A1314 ISO (BCM2042)
 
-Date : 2026-10-01. Clavier : A1314 ISO « Clavier de maria #1 », `04:DB:56:CA:42:EE`, `0005:05AC:0256`,
+Date : 2026-10-01. Clavier : A1314 ISO « Clavier de alice #1 », `AA:BB:CC:DD:EE:F1`, `0005:05AC:0256`,
 bcdDevice `0x0050`, `/dev/hidraw7`, BlueZ 5.87, noyau 7.1.13. Suite de `HARDWARE-RAPPORTS-HID.md`
 (carte des 27 rapports Feature) et de `AUDIT-DECODAGE-HID.md`.
 

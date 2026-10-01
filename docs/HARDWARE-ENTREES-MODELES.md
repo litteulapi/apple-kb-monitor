@@ -1,7 +1,7 @@
 # Entrées clavier et couverture des modèles
 
 Audit du 2026-10-01, PC01 (Manjaro, noyau 7.1.13, keyd v2.6.0, BlueZ 5.87), clavier réel
-A1314 ISO « Clavier de maria #1 » `04:DB:56:CA:42:EE` (`0005:05AC:0256`, pilote `apple`).
+A1314 ISO « Clavier de alice #1 » `AA:BB:CC:DD:EE:F1` (`0005:05AC:0256`, pilote `apple`).
 Base de code : `main` @ `a2b7359`. Branche du livrable : `re/entrees-modeles`.
 
 **Méthode : lecture seule.** Aucune écriture sur le clavier (ni SET_REPORT, ni rapport de sortie,

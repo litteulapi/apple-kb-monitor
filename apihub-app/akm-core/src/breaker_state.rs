@@ -12,7 +12,7 @@
 //! ```text
 //! $XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state      (= /run/user/<uid>/…)
 //! schema=2
-//! mac=04:DB:56:CA:42:EE
+//! mac=AA:BB:CC:DD:EE:F1
 //! open=1
 //! counter=3
 //! written_unix=1790000000
@@ -622,7 +622,7 @@ mod tests {
     use super::*;
     use std::time::Instant;
 
-    const KB: &str = "04:DB:56:CA:42:EE";
+    const KB: &str = "AA:BB:CC:DD:EE:F1";
 
     fn st(open: bool, counter: u32, written: u64) -> BreakerState {
         BreakerState {
@@ -641,7 +641,7 @@ mod tests {
         let text = s.render();
         assert_eq!(
             text,
-            "schema=2\nmac=04:DB:56:CA:42:EE\nopen=1\ncounter=3\nwritten_unix=1790000000\npid=4242\nstarttime=777\n"
+            "schema=2\nmac=AA:BB:CC:DD:EE:F1\nopen=1\ncounter=3\nwritten_unix=1790000000\npid=4242\nstarttime=777\n"
         );
         assert_eq!(BreakerState::parse(&text), Ok(s.clone()));
         let none = BreakerState {
@@ -651,7 +651,7 @@ mod tests {
         assert_eq!(BreakerState::parse(&none.render()), Ok(none));
         assert_eq!(
             BreakerState::parse(
-                "schema=1\nmac=04:db:56:ca:42:ee\nopen=0\ncounter=0\nwritten_unix=5\npid=1\n"
+                "schema=1\nmac=aa:bb:cc:dd:ee:f1\nopen=0\ncounter=0\nwritten_unix=5\npid=1\n"
             )
             .unwrap()
             .mac
@@ -665,7 +665,7 @@ mod tests {
             "schema=1\nmac=-\nopen=0\ncounter=0\nwritten_unix=5\n",
             "schema=1\nmac=-\nopen=0\ncounter=0\nwritten_unix=5\npid=1\nextra=1\n",
             "schema=1\nmac=-\nopen=0\nopen=0\ncounter=0\nwritten_unix=5\npid=1\n",
-            "schema=1\nmac=04:DB:56:CA:42\nopen=0\ncounter=0\nwritten_unix=5\npid=1\n",
+            "schema=1\nmac=AA:BB:CC:DD:EE\nopen=0\ncounter=0\nwritten_unix=5\npid=1\n",
             "schema=1\nmac=-\nopen=0\ncounter=-1\nwritten_unix=5\npid=1\n",
             "schema=1\nmac=-\nopen=0\ncounter=99999999999\nwritten_unix=5\npid=1\n",
             "schema=1\nmac=-\nopen=0\ncounter=0\nwritten_unix=5\npid=1\nstarttime=3\n",
@@ -698,7 +698,7 @@ mod tests {
         assert_eq!(s.age(900), Duration::ZERO, "future write = fresh");
         assert!(!s.is_stale(1000 + STALE_AFTER.as_secs()));
         assert!(s.is_stale(1001 + STALE_AFTER.as_secs()));
-        assert!(s.concerns("04:db:56:ca:42:ee") && s.concerns(KB));
+        assert!(s.concerns("aa:bb:cc:dd:ee:f1") && s.concerns(KB));
         assert!(!s.concerns("11:22:33:44:55:66"));
         assert!(!BreakerState { mac: None, ..s }.concerns(KB));
         assert!(REFRESH < STALE_AFTER);

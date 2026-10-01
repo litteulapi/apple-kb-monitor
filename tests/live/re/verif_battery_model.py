@@ -12,7 +12,7 @@ usage: verif_battery_model.py [--mv 2950 ...]
 """
 import argparse
 
-TABLE_0x5A = [2954, 2506, 2404, 2054]  # mV, mesuré sur l'unité 04:DB:56:CA:42:EE
+TABLE_0x5A = [2954, 2506, 2404, 2054]  # mV, mesuré sur l'unité AA:BB:CC:DD:EE:F1
 LEVELS = [100, 75, 50, 25]
 
 # DoD % -> V/élément (faible débit)

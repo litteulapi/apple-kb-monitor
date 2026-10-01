@@ -478,16 +478,16 @@ mod tests {
     use crate::power::BatteryStatus;
     use std::cell::{Cell, RefCell};
 
-    const UEVENT: &str = "DRIVER=apple\nHID_ID=0005:000005AC:00000256\nHID_NAME=Clavier de maria #1\nHID_UNIQ=04:db:56:ca:42:ee\n";
+    const UEVENT: &str = "DRIVER=apple\nHID_ID=0005:000005AC:00000256\nHID_NAME=Clavier de alice #1\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n";
 
     /// [mesuré] Real frames of the A1314 ISO (2026-10-01, exact ioctl
     /// lengths), 0x4C redacted to zeros.
     const REAL_FRAMES: &str = include_str!("../../../tests/live/re/a1314_iso_frames.hex");
 
-    /// Host address bytes of 0x4C (= `HID_PHYS` 6c:94:66:52:7c:0d, documented in
+    /// Host address bytes of 0x4C (= `HID_PHYS` aa:bb:cc:dd:ee:f2, documented in
     /// the audit), unknown bytes kept redacted, then poisoned with a marker.
     const REAL_4C_HOST_ONLY: [u8; 20] = [
-        0x4C, 0x03, 0x0D, 0x7C, 0x52, 0x66, 0x94, 0x6C, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0x4C, 0x03, 0xF2, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
 
     fn real() -> Fixture {
@@ -535,7 +535,7 @@ mod tests {
         assert_eq!(r.battery.percentage_estimate, Some(99.9));
         assert_eq!(r.battery.percentage_interpolated, Some(99.9));
         assert_eq!(r.firmware.version.as_deref(), Some("0x0050"));
-        assert_eq!(r.device.name.as_deref(), Some("Clavier de maria #1"));
+        assert_eq!(r.device.name.as_deref(), Some("Clavier de alice #1"));
         // #131 / #132: kept raw, never interpreted.
         assert_eq!(r.raw.get("0xff").map(String::as_str), Some("0baf01"));
         assert_eq!(r.raw.get("0x46").map(String::as_str), Some("af0b"));
@@ -569,7 +569,7 @@ mod tests {
         decode_bcm2042(&f, &mut r);
         assert_eq!(
             r.bluetooth.paired_host_addr.as_deref(),
-            Some("6C:94:66:52:7C:0D")
+            Some("AA:BB:CC:DD:EE:F2")
         );
         assert!(!r.raw.contains_key("0x4c"));
         let json = serde_json::to_string(&r).unwrap().to_lowercase();
@@ -792,7 +792,7 @@ mod tests {
         let r = build_report(UEVENT, None, &full_fixture(), KbWake::default()).unwrap();
         assert_eq!(r.battery_pct(), Some(99.0));
         assert_eq!(r.battery.percentage_fine, Some(99.0));
-        assert_eq!(r.device.mac.as_deref(), Some("04:DB:56:CA:42:EE"));
+        assert_eq!(r.device.mac.as_deref(), Some("AA:BB:CC:DD:EE:F1"));
         assert!(r.device.model.as_deref().unwrap().contains("A1314"));
         // HID name wins over the uevent name.
         assert_eq!(r.device.name.as_deref(), Some("Apple Wireless Keyboard"));

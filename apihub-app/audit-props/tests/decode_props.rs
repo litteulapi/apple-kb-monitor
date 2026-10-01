@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::io;
 use std::time::Instant;
 
-const UEVENT: &str = "DRIVER=apple\nHID_ID=0005:000005AC:00000256\nHID_NAME=Clavier\nHID_UNIQ=04:db:56:ca:42:ee\n";
+const UEVENT: &str = "DRIVER=apple\nHID_ID=0005:000005AC:00000256\nHID_NAME=Clavier\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n";
 const REAL_FRAMES: &str = include_str!("../../../tests/live/re/a1314_iso_frames.hex");
 
 /// Ids lus par le décodeur + quelques ids hors table.

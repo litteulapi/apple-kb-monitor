@@ -963,8 +963,8 @@ mod tests {
     use akm_core::machine::{Action as MAction, Machine};
     use akm_core::recovery::{Health, MIN_SPACING};
 
-    const MAC: &str = "04:DB:56:CA:42:EE";
-    const PATH: &str = "/org/bluez/hci0/dev_04_DB_56_CA_42_EE";
+    const MAC: &str = "AA:BB:CC:DD:EE:F1";
+    const PATH: &str = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_F1";
 
     /// Fake BlueZ + desktop + acquisition machine (the real `Machine`).
     struct Fake {
@@ -1006,7 +1006,7 @@ mod tests {
         DevInfo {
             path: PATH.into(),
             mac: MAC.into(),
-            name: "Clavier de maria #1".into(),
+            name: "Clavier de alice #1".into(),
             connected,
             paired: true,
         }
@@ -1222,7 +1222,7 @@ mod tests {
         k.bus().world = vec![];
         k.handle(KMsg::Removed(PATH.into()), t1);
         assert!(k.status(t1).is_empty(), "ghost keyboard gone immediately");
-        assert_eq!(k.bus().removed, ["Clavier de maria #1"]);
+        assert_eq!(k.bus().removed, ["Clavier de alice #1"]);
         let t = run_for(&mut k, t1, 3600);
         assert!(k.bus().connects.is_empty(), "no reconnection to a forgotten device");
         assert!(k.bus().notes.is_empty(), "no re-pairing notice: {:?}", k.bus().notes);

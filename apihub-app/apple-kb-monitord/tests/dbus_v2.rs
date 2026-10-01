@@ -25,8 +25,8 @@ use zbus::zvariant::{OwnedObjectPath, OwnedValue};
 use zbus::MatchRule;
 
 const INNER: &str = "AKM_DBUS_V2_INNER";
-const MAC: &str = "04:DB:56:CA:42:EE";
-const DEV: &str = "/com/agenceapi/AppleKbMonitor1/devices/04_DB_56_CA_42_EE";
+const MAC: &str = "AA:BB:CC:DD:EE:F1";
+const DEV: &str = "/com/agenceapi/AppleKbMonitor1/devices/AA_BB_CC_DD_EE_F1";
 
 #[derive(Default)]
 struct FakeSettings(Mutex<HashMap<&'static str, i32>>);

@@ -26,10 +26,10 @@ impl Rng {
 
 const ATOMS: &[&str] = &[
     "\n", "\n", "\n", " ", "#", "=", ":", "*", "\\", "\"", "\0", "\r", "\t", "é", "0", "1", "3", "9", "a", "f", "F",
-    "A", "schema", "mac", "open", "counter", "written_unix", "pid", "enabled", "true", "false", "-", "04:DB:56:CA:42:EE",
+    "A", "schema", "mac", "open", "counter", "written_unix", "pid", "enabled", "true", "false", "-", "AA:BB:CC:DD:EE:F1",
     "evdev:input:b0005v05ACp0256*", "evdev:input:b0003v05ACp0256*", "evdev:*", " KEYBOARD_KEY_7003f=f6", " KEYBOARD_KEY_c00b8=delete",
     " KEYBOARD_KEY_70029=power", " KEYBOARD_KEY_1=a", "RUN+=\"/bin/sh\"", "# profile: x", "HID_ID=0005:000005AC:00000256",
-    "HID_UNIQ=04:db:56:ca:42:ee", "HID_NAME=x", "999999999999", "18446744073709551615", "4294967296", "-1",
+    "HID_UNIQ=aa:bb:cc:dd:ee:f1", "HID_NAME=x", "999999999999", "18446744073709551615", "4294967296", "-1",
 ];
 
 fn gen(r: &mut Rng, header: Option<&str>) -> String {
@@ -48,7 +48,7 @@ fn gen(r: &mut Rng, header: Option<&str>) -> String {
 fn breaker_state_parse_never_panics_and_roundtrips() {
     let mut r = Rng(0x9e37_79b9_7f4a_7c15);
     let mut ok = 0;
-    const VALS: &[&str] = &["0", "1", "2", "3", "-", "04:DB:56:CA:42:EE", "04:db:56:ca:42:ee", "999999999999", "4294967296", "x", "", " 1", "1 "];
+    const VALS: &[&str] = &["0", "1", "2", "3", "-", "AA:BB:CC:DD:EE:F1", "aa:bb:cc:dd:ee:f1", "999999999999", "4294967296", "x", "", " 1", "1 "];
     for i in 0..200_000 {
         // Une entrée sur deux part d'un état valide dont les champs sont mutés.
         let s = if i % 2 == 0 {

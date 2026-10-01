@@ -1,6 +1,6 @@
 {
  "_meta": {
-  "device": "A1314 ISO 05AC:0256 bcdDevice 0x0050, 04:DB:56:CA:42:EE, /dev/hidraw7, BlueZ 5.87, noyau 7.1.13",
+  "device": "A1314 ISO 05AC:0256 bcdDevice 0x0050, AA:BB:CC:DD:EE:F1, /dev/hidraw7, BlueZ 5.87, noyau 7.1.13",
   "errno": "EINVAL longueur 1 = refus local du noyau (hidraw_get_report count<2, aucun trafic) ; EIO rapide = HANDSHAKE d'erreur du clavier (voir exhaustive_handshake_20261001.json)",
   "masking": "0x4C : longueur + 2 premiers octets, SHA-256/8 seulement du rapport complet (20 o) ; Input 0x01 : forme seule (touches jamais conservées)",
   "source": "tests/live/re/exhaustive_probe.py (HIDIOCG* seul, O_RDONLY, 11 longueurs de tampon, 30 ms entre requêtes)"

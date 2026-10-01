@@ -36,7 +36,7 @@ Apple's driver stops **every** emission after three consecutive silences, HID_CO
 ```text
 /run/user/<uid>/apple-kb-monitor/breaker.state      ($XDG_RUNTIME_DIR, next to hid.lock)
 schema=2                     (schema 1 = without starttime, still read)
-mac=04:DB:56:CA:42:EE        (keyboard followed, or -)
+mac=AA:BB:CC:DD:EE:F1        (keyboard followed, or -)
 open=1                       (R3 flag)
 counter=3                    (consecutive silences)
 written_unix=1790000000
@@ -107,9 +107,9 @@ Dry run on PC01 (BlueZ 5.87, `uhid`, kernel 7.1, Yama 1), 2026-10-01, read-only:
 ```
 SUSPEND (0x13) --dry-run
 bluetoothd pid 1144 (/usr/lib/bluetooth/bluetoothd): 11 L2CAP socket(s)
-  04:DB:56:CA:42:EE fd 31: psm local 0x0011 peer 0x0011 cid 0x0041 state connected (hci handle 0x0100)
-  04:DB:56:CA:42:EE fd 32: psm local 0x0013 peer 0x0013 cid 0x0042 state connected (hci handle 0x0100)
-04:DB:56:CA:42:EE (Apple Wireless Keyboard (A1314, aluminum, ISO) 0x0256): pid 1144 fd 31 psm 0x0011 hci 0x0100 byte 0x13 SUSPEND: NOT sent (--dry-run)
+  AA:BB:CC:DD:EE:F1 fd 31: psm local 0x0011 peer 0x0011 cid 0x0041 state connected (hci handle 0x0100)
+  AA:BB:CC:DD:EE:F1 fd 32: psm local 0x0013 peer 0x0013 cid 0x0042 state connected (hci handle 0x0100)
+AA:BB:CC:DD:EE:F1 (Apple Wireless Keyboard (A1314, aluminum, ISO) 0x0256): pid 1144 fd 31 psm 0x0011 hci 0x0100 byte 0x13 SUSPEND: NOT sent (--dry-run)
 ```
 
 ## Limits

@@ -448,7 +448,7 @@ mod tests {
             c(&["--reset"]).unwrap().command,
             Command::Rename { name: None, reset: true, .. }
         ));
-        assert!(c(&["--mac", "04:DB:56:CA:42:EE", "x"]).is_ok());
+        assert!(c(&["--mac", "AA:BB:CC:DD:EE:F1", "x"]).is_ok());
         assert!(c(&[]).is_err(), "a name or --reset is required");
         assert!(c(&["x", "--reset"]).is_err());
         assert!(c(&["   "]).is_err());
@@ -459,7 +459,7 @@ mod tests {
     #[test]
     fn rename_device_name_arguments() {
         let c = |a: &[&str]| Cli::try_parse_from([&["akmctl", "rename"], a].concat());
-        match c(&["--device-name", "Clavier de maria #1"])
+        match c(&["--device-name", "Clavier de alice #1"])
             .unwrap()
             .command
         {
@@ -474,7 +474,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(name, None);
-                assert_eq!(device_name, Some(Some("Clavier de maria #1".into())));
+                assert_eq!(device_name, Some(Some("Clavier de alice #1".into())));
                 assert!(!dry_run && !check && !write_device_name && !show && restore.is_none());
             }
             _ => panic!(),

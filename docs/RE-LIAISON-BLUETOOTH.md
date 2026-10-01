@@ -1,7 +1,7 @@
 # Rétro-ingénierie de la liaison Bluetooth du clavier Apple A1314 (BR/EDR, HID)
 
-Clavier : Apple A1314 ISO « Clavier de maria #1 » `04:DB:56:CA:42:EE` (puce Broadcom BCM2042 selon les
-sources publiques). Hôte : PC01, Intel AX201 `hci0` `6C:94:66:52:7C:0D` (USB `8087:0026`), BlueZ 5.87,
+Clavier : Apple A1314 ISO « Clavier de alice #1 » `AA:BB:CC:DD:EE:F1` (puce Broadcom BCM2042 selon les
+sources publiques). Hôte : PC01, Intel AX201 `hci0` `AA:BB:CC:DD:EE:F2` (USB `8087:0026`), BlueZ 5.87,
 noyau 7.1.13-2-MANJARO. Mesures du 2026-10-01, liaison établie à 11:33 (ré-appairage), **en lecture seule**.
 
 Complète [RECONNEXION-PAIRAGE.md](RECONNEXION-PAIRAGE.md) (branche `fix/reconnexion-veille`, #142) :
@@ -39,7 +39,7 @@ sans réponse, coupure par supervision 20 s, plus aucun *page scan* ensuite) : �
 
 ## 1. SDP (couche service)
 
-Commande : `sudo -n cat /var/lib/bluetooth/6C:94:66:52:7C:0D/cache/04:DB:56:CA:42:EE` puis
+Commande : `sudo -n cat /var/lib/bluetooth/AA:BB:CC:DD:EE:F2/cache/AA:BB:CC:DD:EE:F1` puis
 `tests/live/re/link_sdp_decode.py tests/fixtures/a1314_iso/link_sdp_cache.txt` → `link_sdp_decoded.txt`.
 `sdptool` n'est plus fourni par `bluez-utils` 5.87 : le cache de BlueZ (rempli lors du ré-appairage de
 11:33) est la seule source passive ; une nouvelle requête SDP (`bluetoothctl` ne sait pas en forcer une sans
@@ -197,7 +197,7 @@ Délai `Exit Sniff Mode` → `Mode Change (Active)`, selon le temps passé en sn
 | Mesure | Valeur | Étiquette |
 |---|---|---|
 | RSSI (`HCI Read RSSI`, via `MGMT Get Connection Information`, rssi-helper toutes les 45 s) | 0 ×30, −1 ×3, −2 ×2, −3 ×2 | [mesuré] |
-| Puissance d'émission **de l'hôte** sur ce lien | 8 dBm, max 8 dBm | [mesuré] `sudo -n btmgmt --index 0 conn-info -t 0 04:DB:56:CA:42:EE` |
+| Puissance d'émission **de l'hôte** sur ce lien | 8 dBm, max 8 dBm | [mesuré] `sudo -n btmgmt --index 0 conn-info -t 0 AA:BB:CC:DD:EE:F1` |
 | Puissance d'émission du clavier | inconnue (classe 2 typique, 0 à +4 dBm) | [source BM2042] |
 
 * En BR/EDR, `Read RSSI` ne renvoie **pas** des dBm absolus : c'est l'écart (dB) à la *Golden Receive Power

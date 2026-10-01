@@ -7,7 +7,7 @@ faudrait pour **obtenir le firmware** du clavier Apple A1314 ISO (puce Broadcom 
 matérielle. Complète `RE-FIRMWARE-MAINTENANCE.md` (mise à jour / bootloader), `HARDWARE-RAPPORTS-HID.md`
 et `RE-HID-EXHAUSTIF.md` (carte des rapports HID), qui restent les sources internes de référence.
 
-Matériel visé : A1314 ISO « Clavier de maria #1 », `04:DB:56:CA:42:EE`, `0005:05AC:0256`,
+Matériel visé : A1314 ISO « Clavier de alice #1 », `AA:BB:CC:DD:EE:F1`, `0005:05AC:0256`,
 bcdDevice `0x0050`, propriété du gérant → analyse d'interopérabilité **licite** sur SON matériel.
 Aucune opération de ce document ne vise à contourner la protection d'un tiers ; rien n'y est exécuté.
 
@@ -95,7 +95,7 @@ Ghidra** et ne pose pas de difficulté de principe (§4).
 - **Matrice de scan** : sur un module BCM2042 8×12, un contributeur a situé la table de matrice **« around
   0x148D »** de l'EEPROM. **[source publique]** keyglove. → l'EEPROM contient bien la **config clavier**.
 - **[déduction]** Config BCM2042 typique en EEPROM : table de matrice/hot-keys, **nom du périphérique**
-  (cohérent avec nos rapports `0x51-0x54` « Clavier de maria #1 »), paramètres radio, et souvent
+  (cohérent avec nos rapports `0x51-0x54` « Clavier de alice #1 »), paramètres radio, et souvent
   **BD_ADDR** et d'éventuels **patchs RAM** chargés au boot.
 - **Appairage / clés de lien** : **[spéculation]**. Le rapport HID `0x4C` expose l'adresse de l'hôte +
   12 octets de forte entropie (voir `HARDWARE-RAPPORTS-HID.md` §2bis) ; **si** ce bond est persistant, il

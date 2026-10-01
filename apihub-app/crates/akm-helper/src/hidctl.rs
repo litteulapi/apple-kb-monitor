@@ -119,7 +119,7 @@ pub fn check_byte(b: u8) -> Result<u8, String> {
     }
 }
 
-/// Bluetooth address, canonical order (as printed: `04:DB:56:CA:42:EE`).
+/// Bluetooth address, canonical order (as printed: `AA:BB:CC:DD:EE:F1`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Mac(pub [u8; 6]);
 
@@ -1047,7 +1047,7 @@ pub fn syslog(warn: bool, msg: &str) {
 mod tests {
     use super::*;
 
-    const KB: Mac = Mac([0x04, 0xdb, 0x56, 0xca, 0x42, 0xee]);
+    const KB: Mac = Mac([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf1]);
     const OTHER: Mac = Mac([0x11, 0x22, 0x33, 0x44, 0x55, 0x66]);
 
     fn l2(mac: Mac, local: u16, peer: u16, connected: bool) -> SockInfo {
@@ -1070,7 +1070,7 @@ mod tests {
         let s = describe_socket(KB, 7, &l2(KB, 0, PSM_HID_CONTROL, true));
         assert_eq!(
             s,
-            "  04:DB:56:CA:42:EE fd 7: psm local 0x0000 peer 0x0011 cid 0x0040 state connected (hci handle 0x000b) mtu out 672 in 672"
+            "  AA:BB:CC:DD:EE:F1 fd 7: psm local 0x0000 peer 0x0011 cid 0x0040 state connected (hci handle 0x000b) mtu out 672 in 672"
         );
         let mut si = l2(KB, 0, PSM_HID_CONTROL, false);
         si.omtu = None;
@@ -1229,46 +1229,46 @@ mod tests {
 
     #[test]
     fn mac_parsing_is_strict() {
-        assert_eq!(Mac::parse("04:db:56:ca:42:ee"), Ok(KB));
+        assert_eq!(Mac::parse("aa:bb:cc:dd:ee:f1"), Ok(KB));
         assert_eq!(
-            Mac::parse("04:DB:56:CA:42:EE").unwrap().to_string(),
-            "04:DB:56:CA:42:EE"
+            Mac::parse("AA:BB:CC:DD:EE:F1").unwrap().to_string(),
+            "AA:BB:CC:DD:EE:F1"
         );
         for bad in [
             "",
-            "04:db:56:ca:42",
-            "04-db-56-ca-42-ee",
-            "04:db:56:ca:42:ee ",
-            "0g:db:56:ca:42:ee",
-            "04:db:56:ca:42:eee",
-            "+4:db:56:ca:42:ee",
+            "aa:bb:cc:dd:ee",
+            "aa-bb-cc-dd-ee-f1",
+            "aa:bb:cc:dd:ee:f1 ",
+            "0g:bb:cc:dd:ee:f1",
+            "aa:bb:cc:dd:ee:f1e",
+            "+a:bb:cc:dd:ee:f1",
         ] {
             assert!(Mac::parse(bad).is_err(), "{bad:?}");
         }
         assert_eq!(
-            Mac::from_bdaddr_le([0xee, 0x42, 0xca, 0x56, 0xdb, 0x04]),
+            Mac::from_bdaddr_le([0xf1, 0xee, 0xdd, 0xcc, 0xbb, 0xaa]),
             KB
         );
     }
 
     #[test]
     fn keyboards_come_from_the_model_table_only() {
-        let a1314 = "HID_ID=0005:000005AC:00000256\nHID_NAME=kb\nHID_UNIQ=04:db:56:ca:42:ee\n";
+        let a1314 = "HID_ID=0005:000005AC:00000256\nHID_NAME=kb\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n";
         assert_eq!(
             keyboard_from_uevent(a1314).map(|k| (k.mac, k.pid)),
             Some((KB, 0x0256))
         );
         // USB bus, unknown product, Apple mouse, missing MAC: refused
         assert!(keyboard_from_uevent(
-            "HID_ID=0003:000005AC:00000256\nHID_UNIQ=04:db:56:ca:42:ee\n"
+            "HID_ID=0003:000005AC:00000256\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n"
         )
         .is_none());
         assert!(keyboard_from_uevent(
-            "HID_ID=0005:000005AC:0000030D\nHID_UNIQ=04:db:56:ca:42:ee\n"
+            "HID_ID=0005:000005AC:0000030D\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n"
         )
         .is_none());
         assert!(keyboard_from_uevent(
-            "HID_ID=0005:0000046D:0000B342\nHID_UNIQ=04:db:56:ca:42:ee\n"
+            "HID_ID=0005:0000046D:0000B342\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n"
         )
         .is_none());
         assert!(keyboard_from_uevent("HID_ID=0005:000005AC:00000256\nHID_UNIQ=\n").is_none());

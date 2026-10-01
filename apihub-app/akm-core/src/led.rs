@@ -485,7 +485,7 @@ mod tests {
             "0005:000005AC:00000256",
             "input7",
             "event7",
-            "Clavier de maria #1",
+            "Clavier de alice #1",
         );
         f.add_hid_keyboard(
             "0003:046D:C31C.0001",
@@ -546,7 +546,7 @@ mod tests {
             "0005:000005AC:00000256",
             "input7",
             "event7",
-            "Clavier de maria #1",
+            "Clavier de alice #1",
         );
         let dev = Path::new("/dev");
         let conf = f.keyd_dir(Some(KEYD_0256));
@@ -603,13 +603,13 @@ mod tests {
         f.set_uniq(
             "0005:05AC:0256.0014",
             "0005:000005AC:00000256",
-            "04:db:56:ca:42:ee",
+            "aa:bb:cc:dd:ee:f1",
         );
         f.add_keyd_virtual();
         let conf = f.keyd_dir(Some(KEYD_0256));
         let dev = Path::new("/dev");
         assert_eq!(
-            led_target_for_in(&f.0, dev, &conf, Some("04:DB:56:CA:42:EE")),
+            led_target_for_in(&f.0, dev, &conf, Some("AA:BB:CC:DD:EE:F1")),
             Some(LedTarget::KeydVirtual(PathBuf::from("/dev/input/event99")))
         );
         assert_eq!(

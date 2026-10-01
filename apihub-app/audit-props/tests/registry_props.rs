@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::io;
 use std::time::Instant;
 
-const UEVENT: &str = "DRIVER=apple\nHID_ID=0005:000005AC:00000256\nHID_NAME=Clavier\nHID_UNIQ=04:db:56:ca:42:ee\n";
+const UEVENT: &str = "DRIVER=apple\nHID_ID=0005:000005AC:00000256\nHID_NAME=Clavier\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n";
 
 struct Spy<'a>(&'a Fixture, RefCell<Vec<u8>>);
 impl HidSource for Spy<'_> {

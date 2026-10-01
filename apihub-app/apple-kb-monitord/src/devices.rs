@@ -438,14 +438,14 @@ mod tests {
     #[test]
     fn device_paths() {
         assert_eq!(
-            device_path("04:db:56:CA:42:EE").unwrap().as_str(),
-            "/com/agenceapi/AppleKbMonitor1/devices/04_DB_56_CA_42_EE"
+            device_path("AA:BB:CC:DD:EE:F1").unwrap().as_str(),
+            "/com/agenceapi/AppleKbMonitor1/devices/AA_BB_CC_DD_EE_F1"
         );
         for bad in [
             "",
-            "04:DB:56:CA:42",
-            "04:DB:56:CA:42:EG",
-            "04-DB-56-CA-42-EE",
+            "AA:BB:CC:DD:EE",
+            "AA:BB:CC:DD:EE:EG",
+            "AA-BB-CC-DD-EE-F1",
         ] {
             assert!(device_path(bad).is_none(), "{bad}");
         }
@@ -455,7 +455,7 @@ mod tests {
     fn dev_props_for_this_and_other_keyboards() {
         let mut k = KbReport::default();
         k.battery.percentage_fine = Some(70.0);
-        k.device.mac = Some("04:DB:56:CA:42:EE".into());
+        k.device.mac = Some("AA:BB:CC:DD:EE:F1".into());
         k.device.model = Some("A1314".into());
         k.device.alias = Some("Bureau".into());
         let s = Snapshot {
@@ -471,7 +471,7 @@ mod tests {
             batteries_installed_at: Some(42),
             ..Default::default()
         };
-        let p = DevProps::for_mac(&s, "04:db:56:ca:42:ee", ("", ""));
+        let p = DevProps::for_mac(&s, "aa:bb:cc:dd:ee:f1", ("", ""));
         assert_eq!((p.base.battery, p.base.connected), (70, true));
         assert_eq!((p.empty_at, p.installed_at), (5_000, 42));
         assert_eq!(p.remaining_s(1_000), 4_000);
@@ -497,7 +497,7 @@ mod tests {
             last_update: 777,
             ..s.clone()
         };
-        let q = DevProps::for_mac(&off, "04:DB:56:CA:42:EE", ("", ""));
+        let q = DevProps::for_mac(&off, "AA:BB:CC:DD:EE:F1", ("", ""));
         assert_eq!((q.base.battery, q.base.connected), (70, false));
         assert_eq!((q.empty_at, q.installed_at, q.base.last_update), (5_000, 42, 777));
         assert_eq!(q.remaining_s(1_000), remaining_seconds(&off, 1_000));

@@ -25,8 +25,8 @@ use apple_kb_monitord::settings::{HelperBackend, SetError};
 use zbus::blocking::Connection;
 
 const INNER: &str = "AKM_AUDIT_SEC2_INNER";
-const MAC: &str = "04:DB:56:CA:42:EE";
-const DEV: &str = "/com/agenceapi/AppleKbMonitor1/devices/04_DB_56_CA_42_EE";
+const MAC: &str = "AA:BB:CC:DD:EE:F1";
+const DEV: &str = "/com/agenceapi/AppleKbMonitor1/devices/AA_BB_CC_DD_EE_F1";
 const N: usize = 12;
 
 #[derive(Debug, Default)]

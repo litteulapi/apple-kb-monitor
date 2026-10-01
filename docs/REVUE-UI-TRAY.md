@@ -278,7 +278,7 @@ Les valeurs affichées sont illustratives (sauf 99 %, 2,90 V, ADC 900 et la MAC,
 │  99 %  ▰▰▰▰▰▰▰▰▰▱  alcaline       RSSI −48 dBm  ▂▄▆█       │
 │  Tension 2,903 V   ADC 900        TX 8 dBm               │
 │  Autonomie ≈ 41 j                 Lien 15 ms / 2,0 s      │
-│  Appareil : A1314 · ISO · 04:DB:56:CA:42:EE · fw 0x0050   │
+│  Appareil : A1314 · ISO · AA:BB:CC:DD:EE:F1 · fw 0x0050   │
 └───────────────────────────────────────────────────────────┘
 ```
 

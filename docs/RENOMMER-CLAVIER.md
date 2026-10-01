@@ -6,7 +6,7 @@ Deux noms existent. Le premier est la voie par défaut ; le second est préparé
 |---|---|---|
 | Commande | `akmctl rename <nom>` / `--reset` | `akmctl rename --device-name <nom>` (essai à blanc par défaut), `--show`, `--restore`, `--write-device-name` |
 | Où | BlueZ, `org.bluez.Device1.Alias`, persisté dans `/var/lib/bluetooth/<adaptateur>/<MAC>/info` (`Alias=`) | micrologiciel du clavier (BCM2042) : lu dans `0x51-0x54` (4 × 8 o ASCII), écrit par Apple dans `0x55` `LongDeviceName` (65 o : id + 64) |
-| Valeur actuelle | `alex` (alias BlueZ du gérant) | `Clavier de maria #1` (identique à `HID_NAME` et au nom distant BlueZ) [mesuré, docs/AUDIT-DECODAGE-HID.md] |
+| Valeur actuelle | `alex` (alias BlueZ du gérant) | `Clavier de alice #1` (identique à `HID_NAME` et au nom distant BlueZ) [mesuré, docs/AUDIT-DECODAGE-HID.md] |
 | Visible par | ce poste uniquement (KDE Bluetooth, `bluetoothctl`, tray, widget, `akmctl`) | tout appareil qui s'appaire au clavier |
 | Risque | nul : propriété BlueZ réversible, ni déconnexion ni réappairage | §6 |
 | État | **implémenté, voie par défaut** | **trame établie (E1) ; écriture réelle derrière 3 verrous, verrou 1 fermé par défaut** |
@@ -93,7 +93,7 @@ wire   : 53 55 43 6c 61 76 69 65 72 20 41 70 70 6c 65 20 41 31 33 31 34 20 64 75
 | longueur | 65 octets remis à `setReport` | [désassemblage] `movzbl %r12b,%r8d` `0x4d4b1` |
 | après | aucune autre trame (pas de `0x50`, pas de `0x51-0x54`, aucune lecture) ; Remote Name Request HCI | [désassemblage] `0x4d4e6`-`0x4d4f8` |
 
-La trame d'hypothèse de l'ancien §5.2 (`Clavier de maria #1`) est confirmée octet pour octet ; elle reste un test (`frame_matches_the_documented_reference_byte_for_byte`), plus aucun champ n'est marqué `[hypothèse]`.
+La trame d'hypothèse de l'ancien §5.2 (`Clavier de alice #1`) est confirmée octet pour octet ; elle reste un test (`frame_matches_the_documented_reference_byte_for_byte`), plus aucun champ n'est marqué `[hypothèse]`.
 
 ### 5.3 Inconnues : tranchées et restantes
 

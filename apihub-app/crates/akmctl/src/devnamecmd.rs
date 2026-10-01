@@ -1229,11 +1229,11 @@ mod tests {
     use std::collections::VecDeque;
     use std::rc::Rc;
 
-    const MAC: &str = "04:DB:56:CA:42:EE";
-    /// "Clavier de maria #1", the 4 × 8 bytes of 0x51-0x54 as the daemon caches them.
+    const MAC: &str = "AA:BB:CC:DD:EE:F1";
+    /// "Clavier de alice #1", the 4 × 8 bytes of 0x51-0x54 as the daemon caches them.
     const OLD_HEX: &str = concat!(
         "436c617669657220",
-        "6465206d61726961",
+        "646520616c696365",
         "2023310000000000",
         "0000000000000000"
     );
@@ -1251,7 +1251,7 @@ mod tests {
         let mut k = KbReport::default();
         k.battery.percentage_fine = Some(99.0);
         k.device.mac = Some(MAC.into());
-        k.device.name = Some("Clavier de maria #1".into());
+        k.device.name = Some("Clavier de alice #1".into());
         k.device.name_on_keyboard_hex = raw_hex.map(str::to_string);
         Snapshot {
             connected,
@@ -1422,7 +1422,7 @@ mod tests {
         assert!(devname::preflight(&p).is_empty(), "{p:?}");
         assert_eq!(
             devname::name_from_raw(&cached_raw(&s).unwrap()).unwrap(),
-            "Clavier de maria #1"
+            "Clavier de alice #1"
         );
         // MTU unknown or too small is a pre-flight failure of its own.
         let p = preflight_from(&s, true, true, None);
@@ -1571,7 +1571,7 @@ mod tests {
             assert_eq!(wr[0].0, WriteOp::DeviceName);
             assert_eq!(wr[0].1, want, "{name}: the fixture bytes, exactly");
             assert_eq!(wr[0].1.len(), 65);
-            assert_eq!(w.backups[0].name, "Clavier de maria #1");
+            assert_eq!(w.backups[0].name, "Clavier de alice #1");
             assert!(io.out.contains("✓ Name written and read back identical"));
             assert!(io.out.contains("Switch the keyboard OFF") && io.out.contains("left:"));
             assert!(io.out.contains("reconnected, name read back"));

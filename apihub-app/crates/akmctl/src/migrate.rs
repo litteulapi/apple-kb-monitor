@@ -110,7 +110,7 @@ mod tests {
     use super::*;
 
     const PY: &str = concat!(
-        r#"{"t":"2026-09-01T10:00:00.5","mac":"04:DB:56:CA:42:EE","bat":80,"fine":78,"volt":2.9,"adc":240,"rssi":0}"#, "\n",
+        r#"{"t":"2026-09-01T10:00:00.5","mac":"AA:BB:CC:DD:EE:F1","bat":80,"fine":78,"volt":2.9,"adc":240,"rssi":0}"#, "\n",
         r#"{"t":"2026-09-01T10:05:00","bat":79}"#, "\n",
         r#"{"t":"2026-09-01T10:06:00","event":"wake","flags":["x"],"raw":19}"#, "\n",
         "not json\n",

@@ -264,7 +264,7 @@ mod tests {
         std::fs::create_dir_all(&ps).unwrap();
         let p = SystemProbe::with_sources(Sources { config_dirs: vec![cfg.clone()], power_supply: ps.clone() });
         assert_eq!(p.evaluate(true), (false, 10), "no kernel battery");
-        std::fs::create_dir_all(ps.join("hid-04:db:56:ca:42:ee-battery-71")).unwrap();
+        std::fs::create_dir_all(ps.join("hid-aa:bb:cc:dd:ee:f1-battery-71")).unwrap();
         assert_eq!(p.evaluate(true), (true, 10));
         assert_eq!(p.evaluate(false), (false, 10), "PowerDevil not running");
         std::fs::write(cfg.join("powerdevil.notifyrc"), "[Event/lowperipheralbattery]\nAction=\n").unwrap();

@@ -21,7 +21,7 @@ use zbus::zvariant::{OwnedValue, Value};
 
 const INNER: &str = "AKM_BLUEZ_FORGET_INNER";
 const WAIT: Duration = Duration::from_secs(5);
-const PATH: &str = "/org/bluez/hci0/dev_04_DB_56_CA_42_EE";
+const PATH: &str = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_F1";
 
 struct Device1 {
     connected: bool,
@@ -32,7 +32,7 @@ struct Device1 {
 impl Device1 {
     #[zbus(property)]
     fn address(&self) -> String {
-        "04:DB:56:CA:42:EE".into()
+        "AA:BB:CC:DD:EE:F1".into()
     }
     #[zbus(property)]
     fn alias(&self) -> String {

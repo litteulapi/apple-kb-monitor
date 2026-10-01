@@ -1,6 +1,6 @@
-Device 04:DB:56:CA:42:EE (public)
-	Name: Clavier de maria #1
-	Alias: Clavier de maria #1
+Device AA:BB:CC:DD:EE:F1 (public)
+	Name: Clavier de alice #1
+	Alias: Clavier de alice #1
 	Class: 0x00002540 (9536)
 	Icon: input-keyboard
 	Paired: yes

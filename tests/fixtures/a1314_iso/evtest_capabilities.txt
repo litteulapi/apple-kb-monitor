@@ -1,6 +1,6 @@
 Input driver version is 1.0.1
 Input device ID: bus 0x5 vendor 0x5ac product 0x256 version 0x50
-Input device name: "Clavier de maria #1"
+Input device name: "Clavier de alice #1"
 Supported events:
   Event type 0 (EV_SYN)
   Event type 1 (EV_KEY)

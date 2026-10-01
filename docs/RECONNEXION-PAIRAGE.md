@@ -7,7 +7,7 @@ bugs [#143](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/143
 [#146](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/146) (sondage UPower) ·
 outils [#147](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/147) (`akmctl doctor` / `akmctl repair`).
 
-Matériel : clavier Apple A1314 ISO « Clavier de maria #1 » `04:DB:56:CA:42:EE` (BR/EDR, pairage *legacy*
+Matériel : clavier Apple A1314 ISO « Clavier de alice #1 » `AA:BB:CC:DD:EE:F1` (BR/EDR, pairage *legacy*
 par code PIN, sans SSP), adaptateur Intel AX201 USB `8087:0026` (firmware `ibt-1040-4150`), BlueZ 5.87,
 noyau 7.1.13-2-MANJARO, PC fixe PC01.
 
@@ -40,7 +40,7 @@ clavier **n'écoutait pas** (il dort, ou il appelle lui-même un hôte qui ne lu
 
 * `Paired/Bonded/Trusted = yes`, `LegacyPairing = yes`, `WakeAllowed = yes` **[mesuré]** (`bluetoothctl info`).
 * Clé noyau (`/sys/kernel/debug/bluetooth/hci0/link_keys`) et clé stockée
-  (`/var/lib/bluetooth/6C:94:66:52:7C:0D/04:DB:56:CA:42:EE/info`) : **empreintes SHA-256 identiques**
+  (`/var/lib/bluetooth/AA:BB:CC:DD:EE:F2/AA:BB:CC:DD:EE:F1/info`) : **empreintes SHA-256 identiques**
   (`b4e4395e8b4b…`), type 0 (*combination key* legacy) **[mesuré]**. Aucune désynchronisation au moment de
   la mesure.
 * Écart : `pin_len` = 16 côté noyau, `PINLength=0` dans le fichier **[mesuré]**. Après un redémarrage le
@@ -282,7 +282,7 @@ n'était pas en cause (§4, point 5).
 
 ```sh
 tests/live/reconnect_probe.sh            # btmon passif + état USB + journal, puis :
-#   1. bluetoothctl disconnect 04:DB:56:CA:42:EE   (une seule fois)
+#   1. bluetoothctl disconnect AA:BB:CC:DD:EE:F1   (une seule fois)
 #   2. le gérant attend 60 s puis appuie sur UNE touche
 #   3. le script attend 120 s la reconnexion et classe ce qu'il voit
 ```

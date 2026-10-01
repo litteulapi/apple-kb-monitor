@@ -113,7 +113,7 @@ pub fn metrics(snap: Option<&Snapshot>, fn_mode: Option<u8>) -> String {
 mod tests {
     use super::*;
 
-    const SAMPLE: &str = r#"{"schema":1,"version":28,"connected":true,"remaining_display":"~42 days","keyboard":{"device":{"model":"Apple Wireless Keyboard (A1314)","mac":"04:DB:56:CA:42:EE","alias":"Clavier de maria #1"},"battery":{"percentage":42.0,"voltage":2.46},"radio":{"rssi_dbm":-2}},"last_update":1790000000}"#;
+    const SAMPLE: &str = r#"{"schema":1,"version":28,"connected":true,"remaining_display":"~42 days","keyboard":{"device":{"model":"Apple Wireless Keyboard (A1314)","mac":"AA:BB:CC:DD:EE:F1","alias":"Clavier de alice #1"},"battery":{"percentage":42.0,"voltage":2.46},"radio":{"rssi_dbm":-2}},"last_update":1790000000}"#;
 
     fn snap() -> Snapshot {
         serde_json::from_str(SAMPLE).unwrap()
@@ -147,7 +147,7 @@ mod tests {
         assert_eq!(v["percentage"], 42);
         assert_eq!(
             v["tooltip"],
-            "Clavier de maria #1\nBattery: 42 % (keyboard indication)\nVoltage: 2.46 V (Good)\nSignal: good (\u{2212}2)\nAutonomy: ~42 days"
+            "Clavier de alice #1\nBattery: 42 % (keyboard indication)\nVoltage: 2.46 V (Good)\nSignal: good (\u{2212}2)\nAutonomy: ~42 days"
         );
     }
 
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn metrics_page_is_exact() {
         let m = metrics(Some(&snap()), Some(2));
-        let l = r#"{mac="04:DB:56:CA:42:EE",model="Apple Wireless Keyboard (A1314)"}"#;
+        let l = r#"{mac="AA:BB:CC:DD:EE:F1",model="Apple Wireless Keyboard (A1314)"}"#;
         let expect = format!(
             "# HELP apple_kb_daemon_up 1 if apple-kb-monitord answers on the session bus.\n# TYPE apple_kb_daemon_up gauge\napple_kb_daemon_up 1\n\
 # HELP apple_kb_fnmode hid_apple fnmode (0 disabled, 1 fkeyslast, 2 fkeysfirst, 3 auto).\n# TYPE apple_kb_fnmode gauge\napple_kb_fnmode 2\n\

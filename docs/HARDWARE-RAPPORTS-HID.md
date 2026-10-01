@@ -1,6 +1,6 @@
 # Rapports HID Feature du clavier Apple A1314 (BCM2042) — carte de rétro-ingénierie
 
-Appareil étudié : Apple Wireless Keyboard A1314 ISO « Clavier de maria #1 », `04:DB:56:CA:42:EE`,
+Appareil étudié : Apple Wireless Keyboard A1314 ISO « Clavier de alice #1 », `AA:BB:CC:DD:EE:F1`,
 `0005:05AC:0256`, bcdDevice `0x0050`, pilote noyau `apple`, `/dev/hidraw7`.
 Piles neuves posées le 2026-10-01 vers 03:00 (clavier hors ligne de 02:55 à 03:06, capacité noyau 90 % → 100 %).
 
@@ -63,7 +63,7 @@ Les IDs `0x54`, `0x5C`, `0x5D`, `0xD1`, `0xD8` n'étaient pas dans l'inventaire 
 | `0x4C` | 20 | `4c 03` + 18 octets masqués | 1 octet `0x03` + **adresse BD_ADDR de l'hôte appairé** (6 o, LE) + 12 octets secrets | adresse [mesuré, §2bis] ; 12 o restants SENSIBLES [hypothèse] fragment de clé de lien |
 | `0x4F` | 3 | `4f 50 00` | u16 LE = `0x0050` = version firmware/bcdDevice | = `Modalias usb:v05ACp0256d0050` et « HID v0.50 » du noyau [mesuré] |
 | `0x51` | 9 | `51` + `"Clavier "` | nom, fragment 1/4 (8 o ASCII) | [mesuré] |
-| `0x52` | 9 | `52` + `"de maria"` | nom, fragment 2/4 | [mesuré] |
+| `0x52` | 9 | `52` + `"de alice"` | nom, fragment 2/4 | [mesuré] |
 | `0x53` | 9 | `53` + `" #1"` + NUL | nom, fragment 3/4 | [mesuré] |
 | `0x54` | 9 | `54` + 8 × NUL | nom, fragment 4/4 (vide ici) | [mesuré] ; nom ≤ 32 octets |
 | `0x5A` | 9 | `5a 0b8a 09ca 0964 0806` | 4 × u16 BE : 2954, 2506, 2404, 2054 mV | valeurs [mesuré] ; seuils de décharge [hypothèse forte] |
@@ -87,7 +87,7 @@ Le firmware mélange donc deux conventions ; `0x46` (LE) et `0xFF` (BE) donnent 
 
 ### 2bis. Structure de `0x4C` (sans divulgation)
 
-* **[mesuré]** octets 2 à 7 = `6c:94:66:52:7c:0d` lu à l'envers, c'est-à-dire l'adresse de l'adaptateur
+* **[mesuré]** octets 2 à 7 = `aa:bb:cc:dd:ee:f2` lu à l'envers, c'est-à-dire l'adresse de l'adaptateur
   Bluetooth du PC (`HID_PHYS`), pas celle du clavier. Vérifié par comparaison booléenne, sans afficher
   la suite.
 * **[mesuré]** 12 octets restants : 12 valeurs distinctes sur 12 (forte entropie), empreinte SHA-256
@@ -160,7 +160,7 @@ Constats **[mesuré]** :
 4. **`0xEA`** vaut 98 sauf **une lecture à 0** (04:40:31, `ea00`, longueur correcte) alors que `0x47` et le
    noyau restent à 99 : valeur transitoire (recalcul en cours ?). Tout consommateur doit ignorer un 0 isolé.
    L'historique d'avril 2026 montre aussi des 0 % ponctuels (bug #78, cause différente : lecture en échec).
-5. `0x4C` désigne toujours l'hôte `6c:94:66:52:7c:0d`.
+5. `0x4C` désigne toujours l'hôte `aa:bb:cc:dd:ee:f2`.
 6. Batterie : 99 % noyau/`0x47` sur toute l'heure ; une heure de piles neuves ne suffit pas à voir
    bouger le pourcentage, seule la tension renseigne (cf. #83/#96 pour l'historique long).
 

@@ -191,7 +191,7 @@ def analyze(path):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--mac", default="04:DB:56:CA:42:EE")
+    ap.add_argument("--mac", default="AA:BB:CC:DD:EE:F1")
     ap.add_argument("--dev", help="/dev/hidrawN (sinon trouvé par HID_UNIQ)")
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--scan-once", action="store_true",

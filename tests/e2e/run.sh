@@ -62,7 +62,7 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/akm-e2e.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 fx="$top/tests/fixtures/a1314_iso"
 mac=04:db:56:00:e2:e0
-anon() { sed -e "s/04:db:56:ca:42:ee/$mac/Ig" -e 's/Clavier de maria #1/Clavier de test/' -e 's/6c:94:66:52:7c:0d/00:1a:7d:00:00:01/I' "$1"; }
+anon() { sed -e "s/aa:bb:cc:dd:ee:f1/$mac/Ig" -e 's/Clavier de alice #1/Clavier de test/' -e 's/aa:bb:cc:dd:ee:f2/00:1a:7d:00:00:01/I' "$1"; }
 
 # Fake sysfs: the keyboard (hidraw7) and a mouse (hidraw3, never to be opened).
 s="$work/sys"

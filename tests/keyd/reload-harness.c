@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
 	device_table_sz = 2;
 	struct device *kb = &device_table[0], *mouse = &device_table[1];
 	/* The two devices of the PC01 journal at 12:35:10. */
-	add_dev(kb, "05ac:0256:09409bbc", "Clavier de maria #1", CAP_KEY | CAP_KEYBOARD);
+	add_dev(kb, "05ac:0256:09409bbc", "Clavier de alice #1", CAP_KEY | CAP_KEYBOARD);
 	add_dev(mouse, "1d57:fa60:3c7f9e03", "2.4G Wireless Device", CAP_MOUSE | CAP_KEY);
 
 	if (!kb->data) {

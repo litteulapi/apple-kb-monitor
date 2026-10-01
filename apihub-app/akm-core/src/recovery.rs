@@ -999,11 +999,11 @@ mod tests {
         use JournalKind::*;
         let c = classify_journal;
         assert_eq!(
-            c("profiles/input/device.c:control_connect_cb() connect to 04:DB:56:CA:42:EE: Host is down (112)"),
+            c("profiles/input/device.c:control_connect_cb() connect to AA:BB:CC:DD:EE:F1: Host is down (112)"),
             Some(PageTimeout)
         );
         assert_eq!(
-            c("profiles/input/device.c:hidp_report_req_timeout() Device 04:DB:56:CA:42:EE HIDP GET_REPORT request timed out"),
+            c("profiles/input/device.c:hidp_report_req_timeout() Device AA:BB:CC:DD:EE:F1 HIDP GET_REPORT request timed out"),
             Some(GetReportTimeout)
         );
         assert_eq!(
@@ -1015,7 +1015,7 @@ mod tests {
             Some(StorageError)
         );
         assert_eq!(
-            c("connect to 04:DB:56:CA:42:EE: Connection reset by peer (104)"),
+            c("connect to AA:BB:CC:DD:EE:F1: Connection reset by peer (104)"),
             Some(Refused)
         );
         assert_eq!(c("Endpoint registered: sender=:1.100"), None);

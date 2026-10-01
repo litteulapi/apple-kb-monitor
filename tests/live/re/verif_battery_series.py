@@ -10,7 +10,7 @@ Chaque salve (au plus une toutes les --period s, 300 s par défaut) :
 Aucun SET_REPORT, aucune écriture : le nœud est ouvert en O_RDONLY.
 Arrêt immédiat à la première erreur d'E/S (EIO, ENODEV, ETIMEDOUT...) ou disparition du nœud.
 
-usage: verif_battery_series.py 04:DB:56:CA:42:EE|/dev/hidraw7 /sys/class/power_supply/<psy> --rounds 40 --out s.jsonl
+usage: verif_battery_series.py AA:BB:CC:DD:EE:F1|/dev/hidraw7 /sys/class/power_supply/<psy> --rounds 40 --out s.jsonl
        verif_battery_series.py --analyze s.jsonl
 """
 import argparse, errno, fcntl, json, os, sys, time

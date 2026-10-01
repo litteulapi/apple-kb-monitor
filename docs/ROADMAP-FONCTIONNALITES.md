@@ -47,7 +47,7 @@ Légende des preuves : **[mesuré]** = constaté sur le poste (noyau 7.1.13, Mag
 | `swap_opt_cmd` | **[mesuré]** 0 ; **[source]** 0 Mac, 1 Windows, 2 côté gauche seulement | idem |
 | `swap_ctrl_cmd`, `swap_fn_leftctrl` | **[mesuré]** 0/0, `root 644` | idem |
 | Portée des paramètres | **[source]** paramètres de **module** : globaux à tous les claviers `hid_apple` (pas par appareil) | idem |
-| Batterie | **[mesuré]** `power_supply hid-04:db:56:ca:42:ee-battery-71` : `capacity`=99, `status`=Discharging, `scope`=Device ; UPower l'expose | — |
+| Batterie | **[mesuré]** `power_supply hid-aa:bb:cc:dd:ee:f1-battery-71` : `capacity`=99, `status`=Discharging, `scope`=Device ; UPower l'expose | — |
 | Batterie BT Magic Keyboard 2021 / Trackpad 2 / Mouse 2 | **[source]** `hid-magicmouse` ne lit la batterie qu'en USB ; en BT le power_supply reste à 0 %. Série de correctifs Alec Hall (juil.–août 2026, respin demandé) | [Phoronix](https://www.phoronix.com/news/Linux-7.0-Fix-Magic-Trackpad-2), [patch](https://ratatoskr.run/linux-input/2026/07/17256372/t) |
 | Rapport `0x90` (trackpad/souris) | **[source]** `HIDIOCGINPUT` : octet 1 drapeaux (bit 1 = en charge), octet 2 capacité 0–100 | [magic-trackpad-battery](https://github.com/mmarfil/magic-trackpad-battery) |
 | Feature reports BCM2042 (A1314) | **[source projet]** 21 rapports lus (`0xEA` % précis, `0xF5` ADC, `0x5A` courbe, `0x4F` firmware, `0xFF` build…) — lecture seule | README, akm-core/decode.rs |
@@ -57,7 +57,7 @@ Légende des preuves : **[mesuré]** = constaté sur le poste (noyau 7.1.13, Mag
 | Touche Eject (A1314) | **[source]** mappée `KEY_EJECTCD` ; remappable via keyd | hid-apple.c |
 | Mise à jour firmware | **[hypothèse]** DFU propriétaire Apple, aucun outil Linux connu → non retenu (lecture de version seulement) | — |
 | Température / délai de veille réglable | **[hypothèse]** non exposés par les rapports connus ; écrire des feature reports inconnus = risque de brique → non retenu | — |
-| Appairage / connexion | **[mesuré]** `org.bluez /org/bluez/hci0/dev_04_DB_56_CA_42_EE` : `Connect`, `Disconnect`, `Trusted`, `RemoveDevice` disponibles via BlueZ | — |
+| Appairage / connexion | **[mesuré]** `org.bluez /org/bluez/hci0/dev_AA_BB_CC_DD_EE_F1` : `Connect`, `Disconnect`, `Trusted`, `RemoveDevice` disponibles via BlueZ | — |
 | keyd | **[mesuré]** `/usr/bin/keyd` installé ; kanata absent | — |
 
 **Conséquence d'architecture** : toute écriture (`hid_apple`, `/etc/keyd`) exige root. Un **seul helper privilégié minimal, autorisé par polkit** (action `com.agenceapi.AppleKbMonitor.configure`), avec liste blanche de paramètres/valeurs, est un prérequis commun (F07). Pas d'écriture directe depuis l'appli utilisateur.

@@ -181,7 +181,7 @@ report : 55 43 6c 61 76 69 65 72 20 41 70 70 6c 65 20 41 31 33 31 34 20 64 75 20
 wire   : 53 55 43 6c 61 76 69 65 72 20 41 70 70 6c 65 20 41 31 33 31 34 20 64 75 20 67 65 72 61 6e 74 20 30 31 00 × 32
 ```
 
-La trame d'hypothèse U1 de `RENOMMER-CLAVIER.md` §5.2 (`Clavier de maria #1`, NUL-bourrée) est **confirmée octet pour
+La trame d'hypothèse U1 de `RENOMMER-CLAVIER.md` §5.2 (`Clavier de alice #1`, NUL-bourrée) est **confirmée octet pour
 octet** par ce désassemblage : l'hypothèse devient un fait établi pour la construction hôte.
 
 ## 7. Conséquence pour `NotProven`

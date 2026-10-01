@@ -2,7 +2,7 @@
 
 > Branche `audit/debug-complet`, revue du 2026-10-01. Périmètre : **le clavier uniquement** (HID/hidraw, batterie, BlueZ, reconnexion, RSSI, LED, touches F, udev/permissions). L'écran (DDC/CI) est hors périmètre.
 > Code relu : `apihub-app/src/keyboard.rs` (641 l.), `bluez.rs` (352), `rssi.rs` (227), `brightness.rs` (298, côté entrée seulement), la boucle de polling de `main.rs` (l. 357-572), `rssi-helper.c`, `udev/`, `modprobe/`, `keyd/`, `dbus/`, et le CLI Python `apple-kb-monitor` (parties clavier).
-> Toutes les affirmations marquées **[mesuré]** ont été vérifiées sur le poste (Manjaro, noyau 7.1.13, BlueZ 5.87, UPower 1.91.3, systemd 261, keyd 2.6.0), avec un A1314 ISO (`05AC:0256`, « Clavier de maria #1 ») **connecté** pendant la revue. Celles marquées **[source]** renvoient au code amont (noyau `torvalds/linux` master, BlueZ master, UPower master, keyd master), téléchargé et relu.
+> Toutes les affirmations marquées **[mesuré]** ont été vérifiées sur le poste (Manjaro, noyau 7.1.13, BlueZ 5.87, UPower 1.91.3, systemd 261, keyd 2.6.0), avec un A1314 ISO (`05AC:0256`, « Clavier de alice #1 ») **connecté** pendant la revue. Celles marquées **[source]** renvoient au code amont (noyau `torvalds/linux` master, BlueZ master, UPower master, keyd master), téléchargé et relu.
 
 ---
 
@@ -13,7 +13,7 @@
 | Brique | Verdict | Raison principale |
 |---|---|---|
 | Lecture des Feature Reports par `hidraw` + `HIDIOCGFEATURE` | **Garder**, comme diagnostic secondaire | Seul moyen d'obtenir tension, ADC, firmware et calibration du BCM2042. `hidraw` est la bonne interface (libusb ne voit pas les périphériques Bluetooth). Mais ce ne doit plus être la source du pourcentage. |
-| Pourcentage batterie calculé par l'app | **Refaire** : lire le `power_supply` du noyau | Le noyau expose déjà la batterie de ce clavier (`hid-04:db:56:ca:42:ee-battery-71`, 90 %) et UPower l'affiche déjà sans l'app **[mesuré]**. |
+| Pourcentage batterie calculé par l'app | **Refaire** : lire le `power_supply` du noyau | Le noyau expose déjà la batterie de ce clavier (`hid-aa:bb:cc:dd:ee:f1-battery-71`, 90 %) et UPower l'affiche déjà sans l'app **[mesuré]**. |
 | Battery Provider BlueZ (`bluez.rs`) | **Garder mais refondre** | UPower **masque** la batterie BlueZ quand une batterie noyau a le même numéro de série (le MAC) **[source]**. Le provider ne sert donc qu'aux clients qui lisent `org.bluez.Battery1` directement (applet Bluetooth de Plasma). Il ne fonctionne aujourd'hui que grâce à une politique D-Bus modifiée à la main dans `/etc`, différente de celle du dépôt **[mesuré]**. |
 | Polling toutes les ~40 s de 14 Feature Reports | **Refaire** en événementiel + cadence lente | Chaque lecture réveille le lien radio : 629 ms pour la première lecture, ~17 ms ensuite **[mesuré]**. Cela fait 30 240 requêtes par jour, en plus des 2 880 d'UPower (une toutes les 30 s **[mesuré]**). Pour des piles AA, une mesure toutes les 10-15 min suffit. |
 | Détection de modèle (table des 10 PID) | **Refaire** | 6 des 10 entrées sont fausses par rapport à `hid-ids.h`. Les Magic Keyboard en Bluetooth ont le vendor `0x004C`, pas `0x05AC` : ils sont tous invisibles pour l'app, le Python, la règle udev et keyd **[source]**. |
@@ -36,9 +36,9 @@ En une phrase : **le noyau et UPower doivent être la source de vérité pour l'
 - `drivers/hid/hid-apple.c` **[source]** : tous les Magic Keyboard (2015 `0x0267`, numpad 2015 `0x026c`, 2021 `0x029c/0x029a/0x029f`, 2024 `0x0320-0x0322`) ont `APPLE_RDESC_BATTERY`. Le pilote corrige leur descripteur et interroge la batterie lui-même toutes les 60 s (`APPLE_BATTERY_TIMEOUT_SEC`).
 - Sur le poste **[mesuré]** :
   ```
-  /sys/class/power_supply/hid-04:db:56:ca:42:ee-battery-71 -> …/uhid/0005:05AC:0256.0014/power_supply/…
+  /sys/class/power_supply/hid-aa:bb:cc:dd:ee:f1-battery-71 -> …/uhid/0005:05AC:0256.0014/power_supply/…
   type=Battery scope=Device present=1 online=1 status=Discharging capacity=90
-  upower : battery_hid_04odbo56ocao42oee_battery_71, serial 04:db:56:ca:42:ee, type keyboard, 90 %
+  upower : battery_hid_04odbo56ocao42oee_battery_71, serial aa:bb:cc:dd:ee:f1, type keyboard, 90 %
   ```
   Le suffixe `-71` correspond à `0x47` : c'est **exactement** le report `HID_BATTERY_STANDARD` que lit `keyboard.rs`. Le nommage `hid-%s-battery-%d` est récent. Le CLI Python cherche encore `hid-{mac}-battery` (sans suffixe) : ce chemin est **périmé** sur ce noyau.
 - UPower relit cette batterie **toutes les 30 s** **[mesuré]** (`upower --monitor-detail` : 02:00:02, 02:00:32, 02:01:02, 02:01:33).
@@ -163,7 +163,7 @@ use std::path::{Path, PathBuf};
 pub enum Family { Bcm2042, MagicKeyboard, Unknown }
 
 pub struct KbNodes {
-    pub mac: String,            // "04:DB:56:CA:42:EE"
+    pub mac: String,            // "AA:BB:CC:DD:EE:F1"
     pub vid: u32, pub pid: u32,
     pub family: Family,
     pub hidraw: Option<PathBuf>,       // /dev/hidrawN

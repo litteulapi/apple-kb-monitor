@@ -40,7 +40,7 @@ def iso(t):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--mac", default="04:DB:56:CA:42:EE")
+    ap.add_argument("--mac", default="AA:BB:CC:DD:EE:F1")
     ap.add_argument("--duration", type=int, default=3600)
     ap.add_argument("--out")
     a = ap.parse_args()

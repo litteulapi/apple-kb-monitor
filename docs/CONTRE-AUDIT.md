@@ -67,8 +67,8 @@ Statuts : **✅ confirmé** · **❌ faux (corrigé)** · **⚠️ surqualifié 
 | 21 | `0xF5` = « 10-bit ADC, 3.3 V ref » (README, wiki) | ❌ | constant à travers un changement de piles ; aucune source ne publie l'ADC | corrigé |
 | 22 | `0x4F` u16 LE = `0x0050` = Version SDP | ✅ | `4f 50 00` ; SDP 0x0203 = 0x0050 | — |
 | 23 | `0x4F` = « 5.0 » (CLI Python) | ❌ | rejeu : `fw_version "5.0"` | issue #200 |
-| 24 | Nom : `"Clavier "` + `"de maria"` + `" #1"` = 19 o, 4 × 8 o | ✅ | hex des 4 trames | — |
-| 25 | `0x4C` : 20 o, octet 1 = `03`, octets 2-7 = hôte inversé | ✅ | `capture…jsonl` `4c030d7c526694…` ; `bonded_host` de la série | — |
+| 24 | Nom : `"Clavier "` + `"de alice"` + `" #1"` = 19 o, 4 × 8 o | ✅ | hex des 4 trames | — |
+| 25 | `0x4C` : 20 o, octet 1 = `03`, octets 2-7 = hôte inversé | ✅ | `capture…jsonl` `4c03f2eeddccbb…` ; `bonded_host` de la série | — |
 | 26 | `0x4C` = « 128-bit internal key » (README) / « identity key » (CLI) | ❌ | 1 + 6 + 12 o ; adresse de l'hôte | corrigé ; CLI : #200 |
 | 27 | `0x4C` stable (empreinte identique) | ✅ | `f34626564fca9676` sur 13 salves + scan + passe 12:02 | — |
 | 28 | CLI Python publie `d[2:16]` = 14 o (adresse + 8 secrets) | ✅ | rejeu : `identity_key` de 14 o ; l. 468 | issue #200 (les #123/#133 fermés ne couvraient que Rust) |

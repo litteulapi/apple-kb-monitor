@@ -4,7 +4,7 @@
 # Nécessite `sudo -n` pour : cache SDP BlueZ, fichier info (clé MASQUÉE), debugfs, btmgmt (lecture).
 # Ne lance PAS btmon : réutiliser une capture existante avec link_btmon_stats.py.
 set -eu
-MAC=${1:-04:DB:56:CA:42:EE}
+MAC=${1:-AA:BB:CC:DD:EE:F1}
 OUT=${2:-.}
 ADAPTER=$(cat /sys/class/bluetooth/hci0/address 2>/dev/null || btmgmt --index 0 info 2>/dev/null | awk '/addr/{print $2; exit}')
 DEV=$(echo "$MAC" | tr ':' '_')

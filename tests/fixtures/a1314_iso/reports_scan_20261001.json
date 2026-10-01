@@ -1,6 +1,6 @@
 {
  "_meta": {
-  "device": "A1314 ISO 05AC:0256 bcdDevice 0x0050, 04:DB:56:CA:42:EE, piles neuves posées 2026-10-01 ~03:00",
+  "device": "A1314 ISO 05AC:0256 bcdDevice 0x0050, AA:BB:CC:DD:EE:F1, piles neuves posées 2026-10-01 ~03:00",
   "note": "0x4C masqué (empreinte SHA-256 tronquée) ; IDs absents = erreur GET_REPORT (non implémentés)",
   "source": "tests/live/re/sample_reports.py --scan-once (GET_REPORT 0x00-0xFF, lecture seule, O_RDONLY)"
  },
@@ -61,7 +61,7 @@
    "len": 9
   },
   "52": {
-   "hex": "526465206d61726961",
+   "hex": "52646520616c696365",
    "len": 9
   },
   "53": {

@@ -662,7 +662,7 @@ mod tests {
         k.battery.voltage = Some(2.81);
         k.radio.rssi_dbm = Some(-48);
         k.device.model = Some("A1314".into());
-        k.device.mac = Some("04:DB:56:CA:42:EE".into());
+        k.device.mac = Some("AA:BB:CC:DD:EE:F1".into());
         k.device.name = Some("Own name".into());
         let s = Snapshot {
             connected: true,
@@ -675,7 +675,7 @@ mod tests {
             (p.battery, p.voltage, p.rssi, p.connected, p.last_update),
             (90, 2.81, -48, true, 7)
         );
-        assert_eq!(p.mac, "04:DB:56:CA:42:EE");
+        assert_eq!(p.mac, "AA:BB:CC:DD:EE:F1");
         assert_eq!(p.name, "Own name");
     }
 
@@ -706,14 +706,14 @@ mod tests {
             ""
         );
         let mut k = KbReport::default();
-        k.device.name_on_keyboard = Some("Clavier de maria #1".into());
+        k.device.name_on_keyboard = Some("Clavier de alice #1".into());
         let s = Snapshot {
             keyboard: Some(k),
             ..Default::default()
         };
         assert_eq!(
             Props::from_snapshot(&s).device_name_on_keyboard,
-            "Clavier de maria #1"
+            "Clavier de alice #1"
         );
     }
 }

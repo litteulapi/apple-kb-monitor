@@ -18,7 +18,7 @@ use akm_helper::hidctl::{
     BTPROTO_L2CAP,
 };
 
-const KB: &str = "04:DB:56:CA:42:EE";
+const KB: &str = "AA:BB:CC:DD:EE:F1";
 
 fn socketpair() -> (OwnedFd, OwnedFd) {
     let mut fds = [0 as RawFd; 2];

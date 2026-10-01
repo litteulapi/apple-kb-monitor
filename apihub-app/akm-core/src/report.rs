@@ -87,7 +87,7 @@ pub struct KbBluetooth {
     pub rssi_dbus: Option<i32>,
     pub tx_power_dbus: Option<i32>,
     /// [mesuré] Report 0x4C bytes 2..8 reversed: Bluetooth address of the host
-    /// adapter the keyboard is paired with (= `HID_PHYS`), e.g. `6C:94:66:52:7C:0D`.
+    /// adapter the keyboard is paired with (= `HID_PHYS`), e.g. `AA:BB:CC:DD:EE:F2`.
     /// The 12 following bytes are unidentified and never published (#123, #133).
     pub paired_host_addr: Option<String>,
 }
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn json_roundtrip_and_tolerant_decoding() {
         let mut r = KbReport::default();
-        r.device.mac = Some("04:DB:56:CA:42:EE".into());
+        r.device.mac = Some("AA:BB:CC:DD:EE:F1".into());
         r.battery.voltage = Some(2.81);
         let s = serde_json::to_string(&r).unwrap();
         assert_eq!(serde_json::from_str::<KbReport>(&s).unwrap(), r);

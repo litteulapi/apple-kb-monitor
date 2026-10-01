@@ -674,7 +674,7 @@ mod tests {
                 |_| Duration::from_millis(50),
             )
         });
-        tx.send(Cmd::Set("04:DB:56:CA:42:EE".into(), 50)).unwrap();
+        tx.send(Cmd::Set("AA:BB:CC:DD:EE:F1".into(), 50)).unwrap();
         thread::sleep(Duration::from_millis(800));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
         let _ = a.kill();
@@ -703,8 +703,8 @@ mod tests {
             Some("AA:BB:0C:DD:EE:01")
         );
         assert_eq!(
-            normalize_mac(" 04:db:56:CA:42:ee ").as_deref(),
-            Some("04:DB:56:CA:42:EE")
+            normalize_mac(" AA:BB:CC:DD:EE:F1 ").as_deref(),
+            Some("AA:BB:CC:DD:EE:F1")
         );
     }
 
@@ -727,18 +727,18 @@ mod tests {
 
     #[test]
     fn paths_are_derived_from_normalised_mac() {
-        let m = normalize_mac("04:db:56:ca:42:ee").unwrap();
+        let m = normalize_mac("aa:bb:cc:dd:ee:f1").unwrap();
         assert_eq!(
             child_path(&m),
-            "/com/agenceapi/AppleKbMonitor/dev_04_DB_56_CA_42_EE"
+            "/com/agenceapi/AppleKbMonitor/dev_AA_BB_CC_DD_EE_F1"
         );
         assert_eq!(
             device_path("/org/bluez/hci1", &m),
-            "/org/bluez/hci1/dev_04_DB_56_CA_42_EE"
+            "/org/bluez/hci1/dev_AA_BB_CC_DD_EE_F1"
         );
         assert_eq!(
             device_path("/org/bluez/hci0/", &m),
-            "/org/bluez/hci0/dev_04_DB_56_CA_42_EE"
+            "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_F1"
         );
         assert!(ObjectPath::try_from(child_path(&m)).is_ok());
     }
@@ -843,7 +843,7 @@ mod tests {
     #[test]
     #[ignore]
     fn live_register() {
-        let mac = std::env::var("KB_MAC").unwrap_or_else(|_| "04:DB:56:CA:42:EE".into());
+        let mac = std::env::var("KB_MAC").unwrap_or_else(|_| "AA:BB:CC:DD:EE:F1".into());
         let p = BatteryProvider::start(&mac, 42).expect("start");
         thread::sleep(Duration::from_secs(8));
         p.set_battery(&mac, 43);

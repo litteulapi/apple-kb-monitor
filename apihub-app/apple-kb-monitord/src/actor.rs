@@ -877,7 +877,7 @@ mod tests {
         let mut k = KbReport::default();
         k.battery.percentage = Some(pct);
         k.battery.voltage = voltage;
-        k.device.mac = Some("04:DB:56:CA:42:EE".into());
+        k.device.mac = Some("AA:BB:CC:DD:EE:F1".into());
         k.device.model = Some("Apple Wireless Keyboard (A1314)".into());
         k
     }
@@ -931,7 +931,7 @@ mod tests {
         assert_eq!(s.last_update, 1234, "its age is known");
         assert_eq!(s.last_error, None);
         assert_eq!(s.kb_error.as_deref(), Some("Keyboard disconnected"));
-        assert_eq!(s.mac(), Some("04:DB:56:CA:42:EE"));
+        assert_eq!(s.mac(), Some("AA:BB:CC:DD:EE:F1"));
         // never seen: the old message
         let mut b = quiet_actor();
         assert_eq!(b.snapshot().kb_error.as_deref(), Some("Keyboard: not found"));
@@ -1038,7 +1038,7 @@ mod tests {
         // reconnection that follows is still announced.
         let mut a = quiet_actor();
         let rx = a.opts.events.subscribe();
-        let mac = "04:DB:56:CA:42:EE";
+        let mac = "AA:BB:CC:DD:EE:F1";
         a.link.acquired(mac, Some(60.0));
         a.disconnected_with(true);
         assert_eq!(
@@ -1154,20 +1154,20 @@ mod tests {
         });
         let b = akm_core::read_policy::breaker();
         b.lock().unwrap().reset();
-        assert!(!a.after_breaker(Some("04:DB:56:CA:42:EE")), "closed: nothing");
+        assert!(!a.after_breaker(Some("AA:BB:CC:DD:EE:F1")), "closed: nothing");
         for _ in 0..akm_core::read_policy::TRIP_AFTER {
             b.lock().unwrap().record(false);
         }
-        assert!(a.after_breaker(Some("04:DB:56:CA:42:EE")));
-        assert!(!a.after_breaker(Some("04:DB:56:CA:42:EE")), "once per connection");
-        assert_eq!(*ASKED.lock().unwrap(), vec!["04:DB:56:CA:42:EE".to_string()]);
+        assert!(a.after_breaker(Some("AA:BB:CC:DD:EE:F1")));
+        assert!(!a.after_breaker(Some("AA:BB:CC:DD:EE:F1")), "once per connection");
+        assert_eq!(*ASKED.lock().unwrap(), vec!["AA:BB:CC:DD:EE:F1".to_string()]);
         // disabled: the request is consumed, BlueZ is not called
         b.lock().unwrap().reset();
         a.opts.disconnect_on_breaker = false;
         for _ in 0..akm_core::read_policy::TRIP_AFTER {
             b.lock().unwrap().record(false);
         }
-        assert!(!a.after_breaker(Some("04:DB:56:CA:42:EE")));
+        assert!(!a.after_breaker(Some("AA:BB:CC:DD:EE:F1")));
         assert_eq!(ASKED.lock().unwrap().len(), 1);
         // the MAC of the last report when the machine has none (NoBluez)
         b.lock().unwrap().reset();

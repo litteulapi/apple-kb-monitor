@@ -47,11 +47,11 @@ mod tests {
     #[test]
     fn paths() {
         assert_eq!(
-            device_path("04:db:56:CA:42:EE").as_deref(),
-            Some("/com/agenceapi/AppleKbMonitor1/devices/04_DB_56_CA_42_EE")
+            device_path("AA:BB:CC:DD:EE:F1").as_deref(),
+            Some("/com/agenceapi/AppleKbMonitor1/devices/AA_BB_CC_DD_EE_F1")
         );
         assert_eq!(device_path("nope"), None);
-        assert_eq!(device_path("04:DB:56:CA:42:EG"), None);
+        assert_eq!(device_path("AA:BB:CC:DD:EE:EG"), None);
     }
 
     #[test]

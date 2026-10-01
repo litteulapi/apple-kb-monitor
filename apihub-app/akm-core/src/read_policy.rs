@@ -909,7 +909,7 @@ mod tests {
             .with(&[0x4F, 0x50, 0x00])
             .with(&[0x60, 0x0b, 0x8a, 0x09, 0xca, 0x09, 0x64, 0x08, 0x06])
             .with(b"\x51Clavier ")
-            .with(b"\x52de maria")
+            .with(b"\x52de alice")
             .with(b"\x53 #1\0\0\0\0\0")
             .with(&[0x54, 0, 0, 0, 0, 0, 0, 0, 0]);
         let spy = Spy {
@@ -951,7 +951,7 @@ mod tests {
         apply_frames(&mut r, Some(0x0256), &conn.lock().unwrap());
         assert_eq!(
             r.device.name_on_keyboard.as_deref(),
-            Some("Clavier de maria #1")
+            Some("Clavier de alice #1")
         );
         assert_eq!(
             r.device.name_on_keyboard_hex.as_deref().map(str::len),
@@ -1376,7 +1376,7 @@ mod tests {
             inner: &f,
             log: RefCell::new(Vec::new()),
         };
-        let uevent = "HID_ID=0005:000005AC:00000256\nHID_NAME=Kb\nHID_UNIQ=04:db:56:ca:42:ee\n";
+        let uevent = "HID_ID=0005:000005AC:00000256\nHID_NAME=Kb\nHID_UNIQ=aa:bb:cc:dd:ee:f1\n";
         let (r, o) =
             build_report_safe(uevent, None, &spy, KbWake::default(), t + ACTIVE_WINDOW * 2);
         assert_eq!(o, SafeRead::Skipped(Gate::Idle));

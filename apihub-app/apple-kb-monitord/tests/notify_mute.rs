@@ -55,7 +55,7 @@ fn inner() {
     let t = Instant::now();
     for _ in 0..3 {
         apple_kb_monitord::notify::link(&LinkEvent::Disconnected {
-            mac: "04:DB:56:CA:42:EE".into(),
+            mac: "AA:BB:CC:DD:EE:F1".into(),
         });
         apple_kb_monitord::notify::send("s", "b", "battery-caution");
     }

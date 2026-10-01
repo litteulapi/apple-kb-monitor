@@ -21,7 +21,7 @@ Issue : [#246](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/
 12:35:10 [ALPM] upgraded apple-kb-monitor (3.1.0-4 -> 3.1.0-5)      # post_upgrade -> _akm_keyd_reload -> `keyd reload`
 12:35:10 keyd[1145]: CONFIG: parsing /etc/keyd/apple-keyboard.conf   # IPC_RELOAD dans le démon déjà lancé
 12:35:10 keyd[1145]: DEVICE: ignoring 1d57:fa60:3c7f9e03 (2.4G Wireless Device)   # souris NON gérée
-12:35:10 keyd[1145]: DEVICE: match 05ac:0256:09409bbc /etc/keyd/apple-keyboard.conf (Clavier de maria #1)
+12:35:10 keyd[1145]: DEVICE: match 05ac:0256:09409bbc /etc/keyd/apple-keyboard.conf (Clavier de alice #1)
 12:35:13 systemd-coredump: Process 1145 (keyd) dumped core (SEGV)
 12:35:14 keyd.service: Failed with result 'core-dump'.               # Restart= absent : reste failed
 ```

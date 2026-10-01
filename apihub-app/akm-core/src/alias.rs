@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn accepts_and_trims() {
-        assert_eq!(validate("Clavier de maria #1").unwrap(), "Clavier de maria #1");
+        assert_eq!(validate("Clavier de alice #1").unwrap(), "Clavier de alice #1");
         assert_eq!(validate("  Bureau \u{e9}t\u{e9} \u{1F3B9} ").unwrap(), "Bureau \u{e9}t\u{e9} \u{1F3B9}");
     }
 

@@ -1,6 +1,6 @@
-  native-path:          hid-04:db:56:ca:42:ee-battery-71
-  model:                Clavier de maria #1
-  serial:               04:db:56:ca:42:ee
+  native-path:          hid-aa:bb:cc:dd:ee:f1-battery-71
+  model:                Clavier de alice #1
+  serial:               aa:bb:cc:dd:ee:f1
   power supply:         no
   updated:              jeu. 01 oct. 2026 02:14:25 (19 seconds ago)
   has history:          yes

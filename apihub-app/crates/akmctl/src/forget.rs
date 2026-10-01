@@ -463,15 +463,15 @@ mod tests {
         let b = ForgetBackup {
             schema: ForgetBackup::SCHEMA,
             created_unix: 0,
-            mac: "04:DB:56:CA:42:EE".into(),
-            name: "Clavier de maria #1".into(),
-            alias: Some("Clavier de maria #1".into()),
+            mac: "AA:BB:CC:DD:EE:F1".into(),
+            name: "Clavier de alice #1".into(),
+            alias: Some("Clavier de alice #1".into()),
             paired: true,
             bonded: true,
             trusted: true,
             adapter_path: "/org/bluez/hci0".into(),
             adapter_address: Some("00:11:22:33:44:55".into()),
-            device_path: "/org/bluez/hci0/dev_04_DB_56_CA_42_EE".into(),
+            device_path: "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_F1".into(),
         };
         let json = serde_json::to_string(&b).unwrap().to_lowercase();
         for k in ["key", "ltk", "irk", "secret"] {

@@ -170,13 +170,13 @@ mod tests {
                 dry_run: false
             })
         );
-        let a = parse_args(&["exit-suspend", "--mac", "04:db:56:ca:42:ee", "--dry-run"]).unwrap();
+        let a = parse_args(&["exit-suspend", "--mac", "aa:bb:cc:dd:ee:f1", "--dry-run"]).unwrap();
         assert_eq!(a.action, Action::Send(HidControl::ExitSuspend));
         assert!(a.dry_run);
-        assert_eq!(a.mac.unwrap().to_string(), "04:DB:56:CA:42:EE");
-        assert!(parse_args(&["suspend", "--dry-run", "--mac", "04:DB:56:CA:42:EE"]).is_ok());
+        assert_eq!(a.mac.unwrap().to_string(), "AA:BB:CC:DD:EE:F1");
+        assert!(parse_args(&["suspend", "--dry-run", "--mac", "AA:BB:CC:DD:EE:F1"]).is_ok());
         // inspect: read-only by construction (dry run), with or without --mac.
-        let a = parse_args(&["inspect", "--mac", "04:DB:56:CA:42:EE"]).unwrap();
+        let a = parse_args(&["inspect", "--mac", "AA:BB:CC:DD:EE:F1"]).unwrap();
         assert_eq!(a.action, Action::Inspect);
         assert!(a.dry_run);
         assert_eq!(parse_args(&["inspect"]).unwrap().action, Action::Inspect);
@@ -193,9 +193,9 @@ mod tests {
             &[
                 "suspend",
                 "--mac",
-                "04:DB:56:CA:42:EE",
+                "AA:BB:CC:DD:EE:F1",
                 "--mac",
-                "04:DB:56:CA:42:EE",
+                "AA:BB:CC:DD:EE:F1",
             ],
             &["suspend", "extra"],
             &["SUSPEND"],

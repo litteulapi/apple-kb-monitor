@@ -883,14 +883,14 @@ mod tests {
     fn journal_summary_counts_this_keyboard_only() {
         let l = |s: &str| s.to_string();
         let lines = vec![
-            l("2026-10-01T02:55:20+02:00 PC01 bluetoothd[1164]: profiles/input/device.c:control_connect_cb() connect to 04:DB:56:CA:42:EE: Host is down (112)"),
-            l("2026-10-01T02:55:52+02:00 PC01 bluetoothd[1164]: profiles/input/device.c:control_connect_cb() connect to 04:DB:56:CA:42:EE: Host is down (112)"),
+            l("2026-10-01T02:55:20+02:00 PC01 bluetoothd[1164]: profiles/input/device.c:control_connect_cb() connect to AA:BB:CC:DD:EE:F1: Host is down (112)"),
+            l("2026-10-01T02:55:52+02:00 PC01 bluetoothd[1164]: profiles/input/device.c:control_connect_cb() connect to AA:BB:CC:DD:EE:F1: Host is down (112)"),
             l("2026-10-01T02:56:00+02:00 PC01 bluetoothd[1164]: profiles/input/device.c:control_connect_cb() connect to AA:BB:CC:DD:EE:FF: Host is down (112)"),
-            l("2026-10-01T04:00:16+02:00 PC01 bluetoothd[1164]: profiles/input/device.c:hidp_report_req_timeout() Device 04:DB:56:CA:42:EE HIDP GET_REPORT request timed out"),
+            l("2026-10-01T04:00:16+02:00 PC01 bluetoothd[1164]: profiles/input/device.c:hidp_report_req_timeout() Device AA:BB:CC:DD:EE:F1 HIDP GET_REPORT request timed out"),
             l("2026-09-27T12:59:07+02:00 PC01 bluetoothd[1164]: src/main.c:check_options() Unknown key ReconnectUUIDs for group AdvMon in /etc/bluetooth/main.conf"),
             l("2026-09-27T12:59:08+02:00 PC01 bluetoothd[1164]: Endpoint registered: sender=:1.100"),
         ];
-        let s = summarize_journal(&lines, Some("04:DB:56:CA:42:EE"));
+        let s = summarize_journal(&lines, Some("AA:BB:CC:DD:EE:F1"));
         let get = |k: JournalKind| s.iter().find(|x| x.0 == k).map(|x| x.1);
         assert_eq!(get(JournalKind::PageTimeout), Some(2));
         assert_eq!(get(JournalKind::GetReportTimeout), Some(1));
@@ -916,8 +916,8 @@ mod tests {
 
     fn kb(paired: bool, connected: bool) -> KbFacts {
         KbFacts {
-            mac: "04:DB:56:CA:42:EE".into(),
-            name: "Clavier de maria #1".into(),
+            mac: "AA:BB:CC:DD:EE:F1".into(),
+            name: "Clavier de alice #1".into(),
             paired,
             bonded: paired,
             trusted: true,

@@ -2,7 +2,7 @@
 
 ## `a1314_iso/` — CAPTURÉ sur le matériel réel (2026-10-01, lecture seule, sans sudo)
 
-Apple Wireless Keyboard A1314 ISO « Clavier de maria #1 », `04:DB:56:CA:42:EE`, BT, `0005:05AC:0256`.
+Apple Wireless Keyboard A1314 ISO « Clavier de alice #1 », `AA:BB:CC:DD:EE:F1`, BT, `0005:05AC:0256`.
 Chemins sysfs d'origine entre parenthèses.
 
 | Fichier | Source |
@@ -10,8 +10,8 @@ Chemins sysfs d'origine entre parenthèses.
 | `report_descriptor.bin` / `.hex` | `/sys/class/hidraw/hidraw7/device/report_descriptor` (224 o) |
 | `hid_device.uevent` | `.../device/uevent` (HID_ID, HID_UNIQ, DRIVER=apple) |
 | `hidraw.uevent` | `/sys/class/hidraw/hidraw7/uevent` |
-| `power_supply.uevent`, `ps_*` | `/sys/class/power_supply/hid-04:db:56:ca:42:ee-battery-71/` (capacité 90, Discharging) |
-| `bluetoothctl_info.txt` | `bluetoothctl info 04:DB:56:CA:42:EE` |
+| `power_supply.uevent`, `ps_*` | `/sys/class/power_supply/hid-aa:bb:cc:dd:ee:f1-battery-71/` (capacité 90, Discharging) |
+| `bluetoothctl_info.txt` | `bluetoothctl info AA:BB:CC:DD:EE:F1` |
 | `upower_info.txt` | `upower -i .../battery_hid_04odbo56ocao42oee_battery_71` |
 | `udevadm_hidraw.props` | `udevadm info -q property /dev/hidraw7` |
 | `input/` | attributs `name phys uniq id/* capabilities/{ev,key,led}` de l'input evdev |

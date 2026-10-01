@@ -932,11 +932,11 @@ mod tests {
     use std::cell::RefCell;
 
     /// Reference of docs/RENOMMER-CLAVIER.md §5.2 for the measured name
-    /// "Clavier de maria #1" (construction confirmed by E1).
+    /// "Clavier de alice #1" (construction confirmed by E1).
     const REF_CLAVIER: [u8; 65] = {
         let mut r = [0u8; 65];
         r[0] = 0x55;
-        let n = *b"Clavier de maria #1";
+        let n = *b"Clavier de alice #1";
         let mut i = 0;
         while i < n.len() {
             r[1 + i] = n[i];
@@ -949,7 +949,7 @@ mod tests {
     fn measured_frames() -> Vec<Vec<u8>> {
         vec![
             [&[0x51u8][..], b"Clavier "].concat(),
-            [&[0x52u8][..], b"de maria"].concat(),
+            [&[0x52u8][..], b"de alice"].concat(),
             [&[0x53u8][..], b" #1\0\0\0\0\0"].concat(),
             [&[0x54u8][..], &[0u8; 8]].concat(),
         ]
@@ -965,8 +965,8 @@ mod tests {
     #[test]
     fn validation() {
         assert_eq!(
-            validate("Clavier de maria #1").unwrap(),
-            "Clavier de maria #1"
+            validate("Clavier de alice #1").unwrap(),
+            "Clavier de alice #1"
         );
         assert_eq!(validate(&"x".repeat(32)).unwrap().len(), 32);
         assert_eq!(
@@ -1108,7 +1108,7 @@ mod tests {
 
     #[test]
     fn frame_matches_the_documented_reference_byte_for_byte() {
-        let f = frames_for("Clavier de maria #1").unwrap();
+        let f = frames_for("Clavier de alice #1").unwrap();
         assert_eq!(f.len(), 1, "one frame: no 0x50, no 0x51-0x54");
         assert_eq!(f[0].report, REF_CLAVIER.to_vec());
         assert_eq!(f[0].op, WriteOp::DeviceName);
@@ -1142,7 +1142,7 @@ mod tests {
 
     #[test]
     fn frames_only_use_the_ids_of_the_operation() {
-        for name in ["a", "Clavier de maria #1", &"q".repeat(32)] {
+        for name in ["a", "Clavier de alice #1", &"q".repeat(32)] {
             for f in frames_for(name).unwrap() {
                 assert!(f.op.ids().contains(&f.id()));
                 assert_eq!(f.data().len(), f.op.payload_len());
@@ -1212,8 +1212,8 @@ mod tests {
     #[test]
     fn readback_and_backup_roundtrip() {
         let raw = raw_from_frames(&measured_frames()).unwrap();
-        assert_eq!(name_from_raw(&raw).unwrap(), "Clavier de maria #1");
-        let b = Backup::new("04:DB:56:CA:42:EE", &raw, 1_790_000_000, "daemon-cache").unwrap();
+        assert_eq!(name_from_raw(&raw).unwrap(), "Clavier de alice #1");
+        let b = Backup::new("AA:BB:CC:DD:EE:F1", &raw, 1_790_000_000, "daemon-cache").unwrap();
         assert_eq!(b.fragments_hex[0], "436c617669657220");
         assert_eq!(b.raw().unwrap(), raw);
         let json = serde_json::to_string(&b).unwrap();
@@ -1437,7 +1437,7 @@ mod tests {
             self.cached.clone()
         }
         fn mac(&mut self) -> String {
-            "04:DB:56:CA:42:EE".into()
+            "AA:BB:CC:DD:EE:F1".into()
         }
         fn now_unix(&mut self) -> u64 {
             1_790_812_799
@@ -1513,7 +1513,7 @@ mod tests {
         // Restore is behind the same lock.
         let raw = raw_from_frames(&measured_frames()).unwrap();
         let b = Backup::new("m", &raw, 1, "daemon-cache").unwrap();
-        let mut sim = Sim::new("Clavier de maria #1");
+        let mut sim = Sim::new("Clavier de alice #1");
         assert_eq!(
             run(&Request::Restore(b), SEQUENCE_PROOF, false, &mut WriteSession::new(), &mut sim),
             Outcome::ConfigDisabled
@@ -1590,7 +1590,7 @@ mod tests {
             assert_eq!(w[0].0, WriteOp::DeviceName);
             assert_eq!(w[0].1, want, "{name}: the fixture bytes, exactly");
             assert_eq!(w[0].1.len(), 65);
-            assert_eq!(sim.backups[0].name, "Clavier de maria #1");
+            assert_eq!(sim.backups[0].name, "Clavier de alice #1");
             // Every byte sent is in the journal, with the wire form.
             assert!(sim.log.iter().any(|l| l.contains(&hex(&w[0].1))));
             assert!(sim.log.iter().any(|l| l.contains(&format!("wire 53 {}", hex(&w[0].1)))));
@@ -1600,10 +1600,10 @@ mod tests {
 
     #[test]
     fn reference_frame_reaches_the_spy_byte_for_byte() {
-        let mut sim = Sim::new("Clavier de maria #1");
+        let mut sim = Sim::new("Clavier de alice #1");
         sim.back = back(raw_from_frames(&measured_frames()).unwrap());
         assert!(matches!(
-            rename(&mut sim, "Clavier de maria #1", SEQUENCE_PROOF),
+            rename(&mut sim, "Clavier de alice #1", SEQUENCE_PROOF),
             Outcome::Verified { .. }
         ));
         assert_eq!(sim.spy.writes.borrow()[0].1, REF_CLAVIER.to_vec());
@@ -1728,8 +1728,8 @@ mod tests {
     #[test]
     fn restore_rewrites_exactly_the_backup_with_a_new_confirmation_and_no_new_backup() {
         let raw = raw_from_frames(&measured_frames()).unwrap();
-        let b = Backup::new("04:DB:56:CA:42:EE", &raw, 1, "daemon-cache").unwrap();
-        let mut sim = Sim::new("Clavier de maria #1");
+        let b = Backup::new("AA:BB:CC:DD:EE:F1", &raw, 1, "daemon-cache").unwrap();
+        let mut sim = Sim::new("Clavier de alice #1");
         sim.cached = Some(expected_readback(&frames_for("x").unwrap()));
         sim.back = back(raw.clone());
         let o = run(
