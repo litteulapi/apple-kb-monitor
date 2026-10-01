@@ -1,0 +1,46 @@
+{
+ "verdict": {
+  "level": "warn",
+  "advice": "Liaison saine ; UPower interroge la batterie toutes les 30 s (voir bluetooth/akm-conf.py upower)."
+ },
+ "health": "connected",
+ "keyboard": {
+  "mac": "04:DB:56:00:E2:E0",
+  "name": "Clavier de test",
+  "paired": true,
+  "bonded": true,
+  "trusted": true,
+  "connected": true,
+  "legacy_pairing": true,
+  "wake_allowed": true
+ },
+ "findings": [
+  {
+   "level": "ok",
+   "topic": "bluez",
+   "text": "BlueZ 5.83 actif, adaptateur alimenté",
+   "fix": null
+  },
+  {
+   "level": "ok",
+   "topic": "pairing",
+   "text": "Appairé, lié et de confiance",
+   "fix": null
+  },
+  {
+   "level": "warn",
+   "topic": "upower",
+   "text": "UPower lit la batterie toutes les 30 s (2 requêtes radio par cycle)",
+   "fix": "bluetooth/akm-conf.py upower"
+  },
+  {
+   "level": "info",
+   "topic": "daemon",
+   "text": "apple-kb-monitord actif (e2e)",
+   "fix": null
+  }
+ ],
+ "daemon": {
+  "running": true
+ }
+}

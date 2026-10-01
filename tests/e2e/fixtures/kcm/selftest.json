@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "tool": "akmctl 3.1.0",
+ "since": 0,
+ "finished": 0,
+ "verdict": "ok",
+ "new_grave": [],
+ "reported": [],
+ "checks": [
+  {
+   "id": "daemon",
+   "level": "ok",
+   "key": "daemon",
+   "text": "démon actif, aucun redémarrage en 24 h"
+  },
+  {
+   "id": "link",
+   "level": "ok",
+   "key": "link",
+   "text": "liaison stable (0 déconnexion en 24 h)"
+  },
+  {
+   "id": "journal",
+   "level": "info",
+   "key": "journal",
+   "text": "2 avertissements dans le journal (24 h)"
+  },
+  {
+   "id": "disk",
+   "level": "ok",
+   "key": "disk",
+   "text": "historique 1,2 Mo"
+  }
+ ],
+ "state": {}
+}

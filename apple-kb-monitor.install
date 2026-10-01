@@ -135,6 +135,8 @@ _akm_message() {
     echo "      # or search 'ApiHub' in KDE application menu"
     echo ""
     _akm_kde_keys_hint
+    echo ">>> System Settings: Input Devices > Keyboard > Apple Keyboard (search 'clavier apple'),"
+    echo "    or: kcmshell6 kcm_applekeyboard   (see /usr/share/doc/apple-kb-monitor/KCM.md)"
     echo ""
     echo ">>> Special keys: akmctl keys --check shows what each key does in KDE; optional"
     echo "    remapping: akmctl keymap (udev hwdb, nothing installed by default). keyd is optional:"

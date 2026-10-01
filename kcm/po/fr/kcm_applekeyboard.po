@@ -1,0 +1,995 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: kcm_applekeyboard\n"
+"Language: fr\n"
+"Language-Team: French\n"
+"Last-Translator: AgenceAPI\n"
+"PO-Revision-Date: 2026-10-01 19:00+0200\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+#: ui/AlertsPage.qml:116
+msgid "Not saved: the thresholds must be whole numbers between 1 and 95, separated by commas."
+msgstr "Non enregistré : les seuils doivent être des nombres entiers entre 1 et 95, séparés par des virgules."
+
+#: ui/AlertsPage.qml:136
+msgid "Saved. The service reads these settings when it starts: restart it to use them now."
+msgstr "Enregistré. Le service lit ces réglages à son démarrage : redémarrez-le pour les appliquer tout de suite."
+
+#: ui/AlertsPage.qml:137
+msgid "Saved. They will be used when the service starts."
+msgstr "Enregistré. Ils seront utilisés au démarrage du service."
+
+#: ui/AlertsPage.qml:140
+msgid "Not saved: %1"
+msgstr "Non enregistré : %1"
+
+#: ui/AlertsPage.qml:160
+msgid "Restart the service"
+msgstr "Redémarrer le service"
+
+#: ui/AlertsPage.qml:165
+msgid "Service restarted with the new settings."
+msgstr "Service redémarré avec les nouveaux réglages."
+
+#: ui/AlertsPage.qml:165
+msgid "The service could not be restarted: %1"
+msgstr "Le service n'a pas pu être redémarré : %1"
+
+#: ui/AlertsPage.qml:178
+msgid "The settings file could not be read (%1): the defaults are shown."
+msgstr "Le fichier de réglages n'a pas pu être lu (%1) : les valeurs par défaut sont affichées."
+
+#: ui/AlertsPage.qml:179
+msgid "Some lines of the settings file are not understood (%1); they are kept as they are."
+msgstr "Certaines lignes du fichier de réglages ne sont pas comprises (%1) ; elles sont conservées telles quelles."
+
+#: ui/AlertsPage.qml:188
+msgctxt "@title:group"
+msgid "Low battery"
+msgstr "Batterie faible"
+
+#: ui/AlertsPage.qml:192
+msgid "Alerts:"
+msgstr "Alertes :"
+
+#: ui/AlertsPage.qml:193
+msgid "Notify when the battery is low"
+msgstr "Prévenir quand la batterie est faible"
+
+#: ui/AlertsPage.qml:198
+msgid "Thresholds (%):"
+msgstr "Seuils (%) :"
+
+#: ui/AlertsPage.qml:202
+msgid "Alert thresholds in percent, separated by commas"
+msgstr "Seuils d'alerte en pourcentage, séparés par des virgules"
+
+#: ui/AlertsPage.qml:211
+msgid "One notification per threshold crossed, on the estimated charge."
+msgstr "Une notification par seuil franchi, sur la charge estimée."
+
+#: ui/AlertsPage.qml:215
+msgid "With KDE:"
+msgstr "Avec KDE :"
+
+#: ui/AlertsPage.qml:217
+msgid "When KDE already warns about this keyboard, send only one reminder"
+msgstr "Quand KDE prévient déjà pour ce clavier, n'envoyer qu'un rappel"
+
+#: ui/AlertsPage.qml:222
+msgid "Critical at or below (%):"
+msgstr "Critique à partir de (%) :"
+
+#: ui/AlertsPage.qml:226
+msgid "Critical threshold in percent"
+msgstr "Seuil critique en pourcentage"
+
+#: ui/AlertsPage.qml:231
+msgid "Re-arm after (points):"
+msgstr "Réarmement après (points) :"
+
+#: ui/AlertsPage.qml:235
+msgid "Points above a threshold before it can notify again"
+msgstr "Points au-dessus d'un seuil avant qu'il puisse de nouveau prévenir"
+
+#: ui/AlertsPage.qml:241
+msgctxt "@title:group"
+msgid "Batteries"
+msgstr "Piles"
+
+#: ui/AlertsPage.qml:245
+msgid "Battery type:"
+msgstr "Type de piles :"
+
+#: ui/AlertsPage.qml:246 ui/StatePage.qml:47
+msgctxt "battery chemistry"
+msgid "alkaline"
+msgstr "alcaline"
+
+#: ui/AlertsPage.qml:246 ui/StatePage.qml:48
+msgctxt "battery chemistry"
+msgid "NiMH (rechargeable)"
+msgstr "NiMH (rechargeable)"
+
+#: ui/AlertsPage.qml:246 ui/StatePage.qml:49
+msgctxt "battery chemistry"
+msgid "lithium"
+msgstr "lithium"
+
+#: ui/AlertsPage.qml:246 ui/StatePage.qml:50
+msgctxt "battery chemistry"
+msgid "unknown"
+msgstr "inconnu"
+
+#: ui/AlertsPage.qml:247
+msgid "Battery type"
+msgstr "Type de piles"
+
+#: ui/AlertsPage.qml:255
+msgid "Used for the estimated charge and its range; the keyboard's own indication does not depend on it."
+msgstr "Sert à la charge estimée et à sa fourchette ; l'indication du clavier lui-même n'en dépend pas."
+
+#: ui/AlertsPage.qml:259
+msgid "Display:"
+msgstr "Affichage :"
+
+#: ui/AlertsPage.qml:260
+msgid "Also show the percentage as macOS shows it"
+msgstr "Afficher aussi le pourcentage tel que macOS le montre"
+
+#: ui/AlertsPage.qml:266
+msgctxt "@title:group"
+msgid "Other notifications"
+msgstr "Autres notifications"
+
+#: ui/AlertsPage.qml:270 ui/StatePage.qml:134
+msgid "Connection:"
+msgstr "Connexion :"
+
+#: ui/AlertsPage.qml:271
+msgid "Notify on disconnection and reconnection"
+msgstr "Prévenir à la déconnexion et à la reconnexion"
+
+#: ui/AlertsPage.qml:276
+msgid "New batteries:"
+msgstr "Piles neuves :"
+
+#: ui/AlertsPage.qml:277
+msgid "Notify when new batteries are detected"
+msgstr "Prévenir quand des piles neuves sont détectées"
+
+#: ui/AlertsPage.qml:283
+msgctxt "@title:group"
+msgid "Shutdown"
+msgstr "Extinction"
+
+#: ui/AlertsPage.qml:287
+msgid "WillShutdown:"
+msgstr "WillShutdown :"
+
+#: ui/AlertsPage.qml:288
+msgid "Tell the keyboard when the computer shuts down or restarts"
+msgstr "Prévenir le clavier quand l'ordinateur s'éteint ou redémarre"
+
+#: ui/AlertsPage.qml:296
+msgid "What macOS sends at every shutdown (one message, nothing else is written). Off = the keyboard is left untouched."
+msgstr "Ce que macOS envoie à chaque extinction (un seul message, rien d'autre n'est écrit). Désactivé = le clavier n'est pas touché."
+
+#: ui/AlertsPage.qml:303
+msgid "File:"
+msgstr "Fichier :"
+
+#: ui/DiagPage.qml:38
+msgctxt "diagnosis level"
+msgid "OK"
+msgstr "OK"
+
+#: ui/DiagPage.qml:39
+msgctxt "diagnosis level"
+msgid "information"
+msgstr "information"
+
+#: ui/DiagPage.qml:40
+msgctxt "diagnosis level"
+msgid "warning"
+msgstr "avertissement"
+
+#: ui/DiagPage.qml:41
+msgctxt "diagnosis level"
+msgid "problem"
+msgstr "problème"
+
+#: ui/DiagPage.qml:49 ui/DiagPage.qml:64
+msgid "no answer within 60 seconds"
+msgstr "aucune réponse en 60 secondes"
+
+#: ui/DiagPage.qml:99
+msgid "Check the link"
+msgstr "Vérifier la liaison"
+
+#: ui/DiagPage.qml:102
+msgid "Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. Reads only."
+msgstr "Lance akmctl doctor : Bluetooth, appairage, configuration, journal, service. Lecture seule."
+
+#: ui/DiagPage.qml:106
+msgid "Self-check"
+msgstr "Autotest"
+
+#: ui/DiagPage.qml:108
+msgid "Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
+msgstr "Lance akmctl selftest : service, liaison, journal, plantages, disque. Lecture seule."
+
+#: ui/DiagPage.qml:113
+msgid "Reconnect"
+msgstr "Reconnecter"
+
+#: ui/DiagPage.qml:116
+msgid "Asks the service to page the keyboard now (at most once every 20 seconds)"
+msgstr "Demande au service d'appeler le clavier maintenant (au plus une fois toutes les 20 secondes)"
+
+#: ui/DiagPage.qml:122
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr "Reconnexion demandée. Appuyez sur une touche du clavier s'il est en veille."
+
+#: ui/DiagPage.qml:123
+msgid "refused by the service (asleep, too soon, or pairing refused)"
+msgstr "refusée par le service (veille, trop tôt, ou appairage refusé)"
+
+#: ui/DiagPage.qml:123
+msgid "Reconnection not requested: %1"
+msgstr "Reconnexion non demandée : %1"
+
+#: ui/DiagPage.qml:129
+msgid "Copy the diagnosis"
+msgstr "Copier le diagnostic"
+
+#: ui/DiagPage.qml:134
+msgid "Diagnosis copied: paste it into a bug report."
+msgstr "Diagnostic copié : collez-le dans un rapport de bogue."
+
+#: ui/DiagPage.qml:139
+msgid "Documentation"
+msgstr "Documentation"
+
+#: ui/DiagPage.qml:150
+msgctxt "@title:group"
+msgid "Link check (akmctl doctor)"
+msgstr "Vérification de la liaison (akmctl doctor)"
+
+#: ui/DiagPage.qml:156
+msgid "Link check running"
+msgstr "Vérification de la liaison en cours"
+
+#: ui/DiagPage.qml:165
+msgctxt "level, advice"
+msgid "Verdict: %1 — %2"
+msgstr "Verdict : %1 — %2"
+
+#: ui/DiagPage.qml:166 ui/DiagPage.qml:213 ui/KeysPage.qml:33
+msgid "Failed: %1"
+msgstr "Échec : %1"
+
+#: ui/DiagPage.qml:166 ui/DiagPage.qml:213
+msgid "Not run yet."
+msgstr "Pas encore lancé."
+
+#: ui/DiagPage.qml:199
+msgctxt "@title:group"
+msgid "Self-check (akmctl selftest)"
+msgstr "Autotest (akmctl selftest)"
+
+#: ui/DiagPage.qml:205
+msgid "Self-check running"
+msgstr "Autotest en cours"
+
+#: ui/DiagPage.qml:212
+msgid "Verdict: %1"
+msgstr "Verdict : %1"
+
+#: ui/KeysPage.qml:29
+msgctxt "result, then the detail"
+msgid "%1 — %2"
+msgstr "%1 — %2"
+
+#: ui/KeysPage.qml:31
+msgid "No answer in time: nothing was confirmed. Check the state before trying again."
+msgstr "Pas de réponse à temps : rien n'a été confirmé. Vérifiez l'état avant de réessayer."
+
+#: ui/KeysPage.qml:33 ui/main.qml:38
+msgid "unknown error"
+msgstr "erreur inconnue"
+
+#: ui/KeysPage.qml:40
+msgctxt "fnmode 0"
+msgid "0 — Fn key disabled"
+msgstr "0 — touche fn désactivée"
+
+#: ui/KeysPage.qml:41
+msgctxt "fnmode 1"
+msgid "1 — special functions first (Apple legend), F1-F12 with fn"
+msgstr "1 — fonctions spéciales d'abord (légende Apple), F1-F12 avec fn"
+
+#: ui/KeysPage.qml:42
+msgctxt "fnmode 2"
+msgid "2 — F1-F12 first, special functions with fn"
+msgstr "2 — F1-F12 d'abord, fonctions spéciales avec fn"
+
+#: ui/KeysPage.qml:43
+msgctxt "fnmode 3"
+msgid "3 — automatic (same as 1 on this keyboard)"
+msgstr "3 — automatique (comme 1 sur ce clavier)"
+
+#: ui/KeysPage.qml:44
+msgctxt "fnmode 4"
+msgid "4 — F1-F12 only, special functions disabled"
+msgstr "4 — F1-F12 seulement, fonctions spéciales désactivées"
+
+#: ui/KeysPage.qml:45 ui/StatePage.qml:55
+msgid "unknown"
+msgstr "inconnu"
+
+#: ui/KeysPage.qml:56
+msgctxt "KDE shortcut action"
+msgid "KDE: %1"
+msgstr "KDE : %1"
+
+#: ui/KeysPage.qml:57
+msgid "no KDE shortcut"
+msgstr "aucun raccourci KDE"
+
+#: ui/KeysPage.qml:75
+msgid "The key table could not be read: %1"
+msgstr "La table des touches n'a pas pu être lue : %1"
+
+#: ui/KeysPage.qml:78 ui/StatePage.qml:93
+msgid "Try again"
+msgstr "Réessayer"
+
+#: ui/KeysPage.qml:91
+msgctxt "@title:group"
+msgid "What each key does now"
+msgstr "Ce que fait chaque touche actuellement"
+
+#: ui/KeysPage.qml:99
+msgid "Fn mode %1. Read from the kernel and the installed mapping; no key press is read."
+msgstr "Mode Fn %1. Lu dans le noyau et le mapping installé ; aucune frappe n'est lue."
+
+#: ui/KeysPage.qml:100
+msgid "Reading the key table…"
+msgstr "Lecture de la table des touches…"
+
+#: ui/KeysPage.qml:110
+msgctxt "@title:column"
+msgid "Key"
+msgstr "Touche"
+
+#: ui/KeysPage.qml:111
+msgctxt "@title:column"
+msgid "Pressed alone"
+msgstr "Seule"
+
+#: ui/KeysPage.qml:112
+msgctxt "@title:column"
+msgid "With fn"
+msgstr "Avec fn"
+
+#: ui/KeysPage.qml:126
+msgctxt "key, legend, alone, with fn"
+msgid "%1 (%2): alone %3; with fn %4"
+msgstr "%1 (%2) : seule %3 ; avec fn %4"
+
+#: ui/KeysPage.qml:159
+msgid "* = changed by the installed manual mapping."
+msgstr "* = modifiée par le mapping manuel installé."
+
+#: ui/KeysPage.qml:159
+msgid "The active profile differs from what is installed: use “Install the mapping”."
+msgstr "Le profil actif diffère de ce qui est installé : utilisez « Installer le mapping »."
+
+#: ui/KeysPage.qml:168
+msgctxt "@title:group"
+msgid "Fn key and modifier keys"
+msgstr "Touche fn et touches de modification"
+
+#: ui/KeysPage.qml:175
+msgid "These are parameters of the kernel driver hid_apple: they apply to ALL Apple keyboards of this computer, are kept after a restart, and each change asks for the administrator password."
+msgstr "Ce sont des paramètres du pilote noyau hid_apple : ils s'appliquent à TOUS les claviers Apple de cet ordinateur, sont conservés après un redémarrage, et chaque modification demande le mot de passe administrateur."
+
+#: ui/KeysPage.qml:179
+msgid "Fn mode:"
+msgstr "Mode Fn :"
+
+#: ui/KeysPage.qml:183
+msgid "Fn mode"
+msgstr "Mode Fn"
+
+#: ui/KeysPage.qml:187
+msgid "Option and Command:"
+msgstr "Option et Commande :"
+
+#: ui/KeysPage.qml:189
+msgid "Mac order (Option = Alt, Command = Meta)"
+msgstr "ordre Mac (Option = Alt, Commande = Méta)"
+
+#: ui/KeysPage.qml:189
+msgid "swapped on both sides (PC order)"
+msgstr "inversées des deux côtés (ordre PC)"
+
+#: ui/KeysPage.qml:189
+msgid "swapped on the left side only"
+msgstr "inversées à gauche seulement"
+
+#: ui/KeysPage.qml:191
+msgid "Option and Command keys"
+msgstr "Touches Option et Commande"
+
+#: ui/KeysPage.qml:195
+msgid "Control and Command:"
+msgstr "Contrôle et Commande :"
+
+#: ui/KeysPage.qml:196
+msgid "Swap Control and Command"
+msgstr "Inverser Contrôle et Commande"
+
+#: ui/KeysPage.qml:201
+msgid "fn and left Control:"
+msgstr "fn et Contrôle gauche :"
+
+#: ui/KeysPage.qml:202
+msgid "Swap fn and the left Control key"
+msgstr "Inverser fn et la touche Contrôle gauche"
+
+#: ui/KeysPage.qml:207
+msgid "ISO keys ` and <:"
+msgstr "Touches ISO ` et < :"
+
+#: ui/KeysPage.qml:209
+msgid "automatic"
+msgstr "automatique"
+
+#: ui/KeysPage.qml:209
+msgid "as engraved"
+msgstr "comme gravées"
+
+#: ui/KeysPage.qml:209
+msgid "swapped"
+msgstr "inversées"
+
+#: ui/KeysPage.qml:211
+msgid "ISO keys"
+msgstr "Touches ISO"
+
+#: ui/KeysPage.qml:216
+msgid "Apply these parameters…"
+msgstr "Appliquer ces paramètres…"
+
+#: ui/KeysPage.qml:229
+msgid "Asks for the administrator password once per changed parameter"
+msgstr "Demande le mot de passe administrateur une fois par paramètre modifié"
+
+#: ui/KeysPage.qml:236
+msgid "Parameters applied to every Apple keyboard."
+msgstr "Paramètres appliqués à tous les claviers Apple."
+
+#: ui/KeysPage.qml:253
+msgid "Undo changes"
+msgstr "Annuler les modifications"
+
+#: ui/KeysPage.qml:270
+msgid "Waiting for the authentication"
+msgstr "En attente de l'authentification"
+
+#: ui/KeysPage.qml:277
+msgctxt "@title:group"
+msgid "Manual key mapping"
+msgstr "Mapping manuel des touches"
+
+#: ui/KeysPage.qml:280
+msgid "Profile:"
+msgstr "Profil :"
+
+#: ui/KeysPage.qml:284
+msgid "Preset:"
+msgstr "Préréglage :"
+
+#: ui/KeysPage.qml:288
+msgid "none (parameters left as they are)"
+msgstr "aucun (paramètres laissés tels quels)"
+
+#: ui/KeysPage.qml:290
+msgid "Preset of the profile"
+msgstr "Préréglage du profil"
+
+#: ui/KeysPage.qml:293
+msgid "Use this preset"
+msgstr "Utiliser ce préréglage"
+
+#: ui/KeysPage.qml:299
+msgid "Preset saved in the profile; use “Install the mapping” to apply it."
+msgstr "Préréglage enregistré dans le profil ; utilisez « Installer le mapping » pour l'appliquer."
+
+#: ui/KeysPage.qml:305
+msgid "Remapped keys:"
+msgstr "Touches réaffectées :"
+
+#: ui/KeysPage.qml:309
+msgid "none"
+msgstr "aucune"
+
+#: ui/KeysPage.qml:317
+msgctxt "key -> code"
+msgid "%1 → %2"
+msgstr "%1 → %2"
+
+#: ui/KeysPage.qml:322
+msgid "Remove"
+msgstr "Retirer"
+
+#: ui/KeysPage.qml:325
+msgid "Remove the mapping of %1"
+msgstr "Retirer le mapping de %1"
+
+#: ui/KeysPage.qml:332
+msgid "Mapping removed from the profile."
+msgstr "Mapping retiré du profil."
+
+#: ui/KeysPage.qml:340
+msgid "Remap:"
+msgstr "Réaffecter :"
+
+#: ui/KeysPage.qml:345
+msgid "Key to remap"
+msgstr "Touche à réaffecter"
+
+#: ui/KeysPage.qml:351
+msgid "Linux key code (KEY_…)"
+msgstr "Code de touche Linux (KEY_…)"
+
+#: ui/KeysPage.qml:356
+msgid "Add"
+msgstr "Ajouter"
+
+#: ui/KeysPage.qml:364
+msgid "Mapping saved in the profile; use “Install the mapping” to apply it."
+msgstr "Mapping enregistré dans le profil ; utilisez « Installer le mapping » pour l'appliquer."
+
+#: ui/KeysPage.qml:371
+msgid "Install the mapping…"
+msgstr "Installer le mapping…"
+
+#: ui/KeysPage.qml:374
+msgid "Installs the active profile (udev hwdb and its parameters); asks for the administrator password"
+msgstr "Installe le profil actif (hwdb udev et ses paramètres) ; demande le mot de passe administrateur"
+
+#: ui/KeysPage.qml:379
+msgid "Mapping installed."
+msgstr "Mapping installé."
+
+#: ui/KeysPage.qml:384
+msgid "Back to the kernel mapping…"
+msgstr "Revenir au mapping du noyau…"
+
+#: ui/KeysPage.qml:391
+msgid "Kernel mapping restored."
+msgstr "Mapping du noyau rétabli."
+
+#: ui/KeysPage.qml:400
+msgctxt "@title:group"
+msgid "KDE shortcuts"
+msgstr "Raccourcis KDE"
+
+#: ui/KeysPage.qml:403
+msgid "F4 (Launchpad):"
+msgstr "F4 (Launchpad) :"
+
+#: ui/KeysPage.qml:405
+msgid "Bind F4 to the application launcher"
+msgstr "Lier F4 au lanceur d'applications"
+
+#: ui/KeysPage.qml:408
+msgid "Adds the missing KDE shortcut for the Launch (D) key, never replacing an existing one"
+msgstr "Ajoute le raccourci KDE manquant pour la touche Launch (D), sans jamais remplacer un raccourci existant"
+
+#: ui/KeysPage.qml:413
+msgid "KDE shortcuts updated."
+msgstr "Raccourcis KDE mis à jour."
+
+#: ui/KeysPage.qml:423
+msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
+msgstr "Pour annuler, dans un terminal : akmctl keymap kde-apply --undo"
+
+#: ui/main.qml:26
+msgid "The keyboard service (apple-kb-monitord) is not running: the state, the name and the reconnection are unavailable. The keys and the notifications can still be set."
+msgstr "Le service du clavier (apple-kb-monitord) n'est pas lancé : l'état, le nom et la reconnexion sont indisponibles. Les touches et les notifications restent réglables."
+
+#: ui/main.qml:30
+msgid "Starting…"
+msgstr "Démarrage…"
+
+#: ui/main.qml:30
+msgid "Start the service"
+msgstr "Lancer le service"
+
+#: ui/main.qml:38
+msgid "The service could not be started: %1"
+msgstr "Le service n'a pas pu être lancé : %1"
+
+#: ui/main.qml:49
+msgid "Sections of the Apple keyboard settings"
+msgstr "Sections des réglages du clavier Apple"
+
+#: ui/main.qml:51
+msgctxt "@title:tab"
+msgid "State"
+msgstr "État"
+
+#: ui/main.qml:52
+msgctxt "@title:tab"
+msgid "Keys"
+msgstr "Touches"
+
+#: ui/main.qml:53
+msgctxt "@title:tab"
+msgid "Notifications"
+msgstr "Notifications"
+
+#: ui/main.qml:54
+msgctxt "@title:tab"
+msgid "Name"
+msgstr "Nom"
+
+#: ui/main.qml:55
+msgctxt "@title:tab"
+msgid "Diagnostics"
+msgstr "Diagnostic"
+
+#: ui/NamePage.qml:31
+msgctxt "placeholder in a command"
+msgid "NAME"
+msgstr "NOM"
+
+#: ui/NamePage.qml:52
+msgctxt "@title:group"
+msgid "Name on this computer"
+msgstr "Nom sur cet ordinateur"
+
+#: ui/NamePage.qml:55
+msgid "Shown as:"
+msgstr "Affiché comme :"
+
+#: ui/NamePage.qml:61
+msgid "Keyboard's own name:"
+msgstr "Nom propre du clavier :"
+
+#: ui/NamePage.qml:69
+msgid "New name:"
+msgstr "Nouveau nom :"
+
+#: ui/NamePage.qml:73
+msgid "e.g. Office keyboard"
+msgstr "par ex. Clavier du bureau"
+
+#: ui/NamePage.qml:75
+msgid "New name of the keyboard on this computer"
+msgstr "Nouveau nom du clavier sur cet ordinateur"
+
+#: ui/NamePage.qml:81
+msgid "Rename"
+msgstr "Renommer"
+
+#: ui/NamePage.qml:89
+msgid "Renamed to “%1” on this computer."
+msgstr "Renommé « %1 » sur cet ordinateur."
+
+#: ui/NamePage.qml:89
+msgid "no answer in time"
+msgstr "pas de réponse à temps"
+
+#: ui/NamePage.qml:89 ui/NamePage.qml:104
+msgid "Not renamed: %1"
+msgstr "Non renommé : %1"
+
+#: ui/NamePage.qml:96
+msgid "Use the keyboard's own name"
+msgstr "Reprendre le nom propre du clavier"
+
+#: ui/NamePage.qml:104
+msgid "The keyboard's own name is used again."
+msgstr "Le nom propre du clavier est de nouveau utilisé."
+
+#: ui/NamePage.qml:115
+msgid "Renaming needs the keyboard service."
+msgstr "Le renommage nécessite le service du clavier."
+
+#: ui/NamePage.qml:116
+msgid "No keyboard is known yet."
+msgstr "Aucun clavier n'est encore connu."
+
+#: ui/NamePage.qml:117
+msgid "Only this computer sees this name (Bluetooth alias); the keyboard itself is not changed."
+msgstr "Seul cet ordinateur voit ce nom (alias Bluetooth) ; le clavier lui-même n'est pas modifié."
+
+#: ui/NamePage.qml:126
+msgctxt "@title:group"
+msgid "Inside the keyboard: terminal only"
+msgstr "Dans le clavier : en terminal uniquement"
+
+#: ui/NamePage.qml:133
+msgid "This module never writes into the keyboard. Writing the name stored in the keyboard, or making it forget its pairings, changes the keyboard itself: these operations stay in a terminal, where they show what they will send and ask you to type a confirmation."
+msgstr "Ce module n'écrit jamais dans le clavier. Écrire le nom stocké dans le clavier, ou lui faire oublier ses appairages, modifie le clavier lui-même : ces opérations restent en terminal, où elles montrent ce qu'elles vont envoyer et demandent de taper une confirmation."
+
+#: ui/NamePage.qml:142
+msgid "Name stored in the keyboard now: %1"
+msgstr "Nom stocké dans le clavier actuellement : %1"
+
+#: ui/NamePage.qml:143
+msgid "Name stored in the keyboard: not read yet (the service reads it once per connection)."
+msgstr "Nom stocké dans le clavier : pas encore lu (le service le lit une fois par connexion)."
+
+#: ui/NamePage.qml:148
+msgid "Name stored in the keyboard, preview (shows the bytes, writes nothing):"
+msgstr "Nom stocké dans le clavier, aperçu (montre les octets, n'écrit rien) :"
+
+#: ui/NamePage.qml:150
+msgid "Then the write itself (pre-flight checks, backup, name typed again; refused while the sequence is not proven, issue #248):"
+msgstr "Puis l'écriture elle-même (vérifications préalables, sauvegarde, nom retapé ; refusée tant que la séquence n'est pas prouvée, ticket #248) :"
+
+#: ui/NamePage.qml:152
+msgid "Forget the keyboard cleanly, as macOS does, then pair it again (only after typing the confirmation word, issue #217):"
+msgstr "Oublier proprement le clavier comme macOS, puis le réappairer (seulement après avoir tapé le mot de confirmation, ticket #217) :"
+
+#: ui/NamePage.qml:173
+msgid "Command: %1"
+msgstr "Commande : %1"
+
+#: ui/NamePage.qml:176
+msgid "Copy"
+msgstr "Copier"
+
+#: ui/NamePage.qml:178
+msgid "Copy the command"
+msgstr "Copier la commande"
+
+#: ui/NamePage.qml:182
+msgid "Command copied."
+msgstr "Commande copiée."
+
+#: ui/StatePage.qml:36
+msgctxt "percentage"
+msgid "%1 %"
+msgstr "%1 %"
+
+#: ui/StatePage.qml:40
+msgid "%1 second ago"
+msgid_plural "%1 seconds ago"
+msgstr[0] "il y a %1 seconde"
+msgstr[1] "il y a %1 secondes"
+
+#: ui/StatePage.qml:41
+msgid "%1 minute ago"
+msgid_plural "%1 minutes ago"
+msgstr[0] "il y a %1 minute"
+msgstr[1] "il y a %1 minutes"
+
+#: ui/StatePage.qml:42
+msgid "%1 hour ago"
+msgid_plural "%1 hours ago"
+msgstr[0] "il y a %1 heure"
+msgstr[1] "il y a %1 heures"
+
+#: ui/StatePage.qml:43
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "il y a %1 jour"
+msgstr[1] "il y a %1 jours"
+
+#: ui/StatePage.qml:58 ui/StatePage.qml:61
+msgctxt "signal quality"
+msgid "excellent"
+msgstr "excellent"
+
+#: ui/StatePage.qml:59 ui/StatePage.qml:61
+msgctxt "signal quality"
+msgid "good"
+msgstr "bon"
+
+#: ui/StatePage.qml:60 ui/StatePage.qml:61
+msgctxt "signal quality"
+msgid "weak"
+msgstr "faible"
+
+#: ui/StatePage.qml:63
+msgctxt "signal quality, then the relative value in dB (0 = ideal range)"
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+#: ui/StatePage.qml:67
+msgid "up to date"
+msgstr "à jour"
+
+#: ui/StatePage.qml:68
+msgid "a newer version exists (this module never updates the firmware)"
+msgstr "une version plus récente existe (ce module ne met jamais le firmware à jour)"
+
+#: ui/StatePage.qml:69
+msgid "model not in the table"
+msgstr "modèle absent de la table"
+
+#: ui/StatePage.qml:70
+msgid "not assessed yet"
+msgstr "pas encore évalué"
+
+#: ui/StatePage.qml:79
+msgid "No data: the keyboard service is not running"
+msgstr "Aucune donnée : le service du clavier n'est pas lancé"
+
+#: ui/StatePage.qml:79
+msgid "Looking for the keyboard service…"
+msgstr "Recherche du service du clavier…"
+
+#: ui/StatePage.qml:80
+msgid "Use “Start the service” above, or run: systemctl --user start apple-kb-monitord.service"
+msgstr "Utilisez « Lancer le service » ci-dessus, ou exécutez : systemctl --user start apple-kb-monitord.service"
+
+#: ui/StatePage.qml:89
+msgid "The keyboard service did not answer within 5 seconds. It is busy or stuck; the values shown may be old."
+msgstr "Le service du clavier n'a pas répondu en 5 secondes. Il est occupé ou bloqué ; les valeurs affichées peuvent être anciennes."
+
+#: ui/StatePage.qml:90
+msgid "The keyboard service answered with an error: %1"
+msgstr "Le service du clavier a répondu par une erreur : %1"
+
+#: ui/StatePage.qml:104
+msgid "Loading the keyboard state"
+msgstr "Chargement de l'état du clavier"
+
+#: ui/StatePage.qml:113
+msgctxt "@title:group"
+msgid "Keyboard"
+msgstr "Clavier"
+
+#: ui/StatePage.qml:116
+msgid "Name:"
+msgstr "Nom :"
+
+#: ui/StatePage.qml:120
+msgid "Name: %1"
+msgstr "Nom : %1"
+
+#: ui/StatePage.qml:123
+msgid "Model:"
+msgstr "Modèle :"
+
+#: ui/StatePage.qml:129
+msgid "Address:"
+msgstr "Adresse :"
+
+#: ui/StatePage.qml:142
+msgid "connected"
+msgstr "connecté"
+
+#: ui/StatePage.qml:142
+msgid "disconnected"
+msgstr "déconnecté"
+
+#: ui/StatePage.qml:143
+msgid "Connection: %1"
+msgstr "Connexion : %1"
+
+#: ui/StatePage.qml:147
+msgid "Problem:"
+msgstr "Problème :"
+
+#: ui/StatePage.qml:156
+msgctxt "@title:group"
+msgid "Battery"
+msgstr "Batterie"
+
+#: ui/StatePage.qml:159
+msgid "Keyboard indication:"
+msgstr "Indication du clavier :"
+
+#: ui/StatePage.qml:161
+msgid "Keyboard indication: %1"
+msgstr "Indication du clavier : %1"
+
+#: ui/StatePage.qml:164
+msgid "Apple display:"
+msgstr "Affichage Apple :"
+
+#: ui/StatePage.qml:166
+msgctxt "percentage as macOS shows it"
+msgid "%1 (as macOS shows it)"
+msgstr "%1 (tel que macOS l'affiche)"
+
+#: ui/StatePage.qml:169
+msgid "Estimated charge:"
+msgstr "Charge estimée :"
+
+#: ui/StatePage.qml:172
+msgid "new batteries: no estimate during the first two days"
+msgstr "piles neuves : pas d'estimation pendant les deux premiers jours"
+
+#: ui/StatePage.qml:173
+msgctxt "estimate, low bound, high bound, chemistry"
+msgid "%1 (between %2 and %3, %4 batteries)"
+msgstr "%1 (entre %2 et %3, piles : %4)"
+
+#: ui/StatePage.qml:175
+msgid "not available"
+msgstr "indisponible"
+
+#: ui/StatePage.qml:178
+msgid "Estimated charge: %1"
+msgstr "Charge estimée : %1"
+
+#: ui/StatePage.qml:181
+msgid "Voltage:"
+msgstr "Tension :"
+
+#: ui/StatePage.qml:183
+msgctxt "volts"
+msgid "%1 V"
+msgstr "%1 V"
+
+#: ui/StatePage.qml:186
+msgid "Remaining:"
+msgstr "Autonomie restante :"
+
+#: ui/StatePage.qml:191
+msgid "Batteries installed:"
+msgstr "Piles installées le :"
+
+#: ui/StatePage.qml:199
+msgctxt "@title:group"
+msgid "Link"
+msgstr "Liaison"
+
+#: ui/StatePage.qml:202
+msgid "Signal:"
+msgstr "Signal :"
+
+#: ui/StatePage.qml:204
+msgid "Signal: %1"
+msgstr "Signal : %1"
+
+#: ui/StatePage.qml:207
+msgid "Last measurement:"
+msgstr "Dernière mesure :"
+
+#: ui/StatePage.qml:208
+msgid "never"
+msgstr "jamais"
+
+#: ui/StatePage.qml:209
+msgid "Last measurement: %1"
+msgstr "Dernière mesure : %1"
+
+#: ui/StatePage.qml:214
+msgctxt "@title:group"
+msgid "Firmware"
+msgstr "Firmware"
+
+#: ui/StatePage.qml:217 ui/StatePage.qml:239
+msgid "Version:"
+msgstr "Version :"
+
+#: ui/StatePage.qml:222
+msgid "Latest known:"
+msgstr "Dernière connue :"
+
+#: ui/StatePage.qml:228
+msgid "Status:"
+msgstr "Statut :"
+
+#: ui/StatePage.qml:236
+msgctxt "@title:group"
+msgid "Service"
+msgstr "Service"
+
+#: ui/StatePage.qml:243
+msgid "Last error:"
+msgstr "Dernière erreur :"

@@ -10,8 +10,11 @@ license=('GPL-2.0-or-later')
 # ldd does not show them: declared by hand (#156). libcap = setcap in the .install.
 depends=('bluez' 'polkit' 'dbus' 'systemd' 'libcap'
          'wayland' 'libxkbcommon' 'libxkbcommon-x11' 'libglvnd'
-         'libx11' 'libxcursor' 'libxi' 'libxrandr')
-makedepends=('rust' 'gcc' 'gettext')
+         'libx11' 'libxcursor' 'libxi' 'libxrandr'
+         # System Settings module "Clavier Apple" (kcm/, #250): Plasma 6 only
+         # loads a KCM from a plugin, linked to these (QML pages inside)
+         'qt6-base' 'qt6-declarative' 'kcmutils' 'ki18n' 'kcoreaddons' 'kirigami')
+makedepends=('rust' 'gcc' 'gettext' 'cmake' 'extra-cmake-modules')
 optdepends=(
     'bluez-utils: bluetoothctl CLI for BT management'
     'libnotify: desktop notifications on low battery'
@@ -35,6 +38,11 @@ build() {
     # rssi-helper (C): the only binary carrying cap_net_admin (file capability
     # applied by apple-kb-monitor.install, see post_install)
     gcc $CFLAGS $LDFLAGS -Wall -Wextra -o "$startdir/rssi-helper" "$startdir/rssi-helper.c"
+
+    # System Settings module (#250): minimal C++ plugin + QML pages + .mo
+    cmake -S "$startdir/kcm" -B "$srcdir/kcm-build" -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_BUILD_TYPE=None -DKDE_INSTALL_USE_QT_SYS_PATHS=ON -DBUILD_TESTING=OFF
+    cmake --build "$srcdir/kcm-build"
 }
 
 package() {
@@ -119,6 +127,12 @@ package() {
     # application of System Settings > Notifications (popup, sound, history, DND).
     install -Dm644 "$startdir/data/apple-kb-monitor.notifyrc"                    "$pkgdir/usr/share/knotifications6/apple-kb-monitor.notifyrc"
     install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.service"
+
+    # ── System Settings → Input Devices → Keyboard → Apple Keyboard (#250):
+    #    lib/qt6/plugins/plasma/kcms/systemsettings/kcm_applekeyboard.so,
+    #    share/applications/kcm_applekeyboard.desktop, fr .mo ──
+    DESTDIR="$pkgdir" cmake --install "$srcdir/kcm-build"
+    install -Dm644 "$startdir/docs/KCM.md" "$pkgdir/usr/share/doc/apple-kb-monitor/KCM.md"
 
     # ── Plasma widget ───────────────────────────────────────────────────
     local plasma_dir="$pkgdir/usr/share/plasma/plasmoids/com.agenceapi.devicehub"
