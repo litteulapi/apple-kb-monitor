@@ -1,0 +1,10 @@
+[package]
+name = "akm-core"
+version.workspace = true
+edition.workspace = true
+description = "Apple Bluetooth keyboard: models, HID decoding, kernel battery, history, connection state machine (no GUI, no D-Bus)"
+
+[dependencies]
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

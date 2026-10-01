@@ -52,7 +52,7 @@ fn tooltip_text(snap: &SharedState) -> String {
 fn spawn_poll_thread(state: State, quit_flag: Arc<AtomicBool>) {
     // Wake event monitor (Input Report 0x13): discovers the node itself, so it
     // is started even if the keyboard is absent right now.
-    keyboard::spawn_wake_monitor("");
+    keyboard::ensure_wake_monitor();
 
     thread::Builder::new()
         .name("kb-supervisor".into())
@@ -105,7 +105,7 @@ impl Actor {
                 // History: only real samples (no invented 100 % / 0 V points).
                 let pct = battery_pct(&k);
                 if let (Some(p), Some(v)) = (pct, k.battery.voltage) {
-                    history::append_history(p, v);
+                    history::append_history(p, Some(v));
                 }
                 self.kb = Some(k);
                 self.after_battery_update();
@@ -177,13 +177,8 @@ impl Actor {
             return;
         }
         self.remaining_at = Some(now);
-        self.remaining = history::estimate_remaining().map(|(rate, hours)| {
-            if hours < 24.0 {
-                format!("{:.1}h ({:.1} mV/h)", hours, rate)
-            } else {
-                format!("{:.1} days ({:.1} mV/h)", hours / 24.0, rate)
-            }
-        });
+        self.remaining = history::estimate_remaining()
+            .map(|(rate, hours)| akm_core::history::format_remaining(rate, hours));
     }
 
     fn publish(&mut self, state: &State) {
@@ -331,7 +326,7 @@ impl ApiHubApp {
             .collect();
         let voltage_history: Vec<(f64, f64)> = entries
             .iter()
-            .map(|e| (e.ts as f64, e.voltage))
+            .filter_map(|e| e.voltage.map(|v| (e.ts as f64, v)))
             .collect();
 
         Self {
@@ -648,7 +643,7 @@ impl ApiHubApp {
                 if ui.button(egui::RichText::new("Refresh").size(14.0)).clicked() {
                     let entries = history::read_history();
                     self.battery_history = entries.iter().map(|e| (e.ts as f64, e.pct)).collect();
-                    self.voltage_history = entries.iter().map(|e| (e.ts as f64, e.voltage)).collect();
+                    self.voltage_history = entries.iter().filter_map(|e| e.voltage.map(|v| (e.ts as f64, v))).collect();
                 }
             });
 

@@ -1,10 +1,20 @@
+[workspace]
+members = [".", "akm-core"]
+default-members = [".", "akm-core"]
+resolver = "2"
+
+[workspace.package]
+version = "3.1.0"
+edition = "2021"
+
 [package]
 name = "apihub-app"
-version = "3.0.0"
-edition = "2021"
-description = "Apple Bluetooth keyboard monitor — tray + GUI, single binary"
+version.workspace = true
+edition.workspace = true
+description = "Apple Bluetooth keyboard monitor — tray + GUI"
 
 [dependencies]
+akm-core = { path = "akm-core" }
 dirs = "5"
 eframe = "0.29"
 libc = "0.2"
