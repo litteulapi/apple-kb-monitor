@@ -98,11 +98,6 @@ pub fn volts_text(v: f64) -> String {
     format!("{v:.2} V")
 }
 
-/// Percentage interpolated on the discharge curve: always marked as an estimate.
-pub fn curve_text(p: f64) -> String {
-    format!("{p:.0} % (estimation)")
-}
-
 pub fn voltage_level(v: f64) -> Level {
     if v > 2.8 {
         Level::Good
@@ -122,16 +117,108 @@ pub fn rssi_level(r: Option<i32>) -> Level {
     }
 }
 
-/// Four-step signal bars on the relative scale; unknown is empty.
-pub fn rssi_bars(r: Option<i32>) -> &'static str {
+/// Lit bars (0-4) of the signal gauge on the relative scale; unknown = 0.
+/// Drawn with the painter: the block glyphs U+2581-2588 are missing from
+/// egui's fonts and showed as empty squares (#198).
+pub fn rssi_bar_count(r: Option<i32>) -> u8 {
     match rssi_valid(r) {
-        None => "\u{2581}\u{2581}\u{2581}\u{2581}",
-        Some(v) if v >= 0 => "\u{2582}\u{2584}\u{2586}\u{2588}",
-        Some(v) if v >= -2 => "\u{2582}\u{2584}\u{2586}\u{2581}",
-        Some(v) if v >= -5 => "\u{2582}\u{2584}\u{2581}\u{2581}",
-        Some(v) if v >= -10 => "\u{2582}\u{2581}\u{2581}\u{2581}",
-        Some(_) => "\u{2581}\u{2581}\u{2581}\u{2581}",
+        None => 0,
+        Some(v) if v >= 0 => 4,
+        Some(v) if v >= -2 => 3,
+        Some(v) if v >= -5 => 2,
+        Some(v) if v >= -10 => 1,
+        Some(_) => 0,
     }
+}
+
+/// Where the big percentage comes from: the keyboard's own indication
+/// (kernel / report 0x47) or a voltage estimate (#198).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PctSource {
+    Indication(f64),
+    Estimate(f64),
+    Unknown,
+}
+
+fn pct_ok(p: Option<f64>) -> Option<f64> {
+    p.filter(|v| v.is_finite() && (0.0..=100.0).contains(v))
+}
+
+pub fn pct_source(b: &akm_core::report::KbBattery) -> PctSource {
+    if let Some(p) = pct_ok(b.percentage).or(pct_ok(b.percentage_fine)) {
+        PctSource::Indication(p)
+    } else if let Some(p) = pct_ok(b.percentage_estimate).or(pct_ok(b.percentage_interpolated)) {
+        PctSource::Estimate(p)
+    } else {
+        PctSource::Unknown
+    }
+}
+
+impl PctSource {
+    pub fn value(self) -> Option<f64> {
+        match self {
+            Self::Indication(p) | Self::Estimate(p) => Some(p),
+            Self::Unknown => None,
+        }
+    }
+    pub fn caption(self) -> &'static str {
+        match self {
+            Self::Indication(_) => "keyboard indication",
+            Self::Estimate(_) => "estimate from the voltage curve",
+            Self::Unknown => "battery level unknown",
+        }
+    }
+}
+
+/// Battery chemistry line: the one declared to the daemon when it made an
+/// estimate, else a guess from the voltage, always marked as such.
+pub fn chemistry_text(b: &akm_core::report::KbBattery) -> Option<String> {
+    if let Some(e) = &b.charge_estimate {
+        return Some(format!("{} (declared)", e.chemistry.as_str()));
+    }
+    b.voltage
+        .filter(|v| v.is_finite() && *v > 0.0)
+        .map(|v| format!("{} (guess from the voltage)", akm_core::calibration::detect_battery_type(v)))
+}
+
+/// Paired state. The daemon never fills `bluetooth.paired` (always false
+/// while BlueZ says Paired=true, #198): only the paired host read from the
+/// keyboard (0x4C) or an explicit `true` prove it; otherwise unknown.
+pub fn paired_text(b: &akm_core::report::KbBluetooth) -> Option<&'static str> {
+    (b.paired || b.paired_host_addr.is_some()).then_some("Yes")
+}
+
+/// Autonomy left: the daemon's forecast, else the legacy text.
+pub fn remaining_text(s: &akm_core::Snapshot, now: u64) -> Option<String> {
+    s.remaining_s(now)
+        .map(akm_core::forecast::format_days)
+        .or_else(|| s.remaining_display.clone().filter(|t| !t.trim().is_empty()))
+}
+
+/// Last wake event of the keyboard (input report 0x13), passive listening.
+pub fn wake_text(w: &akm_core::report::KbWake) -> Option<String> {
+    let age = w.last_age_s.filter(|a| a.is_finite() && *a >= 0.0)?;
+    Some(format!("{} ({} since start)", age_text(Some(age as u64)), w.count))
+}
+
+/// Two side-by-side tiles only when each gets a usable width; below, the
+/// tiles are stacked (#195).
+pub const TWO_COLUMNS_MIN_WIDTH: f32 = 660.0;
+pub fn two_columns(width: f32) -> bool {
+    width >= TWO_COLUMNS_MIN_WIDTH
+}
+
+/// History points that can be drawn: finite, percentage in 0..=100, voltage
+/// > 0, at or after `cutoff`, sorted by time.
+pub fn chart_points(pts: &[(f64, f64)], cutoff: f64, pct: bool) -> Vec<(f64, f64)> {
+    let mut v: Vec<(f64, f64)> = pts
+        .iter()
+        .copied()
+        .filter(|(t, y)| t.is_finite() && y.is_finite() && *t >= cutoff)
+        .filter(|(_, y)| if pct { (0.0..=100.0).contains(y) } else { *y > 0.0 && *y < 10.0 })
+        .collect();
+    v.sort_by(|a, b| a.0.total_cmp(&b.0));
+    v
 }
 
 pub fn accent_color(rgb: [u8; 3]) -> Color32 {
@@ -185,7 +272,6 @@ mod tests {
     fn voltage_and_curve_texts() {
         assert_eq!(volts_text(2.987), "2.99 V");
         assert_eq!(volts_text(2.9), "2.90 V");
-        assert_eq!(curve_text(99.78), "100 % (estimation)");
     }
 
     #[test]
@@ -199,7 +285,10 @@ mod tests {
         assert_eq!(rssi_text(Some(-12)), "weak (\u{2212}12)");
         assert_eq!(rssi_text(Some(2)), "excellent (+2)");
         assert_eq!(rssi_level(Some(127)), Level::Unknown);
-        assert_eq!(rssi_bars(Some(127)), rssi_bars(None));
+        assert_eq!(rssi_bar_count(Some(127)), 0);
+        assert_eq!(rssi_bar_count(None), 0);
+        assert_eq!(rssi_bar_count(Some(0)), 4);
+        assert_eq!(rssi_bar_count(Some(-1)), 3);
     }
 
     #[test]
@@ -251,12 +340,88 @@ mod tests {
         assert_eq!(rssi_level(Some(-5)), Level::Good);
         assert_eq!(rssi_level(Some(-9)), Level::Warn);
         assert_eq!(rssi_level(Some(-40)), Level::Bad);
-        assert_ne!(rssi_bars(Some(0)), rssi_bars(Some(-40)));
+        assert_ne!(rssi_bar_count(Some(0)), rssi_bar_count(Some(-40)));
     }
 
     #[test]
     fn palettes_differ_between_themes() {
         assert_ne!(Palette::new(true).good, Palette::new(false).good);
         assert!(Palette::new(true).color(Level::Unknown).is_none());
+    }
+
+    #[test]
+    fn big_percentage_says_where_it_comes_from() {
+        let mut b = akm_core::report::KbBattery::default();
+        assert_eq!(pct_source(&b), PctSource::Unknown);
+        b.percentage_estimate = Some(81.3);
+        assert_eq!(pct_source(&b), PctSource::Estimate(81.3));
+        assert!(pct_source(&b).caption().contains("estimate"));
+        b.percentage_interpolated = Some(80.0);
+        assert_eq!(pct_source(&b), PctSource::Estimate(81.3));
+        b.percentage = Some(f64::NAN);
+        assert_eq!(pct_source(&b), PctSource::Estimate(81.3));
+        b.percentage = Some(96.0);
+        assert_eq!(pct_source(&b), PctSource::Indication(96.0));
+        assert_eq!(pct_source(&b).caption(), "keyboard indication");
+        b.percentage = Some(250.0);
+        b.percentage_fine = None;
+        assert_eq!(pct_source(&b).value(), Some(81.3));
+    }
+
+    #[test]
+    fn chemistry_prefers_the_declared_one() {
+        let mut b = akm_core::report::KbBattery::default();
+        assert_eq!(chemistry_text(&b), None);
+        b.voltage = Some(2.95);
+        assert!(chemistry_text(&b).unwrap().contains("guess"));
+        b.voltage = Some(f64::NAN);
+        assert_eq!(chemistry_text(&b), None);
+        b.charge_estimate =
+            akm_core::chemistry::estimate_charge(2460, akm_core::chemistry::Chemistry::Nimh);
+        if b.charge_estimate.is_some() {
+            assert_eq!(chemistry_text(&b).unwrap(), "nimh (declared)");
+        }
+    }
+
+    #[test]
+    fn paired_is_never_a_false_no() {
+        let mut bt = akm_core::report::KbBluetooth::default();
+        assert_eq!(paired_text(&bt), None);
+        bt.paired_host_addr = Some("66:77:88:99:AA:BB".into());
+        assert_eq!(paired_text(&bt), Some("Yes"));
+        bt.paired_host_addr = None;
+        bt.paired = true;
+        assert_eq!(paired_text(&bt), Some("Yes"));
+    }
+
+    #[test]
+    fn remaining_and_wake_texts() {
+        let mut s = akm_core::Snapshot::default();
+        assert_eq!(remaining_text(&s, 1000), None);
+        s.remaining_display = Some("  ".into());
+        assert_eq!(remaining_text(&s, 1000), None);
+        s.remaining_display = Some("about 3 days".into());
+        assert_eq!(remaining_text(&s, 1000).as_deref(), Some("about 3 days"));
+        let mut w = akm_core::report::KbWake::default();
+        assert_eq!(wake_text(&w), None);
+        w.last_age_s = Some(f64::NAN);
+        assert_eq!(wake_text(&w), None);
+        w.last_age_s = Some(125.4);
+        w.count = 3;
+        assert_eq!(wake_text(&w).unwrap(), "2 min ago (3 since start)");
+    }
+
+    #[test]
+    fn chart_drops_unusable_points() {
+        let pts = [(10.0, 50.0), (5.0, 60.0), (11.0, f64::NAN), (12.0, 1e308), (13.0, -1.0), (1.0, 70.0), (f64::INFINITY, 1.0)];
+        assert_eq!(chart_points(&pts, 2.0, true), vec![(5.0, 60.0), (10.0, 50.0)]);
+        let v = [(1.0, 2.9), (2.0, 0.0), (3.0, 1e9)];
+        assert_eq!(chart_points(&v, 0.0, false), vec![(1.0, 2.9)]);
+    }
+
+    #[test]
+    fn layout_switches_to_one_column_when_narrow() {
+        assert!(!two_columns(500.0));
+        assert!(two_columns(704.0));
     }
 }

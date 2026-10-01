@@ -189,191 +189,202 @@ impl ApiHubApp {
 
     fn tab_keyboard(&mut self, ui: &mut egui::Ui, snap: &Snapshot) {
         if let Some(ref err) = snap.kb_error {
-            ui.label(egui::RichText::new(err.as_str()).size(16.0).color(self.palette.bad));
+            ui.add(egui::Label::new(egui::RichText::new(err.as_str()).size(16.0).color(self.palette.bad)).wrap());
         }
 
-        egui::ScrollArea::vertical().show(ui, |ui| {
-        match &snap.keyboard {
-            None => {
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            let Some(kb) = &snap.keyboard else {
                 ui.label(egui::RichText::new("Waiting for keyboard data...").size(16.0));
-            }
-            Some(kb) => {
-                // Kernel / 0x47 first; 0xEA is not a percentage (#136).
-                let pct: Option<f64> = kb.battery_pct();
+                return;
+            };
+            let now = unix_now();
+            // Two tiles per row only when each gets a usable width (#195).
+            let wide = view::two_columns(ui.available_width());
+            self.tile_row(ui, wide, |me, ui| me.battery_tile(ui, snap, kb, now), |me, ui| me.radio_tile(ui, snap, kb, now));
+            ui.add_space(8.0);
+            self.tile_row(ui, wide, |me, ui| me.device_tile(ui, snap, kb), |me, ui| me.firmware_tile(ui, kb));
+            ui.add_space(8.0);
+            self.draw_battery_history(ui);
+        });
+    }
 
-                // Top row: battery tile + radio tile side by side
-                ui.columns(2, |cols| {
-                    // LEFT: Battery tile
-                    cols[0].group(|ui| {
-                        ui.vertical_centered(|ui| {
-                            ui.label(self.tint(
-                                egui::RichText::new(view::pct_text(pct, 0)).size(28.0).strong(),
-                                view::battery_level(pct)));
-                            ui.label(egui::RichText::new("keyboard indication").weak().size(14.0));
-                            // Battery type subtitle under hero percentage
-                            if let Some(v) = kb.battery.voltage {
-                                ui.label(egui::RichText::new(format!("{} (estimation)", keyboard::detect_battery_type(v)))
-                                    .weak().size(16.0));
-                            }
-                            ui.add(egui::ProgressBar::new(view::pct_fraction(pct))
-                                .text(view::pct_text(pct, 1)));
-                        });
-                        ui.add_space(4.0);
-                        egui::Grid::new("bat_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                            if let Some(v) = kb.battery.voltage {
-                                // Measured: reports 0x46 / 0xFF, in mV (#139).
-                                ui.label(egui::RichText::new("Voltage").weak().size(16.0));
-                                ui.label(self.tint(
-                                    egui::RichText::new(view::volts_text(v)).strong().size(18.0),
-                                    view::voltage_level(v)));
-                                ui.end_row();
-                            }
-                            if let Some(t) = view::estimate_text(&kb.battery) {
-                                // Charge estimated by the declared chemistry [hypothèse] (#178).
-                                ui.label(egui::RichText::new("Estimate").weak().size(16.0));
-                                ui.label(egui::RichText::new(t).size(16.0));
-                                ui.end_row();
-                            }
-                            // The kernel % steps down only at reconnections (#179).
-                            ui.label(egui::RichText::new("Updated").weak().size(16.0));
-                            ui.label(egui::RichText::new(view::age_text(snap.update_age_s(unix_now()))).size(16.0));
-                            ui.end_row();
-                            if let Some(p) = kb.battery.percentage_interpolated {
-                                // Interpolated on the unit's curve: an estimate.
-                                ui.label(egui::RichText::new("Curve").weak().size(16.0));
-                                ui.label(egui::RichText::new(view::curve_text(p)).size(16.0));
-                                ui.end_row();
-                            }
-                            if let Some(ref rem) = snap.remaining_display {
-                                ui.label(egui::RichText::new("Remaining").weak().size(16.0));
-                                ui.label(egui::RichText::new(rem).size(16.0));
-                                ui.end_row();
-                            }
-                            // LED state
-                            ui.label(egui::RichText::new("LEDs").weak().size(16.0));
-                            ui.horizontal(|ui| {
-                                let on = |b: bool| if b { Level::Good } else { Level::Unknown };
-                                let weak = |b: bool, t: egui::RichText| if b { t } else { t.weak() };
-                                ui.label(weak(snap.caps_lock, self.tint(egui::RichText::new("CAPS").size(16.0).strong(), on(snap.caps_lock))));
-                                ui.label(weak(snap.num_lock, self.tint(egui::RichText::new("NUM").size(16.0).strong(), on(snap.num_lock))));
-                            });
-                            ui.end_row();
-                        });
-                    });
-
-                    // RIGHT: Radio tile
-                    cols[1].group(|ui| {
-                        ui.label(egui::RichText::new("Radio").strong().size(18.0));
-                        ui.add_space(4.0);
-                        egui::Grid::new("radio_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                            // Relative BR/EDR value (dB to the ideal range), not dBm (#174).
-                            let rssi = kb.radio.rel_db();
-                            ui.label(egui::RichText::new("Signal").weak().size(16.0));
-                            let lvl = view::rssi_level(rssi);
-                            ui.horizontal(|ui| {
-                                ui.label(self.tint(egui::RichText::new(view::rssi_text(rssi)).strong().size(18.0), lvl));
-                                ui.label(self.tint(egui::RichText::new(view::rssi_bars(rssi)).size(18.0), lvl));
-                                if view::rssi_valid(rssi).is_some() {
-                                    if let Some(age) = snap.rssi_age_s(unix_now()) {
-                                        ui.label(egui::RichText::new(format!("({:.0}s ago)", age)).weak().size(12.0));
-                                    }
-                                }
-                            });
-                            ui.end_row();
-                            ui.label(egui::RichText::new("TX Power").weak().size(16.0));
-                            ui.label(egui::RichText::new(view::tx_power_text(kb.radio.tx_power_dbm)).size(16.0));
-                            ui.end_row();
-                            ui.label(egui::RichText::new("Connected").weak().size(16.0));
-                            let (txt, lvl) = if kb.bluetooth.connected { ("Yes", Level::Good) } else { ("No", Level::Bad) };
-                            ui.label(self.tint(egui::RichText::new(txt).strong().size(16.0), lvl));
-                            ui.end_row();
-
-                            ui.label(egui::RichText::new("Paired").weak().size(16.0));
-                            ui.label(egui::RichText::new(if kb.bluetooth.paired { "Yes" } else { "No" }).size(16.0));
-                            ui.end_row();
-                        });
-                    });
-                });
-
-                ui.add_space(8.0);
-
-                // Bottom: Device info in two columns
-                ui.columns(2, |cols| {
-                    // LEFT: Identity
-                    cols[0].group(|ui| {
-                        ui.label(egui::RichText::new("Device").strong().size(18.0));
-                        ui.add_space(4.0);
-                        egui::Grid::new("dev_left").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                            if let Some(ref model) = kb.device.model {
-                                ui.label(egui::RichText::new("Model").weak().size(16.0));
-                                ui.label(egui::RichText::new(model).strong().size(16.0));
-                                ui.end_row();
-                            }
-                            if let Some(ref name) = kb.device.name {
-                                ui.label(egui::RichText::new("Own name").weak().size(16.0));
-                                ui.label(egui::RichText::new(name).size(16.0));
-                                ui.end_row();
-                            }
-                            if let Some(ref mac) = kb.device.mac {
-                                ui.label(egui::RichText::new("Name").weak().size(16.0));
-                                self.rename_row(ui, mac, snap.display_name());
-                                ui.end_row();
-                            }
-                            if let Some(ref mac) = kb.device.mac {
-                                ui.label(egui::RichText::new("MAC").weak().size(16.0));
-                                ui.label(egui::RichText::new(mac).monospace().size(16.0));
-                                ui.end_row();
-                            }
-                            if let Some(ref driver) = kb.device.driver {
-                                ui.label(egui::RichText::new("Driver").weak().size(16.0));
-                                ui.label(egui::RichText::new(driver.as_str()).size(16.0));
-                                ui.end_row();
-                            }
-                            if let Some(ref host) = kb.bluetooth.paired_host_addr {
-                                ui.label(egui::RichText::new("Paired host").weak().size(16.0));
-                                ui.label(egui::RichText::new(host).monospace().size(16.0));
-                                ui.end_row();
-                            }
-                        });
-                    });
-
-                    // RIGHT: Firmware
-                    cols[1].group(|ui| {
-                        ui.label(egui::RichText::new("Firmware").strong().size(18.0));
-                        ui.add_space(4.0);
-                        egui::Grid::new("dev_right").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                            if let Some(ref chip) = kb.device.chip {
-                                ui.label(egui::RichText::new("Chip").weak().size(16.0));
-                                ui.label(egui::RichText::new(chip.as_str()).size(16.0));
-                                ui.end_row();
-                            }
-                            if let Some(ref fw) = kb.firmware.version {
-                                ui.label(egui::RichText::new("Version (0x4F)").weak().size(16.0));
-                                ui.label(egui::RichText::new(fw).strong().size(18.0));
-                                ui.end_row();
-                            }
-                            // Uninterpreted vendor reports (meaning not proven, #131/#132).
-                            for (id, hex) in &kb.raw {
-                                ui.label(egui::RichText::new(format!("{id} (raw)")).weak().size(16.0));
-                                ui.label(egui::RichText::new(hex).monospace().size(16.0));
-                                ui.end_row();
-                            }
-                            if kb.incomplete {
-                                ui.label(egui::RichText::new("Read").weak().size(16.0));
-                                ui.label(egui::RichText::new("incomplete (timeout)").size(16.0));
-                                ui.end_row();
-                            }
-                        });
-                    });
-                });
-
-                ui.add_space(8.0);
-
-                // ── Battery History Graph ─────────────────────────────
-                self.draw_battery_history(ui);
-            }
+    /// Two tiles side by side (equal widths) or stacked.
+    fn tile_row(
+        &mut self,
+        ui: &mut egui::Ui,
+        wide: bool,
+        left: impl FnOnce(&mut Self, &mut egui::Ui),
+        right: impl FnOnce(&mut Self, &mut egui::Ui),
+    ) {
+        if wide {
+            ui.columns(2, |cols| {
+                if let [l, r] = cols {
+                    tile(l, |ui| left(self, ui));
+                    tile(r, |ui| right(self, ui));
+                }
+            });
+        } else {
+            tile(ui, |ui| left(self, ui));
+            ui.add_space(8.0);
+            tile(ui, |ui| right(self, ui));
         }
-        }); // ScrollArea
+    }
+
+    fn battery_tile(&mut self, ui: &mut egui::Ui, snap: &Snapshot, kb: &akm_core::report::KbReport, now: u64) {
+        // Kernel / 0x47 first; 0xEA is not a percentage (#136). An estimate is
+        // said to be one (#198).
+        let src = view::pct_source(&kb.battery);
+        let pct = src.value();
+        ui.vertical_centered(|ui| {
+            ui.label(self.tint(egui::RichText::new(view::pct_text(pct, 0)).size(28.0).strong(), view::battery_level(pct)));
+            ui.label(egui::RichText::new(src.caption()).weak().size(14.0));
+            ui.add(egui::ProgressBar::new(view::pct_fraction(pct)).text(view::pct_text(pct, 1)));
+        });
+        ui.add_space(4.0);
+        kv_grid(ui, "bat_detail", |ui| {
+            if let Some(v) = kb.battery.voltage.filter(|v| v.is_finite() && *v > 0.0) {
+                // Measured: reports 0x46 / 0xFF, in mV (#139).
+                key(ui, "Voltage");
+                value(ui, self.tint(egui::RichText::new(view::volts_text(v)).strong().size(18.0), view::voltage_level(v)));
+                ui.end_row();
+            }
+            if let Some(t) = view::estimate_text(&kb.battery) {
+                // Charge estimated by the declared chemistry [hypothèse] (#178).
+                key(ui, "Estimate");
+                value(ui, egui::RichText::new(t).size(16.0));
+                ui.end_row();
+            }
+            if let Some(t) = view::chemistry_text(&kb.battery) {
+                key(ui, "Batteries");
+                value(ui, egui::RichText::new(t).size(16.0));
+                ui.end_row();
+            }
+            // The kernel % steps down only at reconnections (#179).
+            key(ui, "Updated");
+            value(ui, egui::RichText::new(view::age_text(snap.update_age_s(now))).size(16.0));
+            ui.end_row();
+            if let Some(rem) = view::remaining_text(snap, now) {
+                key(ui, "Remaining");
+                value(ui, egui::RichText::new(rem).size(16.0));
+                ui.end_row();
+            }
+            key(ui, "LEDs");
+            ui.horizontal(|ui| {
+                let on = |b: bool| if b { Level::Good } else { Level::Unknown };
+                let weak = |b: bool, t: egui::RichText| if b { t } else { t.weak() };
+                ui.label(weak(snap.caps_lock, self.tint(egui::RichText::new("CAPS").size(16.0).strong(), on(snap.caps_lock))));
+                ui.label(weak(snap.num_lock, self.tint(egui::RichText::new("NUM").size(16.0).strong(), on(snap.num_lock))));
+            });
+            ui.end_row();
+        });
+    }
+
+    fn radio_tile(&mut self, ui: &mut egui::Ui, snap: &Snapshot, kb: &akm_core::report::KbReport, now: u64) {
+        ui.label(egui::RichText::new("Radio").strong().size(18.0));
+        ui.add_space(4.0);
+        kv_grid(ui, "radio_detail", |ui| {
+            // Relative BR/EDR value (dB to the ideal range), not dBm (#174).
+            let rssi = kb.radio.rel_db();
+            let lvl = view::rssi_level(rssi);
+            key(ui, "Signal");
+            ui.horizontal(|ui| {
+                ui.label(self.tint(egui::RichText::new(view::rssi_text(rssi)).strong().size(18.0), lvl));
+                let c = self.palette.color(lvl).unwrap_or_else(|| ui.visuals().text_color());
+                signal_bars(ui, view::rssi_bar_count(rssi), c);
+            });
+            ui.end_row();
+            if view::rssi_valid(rssi).is_some() {
+                if let Some(age) = snap.rssi_age_s(now) {
+                    key(ui, "Measured");
+                    value(ui, egui::RichText::new(view::age_text(Some(age))).size(16.0));
+                    ui.end_row();
+                }
+            }
+            key(ui, "TX Power");
+            value(ui, egui::RichText::new(view::tx_power_text(kb.radio.tx_power_dbm)).size(16.0));
+            ui.end_row();
+            key(ui, "Connected");
+            let (txt, lvl) = if kb.bluetooth.connected { ("Yes", Level::Good) } else { ("No", Level::Bad) };
+            value(ui, self.tint(egui::RichText::new(txt).strong().size(16.0), lvl));
+            ui.end_row();
+            if let Some(p) = view::paired_text(&kb.bluetooth) {
+                key(ui, "Paired");
+                value(ui, egui::RichText::new(p).size(16.0));
+                ui.end_row();
+            }
+            if let Some(w) = view::wake_text(&kb.wake) {
+                // Passive listening of input report 0x13.
+                key(ui, "Last wake");
+                value(ui, egui::RichText::new(w).size(16.0));
+                ui.end_row();
+            }
+        });
+    }
+
+    fn device_tile(&mut self, ui: &mut egui::Ui, snap: &Snapshot, kb: &akm_core::report::KbReport) {
+        ui.label(egui::RichText::new("Device").strong().size(18.0));
+        ui.add_space(4.0);
+        kv_grid(ui, "dev_left", |ui| {
+            if let Some(ref model) = kb.device.model {
+                key(ui, "Model");
+                value(ui, egui::RichText::new(model).strong().size(16.0));
+                ui.end_row();
+            }
+            if let Some(ref name) = kb.device.name {
+                key(ui, "Own name");
+                value(ui, egui::RichText::new(name).size(16.0));
+                ui.end_row();
+            }
+            if let Some(ref mac) = kb.device.mac {
+                key(ui, "MAC");
+                value(ui, egui::RichText::new(mac).monospace().size(16.0));
+                ui.end_row();
+            }
+            if let Some(ref driver) = kb.device.driver {
+                key(ui, "Driver");
+                value(ui, egui::RichText::new(driver.as_str()).size(16.0));
+                ui.end_row();
+            }
+            if let Some(ref host) = kb.bluetooth.paired_host_addr {
+                key(ui, "Paired host");
+                value(ui, egui::RichText::new(host).monospace().size(16.0));
+                ui.end_row();
+            }
+        });
+        // The editor gets the full tile width, below the table (#195).
+        if let Some(ref mac) = kb.device.mac {
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new("Name").weak().size(16.0));
+            self.rename_row(ui, mac, snap.display_name());
+        }
+    }
+
+    fn firmware_tile(&mut self, ui: &mut egui::Ui, kb: &akm_core::report::KbReport) {
+        ui.label(egui::RichText::new("Firmware").strong().size(18.0));
+        ui.add_space(4.0);
+        kv_grid(ui, "dev_right", |ui| {
+            if let Some(ref chip) = kb.device.chip {
+                key(ui, "Chip");
+                value(ui, egui::RichText::new(chip.as_str()).size(16.0));
+                ui.end_row();
+            }
+            if let Some(ref fw) = kb.firmware.version {
+                key(ui, "Version (0x4F)");
+                value(ui, egui::RichText::new(fw).strong().size(18.0));
+                ui.end_row();
+            }
+            // Uninterpreted vendor reports (meaning not proven, #131/#132).
+            for (id, hex) in &kb.raw {
+                key(ui, &format!("{id} (raw)"));
+                value(ui, egui::RichText::new(hex).monospace().size(16.0));
+                ui.end_row();
+            }
+            if kb.incomplete {
+                key(ui, "Read");
+                value(ui, egui::RichText::new("incomplete (timeout)").size(16.0));
+                ui.end_row();
+            }
+        });
     }
 
     /// Editable name of the keyboard: text field + Rename / Reset (BlueZ alias).
@@ -382,9 +393,11 @@ impl ApiHubApp {
         ui.vertical(|ui| {
             let mut submit: Option<String> = None;
             ui.horizontal(|ui| {
+                // Leave room for the two buttons whatever the tile width (#195).
+                let w = (ui.available_width() - 150.0).clamp(80.0, 260.0);
                 let edit = ui.add(
                     egui::TextEdit::singleline(&mut self.rename_buf)
-                        .desired_width(220.0)
+                        .desired_width(w)
                         .char_limit(akm_core::alias::MAX_CHARS)
                         .hint_text("Keyboard name"),
                 );
@@ -411,171 +424,112 @@ impl ApiHubApp {
             }
             if let Some((ok, msg)) = self.rename_status.lock().unwrap_or_else(|e| e.into_inner()).clone() {
                 let t = egui::RichText::new(msg).size(14.0);
-                ui.label(if ok { t.weak() } else { t.color(self.palette.bad) });
+                ui.add(egui::Label::new(if ok { t.weak() } else { t.color(self.palette.bad) }).wrap());
             }
         });
     }
 
-    /// Draw battery + voltage history chart using egui painter.
+    fn reload_history(&mut self) {
+        let entries = source::load_history();
+        self.battery_history = entries.iter().map(|e| (e.ts as f64, e.pct)).collect();
+        self.voltage_history = entries.iter().filter_map(|e| e.reliable_voltage().map(|v| (e.ts as f64, v))).collect();
+    }
+
+    /// Draw battery + voltage history chart (last 24 h) using egui painter.
     fn draw_battery_history(&mut self, ui: &mut egui::Ui) {
-        ui.group(|ui| {
+        tile(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Battery History").strong().size(18.0));
+                ui.label(egui::RichText::new("Battery History (24 h)").strong().size(18.0));
                 if ui.button(egui::RichText::new("Refresh").size(14.0)).clicked() {
-                    let entries = source::load_history();
-                    self.battery_history = entries.iter().map(|e| (e.ts as f64, e.pct)).collect();
-                    self.voltage_history = entries.iter().filter_map(|e| e.reliable_voltage().map(|v| (e.ts as f64, v))).collect();
+                    self.reload_history();
                 }
             });
 
-            if self.battery_history.is_empty() {
-                ui.label(egui::RichText::new("No history data yet.").weak().size(16.0));
+            let cutoff = unix_now() as f64 - 24.0 * 3600.0;
+            // Unusable points (NaN, out of range) are never drawn (#198).
+            let batt_data = view::chart_points(&self.battery_history, cutoff, true);
+            let volt_data = view::chart_points(&self.voltage_history, cutoff, false);
+
+            if batt_data.len() < 2 {
+                let msg = if self.battery_history.is_empty() { "No history data yet." } else { "Not enough data points in the last 24 h." };
+                ui.label(egui::RichText::new(msg).weak().size(16.0));
                 return;
             }
 
-            // Info line
-            let n = self.battery_history.len();
-            let ts_first = self.battery_history.first().map(|p| p.0).unwrap_or(0.0);
-            let ts_last = self.battery_history.last().map(|p| p.0).unwrap_or(0.0);
-            let span_hours = (ts_last - ts_first) / 3600.0;
-            ui.label(egui::RichText::new(
-                format!("{} data points, spanning {:.1} hours", n, span_hours)
-            ).weak().size(14.0));
-
+            let (t_min, t_max) = match (batt_data.first(), batt_data.last()) {
+                (Some(a), Some(b)) => (a.0, b.0),
+                _ => return,
+            };
+            ui.label(egui::RichText::new(format!(
+                "{} points over {:.1} h",
+                batt_data.len(),
+                (t_max - t_min) / 3600.0
+            )).weak().size(14.0));
             ui.add_space(4.0);
 
-            // Chart area: reserve 160px height
-            let chart_height = 160.0;
-            let (response, painter) = ui.allocate_painter(
-                egui::Vec2::new(ui.available_width(), chart_height),
-                egui::Sense::hover(),
-            );
+            let (response, painter) = ui.allocate_painter(egui::Vec2::new(ui.available_width(), 160.0), egui::Sense::hover());
             let rect = response.rect;
-
-            // Background
             let vis = ui.visuals().clone();
             painter.rect_filled(rect, 4.0, vis.extreme_bg_color);
-
-            // Margins inside the chart
-            let margin = 8.0;
+            // Room on the left for the % labels, on top for the legend.
             let plot_rect = egui::Rect::from_min_max(
-                egui::Pos2::new(rect.min.x + margin, rect.min.y + margin),
-                egui::Pos2::new(rect.max.x - margin, rect.max.y - margin),
+                egui::Pos2::new(rect.min.x + 36.0, rect.min.y + 22.0),
+                egui::Pos2::new(rect.max.x - 8.0, rect.max.y - 8.0),
             );
-
             if plot_rect.width() < 10.0 || plot_rect.height() < 10.0 {
                 return;
             }
-
-            // Filter to last 24h if data spans more
-            let now_ts = unsafe { libc::time(std::ptr::null_mut()) } as f64;
-            let cutoff = now_ts - 24.0 * 3600.0;
-            let batt_data: Vec<(f64, f64)> = self.battery_history.iter()
-                .filter(|(ts, _)| *ts >= cutoff)
-                .copied()
-                .collect();
-            let volt_data: Vec<(f64, f64)> = self.voltage_history.iter()
-                .filter(|(ts, _)| *ts >= cutoff)
-                .copied()
-                .collect();
-
-            if batt_data.len() < 2 {
-                painter.text(
-                    rect.center(),
-                    egui::Align2::CENTER_CENTER,
-                    "Not enough data points",
-                    egui::FontId::proportional(14.0),
-                    vis.weak_text_color(),
-                );
-                return;
-            }
-
-            // Time range
-            let t_min = batt_data.first().unwrap().0;
-            let t_max = batt_data.last().unwrap().0;
+            let painter = painter.with_clip_rect(rect);
             let t_range = (t_max - t_min).max(1.0);
+            let x_of = |ts: f64| plot_rect.min.x + ((ts - t_min) / t_range) as f32 * plot_rect.width();
+            let y_of = |frac: f64| plot_rect.max.y - (frac.clamp(0.0, 1.0) as f32) * plot_rect.height();
 
-            // Battery Y range: 0-100
-            let batt_y_min = 0.0_f64;
-            let batt_y_max = 100.0_f64;
-
-            // Voltage Y range: dynamic from data
-            let v_min = volt_data.iter().map(|p| p.1).fold(f64::MAX, f64::min);
-            let v_max = volt_data.iter().map(|p| p.1).fold(f64::MIN, f64::max);
-            let v_range = (v_max - v_min).max(0.1);
-            let v_lo = v_min - v_range * 0.05;
-            let v_hi = v_max + v_range * 0.05;
-
-            // Map functions
-            let map_batt = |ts: f64, pct: f64| -> egui::Pos2 {
-                let x = plot_rect.min.x + ((ts - t_min) / t_range) as f32 * plot_rect.width();
-                let y = plot_rect.max.y - ((pct - batt_y_min) / (batt_y_max - batt_y_min)) as f32 * plot_rect.height();
-                egui::Pos2::new(x, y)
-            };
-            let map_volt = |ts: f64, v: f64| -> egui::Pos2 {
-                let x = plot_rect.min.x + ((ts - t_min) / t_range) as f32 * plot_rect.width();
-                let y = plot_rect.max.y - ((v - v_lo) / (v_hi - v_lo)) as f32 * plot_rect.height();
-                egui::Pos2::new(x, y)
-            };
-
-            // Horizontal grid lines for battery (0%, 25%, 50%, 75%, 100%)
-            for &level in &[0.0, 25.0, 50.0, 75.0, 100.0] {
-                let y = map_batt(t_min, level).y;
+            for level in [0.0, 25.0, 50.0, 75.0, 100.0] {
+                let y = y_of(level / 100.0);
                 painter.line_segment(
                     [egui::Pos2::new(plot_rect.min.x, y), egui::Pos2::new(plot_rect.max.x, y)],
                     egui::Stroke::new(0.5, vis.widgets.noninteractive.bg_stroke.color),
                 );
                 painter.text(
-                    egui::Pos2::new(plot_rect.min.x + 2.0, y - 10.0),
-                    egui::Align2::LEFT_BOTTOM,
-                    format!("{:.0}%", level),
+                    egui::Pos2::new(plot_rect.min.x - 4.0, y),
+                    egui::Align2::RIGHT_CENTER,
+                    format!("{level:.0}%"),
                     egui::FontId::proportional(10.0),
                     vis.weak_text_color(),
                 );
             }
 
-            // Draw battery % line (green)
             let batt_color = self.palette.good;
-            for pair in batt_data.windows(2) {
-                let p0 = map_batt(pair[0].0, pair[0].1);
-                let p1 = map_batt(pair[1].0, pair[1].1);
-                painter.line_segment([p0, p1], egui::Stroke::new(2.0, batt_color));
-            }
+            let line: Vec<egui::Pos2> = batt_data.iter().map(|&(t, p)| egui::Pos2::new(x_of(t), y_of(p / 100.0))).collect();
+            painter.add(egui::Shape::line(line, egui::Stroke::new(2.0, batt_color)));
 
-            // Draw voltage line (cyan)
             let volt_color = self.palette.info;
-            for pair in volt_data.windows(2) {
-                let p0 = map_volt(pair[0].0, pair[0].1);
-                let p1 = map_volt(pair[1].0, pair[1].1);
-                painter.line_segment([p0, p1], egui::Stroke::new(1.5, volt_color));
+            let mut legend = vec![(batt_color, "Battery %".to_string())];
+            if volt_data.len() >= 2 {
+                let v_min = volt_data.iter().map(|p| p.1).fold(f64::MAX, f64::min);
+                let v_max = volt_data.iter().map(|p| p.1).fold(f64::MIN, f64::max);
+                let v_range = (v_max - v_min).max(0.1);
+                let (v_lo, v_hi) = (v_min - v_range * 0.05, v_max + v_range * 0.05);
+                let line: Vec<egui::Pos2> = volt_data
+                    .iter()
+                    .filter(|p| p.0 >= t_min)
+                    .map(|&(t, v)| egui::Pos2::new(x_of(t), y_of((v - v_lo) / (v_hi - v_lo))))
+                    .collect();
+                painter.add(egui::Shape::line(line, egui::Stroke::new(1.5, volt_color)));
+                legend.push((volt_color, format!("Voltage {v_min:.2}\u{2013}{v_max:.2} V (own scale)")));
             }
 
-            // Legend
-            let legend_y = plot_rect.min.y + 4.0;
-            painter.text(
-                egui::Pos2::new(plot_rect.max.x - 4.0, legend_y),
-                egui::Align2::RIGHT_TOP,
-                format!("Battery %  |  Voltage ({:.2}-{:.2} V)", v_min, v_max),
-                egui::FontId::proportional(11.0),
-                vis.weak_text_color(),
-            );
-            // Color swatches for legend
-            let swatch_y = legend_y + 2.0;
-            let swatch_size = 8.0;
-            painter.rect_filled(
-                egui::Rect::from_min_size(
-                    egui::Pos2::new(plot_rect.max.x - 200.0, swatch_y),
-                    egui::Vec2::new(swatch_size, swatch_size),
-                ),
-                0.0, batt_color,
-            );
-            painter.rect_filled(
-                egui::Rect::from_min_size(
-                    egui::Pos2::new(plot_rect.max.x - 100.0, swatch_y),
-                    egui::Vec2::new(swatch_size, swatch_size),
-                ),
-                0.0, volt_color,
-            );
+            // Legend: swatch then its text, laid out right to left.
+            let mut x = rect.max.x - 8.0;
+            for (color, text) in legend.iter().rev() {
+                let galley = painter.layout_no_wrap(text.clone(), egui::FontId::proportional(11.0), vis.weak_text_color());
+                x -= galley.size().x;
+                let y = rect.min.y + 5.0;
+                painter.galley(egui::Pos2::new(x, y), galley.clone(), vis.weak_text_color());
+                x -= 12.0;
+                painter.rect_filled(egui::Rect::from_min_size(egui::Pos2::new(x, y + 2.0), egui::Vec2::splat(8.0)), 1.0, *color);
+                x -= 14.0;
+            }
         });
     }
 
@@ -757,16 +711,57 @@ impl ApiHubApp {
 
         ui.add_space(8.0);
 
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for r in &results {
-                ui.horizontal(|ui| {
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            egui::Grid::new("diag").num_columns(3).spacing([8.0, 6.0]).show(ui, |ui| {
+                for r in &results {
                     let (icon, c) = if r.ok { ("OK", self.palette.good) } else { ("FAIL", self.palette.bad) };
                     ui.label(egui::RichText::new(icon).size(16.0).strong().color(c));
                     ui.label(egui::RichText::new(&r.label).strong().size(16.0));
-                    ui.label(egui::RichText::new(&r.detail).weak().size(16.0));
-                });
-            }
+                    // Long details wrap instead of running off the window (#195).
+                    ui.add(egui::Label::new(egui::RichText::new(&r.detail).weak().size(16.0)).wrap());
+                    ui.end_row();
+                }
+            });
         });
+    }
+}
+
+/// A framed tile that fills the width it is given (equal columns, #195).
+fn tile(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        add(ui);
+    });
+}
+
+/// Two-column key/value table whose values never widen the tile.
+fn kv_grid(ui: &mut egui::Ui, id: &str, rows: impl FnOnce(&mut egui::Ui)) {
+    egui::Grid::new(id).num_columns(2).spacing([16.0, 8.0]).show(ui, rows);
+}
+
+fn key(ui: &mut egui::Ui, k: &str) {
+    ui.label(egui::RichText::new(k).weak().size(16.0));
+}
+
+/// A value cell: truncated with "…" when too long, full text on hover (#195).
+fn value(ui: &mut egui::Ui, t: egui::RichText) {
+    let full = t.text().to_string();
+    let r = ui.add(egui::Label::new(t).truncate());
+    if full.chars().count() > 20 {
+        r.on_hover_text(full);
+    }
+}
+
+/// Four signal bars drawn with the painter (the block glyphs are missing
+/// from egui's fonts, #198).
+fn signal_bars(ui: &mut egui::Ui, lit: u8, color: egui::Color32) {
+    let (rect, _) = ui.allocate_exact_size(egui::Vec2::new(26.0, 16.0), egui::Sense::hover());
+    let off = ui.visuals().widgets.noninteractive.bg_stroke.color;
+    for i in 0..4u8 {
+        let h = 4.0 + 3.5 * f32::from(i);
+        let x = rect.min.x + f32::from(i) * 6.5;
+        let r = egui::Rect::from_min_max(egui::Pos2::new(x, rect.max.y - h), egui::Pos2::new(x + 4.5, rect.max.y));
+        ui.painter().rect_filled(r, 1.0, if i < lit { color } else { off });
     }
 }
 
