@@ -7,8 +7,7 @@ Vérifie à partir de fixtures (docs/HARDWARE-ENTREES-MODELES.md) :
   modifiée) correspond à hid-ids.h et classe chaque cas comme attendu ;
 - la couverture de la configuration livrée (udev, keyd) et du code Python hérité.
 
-Les défauts connus sont marqués expectedFailure avec le numéro d'issue Gitea :
-le test passera (XPASS) quand le défaut sera corrigé.
+Les tests liés à un défaut corrigé portent le numéro d'issue Gitea (#124-#127).
 Lancement : python3 -m pytest tests/live/re -q   (ou python3 <ce fichier>)
 """
 import fnmatch
@@ -51,10 +50,13 @@ def parse_hid_id(hid_id):
     return int(vid, 16), int(pid, 16)
 
 
-def rust_is_apple_modalias(m):
-    """Mirror of model::is_apple_modalias (the watcher's only filter)."""
-    m = m.lower()
-    return m.startswith("usb:v05ac") or m.startswith("bluetooth:v004c")
+def rust_is_keyboard_modalias(table, m):
+    """Mirror of model::is_keyboard_device without Class (the watcher's filter, #124):
+    modalias vendor:product looked up in the model table."""
+    mm = re.match(r"^[a-z]+:v([0-9a-fA-F]{4})p([0-9a-fA-F]{4})", m or "")
+    if not mm:
+        return False
+    return rust_lookup(table, int(mm.group(1), 16), int(mm.group(2), 16)) is not None
 
 
 def kernel_keyboard_pids():
@@ -188,11 +190,16 @@ class TestTableDesModeles(unittest.TestCase):
             has13 = ("input", 0x13) in hid_rdesc.reports(f)
             self.assertEqual(has13, c["expected_family"] == "Bcm2042", c["name"])
 
-    @unittest.expectedFailure  # #124
-    def test_watcher_modalias_filter_rejects_non_keyboards(self):
+    def test_watcher_modalias_filter_rejects_non_keyboards(self):  # #124
+        src = (ROOT / "apihub-app" / "apple-kb-monitord" / "src" / "watcher.rs").read_text()
+        self.assertIn("is_keyboard_device", src)
+        self.assertNotIn("is_apple_modalias", src)
         neg = [c["name"] for c in cases() if c["modalias"] and c["expected_family"] is None
-               and rust_is_apple_modalias(c["modalias"])]
-        self.assertEqual(neg, [])  # today: AirPods, Magic Mouse/Trackpad 1 & 2 accepted
+               and rust_is_keyboard_modalias(self.table, c["modalias"])]
+        self.assertEqual(neg, [])  # AirPods, Magic Mouse/Trackpad 1 & 2 rejected
+        pos = [c["name"] for c in cases() if c["modalias"] and c["expected_family"]
+               and not rust_is_keyboard_modalias(self.table, c["modalias"])]
+        self.assertEqual(pos, [])
 
 
 class TestConfigurationLivree(unittest.TestCase):
@@ -212,14 +219,27 @@ class TestConfigurationLivree(unittest.TestCase):
         mouse = kernel_name("0005:0000004C:00000269")
         self.assertTrue(any(fnmatch.fnmatchcase(mouse, p) for p in pats))
 
-    @unittest.expectedFailure  # #126
-    def test_keyd_ids_cover_supported_models(self):
+    def test_keyd_ids_cover_supported_models(self):  # #126
         conf = (ROOT / "keyd" / "apple-keyboard.conf").read_text()
         ids = conf.split("[ids]", 1)[1].split("[", 1)[0].split()
         for c in cases():
             if c["hid_id"] and c["expected_family"] and c["hid_id"].startswith("0005"):
                 vid, pid = parse_hid_id(c["hid_id"])
                 self.assertIn(f"{vid:04x}:{pid:04x}", ids, c["name"])
+
+    def test_keyd_f3_f6_symetriques_toutes_tables(self):  # #126
+        conf = (ROOT / "keyd" / "apple-keyboard.conf").read_text()
+        main = conf.split("[main]", 1)[1]
+        binds = dict(
+            (k.strip(), v.strip()) for k, v in
+            (l.split("=", 1) for l in main.splitlines() if "=" in l and not l.lstrip().startswith("#")))
+        groups = {"M-z": ("f3", "scale"),
+                  "M-g": ("f4", "dashboard", "search"),
+                  "M-l": ("f5", "kbdillumdown", "micmute"),
+                  "M-d": ("f6", "numlock", "kbdillumup", "sleep")}
+        for macro, keys in groups.items():
+            for k in keys:
+                self.assertEqual(binds.get(k), f"macro({macro})", k)
 
 
 def load_python_legacy():
@@ -231,13 +251,11 @@ def load_python_legacy():
 
 
 class TestPythonHerite(unittest.TestCase):
-    @unittest.expectedFailure  # #127
-    def test_python_legacy_table_matches_kernel(self):
+    def test_python_legacy_table_matches_kernel(self):  # #127
         g = load_python_legacy()
         self.assertEqual(set(g["APPLE_PRODUCTS"]), set(kernel_keyboard_pids()))
 
-    @unittest.expectedFailure  # #127
-    def test_python_find_devices_rejects_mouse_and_sees_magic_keyboard(self):
+    def test_python_find_devices_rejects_mouse_and_sees_magic_keyboard(self):  # #127
         g = load_python_legacy()
         with tempfile.TemporaryDirectory() as tmp:
             sysroot = Path(tmp)

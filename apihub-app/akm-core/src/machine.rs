@@ -50,6 +50,9 @@ pub enum Action {
 pub struct Machine {
     connected: bool,
     mac: Option<String>,
+    /// Other keyboards connected while `mac` is followed (#124): taken over,
+    /// in connection order, when the current one disconnects.
+    standby: Vec<String>,
     acquired: bool,
     attempt: u32,
     next_acquire: Option<Instant>,
@@ -76,6 +79,7 @@ impl Machine {
         Self {
             connected: false,
             mac: None,
+            standby: Vec::new(),
             acquired: false,
             attempt: 0,
             next_acquire: None,
@@ -113,6 +117,11 @@ impl Machine {
         self.mac.as_deref()
     }
 
+    /// Connected keyboards waiting behind the followed one.
+    pub fn standby(&self) -> &[String] {
+        &self.standby
+    }
+
     fn reset_timers(&mut self) {
         self.acquired = false;
         self.attempt = 0;
@@ -126,20 +135,38 @@ impl Machine {
     pub fn on_event(&mut self, ev: &Event, now: Instant) -> Option<Action> {
         match ev {
             Event::Connected(mac) => {
-                let same = self.connected && self.mac.as_deref() == Some(mac.as_str());
-                if !same {
-                    self.reset_timers();
-                    self.connected = true;
-                    self.mac = Some(mac.clone());
-                    self.next_acquire = Some(now);
+                if self.connected && self.mac.as_deref() == Some(mac.as_str()) {
+                    return None;
                 }
+                if self.connected && self.mac.is_some() {
+                    // Another keyboard while one is followed: never switch away
+                    // from a connected keyboard, keep it as a fallback.
+                    if !self.standby.contains(mac) {
+                        self.standby.push(mac.clone());
+                    }
+                    return None;
+                }
+                self.reset_timers();
+                self.connected = true;
+                self.mac = Some(mac.clone());
+                self.next_acquire = Some(now);
                 None
             }
             Event::Disconnected(mac) => {
+                if let Some(i) = self.standby.iter().position(|m| m == mac) {
+                    self.standby.remove(i);
+                    return None;
+                }
                 if self.connected && (self.mac.is_none() || self.mac.as_deref() == Some(mac)) {
-                    self.connected = false;
-                    self.mac = None;
                     self.reset_timers();
+                    if self.standby.is_empty() {
+                        self.connected = false;
+                        self.mac = None;
+                    } else {
+                        // Hand over to the next connected keyboard.
+                        self.mac = Some(self.standby.remove(0));
+                        self.next_acquire = Some(now);
+                    }
                     Some(Action::Clear)
                 } else {
                     None
@@ -378,5 +405,60 @@ mod tests {
         m.force_refresh(t0 + s(3));
         assert_eq!(m.due(t0 + s(3)), vec![Action::Acquire]);
         assert!(m.is_connected() && !m.is_acquired());
+    }
+
+    #[test]
+    fn second_keyboard_never_takes_the_place_of_the_connected_one() {
+        const OTHER: &str = "AA:BB:CC:DD:EE:02";
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        m.acquire_done(true, t0);
+        m.due(t0);
+        assert_eq!(m.on_event(&Event::Connected(OTHER.into()), t0 + s(1)), None);
+        assert_eq!(m.mac(), Some(MAC));
+        assert!(m.is_acquired());
+        assert!(m.due(t0 + s(1)).is_empty());
+        assert_eq!(m.standby(), [OTHER.to_string()]);
+        // Duplicate connection of the standby keyboard is not queued twice.
+        m.on_event(&Event::Connected(OTHER.into()), t0 + s(2));
+        assert_eq!(m.standby().len(), 1);
+        // The followed keyboard leaves: hand over to the other one.
+        assert_eq!(
+            m.on_event(&Event::Disconnected(MAC.into()), t0 + s(3)),
+            Some(Action::Clear)
+        );
+        assert!(m.is_connected());
+        assert_eq!(m.mac(), Some(OTHER));
+        assert_eq!(m.due(t0 + s(3)), vec![Action::Acquire]);
+        assert!(m.standby().is_empty());
+        // Then it leaves too: nothing left.
+        assert_eq!(
+            m.on_event(&Event::Disconnected(OTHER.into()), t0 + s(4)),
+            Some(Action::Clear)
+        );
+        assert!(!m.is_connected());
+    }
+
+    #[test]
+    fn standby_keyboard_disconnect_changes_nothing() {
+        const OTHER: &str = "AA:BB:CC:DD:EE:02";
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        m.acquire_done(true, t0);
+        m.on_event(&Event::Connected(OTHER.into()), t0 + s(1));
+        assert_eq!(
+            m.on_event(&Event::Disconnected(OTHER.into()), t0 + s(2)),
+            None
+        );
+        assert!(m.standby().is_empty());
+        assert_eq!(m.mac(), Some(MAC));
+        assert!(m.is_acquired());
+        assert_eq!(
+            m.on_event(&Event::Disconnected(MAC.into()), t0 + s(3)),
+            Some(Action::Clear)
+        );
+        assert!(!m.is_connected());
     }
 }

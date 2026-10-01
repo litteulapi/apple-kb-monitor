@@ -6,6 +6,7 @@
 //! * [`calibration`] ADC → voltage → percentage, battery chemistry
 //! * [`decode`]      [`decode::HidSource`] trait, [`decode::Fixture`], decoding of
 //!   the vendor Feature Reports (testable without hardware)
+//! * [`discover`]    keyboard discovery / selection (model table + HID descriptor)
 //! * [`hidraw`]      the real `/dev/hidrawN` source + wake monitor
 //! * [`power`]       kernel `power_supply` battery (source of truth for the %)
 //! * [`history`]     JSONL history, injectable clock, rotation, estimate
@@ -25,6 +26,7 @@ pub mod batteries;
 pub mod calibration;
 pub mod config;
 pub mod decode;
+pub mod discover;
 pub mod forecast;
 pub mod hid_params;
 pub mod hidraw;

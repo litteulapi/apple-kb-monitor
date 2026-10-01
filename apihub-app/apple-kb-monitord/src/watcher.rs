@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use crate::actor::Msg;
 pub use akm_core::machine::*;
-use akm_core::model::{is_apple_modalias, is_keyboard_upower_path};
+use akm_core::model::{is_keyboard_device, is_keyboard_upower_path};
 
 use zbus::blocking::{fdo::DBusProxy, Connection, MessageIterator};
 use zbus::zvariant::OwnedValue;
@@ -29,6 +29,18 @@ fn prop_str(p: &Props, k: &str) -> Option<String> {
 
 fn prop_bool(p: &Props, k: &str) -> Option<bool> {
     p.get(k).and_then(|v| bool::try_from(v).ok())
+}
+
+fn prop_u32(p: &Props, k: &str) -> Option<u32> {
+    p.get(k).and_then(|v| u32::try_from(v).ok())
+}
+
+/// A BlueZ device is followed only if it is one of our keyboards: modalias in
+/// the model table and, when known, a keyboard Class of Device (#124). AirPods,
+/// Magic Mouse / Trackpad and phones share Apple's vendor ID and must never
+/// take the keyboard's place.
+fn is_keyboard(p: &Props) -> bool {
+    prop_str(p, "Modalias").is_some_and(|m| is_keyboard_device(&m, prop_u32(p, "Class")))
 }
 
 /// Spawn the watcher thread. It reconnects to the bus on failure (10 s) and
@@ -114,7 +126,7 @@ fn initial_sync(conn: &Connection, known: &mut Known, tx: &Sender<Msg>) -> zbus:
         else {
             continue;
         };
-        if !prop_str(d, "Modalias").is_some_and(|m| is_apple_modalias(&m)) {
+        if !is_keyboard(d) {
             continue;
         }
         let Some(mac) = prop_str(d, "Address").map(|a| a.to_ascii_uppercase()) else {
@@ -179,9 +191,9 @@ fn watch_once(tx: &Sender<Msg>) -> zbus::Result<()> {
                     let entry = match known.0.get(&path) {
                         Some((m, _)) => Some(m.clone()),
                         None => device_props(&calls, &path).ok().and_then(|p| {
-                            prop_str(&p, "Modalias")
-                                .filter(|m| is_apple_modalias(m))
-                                .and(prop_str(&p, "Address"))
+                            is_keyboard(&p)
+                                .then(|| prop_str(&p, "Address"))
+                                .flatten()
                                 .map(|a| a.to_ascii_uppercase())
                         }),
                     };
