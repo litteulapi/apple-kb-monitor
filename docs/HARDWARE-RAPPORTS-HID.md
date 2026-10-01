@@ -57,10 +57,10 @@ Les IDs `0x54`, `0x5C`, `0x5D`, `0xD1`, `0xD8` n'étaient pas dans l'inventaire 
 | `0x09` | 4 | `09 01 00 00` | octet 1 = `0x01` (vendeur `FF01:0B`), octets 2-3 = bourrage | descripteur [mesuré] ; sens [hypothèse] |
 | `0x46` | 3 | `46 aa 0b` / `46 af 0b` | **u16 LE = tension piles en mV** : 2986 / 2991 mV | [mesuré], voir §3 |
 | `0x47` | 2 | `47 63` | u8 = 99 % (Battery Strength) | [source] descripteur + quirk noyau ; = `power_supply/capacity` [mesuré] |
-| `0x49` | 3 | `49 89 0b` | u16 LE = 2953 (mV ?) constant | [hypothèse] tension filtrée/de référence, voir §4 |
+| `0x49` | 3 | `49 89 0b` → `49 86 0b` | u16 LE = 2953 puis 2950 mV, varie lentement | grandeur vivante [mesuré] ; tension filtrée [hypothèse], voir §4 |
 | `0x4A` | 2 | `4a 12` | u8 = 18 | inconnu |
 | `0x4B` | 3 | `4b 00 08` | `00 08` | inconnu |
-| `0x4C` | 20 | `4c 03` + 18 octets masqués | 1 octet type (`0x03`) + 18 octets à forte entropie | SENSIBLE ; [hypothèse] matériau de clé |
+| `0x4C` | 20 | `4c 03` + 18 octets masqués | 1 octet `0x03` + **adresse BD_ADDR de l'hôte appairé** (6 o, LE) + 12 octets secrets | adresse [mesuré, §2bis] ; 12 o restants SENSIBLES [hypothèse] fragment de clé de lien |
 | `0x4F` | 3 | `4f 50 00` | u16 LE = `0x0050` = version firmware/bcdDevice | = `Modalias usb:v05ACp0256d0050` et « HID v0.50 » du noyau [mesuré] |
 | `0x51` | 9 | `51` + `"Clavier "` | nom, fragment 1/4 (8 o ASCII) | [mesuré] |
 | `0x52` | 9 | `52` + `"de maria"` | nom, fragment 2/4 | [mesuré] |
@@ -84,6 +84,20 @@ Les IDs `0x54`, `0x5C`, `0x5D`, `0xD1`, `0xD8` n'étaient pas dans l'inventaire 
 
 Endianness : `0x46`, `0x49`, `0x4F` sont en petit-boutiste ; `0x5A`/`0x5B`/`0xF4`/`0xF5`/`0xFF` en gros-boutiste.
 Le firmware mélange donc deux conventions ; `0x46` (LE) et `0xFF` (BE) donnent la même grandeur.
+
+### 2bis. Structure de `0x4C` (sans divulgation)
+
+* **[mesuré]** octets 2 à 7 = `6c:94:66:52:7c:0d` lu à l'envers, c'est-à-dire l'adresse de l'adaptateur
+  Bluetooth du PC (`HID_PHYS`), pas celle du clavier. Vérifié par comparaison booléenne, sans afficher
+  la suite.
+* **[mesuré]** 12 octets restants : 12 valeurs distinctes sur 12 (forte entropie), empreinte SHA-256
+  identique sur toutes les lectures de la journée (registre stable).
+* **[hypothèse]** enregistrement d'appairage : octet `0x03` (type ou numéro d'emplacement),
+  hôte lié, puis matériau de clé (12 octets ne font pas une clé de lien complète de 16 octets).
+* Correction : ce n'est **pas** une IRK (concept BLE ; le A1314 est en BR/EDR). L'intitulé
+  « identity key » du code et de #123 est inexact, mais la consigne de masquage reste entière.
+* Le CLI Python (`read_all_reports`) publie `d[2:16]` (14 octets) : l'adresse de l'hôte **et 8 des
+  12 octets secrets** ; le démon Rust publie le rapport entier (#123).
 
 ## 3. Tension réelle des piles : `0x46` et `0xFF`, pas `0xF5`
 
