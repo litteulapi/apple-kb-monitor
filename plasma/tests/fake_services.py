@@ -37,10 +37,23 @@ class Window(dbus.service.Object):
 
 
 
+class Tray(dbus.service.Object):
+    @dbus.service.method("com.agenceapi.AppleKbMonitor1.Tray", in_signature="s")
+    def ClaimTrayFor(self, instance):
+        with open(out, "a") as f:
+            f.write("claim %s\n" % instance)
+
+    @dbus.service.method("com.agenceapi.AppleKbMonitor1.Tray", in_signature="s")
+    def ReleaseTrayFor(self, instance):
+        with open(out, "a") as f:
+            f.write("release %s\n" % instance)
+
+
 dn = dbus.service.BusName(DAEMON, bus)
 wn = dbus.service.BusName(WINDOW, bus)
 d = Daemon(bus, "/com/agenceapi/AppleKbMonitor1")
 w = Window(bus, "/com/agenceapi/AppleKbMonitor")
+t = Tray(bus, "/com/agenceapi/AppleKbMonitor1/Tray")
 
 
 def tick():

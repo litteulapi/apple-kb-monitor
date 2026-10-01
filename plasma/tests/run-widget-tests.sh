@@ -30,5 +30,5 @@ exec dbus-run-session -- sh -eu -c '
   grep -q PASS "$out.log" && grep -E "RESULT|PASS" "$out.log" || cat "$out.log"
   echo "children of the widget process: $kids ; stray dbus-monitor: $stray ; Activate calls: $(grep -c activate "$out")"
   cat "$out.err" | tail -5; rm -f "$out.log" "$out.err"
-  [ "$kids" -eq 0 ] && [ "$stray" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q "^activate 0" "$out" && grep -q "^alias AA:BB Mon clavier" "$out"
+  [ "$kids" -eq 0 ] && [ "$stray" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q "^activate 0" "$out" && grep -q "^alias AA:BB Mon clavier" "$out" && grep -q "^claim 42" "$out" && grep -q "^release 42" "$out"
 ' sh "$here"

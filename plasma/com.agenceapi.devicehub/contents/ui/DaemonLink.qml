@@ -20,6 +20,17 @@ Item {
     // StateChanged every 30 s.
     property int safetyPollMs: 120000
 
+    // Tray arbitration (#253): while the widget lives it holds a claim on the
+    // daemon's tray icon, which then leaves the notification area (one icon,
+    // not two). One claim per widget instance; plasmashell hosts them all
+    // under one bus name, so each instance names itself. The claim is renewed
+    // every safetyPollMs and re-sent when the daemon (re)appears; it dies with
+    // plasmashell, and releaseTray() hands the icon back when the widget goes.
+    property string trayName: "com.agenceapi.AppleKbMonitor1"
+    property string trayPath: "/com/agenceapi/AppleKbMonitor1/Tray"
+    property string trayIface: "com.agenceapi.AppleKbMonitor1.Tray"
+    property string claimId: ""
+
     readonly property bool registered: watcher.registered
 
     signal stateReceived(string json)
@@ -43,6 +54,33 @@ Item {
             link.failed(error && error.error ? String(error.error.message) : String(error));
         });
     }
+
+    function claimTray() {
+        if (!watcher.registered || link.claimId === "") return;
+        DBus.SessionBus.asyncCall({
+            service: link.trayName,
+            path: link.trayPath,
+            iface: link.trayIface,
+            member: "ClaimTrayFor",
+            arguments: [new DBus.string(link.claimId)]
+        }, function () {}, function (error) {
+            console.warn("apple-kb-monitor: ClaimTrayFor failed", error && error.error ? error.error.message : error);
+        });
+    }
+
+    function releaseTray() {
+        if (link.claimId === "") return;
+        DBus.SessionBus.asyncCall({
+            service: link.trayName,
+            path: link.trayPath,
+            iface: link.trayIface,
+            member: "ReleaseTrayFor",
+            arguments: [new DBus.string(link.claimId)]
+        }, function () {}, function () {});
+    }
+
+    onRegisteredChanged: if (registered) claimTray()
+    onClaimIdChanged: claimTray()
 
     // Rename on this computer (BlueZ alias). Do NOT pass `signature` to
     // asyncCall: with it the typed arguments are dropped from the message
@@ -98,6 +136,9 @@ Item {
         interval: link.safetyPollMs
         repeat: true
         running: watcher.registered
-        onTriggered: link.fetch()
+        onTriggered: {
+            link.fetch();
+            link.claimTray();
+        }
     }
 }

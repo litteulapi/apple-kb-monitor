@@ -151,22 +151,40 @@ pub struct Control {
     pub shared: SharedRef,
 }
 
-#[interface(name = "com.agenceapi.AppleKbMonitor1.Tray")]
 impl Control {
-    /// Withdraw the tray icon for as long as the caller is on the bus.
-    fn claim_tray(&self, #[zbus(header)] hdr: Header<'_>) -> zbus::fdo::Result<()> {
+    fn claim(&self, hdr: &Header<'_>, instance: &str) -> zbus::fdo::Result<()> {
         let sender = hdr
             .sender()
             .map(|s| s.to_string())
             .ok_or_else(|| zbus::fdo::Error::Failed("no sender".into()))?;
-        let _ = self.tx.send(Event::Claim(sender));
+        let _ = self.tx.send(Event::Claim(sender, instance.to_string()));
         Ok(())
+    }
+    fn release(&self, hdr: &Header<'_>, instance: &str) {
+        if let Some(s) = hdr.sender() {
+            let _ = self.tx.send(Event::Release(s.to_string(), instance.to_string()));
+        }
+    }
+}
+
+#[interface(name = "com.agenceapi.AppleKbMonitor1.Tray")]
+impl Control {
+    /// Withdraw the tray icon for as long as the caller is on the bus.
+    fn claim_tray(&self, #[zbus(header)] hdr: Header<'_>) -> zbus::fdo::Result<()> {
+        self.claim(&hdr, "")
     }
     /// Drop the caller's claim.
     fn release_tray(&self, #[zbus(header)] hdr: Header<'_>) {
-        if let Some(s) = hdr.sender() {
-            let _ = self.tx.send(Event::Release(s.to_string()));
-        }
+        self.release(&hdr, "");
+    }
+    /// Same, for one widget instance of the caller (plasmashell hosts all of
+    /// them under one bus name): the icon comes back when the last instance
+    /// is released or when the caller leaves the bus (#253). Idempotent.
+    fn claim_tray_for(&self, instance: String, #[zbus(header)] hdr: Header<'_>) -> zbus::fdo::Result<()> {
+        self.claim(&hdr, &instance)
+    }
+    fn release_tray_for(&self, instance: String, #[zbus(header)] hdr: Header<'_>) {
+        self.release(&hdr, &instance);
     }
     /// Show the icon again after "Quit (hide icon)".
     fn show_tray(&self) {

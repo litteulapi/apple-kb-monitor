@@ -12,6 +12,7 @@ Item {
 
     DaemonLink {
         id: link
+        claimId: "42"
         onRegisteredChanged: if (registered) fetch()
         onStateReceived: function (json) {
             var kb = JSON.parse(json).keyboard.battery;
@@ -33,6 +34,7 @@ Item {
         onTriggered: {
             link.activateWindow();
             link.setAlias("AA:BB", "Mon clavier");
+            link.releaseTray();
             finish.start();
         }
     }

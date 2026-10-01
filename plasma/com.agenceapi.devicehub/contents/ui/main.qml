@@ -139,8 +139,14 @@ PlasmoidItem {
     }
 
     Component.onCompleted: {
+        // Take over the notification area: the daemon withdraws its own icon
+        // (#253). Setting the id sends the claim when the daemon is on the bus.
+        link.claimId = String(Plasmoid.id);
         if (link.registered) fetchData();
     }
+
+    // Removed from the panel or the tray: give the icon back to the daemon.
+    Component.onDestruction: link.releaseTray()
 
     function batteryTypeOf(v) {
         if (v <= 0) return "";

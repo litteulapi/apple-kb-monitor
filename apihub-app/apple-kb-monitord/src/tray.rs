@@ -26,7 +26,7 @@ mod menu;
 mod sni;
 mod view;
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -78,7 +78,14 @@ pub struct Config {
     /// SNI `Id` (a test instance uses its own).
     pub item_id: String,
     pub lang: Lang,
+    /// A widget-instance claim (`ClaimTrayFor`) lapses after this long without
+    /// being renewed; the widget renews it every couple of minutes, so a
+    /// release lost in a crash cannot leave the desktop without any icon.
+    pub claim_ttl: Duration,
 }
+
+/// Default of [`Config::claim_ttl`].
+pub const CLAIM_TTL: Duration = Duration::from_secs(300);
 
 impl Config {
     pub fn from_env() -> Self {
@@ -95,6 +102,7 @@ impl Config {
             mode,
             item_id: "apple-kb-monitor".into(),
             lang: Lang::from_env(),
+            claim_ttl: CLAIM_TTL,
         }
     }
 }
@@ -145,8 +153,13 @@ pub(crate) enum Event {
     Snapshot(Box<Snapshot>),
     /// `NameOwnerChanged(name, new_owner)`.
     Owner(String, Option<String>),
-    Claim(String),
-    Release(String),
+    /// `(sender, instance)`: a Plasma widget instance (or the legacy
+    /// instance-less `ClaimTray()`, instance `""`) holds the tray.
+    Claim(String, String),
+    Release(String, String),
+    /// `plasma-org.kde.plasma.desktop-appletsrc` now lists the widget in the
+    /// system tray (true) or not (false).
+    WidgetConfig(bool),
     Unhide,
     Action(Action),
 }
@@ -217,15 +230,50 @@ pub fn widget_in_systray(appletsrc: &str) -> bool {
     })
 }
 
-fn widget_enabled() -> bool {
-    let cfg = std::env::var_os("XDG_CONFIG_HOME")
+fn appletsrc_path() -> Option<PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| Path::new(&h).join(".config")));
-    cfg.and_then(|c| {
-        std::fs::read_to_string(c.join("plasma-org.kde.plasma.desktop-appletsrc")).ok()
-    })
-    .is_some_and(|s| widget_in_systray(&s))
+        .or_else(|| std::env::var_os("HOME").map(|h| Path::new(&h).join(".config")))
+        .map(|c| c.join("plasma-org.kde.plasma.desktop-appletsrc"))
+}
+
+fn widget_enabled() -> bool {
+    appletsrc_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .is_some_and(|s| widget_in_systray(&s))
+}
+
+/// How often the configuration of plasmashell is looked at (a `stat`, the
+/// file is read only when it changed). The user ticking the widget in
+/// "Configure System Tray" withdraws the icon within this delay (#253).
+pub const CONFIG_POLL: Duration = Duration::from_secs(2);
+
+/// Watch the appletsrc of plasmashell and tell the tray when "our widget is
+/// in the system tray" changes.
+fn watch_widget_config(tx: Sender<Event>) {
+    let _ = std::thread::Builder::new()
+        .name("tray-appletsrc".into())
+        .spawn(move || {
+            let mut stamp: Option<(std::time::SystemTime, u64)> = None;
+            let mut last: Option<bool> = None;
+            loop {
+                let now = appletsrc_path()
+                    .and_then(|p| std::fs::metadata(p).ok())
+                    .and_then(|m| m.modified().ok().map(|t| (t, m.len())));
+                if now != stamp || last.is_none() {
+                    stamp = now;
+                    let on = widget_enabled();
+                    if last != Some(on) {
+                        last = Some(on);
+                        if tx.send(Event::WidgetConfig(on)).is_err() {
+                            return;
+                        }
+                    }
+                }
+                std::thread::sleep(CONFIG_POLL);
+            }
+        });
 }
 
 /// Whether the SNI should be on the bus.
@@ -287,6 +335,10 @@ pub fn spawn_with(
         }
     }
 
+    if cfg.mode == Mode::Auto {
+        watch_widget_config(tx.clone());
+    }
+
     // Snapshot forwarder: blocks on the watch's condition variable.
     {
         let tx = tx.clone();
@@ -320,7 +372,8 @@ pub fn spawn_with(
                 cfg,
                 bucket: None,
                 charging: false,
-                claims: HashSet::new(),
+                claims: HashMap::new(),
+                widget_cfg: false,
                 hidden_by_user: false,
                 plasma_widget: false,
                 system: None,
@@ -392,7 +445,10 @@ struct Tray {
     cfg: Config,
     bucket: Option<u8>,
     charging: bool,
-    claims: HashSet<String>,
+    /// `(sender, instance)` -> expiry (`None`: until the sender leaves).
+    claims: HashMap<(String, String), Option<Instant>>,
+    /// The appletsrc lists the widget in the system tray.
+    widget_cfg: bool,
     hidden_by_user: bool,
     plasma_widget: bool,
     system: Option<Connection>,
@@ -477,8 +533,9 @@ impl Tray {
             conn,
         };
         // Claims held by clients that left while we were down are void.
-        self.claims.retain(|c| has(c));
-        self.plasma_widget = s.plasmashell && widget_enabled();
+        self.claims.retain(|(c, _), _| has(c));
+        self.widget_cfg = widget_enabled();
+        self.plasma_widget = s.plasmashell && self.widget_cfg;
         self.apply(&self.watch.get(), &s.conn);
 
         let res = self.event_loop(&mut s);
@@ -492,7 +549,9 @@ impl Tray {
     fn event_loop(&mut self, s: &mut Session) -> zbus::Result<()> {
         loop {
             self.reconcile(s);
-            let ev = match s.retry_at {
+            let next_expiry = self.claims.values().flatten().min().copied();
+            let wake = [s.retry_at, next_expiry].into_iter().flatten().min();
+            let ev = match wake {
                 Some(t) => match self
                     .rx
                     .recv_timeout(t.saturating_duration_since(Instant::now()))
@@ -507,7 +566,9 @@ impl Tray {
                 },
             };
             let Some(ev) = ev else {
-                s.retry_at = None; // retry now
+                if s.retry_at.is_some_and(|t| t <= Instant::now()) {
+                    s.retry_at = None; // retry now
+                }
                 continue;
             };
             match ev {
@@ -523,17 +584,29 @@ impl Tray {
                         }
                     } else if name == PLASMASHELL {
                         s.plasmashell = new.is_some();
-                        self.plasma_widget = s.plasmashell && widget_enabled();
-                    } else if new.is_none() && self.claims.remove(&name) {
-                        tracing::info!("tray: claim of {name} ended (client left)");
+                        self.widget_cfg = widget_enabled();
+                        self.plasma_widget = s.plasmashell && self.widget_cfg;
+                    } else if new.is_none() {
+                        let before = self.claims.len();
+                        self.claims.retain(|(c, _), _| *c != name);
+                        if self.claims.len() != before {
+                            tracing::info!("tray: claim of {name} ended (client left)");
+                        }
                     }
                 }
-                Event::Claim(who) => {
-                    tracing::info!("tray: claimed by {who}");
-                    self.claims.insert(who);
+                Event::WidgetConfig(on) => {
+                    tracing::info!("tray: widget {} in the system tray configuration", if on { "listed" } else { "not listed" });
+                    self.widget_cfg = on;
+                    self.plasma_widget = s.plasmashell && on;
                 }
-                Event::Release(who) => {
-                    if self.claims.remove(&who) {
+                Event::Claim(who, instance) => {
+                    let expiry = (!instance.is_empty()).then(|| Instant::now() + self.cfg.claim_ttl);
+                    if self.claims.insert((who.clone(), instance.clone()), expiry).is_none() {
+                        tracing::info!("tray: claimed by {who} ({instance:?})");
+                    }
+                }
+                Event::Release(who, instance) => {
+                    if self.claims.remove(&(who.clone(), instance)).is_some() {
                         tracing::info!("tray: released by {who}");
                     }
                 }
@@ -545,6 +618,12 @@ impl Tray {
 
     /// Take / release the SNI name and (re)register as needed.
     fn reconcile(&mut self, s: &mut Session) {
+        let now = Instant::now();
+        let before = self.claims.len();
+        self.claims.retain(|_, exp| exp.is_none_or(|t| t > now));
+        if self.claims.len() != before {
+            tracing::info!("tray: widget claim lapsed (not renewed)");
+        }
         let want = want_visible(
             self.cfg.mode,
             self.hidden_by_user,
@@ -805,6 +884,139 @@ mod tests {
         assert!(!widget_in_systray("knownItems=com.agenceapi.devicehub\n"));
     }
 
+    // ── #253: the widget withdraws the icon, in real time ───────────────────
+
+    struct FakeWatcher(Arc<Mutex<Vec<String>>>);
+
+    #[zbus::interface(name = "org.kde.StatusNotifierWatcher")]
+    impl FakeWatcher {
+        fn register_status_notifier_item(&self, service: String) {
+            self.0.lock().unwrap().push(service);
+        }
+    }
+
+    fn wait_until(what: &str, secs: u64, mut f: impl FnMut() -> bool) {
+        let end = Instant::now() + Duration::from_secs(secs);
+        while !f() {
+            assert!(Instant::now() < end, "timeout: {what}");
+            std::thread::sleep(Duration::from_millis(40));
+        }
+    }
+
+    fn claim_call(c: &Connection, member: &str, instance: &str) {
+        c.call_method(
+            Some("com.agenceapi.AppleKbMonitor1"),
+            CONTROL_PATH,
+            Some("com.agenceapi.AppleKbMonitor1.Tray"),
+            member,
+            &(instance,),
+        )
+        .unwrap();
+    }
+
+    fn claim_roundtrip_inner() {
+        let dir = std::env::temp_dir().join(format!("akm-tray-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", &dir);
+        let rc = dir.join("plasma-org.kde.plasma.desktop-appletsrc");
+
+        let regs = Arc::new(Mutex::new(Vec::new()));
+        let _watcher = zbus::blocking::ConnectionBuilder::session()
+            .unwrap()
+            .name(WATCHER)
+            .unwrap()
+            .serve_at("/StatusNotifierWatcher", FakeWatcher(regs.clone()))
+            .unwrap()
+            .build()
+            .unwrap();
+        // plasmashell is running
+        let _shell = zbus::blocking::ConnectionBuilder::session()
+            .unwrap()
+            .name(PLASMASHELL)
+            .unwrap()
+            .build()
+            .unwrap();
+        let control = Connection::session().unwrap();
+        control.request_name("com.agenceapi.AppleKbMonitor1").unwrap();
+        let probe = Connection::session().unwrap();
+        let dbus = zbus::blocking::fdo::DBusProxy::new(&probe).unwrap();
+        let item = format!("org.kde.StatusNotifierItem-{}-1", std::process::id());
+        let on_bus = || {
+            dbus.name_has_owner(zbus::names::BusName::try_from(item.as_str()).unwrap())
+                .unwrap()
+        };
+        spawn_with(
+            Arc::new(Watch::new()),
+            Mailbox::new(),
+            Some(control),
+            Config { mode: Mode::Auto, item_id: "akm-test".into(), lang: Lang::En, claim_ttl: Duration::from_secs(2) },
+        );
+        wait_until("icon registered", 5, || regs.lock().unwrap().len() == 1);
+        assert!(on_bus());
+
+        // 1. A widget instance claims: the daemon's icon leaves at once.
+        let widget = Connection::session().unwrap();
+        claim_call(&widget, "ClaimTrayFor", "7");
+        wait_until("icon withdrawn by the claim", 3, || !on_bus());
+        // A second instance, then the first one is removed: still withdrawn.
+        claim_call(&widget, "ClaimTrayFor", "8");
+        claim_call(&widget, "ClaimTrayFor", "8");
+        claim_call(&widget, "ReleaseTrayFor", "7");
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(!on_bus(), "one instance is still alive");
+        // 2. The last one goes: the icon is back and registered again.
+        claim_call(&widget, "ReleaseTrayFor", "8");
+        wait_until("icon back", 3, on_bus);
+        wait_until("registered again", 3, || regs.lock().unwrap().len() == 2);
+
+        // 3. plasmashell dies with a claim held: the icon comes back by itself.
+        let crashing = Connection::session().unwrap();
+        claim_call(&crashing, "ClaimTrayFor", "1");
+        wait_until("withdrawn", 3, || !on_bus());
+        drop(crashing);
+        wait_until("back after the client left", 3, on_bus);
+
+        // 3b. A claim that is not renewed lapses; a renewed one holds.
+        claim_call(&widget, "ClaimTrayFor", "9");
+        wait_until("withdrawn", 3, || !on_bus());
+        for _ in 0..4 {
+            std::thread::sleep(Duration::from_millis(900));
+            claim_call(&widget, "ClaimTrayFor", "9");
+        }
+        assert!(!on_bus(), "renewed claim holds beyond its TTL");
+        wait_until("lapsed without renewal", 6, on_bus);
+
+        // 4. The user ticks the widget in the system tray configuration.
+        std::fs::write(&rc, "[Containments][3][General]\nextraItems=org.kde.plasma.battery,com.agenceapi.devicehub\n").unwrap();
+        wait_until("withdrawn by the configuration", 8, || !on_bus());
+        // ... and unticks it.
+        std::fs::write(&rc, "[Containments][3][General]\nextraItems=org.kde.plasma.battery,org.kde.kscreen,\n").unwrap();
+        wait_until("back after unticking", 8, on_bus);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn widget_claim_and_configuration_withdraw_and_restore_the_icon() {
+        if std::env::var_os("AKM_TRAY_CLAIM_INNER").is_some() {
+            claim_roundtrip_inner();
+            return;
+        }
+        if std::process::Command::new("dbus-run-session").arg("--version").output().is_err() {
+            eprintln!("SKIP: dbus-run-session not installed");
+            return;
+        }
+        let out = std::process::Command::new("dbus-run-session")
+            .arg("--")
+            .arg(std::env::current_exe().unwrap())
+            .args(["--exact", "tray::tests::widget_claim_and_configuration_withdraw_and_restore_the_icon", "--nocapture"])
+            .env("AKM_TRAY_CLAIM_INNER", "1")
+            .output()
+            .expect("run under dbus-run-session");
+        let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+        assert!(out.status.success(), "inner run failed:\n{text}");
+        assert!(text.contains("1 passed"), "inner test did not run:\n{text}");
+    }
+
     /// Live check on the user's session bus, without hardware: a test SNI
     /// with a fake snapshot. Run by hand:
     /// `AKM_TRAY_LIVE_SECS=60 cargo test -p apple-kb-monitord --bin apple-kb-monitord live_tray -- --ignored --nocapture`
@@ -848,6 +1060,7 @@ mod tests {
                     .unwrap_or(Mode::Auto),
                 item_id: "apple-kb-monitor-test".into(),
                 lang: Lang::from_env(),
+                claim_ttl: CLAIM_TTL,
             },
         );
         // Halfway: battery drops to 8 % (icon, status, tooltip, menu change).
