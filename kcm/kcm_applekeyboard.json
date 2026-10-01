@@ -1,0 +1,21 @@
+{
+    "KPlugin": {
+        "Name": "Apple Keyboard",
+        "Name[fr]": "Clavier Apple",
+        "Description": "Battery, keys, alerts and diagnostics of Apple Bluetooth keyboards",
+        "Description[fr]": "Batterie, touches, alertes et diagnostic des claviers Bluetooth Apple",
+        "Icon": "input-keyboard",
+        "Authors": [
+            {
+                "Name": "Han (AgenceAPI)",
+                "Email": "han@agenceapi.com"
+            }
+        ],
+        "License": "GPL-2.0-or-later",
+        "Website": "https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
+    },
+    "X-KDE-Keywords": "apple keyboard,apple,keyboard,battery,fn,function keys,keys,magic keyboard,A1314,bluetooth,hid_apple,fnmode,eject,alias,rename,diagnostic",
+    "X-KDE-Keywords[fr]": "clavier apple,apple,clavier,batterie,piles,fn,touches,touches de fonction,magic keyboard,A1314,bluetooth,hid_apple,fnmode,éjecter,alias,renommer,nom,diagnostic,alertes,notifications",
+    "X-KDE-System-Settings-Parent-Category": "keyboard",
+    "X-KDE-Weight": 60
+}
