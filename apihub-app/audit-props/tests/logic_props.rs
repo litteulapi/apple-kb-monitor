@@ -184,7 +184,6 @@ proptest! {
 
     // ── historique / prévision : jamais NaN, ∞, négatif ──────────────────
     #[test]
-    #[ignore = "bug confirmé : issue #223 (history::parse sans validation -> taux infini)"]
     fn history_estimate_remaining_is_finite(entries in prop::collection::vec(entry(), 0..60)) {
         if let Some((rate, hours)) = history::estimate_remaining(&entries) {
             prop_assert!(rate.is_finite() && rate >= 0.0, "taux {rate}");
@@ -194,7 +193,6 @@ proptest! {
     }
 
     #[test]
-    #[ignore = "bug confirmé : issue #223 (débordement u64 dans forecast::estimate)"]
     fn forecast_is_finite_and_does_not_overflow(entries in prop::collection::vec(entry(), 0..60)) {
         if let Ok(f) = forecast::estimate(&entries) {
             prop_assert!(f.rate_pct_per_day.is_finite() && f.rate_pct_per_day > 0.0);
@@ -246,7 +244,6 @@ fn entry() -> impl Strategy<Value = HistoryEntry> {
 /// `forecast::estimate` : `last_ts + secondes` déborde (panique en debug, wrap en
 /// release) quand le dernier horodatage d'un historique est proche de u64::MAX.
 #[test]
-#[ignore = "bug confirmé : issue #223 (débordement u64 dans forecast::estimate sur ts extrême)"]
 fn forecast_does_not_overflow_on_extreme_timestamps() {
     let t = u64::MAX - 400_000;
     let e: Vec<HistoryEntry> = (0..5)
@@ -259,7 +256,6 @@ fn forecast_does_not_overflow_on_extreme_timestamps() {
 /// `history::parse` n'applique pas `valid_sample` : une ligne avec une tension
 /// absurde donne une autonomie infinie.
 #[test]
-#[ignore = "bug confirmé : issue #223 (history::parse accepte des valeurs hors bornes -> taux infini)"]
 fn estimate_remaining_is_finite_on_absurd_voltages_from_parse() {
     let content = "{\"ts\":1000000,\"pct\":50,\"voltage\":1e306,\"schema\":2}\n\
                    {\"ts\":1010000,\"pct\":49,\"voltage\":1.0,\"schema\":2}\n";
@@ -273,7 +269,6 @@ fn estimate_remaining_is_finite_on_absurd_voltages_from_parse() {
 /// invisible (`read_to_string` échoue) et `rotate()` renvoie une erreur à chaque
 /// appel, le fichier grossit sans fin.
 #[test]
-#[ignore = "bug confirmé : issue #222 (un octet invalide rend tout l'historique illisible et non rotatif)"]
 fn history_survives_one_invalid_utf8_byte() {
     use akm_core::history::{Clock, History};
     struct C;

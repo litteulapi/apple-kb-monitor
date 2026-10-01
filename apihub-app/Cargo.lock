@@ -263,7 +263,6 @@ dependencies = [
  "apple-kb-monitord",
  "eframe",
  "libc",
- "serde",
  "serde_json",
  "zbus",
 ]

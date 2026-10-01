@@ -129,7 +129,6 @@ fn rdesc_keyboard_prefixes_never_panic_and_full_is_keyboard() {
 /// Défaut de couverture de la validation d'alias : U+061C (marque de lettre
 /// arabe, contrôle bidi) et les remplisseurs invisibles (U+3164, U+2800) passent.
 #[test]
-#[ignore = "bug confirmé : issue #221 : contrôles bidi/invisibles non filtrés par alias::validate"]
 fn alias_rejects_remaining_bidi_and_blank_fillers() {
     for bad in ["a\u{061C}b", "\u{3164}", "x\u{2800}", "a\u{00AD}b", "a\u{E0041}b", "a\u{FE0F}\u{180E}"] {
         assert!(validate(bad).is_err(), "{bad:?} accepté");

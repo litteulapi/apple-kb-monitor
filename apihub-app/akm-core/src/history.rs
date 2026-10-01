@@ -174,17 +174,52 @@ pub fn legacy_path() -> PathBuf {
     base.join(REL_PATH)
 }
 
-/// Parse JSONL content; malformed lines are skipped.
-/// Legacy lines come back with `voltage_valid = Some(false)` (#180).
-pub fn parse(content: &str) -> Vec<HistoryEntry> {
-    content
-        .lines()
-        .filter_map(|l| serde_json::from_str::<HistoryEntry>(l).ok())
-        .map(|mut e| {
-            e.mark_legacy();
-            e
-        })
+/// Latest timestamp accepted when reading (2100-01-01 UTC): beyond it the
+/// line is corrupt or hand-edited, and downstream arithmetic is not safe.
+pub const MAX_TS: u64 = 4_102_444_800;
+/// Plausible range of a millivolt reading (same bounds as [`VOLTAGE_RANGE`]).
+const MV_RANGE: std::ops::RangeInclusive<u32> = 500..=4500;
+
+/// Is a decoded line plausible? (`valid_sample`, bounded `ts`, bounded mV).
+pub fn valid_entry(e: &HistoryEntry) -> bool {
+    e.ts <= MAX_TS
+        && valid_sample(e.pct, e.voltage)
+        && e.mv_0x46.is_none_or(|mv| MV_RANGE.contains(&mv))
+        && e.mv_0x49.is_none_or(|mv| MV_RANGE.contains(&mv))
+}
+
+/// One line (bytes, no terminator) -> a validated entry, legacy lines marked.
+fn parse_line(line: &[u8]) -> Option<HistoryEntry> {
+    let mut e = serde_json::from_slice::<HistoryEntry>(line).ok()?;
+    if !valid_entry(&e) {
+        return None;
+    }
+    e.mark_legacy();
+    Some(e)
+}
+
+/// Lines of a byte buffer like `str::lines` (`\n` or `\r\n`), whatever the
+/// bytes: a line that is not UTF-8 is just a line that will not parse.
+fn byte_lines(content: &[u8]) -> Vec<&[u8]> {
+    if content.is_empty() {
+        return Vec::new();
+    }
+    let body = content.strip_suffix(b"\n").unwrap_or(content);
+    body.split(|b| *b == b'\n')
+        .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
         .collect()
+}
+
+/// Parse JSONL bytes; malformed, non-UTF-8 or implausible lines are skipped.
+pub fn parse_bytes(content: &[u8]) -> Vec<HistoryEntry> {
+    byte_lines(content).into_iter().filter_map(parse_line).collect()
+}
+
+/// Parse JSONL content; malformed or implausible lines are skipped (see
+/// [`valid_entry`]). Legacy lines come back with `voltage_valid = Some(false)`
+/// (#180).
+pub fn parse(content: &str) -> Vec<HistoryEntry> {
+    parse_bytes(content.as_bytes())
 }
 
 /// Discharge rate (mV/h) and remaining hours down to 2.0 V, from the last 50
@@ -195,7 +230,7 @@ pub fn estimate_remaining(entries: &[HistoryEntry]) -> Option<(f64, f64)> {
         .rev()
         .filter_map(|e| {
             e.reliable_voltage()
-                .filter(|v| v.is_finite() && *v > 0.0)
+                .filter(|v| v.is_finite() && VOLTAGE_RANGE.contains(v))
                 .map(|v| (e.ts, v))
         })
         .take(50)
@@ -210,7 +245,7 @@ pub fn estimate_remaining(entries: &[HistoryEntry]) -> Option<(f64, f64)> {
         return None;
     }
     let rate_mvh = (first_v - last_v) * 1000.0 / hours;
-    if rate_mvh < 0.1 {
+    if !rate_mvh.is_finite() || rate_mvh < 0.1 {
         return None;
     }
     let remaining_mv = (last_v - 2.0) * 1000.0;
@@ -273,25 +308,26 @@ impl<C: Clock> History<C> {
     /// rewrite. Malformed lines are kept as they are. Returns the number of
     /// lines marked.
     pub fn mark_legacy_voltages(&self) -> io::Result<usize> {
-        let content = match std::fs::read_to_string(&self.path) {
+        let content = match std::fs::read(&self.path) {
             Ok(c) => c,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
             Err(e) => return Err(e),
         };
         let mut changed = 0usize;
-        let mut out = String::with_capacity(content.len() + 64);
-        for line in content.lines() {
-            let marked = serde_json::from_str::<HistoryEntry>(line)
+        let mut out: Vec<u8> = Vec::with_capacity(content.len() + 64);
+        for line in byte_lines(&content) {
+            // Lines that do not parse (or are not UTF-8) are copied byte for byte.
+            let marked = serde_json::from_slice::<HistoryEntry>(line)
                 .ok()
                 .and_then(|mut e| e.mark_legacy().then_some(e));
             match marked {
                 Some(e) => {
                     changed += 1;
-                    out.push_str(&serde_json::to_string(&e).map_err(io::Error::other)?);
+                    out.extend_from_slice(serde_json::to_string(&e).map_err(io::Error::other)?.as_bytes());
                 }
-                None => out.push_str(line),
+                None => out.extend_from_slice(line),
             }
-            out.push('\n');
+            out.push(b'\n');
         }
         if changed == 0 {
             return Ok(0);
@@ -303,7 +339,7 @@ impl<C: Clock> History<C> {
         let tmp = self.path.with_extension("jsonl.tmp");
         {
             let mut f = std::fs::File::create(&tmp)?;
-            f.write_all(out.as_bytes())?;
+            f.write_all(&out)?;
             f.sync_all()?;
         }
         std::fs::rename(&tmp, &self.path)?;
@@ -340,8 +376,9 @@ impl<C: Clock> History<C> {
 
     /// Every entry (empty if the file is missing).
     pub fn read(&self) -> Vec<HistoryEntry> {
-        std::fs::read_to_string(&self.path)
-            .map(|c| parse(&c))
+        // Bytes, not `read_to_string`: one invalid byte must not hide the rest.
+        std::fs::read(&self.path)
+            .map(|c| parse_bytes(&c))
             .unwrap_or_default()
     }
 
@@ -355,13 +392,22 @@ impl<C: Clock> History<C> {
     /// carrying an event (battery replacement) are kept whatever their age:
     /// battery sets last longer than the retention.
     pub fn rotate(&self, retention_s: u64) -> io::Result<usize> {
-        let content = match std::fs::read_to_string(&self.path) {
+        let content = match std::fs::read(&self.path) {
             Ok(c) => c,
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
             Err(e) => return Err(e),
         };
-        let total = content.lines().count();
-        let entries = parse(&content);
+        let lines = byte_lines(&content);
+        let total = lines.len();
+        let mut entries = Vec::new();
+        let mut rejected: Vec<&[u8]> = Vec::new();
+        for l in lines {
+            match parse_line(l) {
+                Some(e) => entries.push(e),
+                None if l.iter().all(u8::is_ascii_whitespace) => {}
+                None => rejected.push(l),
+            }
+        }
         // The threshold is anchored on the data as well as on the wall clock:
         // a clock running ahead (no NTP yet, dead RTC battery) cannot make
         // the whole file look old (#166).
@@ -377,6 +423,20 @@ impl<C: Clock> History<C> {
             .collect();
         if keep.len() == total {
             return Ok(0);
+        }
+        // Corrupt lines are set aside before the rewrite drops them.
+        if !rejected.is_empty() {
+            let mut f = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(self.path.with_extension("jsonl.corrupt"))?;
+            let mut buf = Vec::new();
+            for l in &rejected {
+                buf.extend_from_slice(l);
+                buf.push(b'\n');
+            }
+            f.write_all(&buf)?;
+            f.sync_all()?;
         }
         // One generation of safety net before any rewrite.
         std::fs::copy(&self.path, self.path.with_extension("jsonl.prev"))?;
