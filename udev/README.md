@@ -21,3 +21,11 @@ Mitigations :
 Alternative durcie (non fournie, a la charge de l'administrateur) : remplacer `TAG+="uaccess"` par `GROUP="akm", MODE="0660"` et executer le demon sous un compte du groupe `akm` (unite systemd systeme avec `SupplementaryGroups=akm`). Cela perd l'acces de l'application graphique lancee par l'utilisateur.
 
 Verification : `udevadm verify udev/70-apple-kb-hidraw.rules` ; `getfacl /dev/hidrawN` sur un clavier connecte (ACL presente) et sur une souris Apple (ACL absente).
+
+## hwdb du mapping des touches (#247)
+
+Aucun fichier hwdb n'est fourni par le paquet (défaut = mapping du noyau). `akmctl keymap apply`
+fait écrire `/etc/udev/hwdb.d/90-apple-kb-monitor.hwdb` par `akm-keymap-helper` (entrées
+`evdev:input:b0005v05ACpPPPP*` + `KEYBOARD_KEY_<usage HID>=<nom>`, liste blanche), puis
+`systemd-hwdb update` et `udevadm trigger --subsystem-match=input --action=change`.
+`akmctl keymap reset` le retire. Détails : docs/TOUCHES.md.
