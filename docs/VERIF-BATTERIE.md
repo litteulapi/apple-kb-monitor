@@ -256,8 +256,15 @@ indicateur de santé possible (commentaire sur #108).
 
 ## 7. Issues
 
-Voir les issues ouvertes à partir de cette étude (liste en fin de livraison, commentaires sur #83, #85,
-#108, #139, sans doublon).
+| # | Objet |
+|---|---|
+| #178 (bug) | alertes 30/15/5 % sur l'échelle firmware : la 1re alerte arrive vers ~7 % réels |
+| #179 (doc/RE) | `0x47` ≠ tronc(interp(`0x49`)) à 2945 mV ; `0x49` ≠ filtre de `0x46` : corriger la carte et #139 |
+| #180 (bug) | historique : `voltage` = constante `0xF5` sur 2 136 lignes, à marquer non fiable et à remplacer par `0x46`/`0x49` |
+| #83 (commentaire) | ne pas régresser sur le % firmware ni sur la pente des premiers jours |
+| #85 (commentaire) | `BatteriesInstalledAt` = 0 après redémarrage ; seuil de 300 mV trop haut (saut réel de +160 à +180 mV) |
+| #108 (commentaire) | règles de chimie à la pose, table firmware → réel, écart `0x46` − `0x49` |
+| #139 (commentaire) | égalité exacte réfutée ; le % fin reste sur l'échelle firmware |
 
 ## 8. Reproduire
 
