@@ -161,7 +161,33 @@ pub fn items_of_pid(items: &[String], daemon_pid: u32, pid_of: impl Fn(&str) -> 
 
 /// True when the daemon is on the bus AND has registered its own tray item
 /// with the StatusNotifierWatcher.
+/// Longest wait for the SNI watcher before opening the window (#233).
+pub const TRAY_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Run `f` on a worker thread and wait for it at most `timeout`; `default`
+/// when it does not answer in time (zbus 4.4 has no client-side call
+/// timeout: a peer that never replies blocks the caller for ever).
+pub fn bounded<T: Send + 'static>(timeout: std::time::Duration, default: T, f: impl FnOnce() -> T + Send + 'static) -> T {
+    let (tx, rx) = std::sync::mpsc::channel();
+    if std::thread::Builder::new().name("bounded-call".into()).spawn(move || { let _ = tx.send(f()); }).is_err() {
+        return default;
+    }
+    rx.recv_timeout(timeout).unwrap_or(default)
+}
+
+/// True when the daemon's tray icon is registered; false when unknown,
+/// including a StatusNotifierWatcher that does not answer within
+/// [`TRAY_PROBE_TIMEOUT`] (a frozen plasmashell must not keep the window from
+/// opening, #233).
 pub fn daemon_tray_present() -> bool {
+    let r = bounded(TRAY_PROBE_TIMEOUT, None, || Some(daemon_tray_present_blocking()));
+    r.unwrap_or_else(|| {
+        eprintln!("[apihub] StatusNotifierWatcher did not answer within {} s", TRAY_PROBE_TIMEOUT.as_secs());
+        false
+    })
+}
+
+fn daemon_tray_present_blocking() -> bool {
     let Ok(conn) = Connection::session() else { return false };
     let Ok(dbus) = zbus::blocking::fdo::DBusProxy::new(&conn) else { return false };
     let pid_of = |n: &str| -> Option<u32> {
@@ -186,6 +212,18 @@ pub fn daemon_tray_present() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_call_gives_up_on_a_peer_that_never_answers() {
+        let t = std::time::Instant::now();
+        let r = bounded(std::time::Duration::from_millis(200), false, || {
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+            true
+        });
+        assert!(!r);
+        assert!(t.elapsed() < std::time::Duration::from_secs(1));
+        assert!(bounded(std::time::Duration::from_secs(5), false, || true));
+    }
 
     #[test]
     fn token_from_platform_data() {
