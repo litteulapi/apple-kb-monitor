@@ -37,3 +37,5 @@ usr/lib/systemd/system/hybrid-sleep.target.wants/apple-kb-monitor-resume.service
 usr/lib/systemd/system/suspend-then-hibernate.target.wants/apple-kb-monitor-resume.service
 etc/apple-kb-monitor/hid-suspend.conf
 usr/share/doc/apple-kb-monitor/VEILLE-HID.md
+usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/Signal.js
+usr/share/locale/fr/LC_MESSAGES/plasma_applet_com.agenceapi.devicehub.mo

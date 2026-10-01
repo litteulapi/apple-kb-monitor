@@ -13,6 +13,8 @@ if grep -rEn "plasma5support|dbus-monitor|engine: *\"executable\"" "$here/../com
 fi
 # Display data is plain text, never rich text (#205).
 python3 "$here/check_plaintext.py" >/dev/null || { python3 "$here/check_plaintext.py" >&2; echo "FAIL: rich text in widget" >&2; exit 1; }
+# Every i18n() text of the widget is translated in po/fr.po (#114).
+python3 "$here/check_i18n.py" >/dev/null || { python3 "$here/check_i18n.py" >&2; echo "FAIL: untranslated widget text" >&2; exit 1; }
 # Pure logic of the signal quality (#174), no bus needed.
 QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 qml6 "$here/tst_signal.qml" 2>&1 | grep -q "PASS signal" \
   || { echo "FAIL: tst_signal.qml" >&2; exit 1; }

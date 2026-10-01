@@ -11,7 +11,7 @@ license=('GPL-2.0-or-later')
 depends=('bluez' 'polkit' 'dbus' 'systemd' 'libcap'
          'wayland' 'libxkbcommon' 'libxkbcommon-x11' 'libglvnd'
          'libx11' 'libxcursor' 'libxi' 'libxrandr')
-makedepends=('rust' 'gcc')
+makedepends=('rust' 'gcc' 'gettext')
 optdepends=(
     'bluez-utils: bluetoothctl CLI for BT management'
     'libnotify: desktop notifications on low battery'
@@ -124,7 +124,12 @@ package() {
     local plasma_dir="$pkgdir/usr/share/plasma/plasmoids/com.agenceapi.devicehub"
     install -dm755 "$plasma_dir/contents/ui"
     install -Dm644 "$startdir/plasma/com.agenceapi.devicehub/metadata.json" "$plasma_dir/metadata.json"
-    for qml in "$startdir/plasma/com.agenceapi.devicehub/contents/ui/"*.qml; do
+    for qml in "$startdir/plasma/com.agenceapi.devicehub/contents/ui/"*.qml "$startdir/plasma/com.agenceapi.devicehub/contents/ui/"*.js; do
         install -Dm644 "$qml" "$plasma_dir/contents/ui/$(basename "$qml")"
     done
+    # French translation of the widget (#114): gettext catalogue compiled here,
+    # loaded by Plasma's i18n() from the system locale directory.
+    msgfmt -o "$srcdir/plasma_applet_com.agenceapi.devicehub.mo" "$startdir/plasma/po/fr.po"
+    install -Dm644 "$srcdir/plasma_applet_com.agenceapi.devicehub.mo" \
+        "$pkgdir/usr/share/locale/fr/LC_MESSAGES/plasma_applet_com.agenceapi.devicehub.mo"
 }
