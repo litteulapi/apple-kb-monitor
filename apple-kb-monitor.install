@@ -1,3 +1,12 @@
+# Units are enabled by the package itself (an Arch package does not enable
+# anything on its own): the sleep/resume HID_CONTROL units (system, root) and the
+# user units (daemon, shutdown notice, self-check timer) for every user.
+# Idempotent; opt out with `systemctl mask <unit>`.
+_akm_enable() {
+    systemctl enable apple-kb-monitor-suspend.service apple-kb-monitor-resume.service >/dev/null 2>&1 || true
+    systemctl --global enable apple-kb-monitord.service apple-kb-monitor-shutdown.service apple-kb-monitor-selfcheck.timer >/dev/null 2>&1 || true
+}
+
 post_install() {
     # Reload udev rules and re-apply the uaccess ACL on already-connected keyboards
     udevadm control --reload-rules 2>/dev/null || true
@@ -14,6 +23,7 @@ post_install() {
     fi
 
     _akm_setcap
+    _akm_enable
     _akm_message
 }
 
@@ -37,6 +47,7 @@ post_upgrade() {
     fi
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
+    _akm_enable
     # keyd: never reloaded nor restarted (#246).
     # fnmode is deliberately left alone (user choice / modprobe.d).
     _akm_setcap
