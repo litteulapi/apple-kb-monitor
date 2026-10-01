@@ -47,8 +47,46 @@ pub enum Claim {
     Primary(Connection),
     /// Another instance exists and has been asked to show its window.
     Existing,
+    /// Another instance owns the name but never answered: never open a
+    /// second window next to it (#197).
+    Unreachable,
     /// No session bus: run without single-instance protection.
     NoBus,
+}
+
+/// Outcome of one attempt to own the name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Step {
+    Owned,
+    Taken,
+    Failed,
+}
+
+/// Single-instance protocol, independent of D-Bus (unit-tested): own the
+/// name, else activate its owner; if the owner does not answer (it is
+/// exiting, dumping core or hung), retry so that a name freed in between is
+/// taken by us. Never returns "open anyway" while another owner may live.
+pub fn negotiate(
+    attempts: u32,
+    mut try_own: impl FnMut() -> Step,
+    mut activate: impl FnMut() -> Result<(), String>,
+    mut pause: impl FnMut(),
+) -> Result<bool, String> {
+    let mut last = String::from("no attempt");
+    for i in 0..attempts.max(1) {
+        if i > 0 {
+            pause();
+        }
+        match try_own() {
+            Step::Owned => return Ok(true),
+            Step::Failed => return Err("cannot request the name".into()),
+            Step::Taken => match activate() {
+                Ok(()) => return Ok(false),
+                Err(e) => last = e,
+            },
+        }
+    }
+    Err(last)
 }
 
 pub fn claim(on_activate: impl Fn(Option<String>) + Send + Sync + 'static) -> Claim {
@@ -58,43 +96,66 @@ pub fn claim(on_activate: impl Fn(Option<String>) + Send + Sync + 'static) -> Cl
     }
     let Ok(name) = WellKnownName::try_from(APP_ID) else { return Claim::NoBus };
     use zbus::fdo::RequestNameFlags::DoNotQueue;
-    match conn.request_name_with_flags(name, DoNotQueue.into()) {
-        Ok(RequestNameReply::PrimaryOwner | RequestNameReply::AlreadyOwner) => Claim::Primary(conn),
+    let try_own = || match conn.request_name_with_flags(name.clone(), DoNotQueue.into()) {
+        Ok(RequestNameReply::PrimaryOwner | RequestNameReply::AlreadyOwner) => Step::Owned,
         // zbus maps "Exists" to NameTaken; both mean another instance owns the name.
-        Ok(_) | Err(zbus::Error::NameTaken) => activate_existing(&conn),
+        Ok(_) | Err(zbus::Error::NameTaken) => Step::Taken,
         Err(e) => {
             eprintln!("[apihub] cannot claim {APP_ID}: {e}");
-            Claim::NoBus
+            Step::Failed
         }
+    };
+    // ~20 s at worst: long enough for an exiting instance to release the name.
+    match negotiate(8, try_own, || activate_existing(&conn), || std::thread::sleep(std::time::Duration::from_millis(500))) {
+        Ok(true) => Claim::Primary(conn),
+        Ok(false) => Claim::Existing,
+        Err(e) if conn.unique_name().is_some() && e != "cannot request the name" => {
+            eprintln!("[apihub] existing instance unreachable ({e}): not opening a second window");
+            Claim::Unreachable
+        }
+        Err(_) => Claim::NoBus,
     }
 }
 
-fn activate_existing(conn: &Connection) -> Claim {
+/// `Activate` on the running instance, bounded in time: a hung owner must
+/// not block this launch for the bus' 25 s reply timeout at every attempt.
+fn activate_existing(conn: &Connection) -> Result<(), String> {
     // Forward the token we were started with, so the running window may take focus.
-    let mut args: HashMap<&str, Value<'_>> = HashMap::new();
     let token = std::env::var("XDG_ACTIVATION_TOKEN").ok().filter(|t| !t.is_empty());
-    if let Some(t) = &token {
-        args.insert("activation-token", Value::from(t.as_str()));
-    }
-    match conn.call_method(Some(APP_ID), APP_PATH, Some("org.freedesktop.Application"), "Activate", &(args,)) {
-        Ok(_) => Claim::Existing,
-        Err(e) => {
-            eprintln!("[apihub] existing instance unreachable ({e}): opening anyway");
-            Claim::NoBus
+    let conn = conn.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let spawned = std::thread::Builder::new().name("activate".into()).spawn(move || {
+        let mut args: HashMap<&str, Value<'_>> = HashMap::new();
+        if let Some(t) = &token {
+            args.insert("activation-token", Value::from(t.as_str()));
         }
+        let r = conn
+            .call_method(Some(APP_ID), APP_PATH, Some("org.freedesktop.Application"), "Activate", &(args,))
+            .map(|_| ())
+            .map_err(|e| e.to_string());
+        let _ = tx.send(r);
+    });
+    if let Err(e) = spawned {
+        return Err(e.to_string());
     }
+    rx.recv_timeout(ACTIVATE_TIMEOUT).unwrap_or_else(|_| Err("no answer to Activate".into()))
 }
 
-/// Does one of the registered SNI items belong to `owner` (a unique name)?
-/// `resolve` maps a well-known name to its current owner.
-pub fn items_owned_by(items: &[String], owner: &str, resolve: impl Fn(&str) -> Option<String>) -> bool {
+const ACTIVATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Bus name of a registered SNI item (`"<name>/<path>"`, or just a name).
+fn item_name(item: &str) -> &str {
+    item.split('/').next().unwrap_or("")
+}
+
+/// Is one of the registered SNI items served by process `daemon_pid`?
+/// The daemon publishes its item on a **second** connection (#196), so the
+/// owner's unique name never equals the daemon's: compare process ids.
+/// `pid_of` maps any bus name (unique or well-known) to its owner's pid.
+pub fn items_of_pid(items: &[String], daemon_pid: u32, pid_of: impl Fn(&str) -> Option<u32>) -> bool {
     items.iter().any(|item| {
-        let name = item.split('/').next().unwrap_or("");
-        if name.starts_with(':') {
-            name == owner
-        } else {
-            resolve(name).as_deref() == Some(owner)
-        }
+        let name = item_name(item);
+        !name.is_empty() && pid_of(name) == Some(daemon_pid)
     })
 }
 
@@ -103,11 +164,11 @@ pub fn items_owned_by(items: &[String], owner: &str, resolve: impl Fn(&str) -> O
 pub fn daemon_tray_present() -> bool {
     let Ok(conn) = Connection::session() else { return false };
     let Ok(dbus) = zbus::blocking::fdo::DBusProxy::new(&conn) else { return false };
-    let owner_of = |n: &str| -> Option<String> {
+    let pid_of = |n: &str| -> Option<u32> {
         let name = zbus::names::BusName::try_from(n).ok()?;
-        dbus.get_name_owner(name).ok().map(|o| o.to_string())
+        dbus.get_connection_unix_process_id(name).ok()
     };
-    let Some(daemon) = owner_of(DAEMON_NAME) else { return false };
+    let Some(daemon) = pid_of(DAEMON_NAME) else { return false };
     let Ok(reply) = conn.call_method(
         Some(WATCHER),
         "/StatusNotifierWatcher",
@@ -119,7 +180,7 @@ pub fn daemon_tray_present() -> bool {
     };
     let Ok(v) = reply.body().deserialize::<OwnedValue>() else { return false };
     let Ok(items) = Vec::<String>::try_from(v) else { return false };
-    items_owned_by(&items, &daemon, owner_of)
+    items_of_pid(&items, daemon, pid_of)
 }
 
 #[cfg(test)]
@@ -139,15 +200,42 @@ mod tests {
     }
 
     #[test]
-    fn detects_daemon_item_by_owner() {
+    fn detects_daemon_item_by_pid_on_a_second_connection() {
+        // Measured on the real bus: daemon name on :1.311, its SNI item on
+        // :1.312, same process 497861.
         let items = vec![
-            "org.kde.StatusNotifierItem-4242-1/StatusNotifierItem".to_string(),
-            ":1.77/StatusNotifierItem".to_string(),
+            "org.kde.StatusNotifierItem-4588-1/StatusNotifierItem".to_string(),
+            ":1.56/StatusNotifierItem".to_string(),
+            "org.kde.StatusNotifierItem-497861-1/StatusNotifierItem".to_string(),
         ];
-        let resolve = |n: &str| (n == "org.kde.StatusNotifierItem-4242-1").then(|| ":1.50".to_string());
-        assert!(items_owned_by(&items, ":1.50", resolve));
-        assert!(items_owned_by(&items, ":1.77", resolve));
-        assert!(!items_owned_by(&items, ":1.99", resolve));
-        assert!(!items_owned_by(&[], ":1.50", resolve));
+        let pid_of = |n: &str| match n {
+            "org.kde.StatusNotifierItem-4588-1" => Some(4588),
+            ":1.56" => Some(1200),
+            "org.kde.StatusNotifierItem-497861-1" => Some(497_861),
+            _ => None,
+        };
+        assert!(items_of_pid(&items, 497_861, pid_of));
+        assert!(items_of_pid(&items, 1200, pid_of));
+        assert!(!items_of_pid(&items, 42, pid_of));
+        assert!(!items_of_pid(&[], 497_861, pid_of));
+        assert!(!items_of_pid(&["/StatusNotifierItem".to_string()], 0, |_| Some(0)));
+    }
+
+    #[test]
+    fn negotiate_owns_activates_or_refuses() {
+        // Free name: we own it.
+        assert_eq!(negotiate(3, || Step::Owned, || unreachable!(), || {}), Ok(true));
+        // Live owner answering: raise it.
+        assert_eq!(negotiate(3, || Step::Taken, || Ok(()), || {}), Ok(false));
+        // Owner dying during Activate (NoReply), name freed on the 3rd try.
+        let mut n = 0;
+        let r = negotiate(5, || { n += 1; if n < 3 { Step::Taken } else { Step::Owned } }, || Err("NoReply".into()), || {});
+        assert_eq!(r, Ok(true));
+        // Owner alive but never answering: error, never "open anyway".
+        let mut pauses = 0;
+        let r = negotiate(4, || Step::Taken, || Err("NoReply".into()), || pauses += 1);
+        assert_eq!(r, Err("NoReply".to_string()));
+        assert_eq!(pauses, 3);
+        assert!(negotiate(4, || Step::Failed, || Ok(()), || {}).is_err());
     }
 }
