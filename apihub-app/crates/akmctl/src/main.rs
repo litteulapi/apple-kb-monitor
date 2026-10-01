@@ -88,19 +88,21 @@ fn run(cmd: Command) -> u8 {
             show,
             restore,
             write_device_name,
+            check,
             mac,
             ..
         } => {
+            let mode = if write_device_name {
+                devnamecmd::Mode::Write
+            } else if check {
+                devnamecmd::Mode::Check
+            } else {
+                devnamecmd::Mode::DryRun
+            };
             let action = match (dn, show, restore) {
                 (_, true, _) => devnamecmd::Action::Show,
-                (_, _, Some(file)) => devnamecmd::Action::Restore {
-                    file,
-                    write: write_device_name,
-                },
-                (Some(name), _, None) => devnamecmd::Action::Rename {
-                    name,
-                    write: write_device_name,
-                },
+                (_, _, Some(file)) => devnamecmd::Action::Restore { file, mode },
+                (Some(name), _, None) => devnamecmd::Action::Rename { name, mode },
                 (None, false, None) => {
                     eprintln!("akmctl: --device-name needs a name, --show or --restore");
                     return EXIT_USAGE;

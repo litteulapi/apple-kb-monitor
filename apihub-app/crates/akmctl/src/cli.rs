@@ -83,15 +83,20 @@ pub enum Command {
         #[arg(long, value_name = "NAME", num_args = 0..=1, value_parser = parse_device_name, conflicts_with = "reset")]
         device_name: Option<Option<String>>,
         /// Show the bytes that would be sent, write nothing (the default)
-        #[arg(long, requires = "device_name", conflicts_with_all = ["write_device_name", "name", "reset"])]
+        #[arg(long, requires = "device_name", conflicts_with_all = ["write_device_name", "check", "name", "reset"])]
         dry_run: bool,
-        /// Really write: three locks (config allow_device_name_write = true,
-        /// control-channel MTU >= 66 read via pkexec, name typed again), after
-        /// pre-flight and backup
+        /// Whole pre-flight (control-channel MTU read via ONE pkexec, read-only),
+        /// backup and plan; nothing written, nothing asked
+        #[arg(long, requires = "device_name", conflicts_with_all = ["write_device_name", "name", "reset"])]
+        check: bool,
+        /// Really write: three locks (consent = config allow_device_name_write
+        /// = true, or ECRIRE typed in an interactive terminal for this run only;
+        /// control-channel MTU >= 66 read via pkexec; name typed again), after
+        /// pre-flight, backup and the plan
         #[arg(long, requires = "device_name", conflicts_with_all = ["name", "reset"])]
         write_device_name: bool,
         /// Show the name stored in the keyboard (daemon cache, no hardware read)
-        #[arg(long, requires = "device_name", conflicts_with_all = ["restore", "dry_run", "write_device_name", "name", "reset"])]
+        #[arg(long, requires = "device_name", conflicts_with_all = ["restore", "dry_run", "check", "write_device_name", "name", "reset"])]
         show: bool,
         /// Rewrite a backup made by a previous --device-name run
         #[arg(long, value_name = "BACKUP", requires = "device_name", conflicts_with_all = ["name", "reset"])]
@@ -462,6 +467,7 @@ mod tests {
                 name,
                 device_name,
                 dry_run,
+                check,
                 write_device_name,
                 show,
                 restore,
@@ -469,13 +475,29 @@ mod tests {
             } => {
                 assert_eq!(name, None);
                 assert_eq!(device_name, Some(Some("Clavier de maria #1".into())));
-                assert!(!dry_run && !write_device_name && !show && restore.is_none());
+                assert!(!dry_run && !check && !write_device_name && !show && restore.is_none());
             }
             _ => panic!(),
         }
         assert!(c(&["--device-name", "x", "--dry-run"]).is_ok());
         assert!(c(&["--device-name", "x", "--write-device-name"]).is_ok());
         assert!(c(&["--device-name", "x", "--dry-run", "--write-device-name"]).is_err());
+        // --check: whole pre-flight, nothing written; exclusive with the others.
+        assert!(matches!(
+            c(&["--device-name", "x", "--check"]).unwrap().command,
+            Command::Rename { check: true, write_device_name: false, dry_run: false, .. }
+        ));
+        // A name starting with a dash goes through `--device-name=`: what the
+        // Settings module passes.
+        assert!(matches!(
+            c(&["--device-name=-x; rm -rf", "--check"]).unwrap().command,
+            Command::Rename { device_name: Some(Some(ref n)), check: true, .. } if n == "-x; rm -rf"
+        ));
+        assert!(c(&["--device-name", "--restore", "/x.json", "--check"]).is_ok());
+        assert!(c(&["--device-name", "x", "--check", "--write-device-name"]).is_err());
+        assert!(c(&["--device-name", "x", "--check", "--dry-run"]).is_err());
+        assert!(c(&["--device-name", "--show", "--check"]).is_err());
+        assert!(c(&["--check", "x"]).is_err());
         assert!(matches!(
             c(&["--device-name", "--show"]).unwrap().command,
             Command::Rename {
