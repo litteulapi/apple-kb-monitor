@@ -207,17 +207,19 @@ class TestConfigurationLivree(unittest.TestCase):
         rule = (ROOT / "udev" / "70-apple-kb-hidraw.rules").read_text()
         pats = re.search(r'KERNELS=="([^"]+)"', rule).group(1).split("|")
         for c in cases():
-            if c["hid_id"] and c["expected_family"]:
+            # La règle ne vise que les claviers Bluetooth (#155) : les modèles
+            # filaires (bus 0003) n'ont pas besoin d'hidraw pour la batterie.
+            if c["hid_id"] and c["expected_family"] and c["hid_id"].startswith("0005"):
                 with self.subTest(c["name"]):
                     name = kernel_name(c["hid_id"])
                     self.assertTrue(any(fnmatch.fnmatchcase(name, p) for p in pats), name)
 
-    def test_udev_trop_large_documente(self):
-        """Constat (doc §6) : la règle donne aussi uaccess aux souris/trackpads Apple."""
+    def test_udev_exclut_souris_trackpads(self):
+        """#155 : la règle ne donne plus uaccess aux souris/trackpads Apple."""
         rule = (ROOT / "udev" / "70-apple-kb-hidraw.rules").read_text()
         pats = re.search(r'KERNELS=="([^"]+)"', rule).group(1).split("|")
         mouse = kernel_name("0005:0000004C:00000269")
-        self.assertTrue(any(fnmatch.fnmatchcase(mouse, p) for p in pats))
+        self.assertFalse(any(fnmatch.fnmatchcase(mouse, p) for p in pats))
 
     def test_keyd_ids_cover_supported_models(self):  # #126
         conf = (ROOT / "keyd" / "apple-keyboard.conf").read_text()
