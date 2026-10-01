@@ -47,7 +47,7 @@ use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue};
 const BLUEZ_SERVICE: &str = "org.bluez";
 const PROVIDER_MANAGER_IFACE: &str = "org.bluez.BatteryProviderManager1";
 const PROVIDER_ROOT: &str = "/com/agenceapi/AppleKbMonitor";
-const SOURCE: &str = "apihub-app (HID 0xEA)";
+const SOURCE: &str = "apple-kb-monitord (kernel power_supply)";
 /// How often BlueZ presence / adapter are re-checked.
 const WATCH_PERIOD: Duration = Duration::from_secs(5);
 
@@ -205,7 +205,7 @@ impl BatteryProvider {
         {
             Ok(h) => h,
             Err(e) => {
-                eprintln!("[bluez] cannot spawn provider thread: {}", e);
+                tracing::warn!("cannot spawn provider thread: {}", e);
                 return None;
             }
         };
@@ -281,7 +281,7 @@ fn run_provider(rx: mpsc::Receiver<Cmd>) {
     {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("[bluez] D-Bus setup failed: {}", e);
+            tracing::warn!("D-Bus setup failed: {}", e);
             return;
         }
     };
@@ -335,7 +335,7 @@ impl Worker {
             Ok(_) => {
                 self.exported.insert(mac.to_string(), ());
             }
-            Err(e) => eprintln!("[bluez] export {} failed: {}", path, e),
+            Err(e) => tracing::warn!("export {} failed: {}", path, e),
         }
     }
 
@@ -343,7 +343,7 @@ impl Worker {
         if self.exported.remove(mac).is_some() {
             let path = child_path(mac);
             if let Err(e) = self.conn.object_server().remove::<Bat, _>(path.as_str()) {
-                eprintln!("[bluez] unexport {} failed: {}", path, e);
+                tracing::warn!("unexport {} failed: {}", path, e);
             }
         }
     }
@@ -359,7 +359,7 @@ impl Worker {
         };
         if changed {
             if let Err(e) = zbus::block_on(iref.get().percentage_changed(iref.signal_context())) {
-                eprintln!("[bluez] PropertiesChanged failed: {}", e);
+                tracing::warn!("PropertiesChanged failed: {}", e);
             }
         }
     }
@@ -370,7 +370,7 @@ impl Worker {
         match decide(&self.reg, obs.as_ref()) {
             Action::Nothing => {}
             Action::Forget => {
-                eprintln!("[bluez] bluetoothd gone, will re-register when it returns");
+                tracing::warn!("bluetoothd gone, will re-register when it returns");
                 self.reg = Reg::Unregistered;
             }
             Action::Register { .. } if self.failures > 0 && Instant::now() < self.retry_at => {}
@@ -390,7 +390,7 @@ impl Worker {
                 }
                 match self.call_manager(&adapter, "RegisterBatteryProvider") {
                     Ok(()) => {
-                        eprintln!("[bluez] registered battery provider on {}", adapter);
+                        tracing::info!("registered battery provider on {}", adapter);
                         self.failures = 0;
                         self.reg = Reg::Registered { owner, adapter };
                     }
@@ -398,8 +398,8 @@ impl Worker {
                         self.failures = self.failures.saturating_add(1);
                         self.retry_at = Instant::now() + retry_delay(self.failures);
                         if should_log_failure(self.failures) {
-                            eprintln!(
-                                "[bluez] registration on {} failed (attempt {}), retry in {}s: {}",
+                            tracing::warn!(
+                                "registration on {} failed (attempt {}), retry in {}s: {}",
                                 adapter, self.failures, retry_delay(self.failures).as_secs(), e
                             );
                         }

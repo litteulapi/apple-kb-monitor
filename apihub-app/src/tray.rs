@@ -15,7 +15,7 @@ use zbus::blocking::Connection;
 use zbus::interface;
 use zbus::zvariant::{OwnedValue, Signature, Value};
 
-type State = Arc<Mutex<crate::SharedState>>;
+type State = Arc<akm_core::Watch>;
 
 // ── org.kde.StatusNotifierItem ───────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ impl MenuItem {
 impl DbusmenuServer {
     /// Build the full menu tree from current shared state.
     fn build_layout(&self) -> Value<'static> {
-        let snap = self.state.lock().ok();
+        let snap = Some(self.state.get());
         let mut root_children: Vec<MenuItem> = Vec::new();
 
         // ── Info section ──────────────────────────────────────────

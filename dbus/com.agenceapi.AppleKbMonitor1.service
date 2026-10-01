@@ -1,0 +1,6 @@
+[D-BUS Service]
+# Session-bus activation: a client (apihub-app, widget) asking for the name
+# starts the systemd --user unit instead of a second reader of the keyboard.
+Name=com.agenceapi.AppleKbMonitor1
+Exec=/usr/bin/apple-kb-monitord
+SystemdService=apple-kb-monitord.service

@@ -28,8 +28,9 @@ pub struct Snapshot {
     pub caps_lock: bool,
     pub num_lock: bool,
     pub remaining_display: Option<String>,
-    /// Age in seconds of the RSSI measurement shown (None = no fresh value).
-    pub rssi_age_s: Option<f64>,
+    /// Unix time of the RSSI measurement shown (None = no fresh value).
+    /// A time, not an age, so the snapshot does not change every second.
+    pub rssi_at: Option<u64>,
     /// Unix time of the last successful acquisition (0 = never).
     pub last_update: u64,
     /// Last internal error (acquisition, BlueZ provider...), if any.
@@ -47,7 +48,7 @@ impl Default for Snapshot {
             caps_lock: false,
             num_lock: false,
             remaining_display: None,
-            rssi_age_s: None,
+            rssi_at: None,
             last_update: 0,
             last_error: None,
         }
@@ -69,6 +70,11 @@ impl Snapshot {
     }
     pub fn mac(&self) -> Option<&str> {
         self.keyboard.as_ref().and_then(|k| k.device.mac.as_deref())
+    }
+
+    /// Age of the RSSI value at unix time `now`.
+    pub fn rssi_age_s(&self, now: u64) -> Option<u64> {
+        self.rssi_at.map(|t| now.saturating_sub(t))
     }
 
     /// Tray tooltip; "n/a" instead of an invented 0 when the source is absent.
@@ -148,6 +154,14 @@ mod tests {
         assert!(t.contains("n/a"));
         assert!(!t.contains("0%"));
         assert!(with_battery(90.0).tooltip_text().contains("90%"));
+    }
+
+    #[test]
+    fn rssi_age_is_derived_from_its_timestamp() {
+        let s = Snapshot { rssi_at: Some(1_000), ..Default::default() };
+        assert_eq!(s.rssi_age_s(1_030), Some(30));
+        assert_eq!(s.rssi_age_s(900), Some(0));
+        assert_eq!(Snapshot::default().rssi_age_s(5), None);
     }
 
     #[test]

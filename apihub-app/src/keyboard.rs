@@ -1,6 +1,4 @@
-//! Keyboard access: everything lives in `akm-core` (testable without hardware).
+//! Keyboard helpers used by the UI (implementation in `akm-core`).
 
-pub use akm_core::calibration::*;
-pub use akm_core::hidraw::*;
-pub use akm_core::led::*;
-pub use akm_core::report::*;
+pub use akm_core::calibration::detect_battery_type;
+pub use akm_core::hidraw::find_apple_hidraw;

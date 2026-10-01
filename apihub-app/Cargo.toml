@@ -1,6 +1,6 @@
 [workspace]
-members = [".", "akm-core"]
-default-members = [".", "akm-core"]
+members = [".", "akm-core", "apple-kb-monitord"]
+default-members = [".", "akm-core", "apple-kb-monitord"]
 resolver = "2"
 
 [workspace.package]
@@ -15,10 +15,9 @@ description = "Apple Bluetooth keyboard monitor — tray + GUI"
 
 [dependencies]
 akm-core = { path = "akm-core" }
-dirs = "5"
+apple-kb-monitord = { path = "apple-kb-monitord" }
 eframe = "0.29"
 libc = "0.2"
-notify-rust = "4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 zbus = "4"

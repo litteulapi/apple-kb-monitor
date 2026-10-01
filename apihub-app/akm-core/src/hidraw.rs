@@ -69,6 +69,17 @@ pub fn hid_uevent_for_mac_in(sys: &Path, mac: &str) -> Option<String> {
     })
 }
 
+/// MAC of the first Apple keyboard known to the kernel HID bus (connected).
+pub fn find_apple_keyboard_mac_in(sys: &Path) -> Option<String> {
+    let mut devs: Vec<_> = std::fs::read_dir(sys.join("bus/hid/devices")).ok()?.flatten().map(|e| e.path()).collect();
+    devs.sort();
+    devs.into_iter().find_map(|d| {
+        let u = std::fs::read_to_string(d.join("uevent")).ok()?;
+        apple_model_from_uevent(&u)?;
+        crate::model::mac_from_uevent(&u)
+    })
+}
+
 /// Report built from sysfs only (identity + kernel battery), without opening
 /// hidraw. `None` if the keyboard is unknown to the kernel.
 pub fn report_from_sysfs_in(sys: &Path, mac: &str) -> Option<KbReport> {

@@ -11,6 +11,7 @@ use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 pub use akm_core::machine::*;
+use crate::actor::Msg;
 use akm_core::model::{is_apple_modalias, is_keyboard_upower_path};
 
 use zbus::blocking::{fdo::DBusProxy, Connection, MessageIterator};
@@ -31,17 +32,17 @@ fn prop_bool(p: &Props, k: &str) -> Option<bool> {
 
 /// Spawn the watcher thread. It reconnects to the bus on failure (10 s) and
 /// emits `NoBluez` once if BlueZ cannot be reached at all.
-pub fn spawn_signal_watcher(tx: Sender<Event>) {
+pub fn spawn_signal_watcher(tx: Sender<Msg>) {
     let _ = std::thread::Builder::new().name("kb-watch".into()).spawn(move || {
         let mut told_no_bluez = false;
         loop {
             match watch_once(&tx) {
                 Ok(()) => return, // receiver gone
                 Err(e) => {
-                    eprintln!("[watch] D-Bus error: {e} — retry in 10s");
+                    tracing::warn!("D-Bus error: {e} — retry in 10s");
                     if !told_no_bluez {
                         told_no_bluez = true;
-                        if tx.send(Event::NoBluez).is_err() {
+                        if tx.send(Msg::Bus(Event::NoBluez)).is_err() {
                             return;
                         }
                     }
@@ -95,7 +96,7 @@ fn device_props(conn: &Connection, path: &str) -> zbus::Result<Props> {
 }
 
 /// Enumerate BlueZ devices and emit the current state of every Apple keyboard.
-fn initial_sync(conn: &Connection, known: &mut Known, tx: &Sender<Event>) -> zbus::Result<bool> {
+fn initial_sync(conn: &Connection, known: &mut Known, tx: &Sender<Msg>) -> zbus::Result<bool> {
     let om = zbus::blocking::fdo::ObjectManagerProxy::builder(conn)
         .destination("org.bluez")?
         .path("/")?
@@ -113,7 +114,7 @@ fn initial_sync(conn: &Connection, known: &mut Known, tx: &Sender<Event>) -> zbu
         known.0.insert(path.to_string(), (mac.clone(), connected));
         if connected {
             sent = true;
-            if tx.send(Event::Connected(mac)).is_err() {
+            if tx.send(Msg::Bus(Event::Connected(mac))).is_err() {
                 return Ok(sent);
             }
         }
@@ -121,7 +122,7 @@ fn initial_sync(conn: &Connection, known: &mut Known, tx: &Sender<Event>) -> zbu
     Ok(sent)
 }
 
-fn watch_once(tx: &Sender<Event>) -> zbus::Result<()> {
+fn watch_once(tx: &Sender<Msg>) -> zbus::Result<()> {
     let conn = Connection::system()?;
     let calls = Connection::system()?; // separate connection for method calls
     add_rules(&conn)?;
@@ -142,7 +143,7 @@ fn watch_once(tx: &Sender<Event>) -> zbus::Result<()> {
                 let old: Vec<(String, bool)> =
                     known.0.drain().map(|(_, (mac, c))| (mac, c)).collect();
                 for (mac, c) in old {
-                    if c && tx.send(Event::Disconnected(mac)).is_err() {
+                    if c && tx.send(Msg::Bus(Event::Disconnected(mac))).is_err() {
                         return Ok(());
                     }
                 }
@@ -168,13 +169,13 @@ fn watch_once(tx: &Sender<Event>) -> zbus::Result<()> {
                     let Some(mac) = entry else { continue };
                     known.0.insert(path.clone(), (mac.clone(), connected));
                     let ev = if connected { Event::Connected(mac) } else { Event::Disconnected(mac) };
-                    if tx.send(ev).is_err() {
+                    if tx.send(Msg::Bus(ev)).is_err() {
                         return Ok(());
                     }
                 } else if path.starts_with("/org/freedesktop/UPower/devices/")
                     && is_keyboard_upower_path(&path)
                     && changed.contains_key("Percentage")
-                    && tx.send(Event::BatterySignal).is_err()
+                    && tx.send(Msg::Bus(Event::BatterySignal)).is_err()
                 {
                     return Ok(());
                 }

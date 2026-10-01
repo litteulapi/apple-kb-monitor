@@ -5,7 +5,7 @@
 //! * [`report`]      telemetry data model ([`report::KbReport`])
 //! * [`calibration`] ADC → voltage → percentage, battery chemistry
 //! * [`decode`]      [`decode::HidSource`] trait, [`decode::Fixture`], decoding of
-//!                   the vendor Feature Reports (testable without hardware)
+//!   the vendor Feature Reports (testable without hardware)
 //! * [`hidraw`]      the real `/dev/hidrawN` source + wake monitor
 //! * [`power`]       kernel `power_supply` battery (source of truth for the %)
 //! * [`history`]     JSONL history, injectable clock, rotation, estimate

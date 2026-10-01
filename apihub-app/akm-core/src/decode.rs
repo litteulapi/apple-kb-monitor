@@ -93,7 +93,7 @@ impl Fixture {
                 continue;
             }
             let hex: String = line.chars().filter(|c| !c.is_whitespace()).collect();
-            if hex.len() % 2 != 0 {
+            if !hex.len().is_multiple_of(2) {
                 return Err(format!("line {}: odd number of hex digits", n + 1));
             }
             let bytes = (0..hex.len())

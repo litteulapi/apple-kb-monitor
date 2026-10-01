@@ -1,280 +1,22 @@
-mod bluez;
 mod history;
 mod keyboard;
-mod power;
-mod rssi;
 mod tray;
-mod watcher;
-
-use keyboard::*;
 
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
+use akm_core::{Snapshot, Watch};
+use apple_kb_monitord::actor;
 use eframe::egui;
 
-// ── Shared state ────────────────────────────────────────────────────────────
+/// Latest keyboard state, published by the acquisition actor.
+type State = Arc<Watch>;
 
-#[derive(Clone, Default)]
-pub(crate) struct SharedState {
-    pub(crate) keyboard: Option<KbReport>,
-    pub(crate) kb_error: Option<String>,
-    pub(crate) caps_lock: bool,
-    pub(crate) num_lock: bool,
-    pub(crate) remaining_display: Option<String>,
-    /// Age in seconds of the RSSI measurement shown (None = no fresh value).
-    pub(crate) rssi_age_s: Option<f64>,
-}
-
-type State = Arc<Mutex<SharedState>>;
-
-/// Tray tooltip text; shows "n/a" instead of an invented 0 when the source is absent.
-fn tooltip_text(snap: &SharedState) -> String {
-    let pct = snap.keyboard.as_ref().and_then(|kb| {
-        kb.battery.percentage_fine
-            .or(kb.battery.percentage_interpolated)
-            .or(kb.battery.percentage)
-    });
-    format!(
-        "Apple Keyboard \u{2014} Battery: {}",
-        pct.map(|p| format!("{:.0}%", p)).unwrap_or_else(|| "n/a".into()),
-    )
-}
-
-// ── Keyboard actor (event-driven, #66) ─────────────────────────────────────
-
-/// Start the keyboard actor under a supervisor: if the worker panics, the
-/// shared-state poison is cleared and the worker is restarted (it used to die
-/// silently, freezing the UI and the tray on stale data).
-fn spawn_poll_thread(state: State, quit_flag: Arc<AtomicBool>) {
-    // Wake event monitor (Input Report 0x13): discovers the node itself, so it
-    // is started even if the keyboard is absent right now.
-    keyboard::ensure_wake_monitor();
-
-    thread::Builder::new()
-        .name("kb-supervisor".into())
-        .spawn(move || {
-            while !quit_flag.load(Ordering::Relaxed) {
-                let (st, qf) = (state.clone(), quit_flag.clone());
-                let worker = thread::Builder::new()
-                    .name("kb-actor".into())
-                    .spawn(move || kb_actor(st, qf))
-                    .expect("failed to spawn kb-actor thread");
-                match worker.join() {
-                    Ok(()) => break, // quit flag honoured
-                    Err(_) => {
-                        eprintln!("[kb] actor panicked \u{2014} restarting in 5s");
-                        state.clear_poison();
-                        if let Ok(mut s) = state.lock() {
-                            s.kb_error = Some("Keyboard thread crashed \u{2014} restarting".into());
-                        }
-                        thread::sleep(Duration::from_secs(5));
-                    }
-                }
-            }
-        })
-        .expect("failed to spawn kb supervisor");
-}
-
-/// Everything the actor owns (never shared with the UI thread).
-struct Actor {
-    kb: Option<KbReport>,
-    kernel_pct: Option<u8>,
-    rssi: rssi::RssiTracker,
-    battery_provider: Option<bluez::BatteryProvider>,
-    provider_mac: Option<String>,
-    battery_notified: bool,
-    remaining: Option<String>,
-    remaining_at: Option<Instant>,
-}
-
-impl Actor {
-    /// Full HID read. Returns true when a connected keyboard answered.
-    fn acquire(&mut self) -> bool {
-        match keyboard::read_keyboard() {
-            Some(mut k) if k.bluetooth.connected => {
-                self.kernel_pct = k.device.mac.as_deref()
-                    .and_then(power::kernel_battery)
-                    .map(|r| r.percent);
-                if let Some(p) = self.kernel_pct {
-                    k.battery.percentage_fine = Some(f64::from(p));
-                }
-                // History: only real samples (no invented 100 % / 0 V points).
-                let pct = battery_pct(&k);
-                if let (Some(p), Some(v)) = (pct, k.battery.voltage) {
-                    history::append_history(p, Some(v));
-                }
-                self.kb = Some(k);
-                self.after_battery_update();
-                true
-            }
-            _ => {
-                self.kb = None;
-                false
-            }
-        }
-    }
-
-    /// Kernel power_supply capacity only (UPower signal).
-    fn kernel_battery(&mut self) {
-        let Some(k) = self.kb.as_mut() else { return };
-        if let Some(r) = k.device.mac.as_deref().and_then(power::kernel_battery) {
-            self.kernel_pct = Some(r.percent);
-            k.battery.percentage_fine = Some(f64::from(r.percent));
-            self.after_battery_update();
-        }
-    }
-
-    fn clear(&mut self) {
-        self.kb = None;
-        self.kernel_pct = None;
-        self.rssi.clear();
-        if let (Some(old), Some(bp)) = (self.provider_mac.take(), self.battery_provider.as_ref()) {
-            bp.remove(&old);
-        }
-    }
-
-    /// BlueZ Battery1 export + low-battery alert.
-    fn after_battery_update(&mut self) {
-        let Some(k) = self.kb.as_ref() else { return };
-        let pct_opt = battery_pct(k);
-        let pct = pct_opt.unwrap_or(100.0);
-        let mac = k.device.mac.clone();
-        if let (Some(mac), true) = (mac.as_deref(), pct_opt.is_some()) {
-            if self.battery_provider.is_none() {
-                self.battery_provider = bluez::BatteryProvider::spawn();
-            }
-            if let Some(bp) = self.battery_provider.as_ref() {
-                bp.set_battery(mac, pct.round().clamp(0.0, 100.0) as u8);
-                self.provider_mac = Some(mac.to_string());
-            }
-        }
-        if pct_opt.is_some() && pct >= 20.0 {
-            self.battery_notified = false;
-        }
-        if pct_opt.is_some() && !self.battery_notified && pct < 15.0 {
-            self.battery_notified = true;
-            let _ = notify_rust::Notification::new()
-                .summary("Apple Keyboard \u{2014} Low Battery")
-                .body(&format!("Battery at {:.0}% \u{2014} charge soon", pct))
-                .icon("battery-caution")
-                .show();
-            keyboard::flash_capslock(5);
-        }
-    }
-
-    fn refresh_rssi(&mut self) {
-        let Some(mac) = self.kb.as_ref().and_then(|k| k.device.mac.clone()) else { return };
-        self.rssi.record(&mac, rssi::read_rssi(&mac), Instant::now());
-    }
-
-    /// Battery-time estimate: disk only, recomputed at most every 5 min.
-    fn refresh_remaining(&mut self, now: Instant) {
-        if self.remaining_at.is_some_and(|t| now.duration_since(t) < Duration::from_secs(300)) {
-            return;
-        }
-        self.remaining_at = Some(now);
-        self.remaining = history::estimate_remaining()
-            .map(|(rate, hours)| akm_core::history::format_remaining(rate, hours));
-    }
-
-    fn publish(&mut self, state: &State) {
-        let now = Instant::now();
-        self.refresh_remaining(now);
-        let mut kb = self.kb.clone();
-        let mut rssi_age = None;
-        if let Some(k) = kb.as_mut() {
-            // RSSI is exposed only while fresh and taken from this very MAC.
-            let cur = k.device.mac.as_deref().and_then(|m| self.rssi.current(m, now));
-            k.radio.rssi_dbm = cur.map(|c| c.0);
-            k.radio.tx_power_dbm = cur.and_then(|c| c.1);
-            k.bluetooth.rssi_dbus = None;
-            k.bluetooth.tx_power_dbus = None;
-            rssi_age = cur.map(|c| c.2.as_secs_f64());
-        }
-        // LED state (sysfs only; nothing to read while the keyboard is away).
-        let (caps, num) = if kb.is_some() { keyboard::read_led_state() } else { (false, false) };
-        if let Ok(mut s) = state.lock() {
-            s.kb_error = if kb.is_none() { Some("Keyboard: not found".into()) } else { None };
-            s.keyboard = kb;
-            s.rssi_age_s = rssi_age;
-            s.caps_lock = caps;
-            s.num_lock = num;
-            s.remaining_display = self.remaining.clone();
-        }
-    }
-}
-
-fn battery_pct(k: &KbReport) -> Option<f64> {
-    k.battery.percentage_fine
-        .or(k.battery.percentage_interpolated)
-        .or(k.battery.percentage)
-        .filter(|p| p.is_finite())
-}
-
-/// Event loop. Sleeps until a BlueZ/UPower event or the next scheduled
-/// action; while the keyboard is disconnected nothing keyboard-related runs.
-fn kb_actor(state: State, quit_flag: Arc<AtomicBool>) {
-    let (tx, rx) = mpsc::channel::<watcher::Event>();
-    watcher::spawn_signal_watcher(tx);
-    let mut machine = watcher::Machine::new();
-    let mut actor = Actor {
-        kb: None,
-        kernel_pct: None,
-        rssi: rssi::RssiTracker::new(watcher::RSSI_MAX_AGE),
-        battery_provider: None,
-        provider_mac: None,
-        battery_notified: false,
-        remaining: None,
-        remaining_at: None,
-    };
-    actor.publish(&state);
-
-    // The UI-facing snapshot (LED, RSSI expiry) is refreshed at least this often.
-    const UI_TICK: Duration = Duration::from_secs(5);
-    loop {
-        if quit_flag.load(Ordering::Relaxed) {
-            eprintln!("[kb] quit flag set, exiting keyboard actor");
-            break;
-        }
-        let now = Instant::now();
-        let wait = machine
-            .next_deadline()
-            .map_or(UI_TICK, |d| d.saturating_duration_since(now).min(UI_TICK));
-        match rx.recv_timeout(wait) {
-            Ok(ev) => {
-                if machine.on_event(&ev, Instant::now()) == Some(watcher::Action::Clear) {
-                    eprintln!("[kb] disconnected");
-                    actor.clear();
-                }
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => {
-                eprintln!("[kb] watcher gone, exiting keyboard actor");
-                break;
-            }
-        }
-        for action in machine.due(Instant::now()) {
-            match action {
-                watcher::Action::Acquire => {
-                    let ok = actor.acquire();
-                    machine.acquire_done(ok, Instant::now());
-                    if ok {
-                        let pct = actor.kb.as_ref().and_then(battery_pct);
-                        eprintln!("[kb] acquired {} battery={}", machine.mac().unwrap_or("?"),
-                            pct.map_or("n/a".into(), |p| format!("{p:.0}%")));
-                    }
-                }
-                watcher::Action::KernelBattery => actor.kernel_battery(),
-                watcher::Action::Rssi => actor.refresh_rssi(),
-                watcher::Action::Clear => actor.clear(),
-            }
-        }
-        actor.publish(&state);
-    }
+fn unix_now() -> u64 {
+    akm_core::history::Clock::now(&akm_core::history::SystemClock)
 }
 
 // ── App ─────────────────────────────────────────────────────────────────────
@@ -309,8 +51,8 @@ struct ApiHubApp {
 }
 
 impl ApiHubApp {
-    /// Create the GUI app. Does NOT spawn the poll thread or BlueZ —
-    /// those are owned by main() and shared via Arc<Mutex<SharedState>>.
+    /// Create the GUI app. Does NOT spawn the acquisition — it is owned by
+    /// main() and shared through the `Watch`.
     fn new(
         _cc: &eframe::CreationContext<'_>,
         tray_tooltip: Arc<Mutex<String>>,
@@ -353,12 +95,9 @@ impl eframe::App for ApiHubApp {
 
         // ── Update tray tooltip (every frame, lightweight) ─────
         {
-            let snap_for_tray = self.state.lock().map(|s| s.clone()).ok();
-            if let Some(ref snap) = snap_for_tray {
-                let text = tooltip_text(snap);
-                if let Ok(mut tt) = self.tray_tooltip.lock() {
-                    *tt = text;
-                }
+            let text = self.state.get().tooltip_text();
+            if let Ok(mut tt) = self.tray_tooltip.lock() {
+                *tt = text;
             }
         }
 
@@ -390,7 +129,7 @@ impl eframe::App for ApiHubApp {
         // Next repaint in 2s — egui sleeps until then or until user interaction
         ctx.request_repaint_after(Duration::from_secs(2));
 
-        let snap = self.state.lock().map(|s| s.clone()).unwrap_or_default();
+        let snap = self.state.get();
 
         egui::TopBottomPanel::top("tabs").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -411,7 +150,7 @@ impl eframe::App for ApiHubApp {
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
 impl ApiHubApp {
-    fn tab_keyboard(&mut self, ui: &mut egui::Ui, snap: &SharedState) {
+    fn tab_keyboard(&mut self, ui: &mut egui::Ui, snap: &Snapshot) {
         if let Some(ref err) = snap.kb_error {
             ui.label(egui::RichText::new(err.as_str()).size(16.0).color(egui::Color32::from_rgb(255, 100, 100)));
         }
@@ -516,7 +255,7 @@ impl ApiHubApp {
                                 ui.horizontal(|ui| {
                                     ui.colored_label(color, egui::RichText::new(format!("{} dBm", r)).strong().size(18.0));
                                     ui.colored_label(color, egui::RichText::new(bars).size(18.0));
-                                    if let Some(age) = snap.rssi_age_s {
+                                    if let Some(age) = snap.rssi_age_s(unix_now()) {
                                         ui.label(egui::RichText::new(format!("({:.0}s ago)", age)).weak().size(12.0));
                                     }
                                 });
@@ -986,7 +725,7 @@ fn main() -> eframe::Result<()> {
     // 4. When window closes → back to tray-only (no subprocess, no zombie)
     // 5. Quit flag — graceful shutdown, lets destructors run
 
-    let state: State = Arc::new(Mutex::new(SharedState::default()));
+    let state: State = Arc::new(Watch::new());
 
     // Shared quit flag — set by tray "Quit", checked by main loop + poll thread
     let quit_flag = Arc::new(AtomicBool::new(false));
@@ -1001,8 +740,8 @@ fn main() -> eframe::Result<()> {
         quit_flag.clone(),
     );
 
-    // ── Polling ──────────────────────────────────────────────────────
-    spawn_poll_thread(Arc::clone(&state), quit_flag.clone());
+    // ── Acquisition (same actor as apple-kb-monitord) ────────────────
+    let acquisition = actor::spawn(state.clone(), actor::Mailbox::new(), actor::Options::default());
 
     eprintln!("[apihub] tray mode — click scarab icon to open window");
 
@@ -1017,10 +756,8 @@ fn main() -> eframe::Result<()> {
         std::thread::sleep(Duration::from_secs(2));
 
         // Update tray tooltip
-        if let Ok(snap) = state.lock() {
-            if let Ok(mut tt) = tray_tooltip.lock() {
-                *tt = tooltip_text(&snap);
-            }
+        if let Ok(mut tt) = tray_tooltip.lock() {
+            *tt = state.get().tooltip_text();
         }
 
         // Show Window → open eframe in THIS process (blocks until window closed)
@@ -1053,6 +790,7 @@ fn main() -> eframe::Result<()> {
         }
     }
 
+    acquisition.stop();
     Ok(())
 }
 
@@ -1062,22 +800,22 @@ mod tests {
 
     #[test]
     fn tooltip_shows_na_without_sources() {
-        let t = tooltip_text(&SharedState::default());
+        let t = Snapshot::default().tooltip_text();
         assert!(t.contains("n/a"));
         assert!(!t.contains("0%"));
     }
 
     #[test]
-    fn poisoned_state_is_recovered() {
-        let st: State = Arc::new(Mutex::new(SharedState::default()));
-        let s2 = st.clone();
+    fn diag_results_survive_a_panicking_writer() {
+        let r: Arc<Mutex<Vec<DiagResult>>> = Arc::new(Mutex::new(Vec::new()));
+        let r2 = r.clone();
         let _ = thread::spawn(move || {
-            let _g = s2.lock().unwrap();
+            let _g = r2.lock().unwrap();
             panic!("boom");
         })
         .join();
-        assert!(st.lock().is_err());
-        st.clear_poison();
-        assert!(st.lock().is_ok());
+        assert!(r.lock().is_err());
+        r.clear_poison();
+        assert!(r.lock().is_ok());
     }
 }

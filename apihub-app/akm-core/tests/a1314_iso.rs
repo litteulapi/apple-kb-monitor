@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use akm_core::decode::{build_report, Fixture, HidSource};
-use akm_core::hidraw::{hid_uevent_for_mac_in, report_from_sysfs_in};
+use akm_core::hidraw::{find_apple_hidraw_in, find_apple_keyboard_mac_in, hid_uevent_for_mac_in, report_from_sysfs_in};
 use akm_core::model::{family_from_uevent, Family};
 use akm_core::power::{kernel_battery_in, BatteryStatus};
 use akm_core::report::KbWake;
@@ -77,6 +77,9 @@ fn sysfs_only_report_without_hidraw() {
     assert!(r.bluetooth.connected);
     assert!(r.battery.voltage.is_none(), "no invented voltage");
     assert!(report_from_sysfs_in(&sys.0, "AA:BB:CC:DD:EE:FF").is_none());
+    // Discovery without BlueZ: MAC from the HID bus, node from class/hidraw.
+    assert_eq!(find_apple_keyboard_mac_in(&sys.0).as_deref(), Some(MAC));
+    assert_eq!(find_apple_hidraw_in(&sys.0).as_deref(), Some("/dev/hidraw7"));
 }
 
 #[test]
