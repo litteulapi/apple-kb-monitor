@@ -3,7 +3,7 @@ msgstr ""
 "Project-Id-Version: kcm_applekeyboard\n"
 "Report-Msgid-Bugs-To: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-"
 "monitor/issues\n"
-"POT-Creation-Date: 2026-10-01 22:00+0200\n"
+"POT-Creation-Date: 2026-10-01 23:14+0200\n"
 "PO-Revision-Date: 2026-10-01 19:00+0200\n"
 "Last-Translator: AgenceAPI\n"
 "Language-Team: French\n"
@@ -21,7 +21,15 @@ msgstr ""
 "Non enregistré : les seuils doivent être des nombres entiers entre 1 et 95, "
 "séparés par des virgules."
 
-#: ui/AlertsPage.qml:136
+#: ui/AlertsPage.qml:132
+msgid ""
+"Not saved: config.toml uses a form this page cannot edit safely (%1). Edit "
+"the file by hand."
+msgstr ""
+"Non enregistré : config.toml utilise une forme que cette page ne peut pas "
+"modifier sans risque (%1). Modifiez le fichier à la main."
+
+#: ui/AlertsPage.qml:145
 msgid ""
 "Saved. The service reads these settings when it starts: restart it to use "
 "them now."
@@ -29,33 +37,33 @@ msgstr ""
 "Enregistré. Le service lit ces réglages à son démarrage : redémarrez-le pour "
 "les appliquer tout de suite."
 
-#: ui/AlertsPage.qml:137
+#: ui/AlertsPage.qml:146
 msgid "Saved. They will be used when the service starts."
 msgstr "Enregistré. Ils seront utilisés au démarrage du service."
 
-#: ui/AlertsPage.qml:140
+#: ui/AlertsPage.qml:149
 msgid "Not saved: %1"
 msgstr "Non enregistré : %1"
 
-#: ui/AlertsPage.qml:160
+#: ui/AlertsPage.qml:169
 msgid "Restart the service"
 msgstr "Redémarrer le service"
 
-#: ui/AlertsPage.qml:165
+#: ui/AlertsPage.qml:174
 msgid "Service restarted with the new settings."
 msgstr "Service redémarré avec les nouveaux réglages."
 
-#: ui/AlertsPage.qml:165
+#: ui/AlertsPage.qml:174
 msgid "The service could not be restarted: %1"
 msgstr "Le service n'a pas pu être redémarré : %1"
 
-#: ui/AlertsPage.qml:178
+#: ui/AlertsPage.qml:187
 msgid "The settings file could not be read (%1): the defaults are shown."
 msgstr ""
 "Le fichier de réglages n'a pas pu être lu (%1) : les valeurs par défaut sont "
 "affichées."
 
-#: ui/AlertsPage.qml:179
+#: ui/AlertsPage.qml:188
 msgid ""
 "Some lines of the settings file are not understood (%1); they are kept as "
 "they are."
@@ -63,89 +71,89 @@ msgstr ""
 "Certaines lignes du fichier de réglages ne sont pas comprises (%1) ; elles "
 "sont conservées telles quelles."
 
-#: ui/AlertsPage.qml:188
+#: ui/AlertsPage.qml:197
 msgctxt "@title:group"
 msgid "Low battery"
 msgstr "Batterie faible"
 
-#: ui/AlertsPage.qml:192
+#: ui/AlertsPage.qml:201
 msgid "Alerts:"
 msgstr "Alertes :"
 
-#: ui/AlertsPage.qml:193
+#: ui/AlertsPage.qml:202
 msgid "Notify when the battery is low"
 msgstr "Prévenir quand la batterie est faible"
 
-#: ui/AlertsPage.qml:198
+#: ui/AlertsPage.qml:207
 msgid "Thresholds (%):"
 msgstr "Seuils (%) :"
 
-#: ui/AlertsPage.qml:202
+#: ui/AlertsPage.qml:211
 msgid "Alert thresholds in percent, separated by commas"
 msgstr "Seuils d'alerte en pourcentage, séparés par des virgules"
 
-#: ui/AlertsPage.qml:211
+#: ui/AlertsPage.qml:220
 msgid "One notification per threshold crossed, on the estimated charge."
 msgstr "Une notification par seuil franchi, sur la charge estimée."
 
-#: ui/AlertsPage.qml:215
+#: ui/AlertsPage.qml:224
 msgid "With KDE:"
 msgstr "Avec KDE :"
 
-#: ui/AlertsPage.qml:217
+#: ui/AlertsPage.qml:226
 msgid "When KDE already warns about this keyboard, send only one reminder"
 msgstr "Quand KDE prévient déjà pour ce clavier, n'envoyer qu'un rappel"
 
-#: ui/AlertsPage.qml:222
+#: ui/AlertsPage.qml:231
 msgid "Critical at or below (%):"
 msgstr "Critique à partir de (%) :"
 
-#: ui/AlertsPage.qml:226
+#: ui/AlertsPage.qml:235
 msgid "Critical threshold in percent"
 msgstr "Seuil critique en pourcentage"
 
-#: ui/AlertsPage.qml:231
+#: ui/AlertsPage.qml:240
 msgid "Re-arm after (points):"
 msgstr "Réarmement après (points) :"
 
-#: ui/AlertsPage.qml:235
+#: ui/AlertsPage.qml:244
 msgid "Points above a threshold before it can notify again"
 msgstr "Points au-dessus d'un seuil avant qu'il puisse de nouveau prévenir"
 
-#: ui/AlertsPage.qml:241
+#: ui/AlertsPage.qml:250
 msgctxt "@title:group"
 msgid "Batteries"
 msgstr "Piles"
 
-#: ui/AlertsPage.qml:245
+#: ui/AlertsPage.qml:254
 msgid "Battery type:"
 msgstr "Type de piles :"
 
-#: ui/AlertsPage.qml:246 ui/StatePage.qml:47
+#: ui/AlertsPage.qml:255 ui/StatePage.qml:47
 msgctxt "battery chemistry"
 msgid "alkaline"
 msgstr "alcaline"
 
-#: ui/AlertsPage.qml:246 ui/StatePage.qml:48
+#: ui/AlertsPage.qml:255 ui/StatePage.qml:48
 msgctxt "battery chemistry"
 msgid "NiMH (rechargeable)"
 msgstr "NiMH (rechargeable)"
 
-#: ui/AlertsPage.qml:246 ui/StatePage.qml:49
+#: ui/AlertsPage.qml:255 ui/StatePage.qml:49
 msgctxt "battery chemistry"
 msgid "lithium"
 msgstr "lithium"
 
-#: ui/AlertsPage.qml:246 ui/StatePage.qml:50
+#: ui/AlertsPage.qml:255 ui/StatePage.qml:50
 msgctxt "battery chemistry"
 msgid "unknown"
 msgstr "inconnu"
 
-#: ui/AlertsPage.qml:247
+#: ui/AlertsPage.qml:256
 msgid "Battery type"
 msgstr "Type de piles"
 
-#: ui/AlertsPage.qml:255
+#: ui/AlertsPage.qml:264
 msgid ""
 "Used for the estimated charge and its range; the keyboard's own indication "
 "does not depend on it."
@@ -153,49 +161,49 @@ msgstr ""
 "Sert à la charge estimée et à sa fourchette ; l'indication du clavier lui-"
 "même n'en dépend pas."
 
-#: ui/AlertsPage.qml:259
+#: ui/AlertsPage.qml:268
 msgid "Display:"
 msgstr "Affichage :"
 
-#: ui/AlertsPage.qml:260
+#: ui/AlertsPage.qml:269
 msgid "Also show the percentage as macOS shows it"
 msgstr "Afficher aussi le pourcentage tel que macOS le montre"
 
-#: ui/AlertsPage.qml:266
+#: ui/AlertsPage.qml:275
 msgctxt "@title:group"
 msgid "Other notifications"
 msgstr "Autres notifications"
 
-#: ui/AlertsPage.qml:270 ui/StatePage.qml:134
+#: ui/AlertsPage.qml:279 ui/StatePage.qml:134
 msgid "Connection:"
 msgstr "Connexion :"
 
-#: ui/AlertsPage.qml:271
+#: ui/AlertsPage.qml:280
 msgid "Notify on disconnection and reconnection"
 msgstr "Prévenir à la déconnexion et à la reconnexion"
 
-#: ui/AlertsPage.qml:276
+#: ui/AlertsPage.qml:285
 msgid "New batteries:"
 msgstr "Piles neuves :"
 
-#: ui/AlertsPage.qml:277
+#: ui/AlertsPage.qml:286
 msgid "Notify when new batteries are detected"
 msgstr "Prévenir quand des piles neuves sont détectées"
 
-#: ui/AlertsPage.qml:283
+#: ui/AlertsPage.qml:292
 msgctxt "@title:group"
 msgid "Shutdown"
 msgstr "Extinction"
 
-#: ui/AlertsPage.qml:287
+#: ui/AlertsPage.qml:296
 msgid "WillShutdown:"
 msgstr "WillShutdown :"
 
-#: ui/AlertsPage.qml:288
+#: ui/AlertsPage.qml:297
 msgid "Tell the keyboard when the computer shuts down or restarts"
 msgstr "Prévenir le clavier quand l'ordinateur s'éteint ou redémarre"
 
-#: ui/AlertsPage.qml:296
+#: ui/AlertsPage.qml:305
 msgid ""
 "What macOS sends at every shutdown (one message, nothing else is written). "
 "Off = the keyboard is left untouched."
@@ -203,7 +211,7 @@ msgstr ""
 "Ce que macOS envoie à chaque extinction (un seul message, rien d'autre n'est "
 "écrit). Désactivé = le clavier n'est pas touché."
 
-#: ui/AlertsPage.qml:303
+#: ui/AlertsPage.qml:312
 msgid "File:"
 msgstr "Fichier :"
 
@@ -680,13 +688,18 @@ msgid ""
 "A terminal was opened: akmctl runs the whole pre-flight there (one "
 "administrator authentication to read the Bluetooth channel size) and writes "
 "nothing."
-msgstr "Un terminal a été ouvert : akmctl y exécute tout le pré-vol (une authentification administrateur pour lire la taille du canal Bluetooth) et n'écrit rien."
+msgstr ""
+"Un terminal a été ouvert : akmctl y exécute tout le pré-vol (une "
+"authentification administrateur pour lire la taille du canal Bluetooth) et "
+"n'écrit rien."
 
 #: ui/NamePage.qml:61
 msgid ""
 "A terminal was opened: nothing is written until you type ECRIRE and the name "
 "again there."
-msgstr "Un terminal a été ouvert : rien n'est écrit tant que vous n'y avez pas tapé ECRIRE puis le nom à nouveau."
+msgstr ""
+"Un terminal a été ouvert : rien n'est écrit tant que vous n'y avez pas tapé "
+"ECRIRE puis le nom à nouveau."
 
 #: ui/NamePage.qml:79
 msgctxt "@title:group"
@@ -782,7 +795,9 @@ msgstr "Nom à écrire dans le clavier"
 msgid ""
 "1 to 32 printable ASCII characters, no leading or trailing space, no "
 "backslash; the write itself happens in a terminal"
-msgstr "1 à 32 caractères ASCII imprimables, sans espace en tête ni en fin, sans barre oblique inversée ; l'écriture elle-même se fait dans un terminal"
+msgstr ""
+"1 à 32 caractères ASCII imprimables, sans espace en tête ni en fin, sans "
+"barre oblique inversée ; l'écriture elle-même se fait dans un terminal"
 
 #: ui/NamePage.qml:171
 msgid "Check (nothing written)"
@@ -792,7 +807,9 @@ msgstr "Vérifier (sans écrire)"
 msgid ""
 "Opens a terminal on akmctl rename --device-name --check: whole pre-flight, "
 "backup and plan, nothing written"
-msgstr "Ouvre un terminal sur akmctl rename --device-name --check : pré-vol complet, sauvegarde et plan, rien n'est écrit"
+msgstr ""
+"Ouvre un terminal sur akmctl rename --device-name --check : pré-vol complet, "
+"sauvegarde et plan, rien n'est écrit"
 
 #: ui/NamePage.qml:179
 msgid "Write the name into the keyboard…"
@@ -802,13 +819,18 @@ msgstr "Écrire le nom dans le clavier…"
 msgid ""
 "Opens a terminal on akmctl rename --device-name --write-device-name: the "
 "write happens there, only after you type ECRIRE and the name again"
-msgstr "Ouvre un terminal sur akmctl rename --device-name --write-device-name : l'écriture s'y fait, seulement après que vous avez tapé ECRIRE puis le nom à nouveau"
+msgstr ""
+"Ouvre un terminal sur akmctl rename --device-name --write-device-name : "
+"l'écriture s'y fait, seulement après que vous avez tapé ECRIRE puis le nom à "
+"nouveau"
 
 #: ui/NamePage.qml:192
 msgid ""
 "Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
 "no backslash."
-msgstr "Refusé : 1 à 32 caractères ASCII imprimables, sans espace en tête ni en fin, sans barre oblique inversée."
+msgstr ""
+"Refusé : 1 à 32 caractères ASCII imprimables, sans espace en tête ni en fin, "
+"sans barre oblique inversée."
 
 #: ui/NamePage.qml:193
 msgid ""
@@ -817,7 +839,12 @@ msgid ""
 "the pre-flight (one administrator authentication to read the Bluetooth "
 "channel size), then asks you to type ECRIRE and the name again before its "
 "single write."
-msgstr "Ce module n'écrit rien dans le clavier. Les deux boutons ne font qu'ouvrir un terminal où akmctl affiche les octets exacts, sauvegarde le nom actuel, exécute le pré-vol (une authentification administrateur pour lire la taille du canal Bluetooth), puis vous demande de taper ECRIRE et le nom à nouveau avant son unique écriture."
+msgstr ""
+"Ce module n'écrit rien dans le clavier. Les deux boutons ne font qu'ouvrir "
+"un terminal où akmctl affiche les octets exacts, sauvegarde le nom actuel, "
+"exécute le pré-vol (une authentification administrateur pour lire la taille "
+"du canal Bluetooth), puis vous demande de taper ECRIRE et le nom à nouveau "
+"avant son unique écriture."
 
 #: ui/NamePage.qml:203
 msgid ""
@@ -827,7 +854,13 @@ msgid ""
 "terminal saves the current name first and shows the exact rollback command; "
 "the keyboard must be switched off and on afterwards so the name is read "
 "back. Details: docs/RENOMMER-CLAVIER.md §5.3 and §6."
-msgstr "Écrire dans le micrologiciel du clavier comporte deux risques non mesurés : la réponse du micrologiciel à l'écriture (U5) et la survie du nom à un changement de piles (U3). Ayez un second clavier fonctionnel sous la main. Le terminal sauvegarde d'abord le nom actuel et affiche la commande exacte de retour arrière ; le clavier doit ensuite être éteint puis rallumé pour que le nom soit relu. Détails : docs/RENOMMER-CLAVIER.md §5.3 et §6."
+msgstr ""
+"Écrire dans le micrologiciel du clavier comporte deux risques non mesurés : "
+"la réponse du micrologiciel à l'écriture (U5) et la survie du nom à un "
+"changement de piles (U3). Ayez un second clavier fonctionnel sous la main. "
+"Le terminal sauvegarde d'abord le nom actuel et affiche la commande exacte "
+"de retour arrière ; le clavier doit ensuite être éteint puis rallumé pour "
+"que le nom soit relu. Détails : docs/RENOMMER-CLAVIER.md §5.3 et §6."
 
 #: ui/NamePage.qml:211
 msgctxt "@title:group"
@@ -838,19 +871,25 @@ msgstr "Les mêmes opérations, à copier dans un terminal"
 msgid ""
 "Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
 "authentication):"
-msgstr "Nom stocké dans le clavier, aperçu (montre les octets, n'écrit rien, aucune authentification) :"
+msgstr ""
+"Nom stocké dans le clavier, aperçu (montre les octets, n'écrit rien, aucune "
+"authentification) :"
 
 #: ui/NamePage.qml:218
 msgid ""
 "Whole pre-flight, backup and plan (one administrator authentication, writes "
 "nothing):"
-msgstr "Pré-vol complet, sauvegarde et plan (une authentification administrateur, n'écrit rien) :"
+msgstr ""
+"Pré-vol complet, sauvegarde et plan (une authentification administrateur, "
+"n'écrit rien) :"
 
 #: ui/NamePage.qml:220
 msgid ""
 "The write itself (pre-flight, backup, ECRIRE typed, name typed again, one "
 "frame, then switch the keyboard off and on; issue #248):"
-msgstr "L'écriture elle-même (pré-vol, sauvegarde, ECRIRE tapé, nom retapé, une trame, puis éteindre et rallumer le clavier ; issue #248) :"
+msgstr ""
+"L'écriture elle-même (pré-vol, sauvegarde, ECRIRE tapé, nom retapé, une "
+"trame, puis éteindre et rallumer le clavier ; issue #248) :"
 
 #: ui/NamePage.qml:222
 msgid ""

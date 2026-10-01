@@ -118,11 +118,20 @@ ColumnLayout {
             return;
         }
         let text = root.store.configText;
-        for (const k in defaultsMap) {
-            if (!same(c[k], loaded[k])) {
-                const dot = k.indexOf(".");
-                text = Toml.set(text, k.slice(0, dot), k.slice(dot + 1), c[k]);
+        try {
+            for (const k in defaultsMap) {
+                if (!same(c[k], loaded[k])) {
+                    const dot = k.indexOf(".");
+                    text = Toml.set(text, k.slice(0, dot), k.slice(dot + 1), c[k]);
+                }
             }
+        } catch (e) {
+            // #258: a form of TOML this editor does not rewrite safely
+            // ([[table]], inline table, quoted key): nothing is written.
+            result.type = Kirigami.MessageType.Error;
+            result.text = i18n("Not saved: config.toml uses a form this page cannot edit safely (%1). Edit the file by hand.", String(e.message || e));
+            result.visible = true;
+            return;
         }
         saving = true;
         root.store.writeConfig(text, function (ok, error) {
