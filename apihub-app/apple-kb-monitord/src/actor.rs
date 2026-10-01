@@ -645,7 +645,9 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
                     actor.disconnected();
                 }
             }
-            Ok(Msg::Refresh) => machine.force_refresh(Instant::now()),
+            Ok(Msg::Refresh) => {
+                let _ = machine.force_refresh(Instant::now());
+            }
             Ok(Msg::Alias(mac, alias)) => actor.set_alias(&mac, alias),
             Ok(Msg::Quit) => break,
             Err(mpsc::RecvTimeoutError::Timeout) => {}

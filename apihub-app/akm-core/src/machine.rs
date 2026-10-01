@@ -13,6 +13,12 @@ use std::time::{Duration, Instant};
 /// times (docs/RECONNEXION-PAIRAGE.md), so we never read more often than Apple.
 pub const SLOW_READ_PERIOD: Duration = Duration::from_secs(4 * 60 * 60);
 /// RSSI refresh while connected (the tracker expires a value after ~2 periods).
+/// Plancher entre deux lectures HID provoquees par `Refresh()` (D-Bus, tray,
+/// fenetre) et apres toute lecture reussie : un appel plus proche est ignore
+/// (#206 : sinon toute appli de la session declenche des salves GET_REPORT
+/// pendant la frappe, cause de coupures de liaison).
+pub const FORCE_REFRESH_FLOOR: Duration = Duration::from_secs(5 * 60);
+
 pub const RSSI_PERIOD: Duration = Duration::from_secs(45);
 /// A measurement older than this is shown as absent.
 pub const RSSI_MAX_AGE: Duration = Duration::from_secs(100);
@@ -77,6 +83,9 @@ pub struct Machine {
     next_rssi: Option<Instant>,
     next_kernel: Option<Instant>,
     last_kernel: Option<Instant>,
+    /// Derniere lecture complete reussie / derniere relance acceptee (#206).
+    last_read: Option<Instant>,
+    last_forced: Option<Instant>,
 }
 
 /// Retry delay after `attempt` failed acquisitions: 0.5, 1, 2, 4 ... capped.
@@ -105,6 +114,8 @@ impl Machine {
             next_rssi: None,
             next_kernel: None,
             last_kernel: None,
+            last_read: None,
+            last_forced: None,
         }
     }
 
@@ -119,16 +130,27 @@ impl Machine {
 
     /// Explicit refresh request (D-Bus `Refresh()`): a full read is due now if
     /// connected; no effect while disconnected (nothing is ever probed then).
-    pub fn force_refresh(&mut self, now: Instant) {
+    /// Bounded (#206): ignored when a read succeeded or a refresh was accepted
+    /// less than `FORCE_REFRESH_FLOOR` ago, so repeated calls never turn into a
+    /// burst of HID reports. Returns whether the request was accepted.
+    pub fn force_refresh(&mut self, now: Instant) -> bool {
         if !self.connected {
-            return;
+            return false;
         }
+        let recent = |t: Option<Instant>| {
+            t.is_some_and(|t| now.saturating_duration_since(t) < FORCE_REFRESH_FLOOR)
+        };
+        if recent(self.last_forced) || (self.acquired && recent(self.last_read)) {
+            return false;
+        }
+        self.last_forced = Some(now);
         if self.acquired {
             self.next_slow = Some(now);
         } else {
             self.attempt = 0;
             self.next_acquire = Some(now);
         }
+        true
     }
 
     pub fn mac(&self) -> Option<&str> {
@@ -293,6 +315,7 @@ impl Machine {
             self.attempt = 0;
             self.next_acquire = None;
             self.next_slow = Some(now + SLOW_READ_PERIOD);
+            self.last_read = Some(now);
             self.last_kernel = Some(now);
             if first {
                 self.next_rssi = Some(now);
@@ -468,13 +491,20 @@ mod tests {
         m.acquire_done(true, t0);
         m.due(t0);
         assert!(m.due(t0 + s(1)).is_empty());
-        m.force_refresh(t0 + s(1));
-        assert_eq!(m.due(t0 + s(1)), vec![Action::Acquire]);
-        // while retrying, refresh resets the backoff
-        m.acquire_done(false, t0 + s(2));
-        m.acquire_done(false, t0 + s(3));
-        m.force_refresh(t0 + s(3));
-        assert_eq!(m.due(t0 + s(3)), vec![Action::Acquire]);
+        // #206 : une lecture vient d'avoir lieu, le Refresh est ignore
+        assert!(!m.force_refresh(t0 + s(1)));
+        assert!(m.due(t0 + s(1)).is_empty());
+        let t1 = t0 + FORCE_REFRESH_FLOOR + s(1);
+        assert!(m.force_refresh(t1));
+        assert!(m.due(t1).contains(&Action::Acquire));
+        // while retrying, refresh resets the backoff (once per floor)
+        m.acquire_done(false, t1 + s(1));
+        m.acquire_done(false, t1 + s(2));
+        assert!(!m.force_refresh(t1 + s(2)), "relance recente ignoree");
+        let t2 = t1 + FORCE_REFRESH_FLOOR + s(2);
+        m.acquire_done(false, t2);
+        assert!(m.force_refresh(t2));
+        assert!(m.due(t2).contains(&Action::Acquire));
         assert!(m.is_connected() && !m.is_acquired());
     }
 
