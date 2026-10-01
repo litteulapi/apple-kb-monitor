@@ -23,7 +23,7 @@ The 18 steps (`--list`; "required" = fails the pipeline):
 | `fmt` | yes | `cargo fmt --check` on the workspace |
 | `clippy` | yes | `cargo clippy --locked --workspace --all-targets -- -D warnings` |
 | `test` | yes | `cargo test --workspace` with the hang timeout |
-| `claims` | yes | `qa_checks.py claims`: documents, QML and Rust strings scanned for the claims refuted by [CONTRE-AUDIT.md](CONTRE-AUDIT.md) (`0xF5` as an ADC, ARM7TDMI, signed firmware, RSSI as dBm, `0x4C` as an identity key); a line that negates the claim passes; allow-list `claims-allow.tsv` |
+| `claims` | yes | `qa_checks.py claims`: documents, QML and Rust strings scanned for the five claims refuted by [CONTRE-AUDIT.md](CONTRE-AUDIT.md) (the `CLAIMS` table of `qa_checks.py`: the constant `0xF5`, the BCM2042 core, the firmware signature, the unit of the RSSI, the content of `0x4C`); a line that negates the claim passes; allow-list `claims-allow.tsv` |
 | `redaction` | yes | `qa_checks.py redaction`: no Apple binary, no decompiled code committed (magic numbers, size, patterns) |
 | `deny` | yes | `cargo deny` with the policy and justified ignores of `apihub-app/deny.toml` |
 | `audit` | no | `cargo audit` (advisory, network) |
