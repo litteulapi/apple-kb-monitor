@@ -259,5 +259,12 @@ ou image `fw5001.hex` du clavier 2007, qui est chiffrée et ne sera pas déchiff
 
 ## 9. Suivi Gitea
 
-Voir les issues et commentaires liés à ce document : correction documentaire (nouvelle issue), compléments à #216
-(historique de `0x4A`), #188 (registres WO et canal de mise à jour) et #213 (affichage linéaire avant Lion).
+| Issue | Objet |
+|---|---|
+| #229 | docs : corrections du §7 (combo 10.6.8 `SUBaseSystem`, `0x4A` depuis BT 1.5, protocole `bfu` complet, table d'apparition) |
+| #216 | commentaire : historique de `0x4A` (1-4) de 2004 à 10.7.5, lecture `0x12` inexpliquée |
+| #188 | commentaire : registres WO absents de 10.2.8 → 10.6.8 ; canal de mise à jour PSM `0xF30D`, identique en 2007 et 2009 |
+| #213 | commentaire : 10.5.8 affichait le brut linéaire, la courbe arrive entre 10.6 et 10.7 |
+
+Aucune nouvelle fonction sûre n'est exploitable : toutes les fonctions qu'Apple appelait sur notre PID ont déjà une issue
+(#189, #190, #191, #192, #213, #215, #216, #217).
