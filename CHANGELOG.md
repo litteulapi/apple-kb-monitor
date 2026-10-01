@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [3.1.0] - Unreleased
 
+### Security (audit 2, #202-#212, #214)
+- `Refresh()` (D-Bus, tray) is bounded: ignored within 5 min of the last read or accepted refresh; HID reads are 1 s apart and a circuit breaker stops them after 3 failed requests until the keyboard shows signs of life (#206, #214).
+- `SetFnMode` runs `/usr/bin/pkexec <helper> set-fnmode <n>` from constants (no `$PATH`, no `APPLE_KB_SETTINGS_HELPER`), checks the caller's uid, one dialog at a time, logged; `SetSwapOptCmd`/`SetIsoLayout` removed (no polkit action); polkit `auth_admin` without `_keep` (#202, #203).
+- Keyboard names are plain text in the Plasma widget and escaped in the tray tooltip; `--` before the alias in kdialog/zenity; aliases cannot start with `-` (#205, #207).
+- `hid.lock` fallback is a private per-uid `0700` directory, `O_NOFOLLOW` (#208).
+- `rssi-helper` is `root:akm 0750` (group created by sysusers; `usermod -aG akm $USER` once). Systemd unit: only options compatible with pkexec / file capabilities (#209, #211). `deny.toml` documents the remaining advisories; webbrowser, anyhow, event-listener, memmap2 updated (#212). Real 0x4C fingerprints removed from fixtures (#210). Residual hidraw descriptor risk documented (#204).
+
+
 ### Removed / Changed (single language: Rust, #16)
 - `akmctl` now covers the former Python CLI: `history` (+ `--since/--until/--last`, `export --csv`, `import`), `graph`, `waybar`, `metrics`, `led`, and a SAFE `dump` (reports 0x47/0x46/0x49 only) (#22).
 - Removed the Python script `apple-kb-monitor`, `apihub-settings`, `apple-kb-monitor.service`, `tests/test_apple_kb.py`; the package no longer depends on `python` / `python-dbus-fast` (pkgrel 6).
