@@ -15,10 +15,37 @@ usage: verif_battery_series.py 04:DB:56:CA:42:EE|/dev/hidraw7 /sys/class/power_s
 """
 import argparse, errno, fcntl, json, os, sys, time
 
+MAC = ""
 BATT_FIRST = [0x46, 0xFF, 0x49, 0x47, 0xEA]
 OTHERS = [0x09, 0x4A, 0x4B, 0x4F, 0x51, 0x52, 0x53, 0x54, 0x5A, 0x5B, 0x5C, 0x5D,
           0x60, 0xD1, 0xD8, 0xEB, 0xF4, 0xF5, 0xF6, 0xF7, 0xFE]
-IDS = BATT_FIRST + OTHERS  # 26 ids ; 0x4C volontairement absent
+IDS_FULL = BATT_FIRST + OTHERS  # 26 ids ; 0x4C volontairement absent (non utilisé : consigne du 01/10 12:20)
+# Mode léger imposé après le décrochage du 01/10 12:13 : 4 rapports, jamais 0xFE ni balayage.
+IDS = [0x46, 0x49, 0x47, 0xEA]
+
+
+def bt_connected(mac):
+    """État BlueZ (cache de bluetoothd, aucune requête radio)."""
+    import subprocess
+    try:
+        out = subprocess.run(["bluetoothctl", "info", mac], capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return False
+    return "\tConnected: yes" in out
+
+
+def upower_pct(mac):
+    """Pourcentage tenu par UPower (déjà interrogé par le système) : aucune requête supplémentaire."""
+    import subprocess
+    try:
+        out = subprocess.run(["upower", "-d"], capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return None
+    blk = [b for b in out.split("\n\n") if mac.lower().replace(":", "_") in b.lower() or mac.lower() in b.lower()]
+    for line in (blk[0].splitlines() if blk else []):
+        if "percentage:" in line:
+            return line.split(":", 1)[1].strip()
+    return None
 
 
 def hidiocgfeature(length):
@@ -59,7 +86,7 @@ def find_hidraw(mac):
 
 def one_round(dev, psy, gap):
     rec = {"t": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "epoch": round(time.time(), 1)}
-    rec["cap_before"], rec["cap_before_us"] = read_capacity(psy)
+    rec["upower_before"] = upower_pct(MAC)
     fd = os.open(dev, os.O_RDONLY | os.O_CLOEXEC)
     try:
         rep, lat = {}, {}
@@ -71,7 +98,7 @@ def one_round(dev, psy, gap):
     finally:
         os.close(fd)
     rec["rep"], rec["lat_ms"] = rep, lat
-    rec["cap_after"], rec["cap_after_us"] = read_capacity(psy)
+    rec["upower_after"] = upower_pct(MAC)
     return rec
 
 
@@ -93,7 +120,7 @@ def analyze(path):
     for r in rows:
         d = decode(r["rep"])
         print(r["t"][11:19], d.get("v46"), d.get("vff"), d.get("v49"), "|", d.get("p47"), d.get("pea"),
-              "|", r["cap_before"], r["cap_after"], "(%d/%d)" % (r["cap_before_us"], r["cap_after_us"]), "|", d.get("ff3"))
+              "|", r.get("upower_before", r.get("cap_before")), r.get("upower_after", r.get("cap_after")), "|", d.get("ff3"))
     # registres qui bougent
     keys = rows[0]["rep"].keys() if rows else []
     for k in keys:
@@ -121,7 +148,7 @@ def main():
     # on ne lit qu'une fois qu'il s'est reconnecté de lui-même (appui de touche).
     mac = a.dev if ":" in a.dev else None
     resolve = (lambda: find_hidraw(mac)) if mac else (lambda: a.dev if os.path.exists(a.dev) else None)
-    while a.wait_node and not resolve():
+    while a.wait_node and not (resolve() and (not mac or bt_connected(mac))):
         time.sleep(10)
     # Respect de la cadence entre deux exécutions : dernière salve du fichier il y a >= period.
     if os.path.exists(a.out):
@@ -129,10 +156,12 @@ def main():
         last = [r["epoch"] for r in last if "epoch" in r]
         if last and time.time() - last[-1] < a.period:
             time.sleep(a.period - (time.time() - last[-1]))
+    global MAC
+    MAC = mac or ""
     out = open(a.out, "a", buffering=1)
     for i in range(a.rounds):
         dev = resolve()
-        if not dev:
+        if not dev or (mac and not bt_connected(mac)):
             out.write(json.dumps({"t": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "stop": "noeud absent"}) + "\n")
             return 2
         try:
