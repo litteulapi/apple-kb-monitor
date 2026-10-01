@@ -122,21 +122,20 @@ fn sysfs_only_report_without_hidraw() {
 fn read_keyboard_on_fixture_frames() {
     let sys = FakeSys::new();
     let uevent = read("a1314_iso/hid_device.uevent");
-    // Synthetic 0x47 frame shipped with the fixtures + the vendor frames used
-    // by the Python test-suite (tests/test_apple_kb.py).
-    let mut dump = read("synthetic/get_feature_0x47_battery90.hex");
-    dump.push_str(
-        "\nea 5a\nf5 03 68\n5a 0b 54 09 92 09 2e 07 d0\n4f 50\nff 0c 32 01\n46 37 0c\n09 01\n",
-    );
+    // Real vendor frames of the same keyboard (tests/live/re, 0x4C redacted).
+    let dump = fs::read_to_string(fixtures().join("../live/re/a1314_iso_frames.hex")).unwrap();
     let src = Fixture::from_hex_dump(&dump).unwrap();
-    assert_eq!(src.feature(0x47).unwrap()[1], 90);
+    assert_eq!(src.feature(0x47).unwrap(), vec![0x47, 99]);
     let kernel = kernel_battery_in(&sys.0, MAC);
     let r = build_report(&uevent, kernel, &src, KbWake::default()).expect("keyboard answers");
+    // The kernel capacity of the capture (90) wins over 0x47 and 0xEA.
     assert_eq!(r.battery_pct(), Some(90.0));
     assert_eq!(r.battery.percentage, Some(90.0));
-    assert!((r.battery.voltage.unwrap() - 2.813).abs() < 0.001);
-    assert_eq!(r.firmware.version.as_deref(), Some("5.0"));
-    assert_eq!(r.bluetooth.conn_interval_ms, Some(68.75));
+    assert_eq!(r.battery.adc_raw, Some(900));
+    assert_eq!(r.firmware.version.as_deref(), Some("0x0050"));
+    assert_eq!(r.raw.get("0x46").map(String::as_str), Some("af0b"));
+    assert_eq!(r.raw.get("0xff").map(String::as_str), Some("0baf01"));
+    assert!(!r.incomplete);
     assert_eq!(r.device.mac.as_deref(), Some(MAC));
     // Keyboard asleep: probe 0xEA unanswered -> no report at all.
     let asleep = Fixture::from_hex_dump(&read("synthetic/get_feature_0x47_battery90.hex")).unwrap();

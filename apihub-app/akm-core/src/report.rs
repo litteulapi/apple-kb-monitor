@@ -1,6 +1,8 @@
 //! Telemetry data model of one keyboard (serialisable: it travels over D-Bus
 //! and in `--json`).
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -16,13 +18,22 @@ pub struct KbDevice {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct KbBattery {
-    /// Kernel `power_supply` capacity, else firmware-rounded report 0x47.
+    /// Kernel `power_supply` capacity, else report 0x47 (Battery Strength).
+    /// [mesuré] 0x47 = kernel capacity (99 = 99 on the A1314 ISO, 2026-10-01);
+    /// [source] `hid-input.c` reads 0x47 as a 0..100 Feature report.
     pub percentage: Option<f64>,
-    /// Precise value (report 0xEA), replaced by the kernel value when known.
+    /// Compatibility mirror of `percentage` for D-Bus/QML clients that read
+    /// this name. It is **never** report 0xEA any more: the "pre-rounding
+    /// value" claim was refuted (0xEA = 98 while 0x47 = kernel = 99, #136).
+    /// 0xEA is kept uninterpreted in [`KbReport::raw`].
     pub percentage_fine: Option<f64>,
-    /// Interpolated from voltage + calibration curve (diagnostic).
+    /// [hypothèse] Estimate from `voltage` and the 0x5A curve; only computed
+    /// when a valid curve was read, bounded by the cut-off voltage.
     pub percentage_interpolated: Option<f64>,
+    /// [hypothèse] Estimate `adc_raw * 3.3 / 1023`: the scale is not proven
+    /// (0x46/0x49/0xFF read as mV give 2.95-2.99 V against 2.903 V).
     pub voltage: Option<f64>,
+    /// [mesuré] Report 0xF5, u16 big-endian, uninterpreted.
     pub adc_raw: Option<u32>,
 }
 
@@ -33,10 +44,10 @@ pub struct KbBluetooth {
     pub paired: bool,
     pub rssi_dbus: Option<i32>,
     pub tx_power_dbus: Option<i32>,
-    pub conn_interval_ms: Option<f64>,
-    pub slave_latency: Option<u8>,
-    pub supervision_timeout_s: Option<f64>,
-    pub identity_key: Option<String>,
+    /// [mesuré] Report 0x4C bytes 2..8 reversed: Bluetooth address of the host
+    /// adapter the keyboard is paired with (= `HID_PHYS`), e.g. `6C:94:66:52:7C:0D`.
+    /// The 12 following bytes are unidentified and never published (#123, #133).
+    pub paired_host_addr: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -49,9 +60,9 @@ pub struct KbRadio {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct KbFirmware {
+    /// Report 0x4F as u16 little-endian, shown `0x0050`. [mesuré] equals the
+    /// DID version of the BlueZ modalias (`usb:v05ACp0256d0050`).
     pub version: Option<String>,
-    pub build: Option<u32>,
-    pub adc_ref: Option<u16>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -72,16 +83,25 @@ pub struct KbReport {
     pub bluetooth: KbBluetooth,
     pub radio: KbRadio,
     pub firmware: KbFirmware,
+    /// Uninterpreted vendor reports, `"0xNN"` -> payload hex (report id
+    /// excluded). Their meaning is not proven (docs/AUDIT-DECODAGE-HID.md):
+    /// 0x46, 0x49 and 0xFF are **not** LE link parameters nor a build number
+    /// (#131, #132). 0x4C is never included (#123).
+    pub raw: BTreeMap<String, String>,
+    /// The vendor read stopped early (request timed out, device gone or time
+    /// budget spent, #134): the fields above may be partial.
+    pub incomplete: bool,
 }
 
 impl KbReport {
-    /// Best battery percentage available (kernel > precise > interpolated > rounded).
+    /// Best battery percentage: kernel/0x47 (`percentage`) > compatibility
+    /// mirror > interpolated estimate. Every term is filtered on its own, so a
+    /// NaN falls through to the next one. 0xEA is not a percentage source.
     pub fn battery_pct(&self) -> Option<f64> {
-        self.battery
-            .percentage_fine
-            .or(self.battery.percentage_interpolated)
-            .or(self.battery.percentage)
-            .filter(|p| p.is_finite())
+        let ok = |p: Option<f64>| p.filter(|v| v.is_finite());
+        ok(self.battery.percentage)
+            .or(ok(self.battery.percentage_fine))
+            .or(ok(self.battery.percentage_interpolated))
     }
 }
 
@@ -93,15 +113,19 @@ mod tests {
     fn battery_pct_priority_and_nan() {
         let mut r = KbReport::default();
         assert_eq!(r.battery_pct(), None);
-        r.battery.percentage = Some(50.0);
-        assert_eq!(r.battery_pct(), Some(50.0));
         r.battery.percentage_interpolated = Some(60.0);
         assert_eq!(r.battery_pct(), Some(60.0));
         r.battery.percentage_fine = Some(90.0);
         assert_eq!(r.battery_pct(), Some(90.0));
-        r.battery.percentage_fine = Some(f64::NAN);
+        // Kernel / 0x47 wins over everything (#136).
+        r.battery.percentage = Some(50.0);
+        assert_eq!(r.battery_pct(), Some(50.0));
+        // A NaN falls through to the next finite term.
+        r.battery.percentage = Some(f64::NAN);
+        assert_eq!(r.battery_pct(), Some(90.0));
+        r.battery.percentage_fine = Some(f64::INFINITY);
+        assert_eq!(r.battery_pct(), Some(60.0));
         r.battery.percentage_interpolated = None;
-        r.battery.percentage = None;
         assert_eq!(r.battery_pct(), None);
     }
 

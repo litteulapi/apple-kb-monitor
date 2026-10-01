@@ -214,17 +214,13 @@ impl DbusmenuServer {
         // ── Info section ──────────────────────────────────────────
         if let Some(ref snap) = snap {
             if let Some(ref kb) = snap.keyboard {
-                let pct = kb
-                    .battery
-                    .percentage_fine
-                    .or(kb.battery.percentage_interpolated)
-                    .or(kb.battery.percentage)
-                    .unwrap_or(0.0);
-                let voltage = kb.battery.voltage.unwrap_or(0.0);
-                root_children.push(info_item(
-                    menu_id::INFO_BATTERY,
-                    format!("Battery: {:.0}%  ({:.3}V)", pct, voltage),
-                ));
+                let pct = kb.battery_pct().unwrap_or(0.0);
+                // Voltage is an estimate [hypothèse], shown as such.
+                let label = match kb.battery.voltage {
+                    Some(v) => format!("Battery: {:.0}%  (≈{:.2} V est.)", pct, v),
+                    None => format!("Battery: {:.0}%", pct),
+                };
+                root_children.push(info_item(menu_id::INFO_BATTERY, label));
                 if let Some(ref rssi) = kb.radio.rssi_dbm {
                     root_children.push(info_item(
                         menu_id::INFO_RSSI,

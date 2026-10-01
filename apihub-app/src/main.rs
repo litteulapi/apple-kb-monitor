@@ -189,9 +189,8 @@ impl ApiHubApp {
                 ui.label(egui::RichText::new("Waiting for keyboard data...").size(16.0));
             }
             Some(kb) => {
-                let pct: Option<f64> = kb.battery.percentage_fine
-                    .or(kb.battery.percentage_interpolated)
-                    .or(kb.battery.percentage);
+                // Kernel / 0x47 first; 0xEA is not a percentage (#136).
+                let pct: Option<f64> = kb.battery_pct();
 
                 // Top row: battery tile + radio tile side by side
                 ui.columns(2, |cols| {
@@ -203,7 +202,7 @@ impl ApiHubApp {
                                 view::battery_level(pct)));
                             // Battery type subtitle under hero percentage
                             if let Some(v) = kb.battery.voltage {
-                                ui.label(egui::RichText::new(keyboard::detect_battery_type(v))
+                                ui.label(egui::RichText::new(format!("{} (estimation)", keyboard::detect_battery_type(v)))
                                     .weak().size(16.0));
                             }
                             ui.add(egui::ProgressBar::new(view::pct_fraction(pct))
@@ -212,14 +211,15 @@ impl ApiHubApp {
                         ui.add_space(4.0);
                         egui::Grid::new("bat_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
                             if let Some(v) = kb.battery.voltage {
-                                ui.label(egui::RichText::new("Voltage").weak().size(16.0));
+                                // [hypothèse] adc * 3.3 / 1023: an estimate, not a measurement.
+                                ui.label(egui::RichText::new("Voltage (est.)").weak().size(16.0));
                                 ui.label(self.tint(
-                                    egui::RichText::new(format!("{:.3} V", v)).strong().size(18.0),
+                                    egui::RichText::new(format!("≈ {:.2} V", v)).strong().size(18.0),
                                     view::voltage_level(v)));
                                 ui.end_row();
                             }
                             if let Some(adc) = kb.battery.adc_raw {
-                                ui.label(egui::RichText::new("ADC").weak().size(16.0));
+                                ui.label(egui::RichText::new("0xF5 (raw)").weak().size(16.0));
                                 ui.label(egui::RichText::new(format!("{}", adc)).size(16.0));
                                 ui.end_row();
                             }
@@ -269,22 +269,6 @@ impl ApiHubApp {
                             ui.label(egui::RichText::new("Paired").weak().size(16.0));
                             ui.label(egui::RichText::new(if kb.bluetooth.paired { "Yes" } else { "No" }).size(16.0));
                             ui.end_row();
-
-                            // Compact BT Interval/Timeout on one row
-                            if let Some(interval) = kb.bluetooth.conn_interval_ms {
-                                let latency = kb.bluetooth.slave_latency.unwrap_or(0);
-                                let effective = interval * (latency as f64 + 1.0);
-                                let timeout_str = kb.bluetooth.supervision_timeout_s
-                                    .map(|t| format!(" | T/O {:.1}s", t))
-                                    .unwrap_or_default();
-                                ui.label(egui::RichText::new("BT Link").weak().size(16.0));
-                                ui.label(egui::RichText::new(format!("{:.0}ms eff={:.0}ms{}", interval, effective, timeout_str)).size(16.0));
-                                ui.end_row();
-                            } else if let Some(timeout) = kb.bluetooth.supervision_timeout_s {
-                                ui.label(egui::RichText::new("BT Timeout").weak().size(16.0));
-                                ui.label(egui::RichText::new(format!("{:.1}s", timeout)).size(16.0));
-                                ui.end_row();
-                            }
                         });
                     });
                 });
@@ -318,10 +302,9 @@ impl ApiHubApp {
                                 ui.label(egui::RichText::new(driver.as_str()).size(16.0));
                                 ui.end_row();
                             }
-                            if let Some(ref key) = kb.bluetooth.identity_key {
-                                ui.label(egui::RichText::new("Identity").weak().size(16.0));
-                                let short: String = key.chars().take(23).collect();
-                                ui.label(egui::RichText::new(short).monospace().size(16.0));
+                            if let Some(ref host) = kb.bluetooth.paired_host_addr {
+                                ui.label(egui::RichText::new("Paired host").weak().size(16.0));
+                                ui.label(egui::RichText::new(host).monospace().size(16.0));
                                 ui.end_row();
                             }
                         });
@@ -338,18 +321,19 @@ impl ApiHubApp {
                                 ui.end_row();
                             }
                             if let Some(ref fw) = kb.firmware.version {
-                                ui.label(egui::RichText::new("Version").weak().size(16.0));
+                                ui.label(egui::RichText::new("Version (0x4F)").weak().size(16.0));
                                 ui.label(egui::RichText::new(fw).strong().size(18.0));
                                 ui.end_row();
                             }
-                            if let Some(ref build) = kb.firmware.build {
-                                ui.label(egui::RichText::new("Build").weak().size(16.0));
-                                ui.label(egui::RichText::new(build.to_string()).size(16.0));
+                            // Uninterpreted vendor reports (meaning not proven, #131/#132).
+                            for (id, hex) in &kb.raw {
+                                ui.label(egui::RichText::new(format!("{id} (raw)")).weak().size(16.0));
+                                ui.label(egui::RichText::new(hex).monospace().size(16.0));
                                 ui.end_row();
                             }
-                            if let Some(adc_ref) = kb.firmware.adc_ref {
-                                ui.label(egui::RichText::new("ADC Ref").weak().size(16.0));
-                                ui.label(egui::RichText::new(format!("{}", adc_ref)).monospace().size(16.0));
+                            if kb.incomplete {
+                                ui.label(egui::RichText::new("Read").weak().size(16.0));
+                                ui.label(egui::RichText::new("incomplete (timeout)").size(16.0));
                                 ui.end_row();
                             }
                         });
