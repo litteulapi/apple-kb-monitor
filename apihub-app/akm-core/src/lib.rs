@@ -3,6 +3,7 @@
 //!
 //! * [`model`]       supported models, `HID_ID` / `HID_UNIQ` parsing
 //! * [`report`]      telemetry data model ([`report::KbReport`])
+//! * [`chemistry`]   charge estimate by declared battery chemistry (#178)
 //! * [`calibration`] ADC → voltage → percentage, battery chemistry
 //! * [`decode`]      [`decode::HidSource`] trait, [`decode::Fixture`], decoding of
 //!   the vendor Feature Reports (testable without hardware)
@@ -13,6 +14,7 @@
 //! * [`machine`]     pure connection/scheduling state machine
 //! * [`rssi`]        RSSI helper runner + freshness tracker
 //! * [`led`]         keyboard LED state (sysfs) and control
+//! * [`signal`]     link quality from the relative BR/EDR RSSI (#174)
 //! * [`snapshot`]    immutable published state + `Watch` (Arc + version)
 //! * [`alerts`]      multi-threshold low-battery alerts with hysteresis (#82)
 //! * [`forecast`]    autonomy forecast in days from the history (#83)
@@ -26,6 +28,7 @@ pub mod alerts;
 pub mod alias;
 pub mod batteries;
 pub mod calibration;
+pub mod chemistry;
 pub mod config;
 pub mod decode;
 pub mod discover;
@@ -42,6 +45,7 @@ pub mod read_policy;
 pub mod recovery;
 pub mod report;
 pub mod rssi;
+pub mod signal;
 pub mod snapshot;
 
 pub use report::KbReport;

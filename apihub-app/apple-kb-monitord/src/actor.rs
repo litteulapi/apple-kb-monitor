@@ -13,6 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use akm_core::alerts::{AlertConfig, AlertState, Urgency};
+use akm_core::chemistry::{self, Chemistry};
 use akm_core::batteries::{self, Detector};
 use akm_core::forecast::{self, Forecast};
 use akm_core::history::{
@@ -81,6 +82,8 @@ pub struct Options {
     pub notify_connection: bool,
     /// "New batteries" notification (#85).
     pub notify_battery_replaced: bool,
+    /// Declared battery chemistry (`[battery] chemistry`, #178).
+    pub chemistry: Chemistry,
     /// Where detected events go (D-Bus device signals, tray...).
     pub events: Arc<EventHub>,
     /// Where the keyboard's alias is read (BlueZ).
@@ -97,6 +100,7 @@ impl Default for Options {
             alerts_enabled: true,
             notify_connection: true,
             notify_battery_replaced: true,
+            chemistry: Chemistry::default(),
             events: EventHub::new(),
             alias: Arc::new(BluezAlias::default()),
         }
@@ -110,6 +114,7 @@ impl Options {
         self.alerts_enabled = c.alerts_enabled;
         self.notify_connection = c.notify_connection;
         self.notify_battery_replaced = c.notify_battery_replaced;
+        self.chemistry = c.chemistry;
     }
 }
 
@@ -145,6 +150,9 @@ struct Actor {
     remaining_at: Option<Instant>,
     last_update: u64,
     last_error: Option<String>,
+    /// The keyboard reconnected and no reading was judged since: the next one
+    /// may carry a firmware step that is not a discharge (#179).
+    reconnected: bool,
 }
 
 impl Actor {
@@ -158,6 +166,14 @@ impl Actor {
             }
             h
         });
+        // #180: the former `voltage` field was a constant; mark it unreliable.
+        if let Some(h) = history.as_ref() {
+            match h.mark_legacy_voltages() {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("history: {n} legacy voltage(s) marked unreliable"),
+                Err(e) => tracing::warn!("history voltage migration failed: {e}"),
+            }
+        }
         let past = history.as_ref().map(History::read).unwrap_or_default();
         Self {
             alerts: AlertState::new(opts.alerts.clone()),
@@ -179,7 +195,19 @@ impl Actor {
             remaining_at: None,
             last_update: 0,
             last_error: None,
+            reconnected: false,
         }
+    }
+
+    /// Charge estimate of a report for the declared chemistry (#178). The age
+    /// of the set comes from the detected installation (#85).
+    fn assess(&self, k: &KbReport, now_s: u64) -> chemistry::Assessment {
+        chemistry::assess(
+            k.battery.voltage_filtered_mv,
+            k.battery.voltage_mv,
+            self.opts.chemistry,
+            self.installed_at.map(|t| now_s.saturating_sub(t)),
+        )
     }
 
     /// Full read: HID Feature Reports, or kernel-only when hidraw is not
@@ -282,6 +310,7 @@ impl Actor {
     /// state of the tray, v2 forecast), the error text is brought up to date.
     fn clear(&mut self) {
         self.linked = false;
+        self.reconnected = true;
         self.last_error = None;
         hidraw::set_wake_monitor_enabled(false);
         self.rssi.clear();
@@ -313,7 +342,13 @@ impl Actor {
             // Validate BEFORE the detector (#163); the detector state moves only
             // once the sample is stored.
             let ts = self.history.as_ref().map_or_else(unix_now, History::now);
-            let mut entry = HistoryEntry::sample(ts, pct, voltage);
+            // The real voltages in mV (0x46 and 0x49), not the legacy constant (#180).
+            let mv46 = voltage.and(k.battery.voltage_mv);
+            let mv49 = k
+                .battery
+                .voltage_filtered_mv
+                .filter(|mv| akm_core::history::VOLTAGE_RANGE.contains(&(f64::from(*mv) / 1000.0)));
+            let mut entry = HistoryEntry::measured(ts, pct, mv46, mv49);
             if self.detector.check(&entry).is_some() {
                 entry.event = Some(HistoryEvent::BatteryReplaced);
             }
@@ -370,11 +405,21 @@ impl Actor {
             }
         }
 
+        // Alerts run on the charge estimated by the declared chemistry when
+        // there is one, else on the keyboard's percentage (#178). The first
+        // reading after a reconnection may carry a firmware step: it raises no
+        // alert (#179).
+        let after_reconnect = std::mem::take(&mut self.reconnected);
         if self.opts.alerts_enabled {
-            if let Some(c) = self.alerts.update(pct) {
-                tracing::warn!("low battery: {pct:.0}% (threshold {}%)", c.threshold);
+            let assessment = self.assess(k, self.history.as_ref().map_or_else(unix_now, History::now));
+            let (alert_pct, basis) = chemistry::alert_pct(assessment.estimate.as_ref(), pct);
+            if let Some(c) = self.alerts.update_after(alert_pct, after_reconnect) {
+                tracing::warn!(
+                    "low battery: {alert_pct:.0}% ({basis:?}, keyboard {pct:.0}%, threshold {}%)",
+                    c.threshold
+                );
                 if self.opts.notify {
-                    notify::battery_crossing(&c);
+                    notify::battery_crossing(&c, basis);
                     if c.urgency == Urgency::Critical {
                         led::flash_capslock_for(mac.clone(), 5);
                     }
@@ -450,11 +495,19 @@ impl Actor {
                 .mac
                 .as_deref()
                 .and_then(|m| self.rssi.current(m, now));
-            k.radio.rssi_dbm = cur.map(|c| c.0);
+            // BR/EDR: a gap in dB to the ideal range, not dBm (#174).
+            k.radio.set_rssi_rel(cur.map(|c| c.0));
             k.radio.tx_power_dbm = cur.and_then(|c| c.1);
             k.bluetooth.rssi_dbus = None;
             k.bluetooth.tx_power_dbus = None;
             rssi_at = cur.and(self.rssi_at);
+        }
+        // Charge estimate by declared chemistry (#178), recomputed at every
+        // publication so a change of set or of config shows at once.
+        if let Some(k) = kb.as_mut() {
+            let a = self.assess(k, self.history.as_ref().map_or_else(unix_now, History::now));
+            k.battery.charge_estimate = a.estimate;
+            k.battery.new_batteries = a.new_batteries;
         }
         let (caps, num) = if self.linked {
             led::read_led_state()
@@ -692,6 +745,132 @@ mod tests {
         assert_eq!(a.installed_at, None);
     }
 
+    fn report_mv(fw_pct: f64, mv_slow: u32) -> KbReport {
+        let mut k = report(fw_pct, Some(f64::from(mv_slow + 37) / 1000.0));
+        k.battery.voltage_mv = Some(mv_slow + 37);
+        k.battery.voltage_filtered_mv = Some(mv_slow);
+        k
+    }
+
+    fn crossings(rx: &mpsc::Receiver<DeviceEvent>) -> Vec<u8> {
+        rx.try_iter()
+            .filter_map(|e| match e {
+                DeviceEvent::BatteryLevelCrossed { crossing, .. } => Some(crossing.threshold),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn snapshot_carries_the_estimate_next_to_the_firmware_percentage() {
+        // #178: firmware 50 % at 2404 mV is about 25 % of real charge (alkaline).
+        let mut a = quiet_actor();
+        a.kb = Some(report_mv(50.0, 2404));
+        a.linked = true;
+        let s = a.snapshot();
+        let b = &s.keyboard.as_ref().unwrap().battery;
+        assert_eq!(b.percentage, Some(50.0), "the indication is not rewritten");
+        let e = b.charge_estimate.as_ref().unwrap();
+        assert_eq!((e.pct, e.low, e.high), (25.0, 15.0, 35.0));
+        assert_eq!(e.chemistry, Chemistry::Alkaline);
+        // Undeclared chemistry: no estimate.
+        let mut u = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            chemistry: Chemistry::Unknown,
+            ..Options::default()
+        });
+        u.kb = Some(report_mv(50.0, 2404));
+        u.linked = true;
+        assert!(u.snapshot().keyboard.unwrap().battery.charge_estimate.is_none());
+        // Set installed an hour ago: new batteries, no figure from the voltage.
+        let mut n = quiet_actor();
+        n.kb = Some(report_mv(98.0, 2950));
+        n.linked = true;
+        n.installed_at = Some(unix_now() - 3600);
+        let b = n.snapshot().keyboard.unwrap().battery;
+        assert!(b.new_batteries && b.charge_estimate.is_none());
+    }
+
+    #[test]
+    fn alerts_follow_the_estimate_not_the_firmware_scale() {
+        // #178: firmware 64 % (2460 mV) is already 30 % of real charge.
+        let mut a = quiet_actor();
+        let rx = a.opts.events.subscribe();
+        for (fw, mv) in [(90.0, 2775), (75.0, 2506)] {
+            a.kb = Some(report_mv(fw, mv));
+            a.after_battery_update(true);
+        }
+        assert!(crossings(&rx).is_empty(), "35 % real: nothing yet");
+        a.kb = Some(report_mv(64.0, 2455));
+        a.after_battery_update(true);
+        assert_eq!(crossings(&rx), vec![30]);
+        // Same reading again: once only.
+        a.after_battery_update(true);
+        assert!(crossings(&rx).is_empty());
+        // Without a declared chemistry the firmware scale is used.
+        let mut u = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            chemistry: Chemistry::Unknown,
+            ..Options::default()
+        });
+        let rxu = u.opts.events.subscribe();
+        u.kb = Some(report_mv(64.0, 2455));
+        u.after_battery_update(true);
+        assert!(crossings(&rxu).is_empty());
+        u.kb = Some(report_mv(29.0, 2455));
+        u.after_battery_update(true);
+        assert_eq!(crossings(&rxu), vec![30]);
+    }
+
+    #[test]
+    fn firmware_step_at_a_reconnection_raises_no_alert() {
+        // #179: the kernel percentage steps down 32 -> 28 when the keyboard
+        // reconnects, with no consumption behind it.
+        let mut a = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            chemistry: Chemistry::Unknown,
+            ..Options::default()
+        });
+        let rx = a.opts.events.subscribe();
+        a.kb = Some(report(32.0, None));
+        a.linked = true;
+        a.after_battery_update(true);
+        a.disconnected();
+        assert!(a.reconnected);
+        a.kb = Some(report(28.0, None));
+        a.linked = true;
+        a.after_battery_update(true);
+        assert!(crossings(&rx).is_empty(), "link artefact, not a discharge");
+        assert!(!a.reconnected, "consumed by the first reading");
+        // A later drop within the session is judged normally.
+        a.kb = Some(report(14.0, None));
+        a.after_battery_update(false);
+        assert_eq!(crossings(&rx), vec![15]);
+    }
+
+    #[test]
+    fn history_stores_real_millivolts() {
+        // #180 through the actor: needs the history on; an own file.
+        let dir = std::env::temp_dir().join(format!("akm-actor-hist-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut a = quiet_actor();
+        a.history = Some(History::new(dir.join("h.jsonl"), SystemClock));
+        a.kb = Some(report_mv(98.0, 2945));
+        a.after_battery_update(true);
+        let e = a.history.as_ref().unwrap().read();
+        assert_eq!(e.len(), 1);
+        assert_eq!((e[0].mv_0x46, e[0].mv_0x49), (Some(2982), Some(2945)));
+        assert_eq!(e[0].schema, Some(akm_core::history::SCHEMA));
+        assert!(e[0].voltage_reliable());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn options_follow_the_config() {
         let o = Options::default();
@@ -704,6 +883,10 @@ mod tests {
         o.apply_config(&c);
         assert_eq!(o.alerts.thresholds(), &[20]);
         assert!(!o.alerts_enabled && !o.notify_connection && o.notify_battery_replaced);
+        assert_eq!(o.chemistry, Chemistry::Alkaline);
+        let (c, _) = akm_core::config::parse("[battery]\nchemistry = \"lithium\"\n");
+        o.apply_config(&c);
+        assert_eq!(o.chemistry, Chemistry::Lithium);
     }
 
     #[test]

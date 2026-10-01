@@ -91,9 +91,28 @@ PlasmaExtras.Representation {
                 }
             }
 
+            PlasmaComponents3.Label {
+                Layout.fillWidth: true
+                text: i18n("Keyboard indication (its own percentage, not a linear charge)")
+                opacity: 0.7
+                wrapMode: Text.Wrap
+            }
+
             Kirigami.FormLayout {
                 Layout.fillWidth: true
                 twinFormLayouts: []
+
+                PlasmaComponents3.Label {
+                    Kirigami.FormData.label: i18n("Estimate:")
+                    visible: root.hasEstimate || root.newBatteries
+                    text: root.estimateText
+                    wrapMode: Text.Wrap
+                }
+                PlasmaComponents3.Label {
+                    Kirigami.FormData.label: i18n("Last reading:")
+                    text: root.updatedText
+                    Accessible.description: i18n("The keyboard's percentage only goes down when it reconnects")
+                }
 
                 PlasmaComponents3.Label {
                     Kirigami.FormData.label: i18n("Voltage:")
@@ -110,7 +129,7 @@ PlasmaExtras.Representation {
                     text: root.batteryType
                 }
                 PlasmaComponents3.Label {
-                    Kirigami.FormData.label: i18n("Signal (RSSI):")
+                    Kirigami.FormData.label: i18n("Signal:")
                     text: root.rssiText
                 }
                 PlasmaComponents3.Label {

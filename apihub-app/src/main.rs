@@ -77,7 +77,7 @@ impl ApiHubApp {
             .collect();
         let voltage_history: Vec<(f64, f64)> = entries
             .iter()
-            .filter_map(|e| e.voltage.map(|v| (e.ts as f64, v)))
+            .filter_map(|e| e.reliable_voltage().map(|v| (e.ts as f64, v)))
             .collect();
 
         Self {
@@ -209,6 +209,7 @@ impl ApiHubApp {
                             ui.label(self.tint(
                                 egui::RichText::new(view::pct_text(pct, 0)).size(28.0).strong(),
                                 view::battery_level(pct)));
+                            ui.label(egui::RichText::new("keyboard indication").weak().size(14.0));
                             // Battery type subtitle under hero percentage
                             if let Some(v) = kb.battery.voltage {
                                 ui.label(egui::RichText::new(format!("{} (estimation)", keyboard::detect_battery_type(v)))
@@ -227,6 +228,16 @@ impl ApiHubApp {
                                     view::voltage_level(v)));
                                 ui.end_row();
                             }
+                            if let Some(t) = view::estimate_text(&kb.battery) {
+                                // Charge estimated by the declared chemistry [hypothèse] (#178).
+                                ui.label(egui::RichText::new("Estimate").weak().size(16.0));
+                                ui.label(egui::RichText::new(t).size(16.0));
+                                ui.end_row();
+                            }
+                            // The kernel % steps down only at reconnections (#179).
+                            ui.label(egui::RichText::new("Updated").weak().size(16.0));
+                            ui.label(egui::RichText::new(view::age_text(snap.update_age_s(unix_now()))).size(16.0));
+                            ui.end_row();
                             if let Some(p) = kb.battery.percentage_interpolated {
                                 // Interpolated on the unit's curve: an estimate.
                                 ui.label(egui::RichText::new("Curve").weak().size(16.0));
@@ -255,8 +266,9 @@ impl ApiHubApp {
                         ui.label(egui::RichText::new("Radio").strong().size(18.0));
                         ui.add_space(4.0);
                         egui::Grid::new("radio_detail").num_columns(2).spacing([16.0, 8.0]).show(ui, |ui| {
-                            let rssi = kb.radio.rssi_dbm;
-                            ui.label(egui::RichText::new("RSSI").weak().size(16.0));
+                            // Relative BR/EDR value (dB to the ideal range), not dBm (#174).
+                            let rssi = kb.radio.rel_db();
+                            ui.label(egui::RichText::new("Signal").weak().size(16.0));
                             let lvl = view::rssi_level(rssi);
                             ui.horizontal(|ui| {
                                 ui.label(self.tint(egui::RichText::new(view::rssi_text(rssi)).strong().size(18.0), lvl));
@@ -412,7 +424,7 @@ impl ApiHubApp {
                 if ui.button(egui::RichText::new("Refresh").size(14.0)).clicked() {
                     let entries = source::load_history();
                     self.battery_history = entries.iter().map(|e| (e.ts as f64, e.pct)).collect();
-                    self.voltage_history = entries.iter().filter_map(|e| e.voltage.map(|v| (e.ts as f64, v))).collect();
+                    self.voltage_history = entries.iter().filter_map(|e| e.reliable_voltage().map(|v| (e.ts as f64, v))).collect();
                 }
             });
 

@@ -7,6 +7,9 @@
 //! critical = 5               # thresholds <= 5 are sent as "critical"
 //! enabled = true
 //!
+//! [battery]
+//! chemistry = "alkaline"     # "alkaline" | "nimh" | "lithium" | "unknown"
+//!
 //! [notifications]
 //! connection = true          # "disconnected" / "reconnected (N %)", low urgency
 //! battery_replaced = true    # "new batteries detected"
@@ -21,6 +24,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::alerts::{AlertConfig, DEFAULT_HYSTERESIS};
+use crate::chemistry::Chemistry;
 
 const REL_PATH: &str = "apple-kb-monitor/config.toml";
 
@@ -30,6 +34,8 @@ pub struct Config {
     pub alerts_enabled: bool,
     pub notify_connection: bool,
     pub notify_battery_replaced: bool,
+    /// Declared chemistry of the batteries (#178), default alkaline.
+    pub chemistry: Chemistry,
 }
 
 impl Default for Config {
@@ -39,6 +45,7 @@ impl Default for Config {
             alerts_enabled: true,
             notify_connection: true,
             notify_battery_replaced: true,
+            chemistry: Chemistry::default(),
         }
     }
 }
@@ -175,6 +182,13 @@ pub fn parse(content: &str) -> (Config, Vec<String>) {
                 _ => warn.push(format!("line {}: critical must be in 0..=99", n + 1)),
             },
             ("alerts", "enabled", Val::Bool(b)) => cfg.alerts_enabled = b,
+            ("battery", "chemistry", Val::Str(v)) => match Chemistry::parse(&v) {
+                Some(c) => cfg.chemistry = c,
+                None => warn.push(format!(
+                    "line {}: chemistry must be alkaline, nimh, lithium or unknown (alkaline kept)",
+                    n + 1
+                )),
+            },
             ("notifications", "connection", Val::Bool(b)) => cfg.notify_connection = b,
             ("notifications", "battery_replaced", Val::Bool(b)) => cfg.notify_battery_replaced = b,
             (s, k, _) => warn.push(format!("line {}: unknown or mistyped key [{s}] {k}", n + 1)),
@@ -262,6 +276,22 @@ mod tests {
         assert!(c.alerts.thresholds().is_empty());
         assert_eq!(w.len(), 1, "{w:?}");
         assert!(w[0].contains("empty"));
+    }
+
+    #[test]
+    fn battery_chemistry_is_read_and_defaults_to_alkaline() {
+        // #178
+        assert_eq!(Config::default().chemistry, Chemistry::Alkaline);
+        let (c, w) = parse("[battery]\nchemistry = \"nimh\"  # Eneloop\n");
+        assert!(w.is_empty(), "{w:?}");
+        assert_eq!(c.chemistry, Chemistry::Nimh);
+        let (c, _) = parse("[battery]\nchemistry = \"Unknown\"\n");
+        assert_eq!(c.chemistry, Chemistry::Unknown);
+        let (c, w) = parse("[battery]\nchemistry = \"zinc\"\n");
+        assert_eq!(c.chemistry, Chemistry::Alkaline, "invalid value: default kept");
+        assert_eq!(w.len(), 1, "{w:?}");
+        let (_, w) = parse("[battery]\nchemistry = 3\n");
+        assert_eq!(w.len(), 1, "{w:?}");
     }
 
     #[test]

@@ -3,6 +3,7 @@ import QtQuick.Layouts
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
+import "Signal.js" as Sig
 
 // Event-driven view of the daemon apple-kb-monitord (session bus,
 // com.agenceapi.AppleKbMonitor1). No subprocess and no fast timer: DaemonLink
@@ -22,7 +23,20 @@ PlasmoidItem {
     property real voltage: 0
     // Percentage interpolated on the unit's own discharge curve: an ESTIMATE, -1 = unknown.
     property real curvePercent: -1
+    // Relative BR/EDR RSSI in dB (0 = ideal reception range), NOT dBm (#174).
     property real rssi: NaN
+    // "excellent" | "good" | "weak" | "" (unknown)
+    property string rssiQuality: ""
+    // Charge estimated from the voltage and the declared chemistry (#178):
+    // [hypothèse], -1 = none. The keyboard's own indication is batteryPercent.
+    property real estimatePct: -1
+    property real estimateLow: -1
+    property real estimateHigh: -1
+    property string estimateChem: ""
+    property bool newBatteries: false
+    // Unix time of the last reading (#179): the keyboard's percentage only
+    // steps down when it reconnects, so the age of the reading is shown.
+    property real lastUpdate: 0
     property string kbModel: ""
     // Name shown to the user: alias set on this computer, else own name (#141).
     property string kbName: ""
@@ -39,7 +53,20 @@ PlasmoidItem {
 
     // Short human text used by tooltip, compact label and screen readers.
     readonly property string batteryText: batteryPercent >= 0 ? i18n("%1%", batteryPercent) : "—"
-    readonly property string rssiText: hasRssi ? i18n("%1 dBm", rssi) : "—"
+    readonly property string rssiText: hasRssi
+        ? i18n("%1 (%2)", qualityLabel(rssiQuality), Sig.rawRssi(rssi))
+        : "—"
+    readonly property bool hasEstimate: connected && estimatePct >= 0 && !newBatteries
+    readonly property string estimateText: newBatteries
+        ? i18n("new batteries, no estimate yet")
+        : (estimatePct >= 0
+            ? i18n("≈ %1% (%2 to %3%), %4", estimatePct.toFixed(0), estimateLow.toFixed(0),
+                   estimateHigh.toFixed(0), estimateChem)
+            : "")
+    // Time of the last reading (no timer: re-evaluated on each state change).
+    readonly property string updatedText: lastUpdate > 0
+        ? Qt.formatTime(new Date(lastUpdate * 1000), Qt.locale().timeFormat(Locale.ShortFormat))
+        : "—"
     readonly property string stateText: connected
         ? i18n("Connected")
         : (daemonRunning ? i18n("Keyboard not connected") : i18n("Monitor stopped"))
@@ -58,9 +85,10 @@ PlasmoidItem {
 
     toolTipMainText: connected ? (kbName !== "" ? kbName : kbModel) : stateText
     toolTipSubText: connected
-        ? [hasBattery ? i18n("Battery %1", batteryText) : "",
+        ? [hasBattery ? i18n("Keyboard indication %1", batteryText) : "",
+           (hasEstimate || newBatteries) ? i18n("Estimate: %1", estimateText) : "",
            voltage > 0 ? i18n("%1 V", voltage.toFixed(2)) : "",
-           hasRssi ? i18n("Signal %1", rssiText) : "",
+           hasRssi ? i18n("Signal: %1", rssiText) : "",
            remaining].filter(function (s) { return s !== ""; }).join("\n")
         : (daemonRunning ? i18n("Waiting for the Apple keyboard…")
                          : i18n("apple-kb-monitord is not on the session bus"))
@@ -110,12 +138,11 @@ PlasmoidItem {
         return i18n("Critical, replace");
     }
 
-    // RSSI is unknown when absent, null or the 127 sentinel. 0 dBm is a valid
-    // measurement (keyboard right next to the adapter); a positive value is not.
-    function rssiOf(radio) {
-        if (!radio || radio.rssi_dbm === null || radio.rssi_dbm === undefined) return NaN;
-        var v = Number(radio.rssi_dbm);
-        return (isNaN(v) || v > 0) ? NaN : v;
+    function qualityLabel(q) {
+        if (q === "excellent") return i18n("excellent");
+        if (q === "good") return i18n("good");
+        if (q === "weak") return i18n("weak");
+        return "—";
     }
 
     function apply(json) {
@@ -127,7 +154,15 @@ PlasmoidItem {
         root.batteryPercent = (pct === null || pct === undefined) ? -1 : Math.round(pct);
         root.voltage = b.voltage || 0;
         root.curvePercent = (b.percentage_interpolated === null || b.percentage_interpolated === undefined) ? -1 : Number(b.percentage_interpolated);
-        root.rssi = rssiOf(kb ? kb.radio : null);
+        root.rssi = Sig.rssiOf(kb ? kb.radio : null);
+        root.rssiQuality = (kb && kb.radio && kb.radio.rssi_quality) ? kb.radio.rssi_quality : Sig.qualityOf(root.rssi);
+        var est = b.charge_estimate || null;
+        root.estimatePct = est ? Number(est.pct) : -1;
+        root.estimateLow = est ? Number(est.low) : -1;
+        root.estimateHigh = est ? Number(est.high) : -1;
+        root.estimateChem = est ? String(est.chemistry) : "";
+        root.newBatteries = !!b.new_batteries;
+        root.lastUpdate = Number(d.last_update || 0);
         root.kbModel = (kb && kb.device && kb.device.model) ? kb.device.model : i18n("Apple Keyboard");
         root.kbName = d.name || ((kb && kb.device && (kb.device.alias || kb.device.name)) || "");
         root.kbMac = (kb && kb.device && kb.device.mac) ? kb.device.mac : "";
@@ -151,6 +186,9 @@ PlasmoidItem {
         root.voltage = 0;
         root.curvePercent = -1;
         root.rssi = NaN;
+        root.rssiQuality = "";
+        root.estimatePct = -1;
+        root.newBatteries = false;
         root.remaining = "";
     }
 

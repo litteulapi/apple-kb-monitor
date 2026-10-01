@@ -69,8 +69,9 @@ impl Snapshot {
     pub fn voltage(&self) -> Option<f64> {
         self.keyboard.as_ref().and_then(|k| k.battery.voltage)
     }
+    /// Relative BR/EDR RSSI in dB (0 = ideal range), not dBm (#174).
     pub fn rssi(&self) -> Option<i32> {
-        self.keyboard.as_ref().and_then(|k| k.radio.rssi_dbm)
+        self.keyboard.as_ref().and_then(|k| k.radio.rel_db())
     }
     pub fn model(&self) -> Option<&str> {
         self.keyboard
@@ -95,6 +96,14 @@ impl Snapshot {
             .into_iter()
             .flatten()
             .find(|n| !n.is_empty())
+    }
+
+    /// Age of the last successful acquisition at unix time `now`, `None` if
+    /// there was none. The kernel percentage steps down only at reconnections
+    /// (docs/VERIF-BATTERIE.md §1.2bis): this age is what tells how stale the
+    /// shown indication can be (#179).
+    pub fn update_age_s(&self, now: u64) -> Option<u64> {
+        (self.last_update > 0).then(|| now.saturating_sub(self.last_update))
     }
 
     /// Age of the RSSI value at unix time `now`.
@@ -244,6 +253,17 @@ mod tests {
             "Apple Keyboard \u{2014} Battery: 41% \u{2014} \u{2248} 41 days left"
         );
         assert_eq!(Snapshot::default().remaining_s(0), None);
+    }
+
+    #[test]
+    fn update_age_is_derived_from_last_update() {
+        let s = Snapshot {
+            last_update: 1_000,
+            ..Snapshot::default()
+        };
+        assert_eq!(s.update_age_s(1_090), Some(90));
+        assert_eq!(s.update_age_s(900), Some(0));
+        assert_eq!(Snapshot::default().update_age_s(5), None);
     }
 
     #[test]

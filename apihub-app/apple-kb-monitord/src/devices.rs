@@ -6,7 +6,7 @@
 //!
 //! Properties (`PropertiesChanged` emitted):
 //! * `Mac` s, `Model` s, `Name` s (alias, else own name; "" unknown), `Connected` b
-//! * `Battery` i (-1 unknown), `Voltage` d (0 unknown), `Rssi` i (127 unknown)
+//! * `Battery` i (-1 unknown), `Voltage` d (0 unknown), `Rssi` i (relative dB on BR/EDR, not dBm, #174; 127 unknown)
 //! * `LastUpdate` t (0 never)
 //! * `RemainingSeconds` x (-1 unknown; computed at read time from `EmptyAt`)
 //! * `DischargeRate` d (% per day, 0 unknown), `EmptyAt` t (0 unknown)

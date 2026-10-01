@@ -153,24 +153,45 @@ pub fn short_model(model: &str) -> &str {
     model.split(" (").next().unwrap_or(model).trim()
 }
 
-/// RSSI is BlueZ MGMT `GET_CONN_INFO`: on BR/EDR it is relative to the
-/// golden receive power range (0 = inside the range). `None` = unknown: the
-/// line is omitted, never "127".
+/// RSSI is BlueZ MGMT `GET_CONN_INFO`: on BR/EDR it is a gap in dB to the
+/// controller's ideal reception range (0 = ideal), **not** dBm (#174). Words
+/// first, raw value in parentheses without unit. `None` = unknown: the line is
+/// omitted, never "127".
 pub fn rssi_text(lang: Lang, rssi: Option<i32>) -> Option<String> {
-    let r = rssi.filter(|r| *r != 127 && (-127..=20).contains(r))?;
-    let q = match r {
-        r if r > 0 => lang.t("fort", "strong"),
-        0 => lang.t("optimal", "optimal"),
-        -10..=-1 => lang.t("bon", "good"),
-        -20..=-11 => lang.t("moyen", "fair"),
-        _ => lang.t("faible", "weak"),
+    akm_core::signal::text(rssi, lang == Lang::Fr)
+        // French typography: no-break space before the colon.
+        .map(|t| t.replacen(" :", "\u{a0}:", 1))
+}
+
+/// Estimated charge by chemistry, next to the keyboard's own indication (#178).
+pub fn estimate_text(lang: Lang, b: &akm_core::report::KbBattery) -> Option<String> {
+    if b.new_batteries {
+        return Some(
+            lang.t(
+                "Piles neuves : pas d\u{2019}estimation",
+                "New batteries: no estimate yet",
+            )
+            .into(),
+        );
+    }
+    let e = b.charge_estimate.as_ref()?;
+    let chem = match (lang, e.chemistry) {
+        (Lang::Fr, akm_core::chemistry::Chemistry::Alkaline) => "alcaline",
+        (_, akm_core::chemistry::Chemistry::Alkaline) => "alkaline",
+        (_, akm_core::chemistry::Chemistry::Nimh) => "NiMH",
+        (_, akm_core::chemistry::Chemistry::Lithium) => "lithium",
+        (_, akm_core::chemistry::Chemistry::Unknown) => return None,
     };
-    let v = if r < 0 {
-        format!("\u{2212}{}", -r)
-    } else {
-        r.to_string()
-    };
-    Some(format!("{} {q} ({v}\u{a0}dBm)", lang.t("Signal", "Signal")))
+    Some(match lang {
+        Lang::Fr => format!(
+            "Estimation ({chem}) :\u{a0}\u{2248}\u{a0}{:.0}\u{a0}% ({:.0} \u{e0} {:.0}\u{a0}%)",
+            e.pct, e.low, e.high
+        ),
+        Lang::En => format!(
+            "Estimate ({chem}): \u{2248} {:.0}% ({:.0} to {:.0}%)",
+            e.pct, e.low, e.high
+        ),
+    })
 }
 
 pub fn age_text(lang: Lang, last_update: u64, now: u64) -> String {
@@ -220,6 +241,8 @@ pub mod id {
     pub const SIGNAL: i32 = 4;
     pub const AUTONOMY: i32 = 5;
     pub const CAPS: i32 = 6;
+    /// Charge estimated by chemistry (#178).
+    pub const ESTIMATE: i32 = 7;
     pub const SEP1: i32 = 10;
     pub const OPEN: i32 = 11;
     pub const REFRESH: i32 = 12;
@@ -231,8 +254,8 @@ pub mod id {
     pub const SEP2: i32 = 20;
     pub const QUIT: i32 = 21;
     #[cfg(test)]
-    pub const ALL: [i32; 15] = [
-        HEADER, BATTERY, CONNECTION, SIGNAL, AUTONOMY, CAPS, SEP1, OPEN, REFRESH, COPY, BLUETOOTH,
+    pub const ALL: [i32; 16] = [
+        HEADER, BATTERY, ESTIMATE, CONNECTION, SIGNAL, AUTONOMY, CAPS, SEP1, OPEN, REFRESH, COPY, BLUETOOTH,
         RENAME, REPAIR, SEP2, QUIT,
     ];
 }
@@ -340,7 +363,11 @@ impl View {
         };
 
         let battery_line = pct.map(|p| {
-            let mut s = format!("{} {}", lang.t("Batterie :", "Battery:"), lang.pct(p));
+            let mut s = format!(
+                "{} {}",
+                lang.t("Indication du clavier :", "Keyboard indication:"),
+                lang.pct(p)
+            );
             if let Some(v) = snap.voltage().filter(|v| *v > 0.0) {
                 s += &format!(" \u{b7} {}", lang.volts(v));
             }
@@ -351,8 +378,8 @@ impl View {
         });
         let battery_a11y = pct.map(|p| {
             let mut s = match lang {
-                Lang::Fr => format!("Batterie {:.0} pour cent", p),
-                Lang::En => format!("Battery {:.0} percent", p),
+                Lang::Fr => format!("Indication du clavier {:.0} pour cent", p),
+                Lang::En => format!("Keyboard indication {:.0} percent", p),
             };
             if let Some(v) = snap.voltage().filter(|v| *v > 0.0) {
                 s += &match lang {
@@ -367,6 +394,11 @@ impl View {
         } else {
             None
         };
+        let estimate = snap
+            .keyboard
+            .as_ref()
+            .filter(|_| pct.is_some() && !charging)
+            .and_then(|k| estimate_text(lang, &k.battery));
         let autonomy = snap
             .remaining_display
             .as_ref()
@@ -406,6 +438,7 @@ impl View {
         }
         if snap.connected {
             tooltip_lines.extend(battery_line.clone());
+            tooltip_lines.extend(estimate.clone());
             tooltip_lines.extend(rssi.clone());
             tooltip_lines.extend(autonomy.clone());
             if snap.caps_lock {
@@ -451,6 +484,11 @@ impl View {
         let menu = vec![
             header,
             battery,
+            if snap.connected {
+                estimate.map_or_else(|| hidden(id::ESTIMATE), |l| info(id::ESTIMATE, l, None))
+            } else {
+                hidden(id::ESTIMATE)
+            },
             info(id::CONNECTION, conn_line, None),
             rssi.map_or_else(|| hidden(id::SIGNAL), |l| info(id::SIGNAL, l, None)),
             autonomy.map_or_else(|| hidden(id::AUTONOMY), |l| info(id::AUTONOMY, l, None)),
@@ -729,18 +767,26 @@ mod tests {
     fn rssi_unknown_is_absent_never_127() {
         assert_eq!(rssi_text(Lang::Fr, None), None);
         assert_eq!(rssi_text(Lang::Fr, Some(127)), None);
+        // #174: words first, raw value without unit; 0 is ideal, > 0 is legal.
         assert_eq!(
             rssi_text(Lang::Fr, Some(0)).unwrap(),
-            "Signal optimal (0\u{a0}dBm)"
+            "Signal\u{a0}: excellent (0)"
         );
         assert_eq!(
             rssi_text(Lang::En, Some(-48)).unwrap(),
-            "Signal weak (\u{2212}48\u{a0}dBm)"
+            "Signal: weak (\u{2212}48)"
         );
         assert_eq!(
             rssi_text(Lang::Fr, Some(-4)).unwrap(),
-            "Signal bon (\u{2212}4\u{a0}dBm)"
+            "Signal\u{a0}: bon (\u{2212}4)"
         );
+        assert_eq!(
+            rssi_text(Lang::En, Some(2)).unwrap(),
+            "Signal: excellent (+2)"
+        );
+        for r in [0, -4, 2, -48] {
+            assert!(!rssi_text(Lang::En, Some(r)).unwrap().contains("dBm"));
+        }
 
         let v = View::build(&snap(Some(99.0), true, None), false, None, Lang::Fr);
         let body = v.tooltip_body(Lang::Fr, 1_012, true);
@@ -765,8 +811,8 @@ mod tests {
             lines,
             vec![
                 "Apple Wireless Keyboard (A1314, aluminum, ISO) \u{b7} Clavier_test",
-                "Batterie : 99\u{a0}% \u{b7} 2,90\u{a0}V",
-                "Signal bon (\u{2212}3\u{a0}dBm)",
+                "Indication du clavier : 99\u{a0}% \u{b7} 2,90\u{a0}V",
+                "Signal\u{a0}: bon (\u{2212}3)",
                 "Autonomie estimée : ≈ 41 j",
                 "Mis à jour il y a 12\u{a0}s",
             ]
@@ -775,8 +821,37 @@ mod tests {
 
         let v = View::build(&s, false, None, Lang::En);
         let body = v.tooltip_body(Lang::En, 1_000 + 7_200, true);
-        assert!(body.contains("Battery: 99% \u{b7} 2.90 V"), "{body}");
+        assert!(body.contains("Keyboard indication: 99% \u{b7} 2.90 V"), "{body}");
         assert!(body.ends_with("Updated 2\u{a0}h ago"), "{body}");
+    }
+
+    #[test]
+    fn estimate_is_shown_next_to_the_keyboard_indication() {
+        // #178: indication 62 %, estimate 30 % (20-40 %), alkaline.
+        let mut s = snap(Some(62.0), true, Some(0));
+        s.keyboard.as_mut().unwrap().battery.charge_estimate =
+            akm_core::chemistry::estimate_charge(2460, akm_core::chemistry::Chemistry::Alkaline);
+        let v = View::build(&s, false, None, Lang::Fr);
+        let body = v.tooltip_body(Lang::Fr, 1_012, true);
+        assert!(body.contains("Indication du clavier : 62\u{a0}%"), "{body}");
+        assert!(
+            body.contains("Estimation (alcaline) :\u{a0}\u{2248}\u{a0}30\u{a0}% (20 \u{e0} 40\u{a0}%)"),
+            "{body}"
+        );
+        assert!(v.entry(id::ESTIMATE).unwrap().visible());
+        let en = View::build(&s, false, None, Lang::En).tooltip_body(Lang::En, 1_012, true);
+        assert!(en.contains("Estimate (alkaline): \u{2248} 30% (20 to 40%)"), "{en}");
+        // Offline: no estimate line (stale voltage).
+        s.connected = false;
+        assert!(!View::build(&s, false, None, Lang::Fr).entry(id::ESTIMATE).unwrap().visible());
+        // New batteries: said, no figure.
+        let mut n = snap(Some(98.0), true, Some(0));
+        n.keyboard.as_mut().unwrap().battery.new_batteries = true;
+        let b = View::build(&n, false, None, Lang::Fr).tooltip_body(Lang::Fr, 1_012, true);
+        assert!(b.contains("Piles neuves"), "{b}");
+        // No estimate (undeclared chemistry): nothing invented.
+        let none = View::build(&snap(Some(62.0), true, Some(0)), false, None, Lang::Fr);
+        assert!(!none.entry(id::ESTIMATE).unwrap().visible());
     }
 
     #[test]
@@ -839,7 +914,7 @@ mod tests {
             .entry(id::BATTERY)
             .unwrap()
             .get("accessible-desc")
-            .is_some_and(|d| *d == Prop::Str("Batterie 99 pour cent, 2,90 volts".into())));
+            .is_some_and(|d| *d == Prop::Str("Indication du clavier 99 pour cent, 2,90 volts".into())));
         assert_eq!(
             v2.entry(id::REFRESH).unwrap().get("enabled"),
             Some(&Prop::Bool(false))

@@ -107,12 +107,18 @@ pub struct Crossing {
 pub struct AlertState {
     cfg: AlertConfig,
     armed: Vec<bool>,
+    /// Last value fed (to tell a drop from a steady reading).
+    last: Option<f64>,
 }
 
 impl AlertState {
     pub fn new(cfg: AlertConfig) -> Self {
         let armed = vec![true; cfg.thresholds.len()];
-        Self { cfg, armed }
+        Self {
+            cfg,
+            armed,
+            last: None,
+        }
     }
 
     pub fn config(&self) -> &AlertConfig {
@@ -121,9 +127,22 @@ impl AlertState {
 
     /// Feed a battery reading; returns the alert to raise, if any.
     pub fn update(&mut self, pct: f64) -> Option<Crossing> {
+        self.update_after(pct, false)
+    }
+
+    /// Like [`Self::update`]. `after_reconnect`: this is the first reading
+    /// since the keyboard reconnected. The firmware percentage only steps down
+    /// at reconnections (docs/VERIF-BATTERIE.md §1.2bis: 99 -> 96 without any
+    /// consumption), so a **drop** seen on such a reading is a link artefact,
+    /// not a discharge: the thresholds it crosses are disarmed **without**
+    /// raising an alert (#179). A reading that does not drop is handled
+    /// normally, and so is the very first reading of the session.
+    pub fn update_after(&mut self, pct: f64, after_reconnect: bool) -> Option<Crossing> {
         if !pct.is_finite() {
             return None;
         }
+        let stepped = after_reconnect && self.last.is_some_and(|prev| pct < prev);
+        self.last = Some(pct);
         let mut lowest = None;
         for (i, &t) in self.cfg.thresholds.iter().enumerate() {
             let t_f = f64::from(t);
@@ -131,7 +150,9 @@ impl AlertState {
                 self.armed[i] = true;
             } else if self.armed[i] && pct <= t_f {
                 self.armed[i] = false;
-                lowest = Some(t); // thresholds are sorted highest first
+                if !stepped {
+                    lowest = Some(t); // thresholds are sorted highest first
+                }
             }
         }
         lowest.map(|threshold| Crossing {
@@ -212,6 +233,55 @@ mod tests {
         assert_eq!(run(&mut s, [9.0]).len(), 1);
         assert_eq!(s.is_armed(42), None);
         assert!(s.update(f64::NAN).is_none());
+    }
+
+    #[test]
+    fn step_down_at_a_reconnection_raises_no_alert() {
+        // #179: 32 -> 28 on the first reading after a reconnection.
+        let mut s = AlertState::new(AlertConfig::default());
+        assert!(s.update(32.0).is_none());
+        assert!(s.update_after(28.0, true).is_none());
+        assert_eq!(s.is_armed(30), Some(false), "disarmed, not forgotten");
+        // The same drop during a continuous session does alert.
+        let mut s = AlertState::new(AlertConfig::default());
+        assert!(s.update(32.0).is_none());
+        assert_eq!(s.update_after(28.0, false).unwrap().threshold, 30);
+        // A real discharge after the step still raises the lower thresholds.
+        let mut s = AlertState::new(AlertConfig::default());
+        s.update(32.0);
+        s.update_after(28.0, true);
+        assert_eq!(s.update(14.0).unwrap().threshold, 15);
+    }
+
+    #[test]
+    fn reconnection_without_a_drop_or_first_reading_is_normal() {
+        // First reading of the session, below a threshold: warned once.
+        let mut s = AlertState::new(AlertConfig::default());
+        assert_eq!(s.update_after(10.0, true).unwrap().threshold, 15);
+        // Reconnection with a steady value already armed: the usual rules.
+        let mut s = AlertState::new(AlertConfig::default());
+        s.update(40.0);
+        assert!(s.update_after(40.0, true).is_none());
+        assert!(s.update_after(41.0, true).is_none());
+    }
+
+    #[test]
+    fn descending_voltage_estimate_raises_three_alerts_in_order_once() {
+        // #178: 2950 -> 2000 mV on the alkaline curve, alerts on the estimate.
+        use crate::chemistry::{alert_pct, estimate_charge, Chemistry};
+        let mut s = AlertState::new(AlertConfig::default());
+        let mut got = Vec::new();
+        for mv in (2000..=2950).rev().step_by(5) {
+            let e = estimate_charge(mv, Chemistry::Alkaline);
+            let (pct, _) = alert_pct(e.as_ref(), 100.0);
+            if let Some(c) = s.update(pct) {
+                got.push((c.threshold, mv));
+            }
+        }
+        let th: Vec<u8> = got.iter().map(|g| g.0).collect();
+        assert_eq!(th, vec![30, 15, 5], "{got:?}");
+        // 30 % real alkaline is about 2460 mV (firmware 64 %), not 2124 mV.
+        assert!((2450..=2470).contains(&got[0].1), "{got:?}");
     }
 
     #[test]
