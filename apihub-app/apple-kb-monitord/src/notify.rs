@@ -184,17 +184,16 @@ pub fn battery_state_text(
     s: akm_core::registry::BatteryState,
 ) -> Option<(String, String, &'static str, Urgency)> {
     use akm_core::registry::BatteryState as B;
-    let summary = "Apple Keyboard \u{2014} Low Battery".to_string();
     match s {
         B::Low => Some((
-            summary,
-            "The keyboard reports a low battery \u{2014} plan to replace the batteries".into(),
+            "Apple Keyboard \u{2014} battery low (keyboard alert)".to_string(),
+            "The keyboard itself reports a low battery \u{2014} plan to replace the batteries".into(),
             "battery-caution",
             Urgency::Normal,
         )),
         B::Critical => Some((
-            summary,
-            "The keyboard reports a critically low battery \u{2014} replace the batteries now".into(),
+            "Apple Keyboard \u{2014} battery critical (keyboard alert)".to_string(),
+            "The keyboard itself reports a critically low battery \u{2014} replace the batteries now".into(),
             "battery-empty",
             Urgency::Critical,
         )),
@@ -213,7 +212,7 @@ pub fn battery_state(s: akm_core::registry::BatteryState) {
 pub fn link(ev: &LinkEvent) {
     let (s, b) = link::text(ev);
     let icon = match ev {
-        LinkEvent::Disconnected { .. } => "input-keyboard-virtual-off",
+        LinkEvent::Disconnected { .. } | LinkEvent::PoweredOff { .. } => "input-keyboard-virtual-off",
         LinkEvent::Reconnected { .. } => "input-keyboard",
     };
     send_with(&s, &b, icon, Urgency::Low, true);
@@ -324,9 +323,11 @@ mod tests {
     #[test]
     fn keyboard_driven_alert_texts() {
         use akm_core::registry::BatteryState as B;
-        let (_, b, icon, u) = battery_state_text(B::Low).unwrap();
+        let (sum, b, icon, u) = battery_state_text(B::Low).unwrap();
+        assert!(sum.contains("battery low (keyboard alert)"));
         assert!(b.contains("low battery") && icon == "battery-caution" && u == Urgency::Normal);
-        let (_, b, icon, u) = battery_state_text(B::Critical).unwrap();
+        let (sum, b, icon, u) = battery_state_text(B::Critical).unwrap();
+        assert!(sum.contains("battery critical (keyboard alert)"));
         assert!(b.contains("replace the batteries now") && icon == "battery-empty" && u == Urgency::Critical);
         assert!(battery_state_text(B::Normal).is_none() && battery_state_text(B::Invalid(9)).is_none());
     }

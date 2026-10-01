@@ -320,7 +320,13 @@ impl Actor {
 
     /// BlueZ reported the keyboard gone.
     fn disconnected(&mut self) {
-        if let Some(ev) = self.link.disconnected() {
+        // The keyboard announced its switch-off just before (`0x13` bit 1 = 0):
+        // an Off, not a lost link (#190).
+        self.disconnected_with(akm_core::link::take_keyboard_off());
+    }
+
+    fn disconnected_with(&mut self, powered_off: bool) {
+        if let Some(ev) = self.link.disconnected_as(powered_off) {
             self.link_event(ev);
         }
         self.clear();
@@ -446,7 +452,14 @@ impl Actor {
                     "low battery: {alert_pct:.0}% ({basis:?}, keyboard {pct:.0}%, threshold {}%)",
                     c.threshold
                 );
-                if self.opts.notify {
+                // The keyboard's own 0x30 alert, if it already announced the
+                // same level, is the one the user got (#189).
+                let fresh = akm_core::alerts::dedupe()
+                    .allow_percent(akm_core::alerts::rank_of(c.urgency), unix_now());
+                if !fresh {
+                    tracing::info!("low battery {alert_pct:.0}%: not shown, the keyboard already announced it");
+                }
+                if self.opts.notify && fresh {
                     notify::battery_crossing(&c, basis);
                     if c.urgency == Urgency::Critical {
                         led::flash_capslock_for(mac.clone(), 5);
@@ -471,6 +484,7 @@ impl Actor {
             r.voltage_after
         );
         self.alerts.rearm_all();
+        akm_core::alerts::dedupe().reset();
         self.installed_at = Some(r.ts);
         if self.opts.notify && self.opts.notify_battery_replaced {
             notify::battery_replaced(&r);
@@ -857,6 +871,34 @@ mod tests {
         u.kb = Some(report_mv(29.0, 2455));
         u.after_battery_update(true);
         assert_eq!(crossings(&rxu), vec![30]);
+    }
+
+    #[test]
+    fn announced_switch_off_is_published_as_off_not_as_a_lost_link() {
+        // #190: the event is distinct from a disconnection, and the
+        // reconnection that follows is still announced.
+        let mut a = quiet_actor();
+        let rx = a.opts.events.subscribe();
+        let mac = "04:DB:56:CA:42:EE";
+        a.link.acquired(mac, Some(60.0));
+        a.disconnected_with(true);
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            DeviceEvent::Link(akm_core::link::LinkEvent::PoweredOff { mac: mac.into() })
+        );
+        assert!(rx.try_recv().is_err());
+        assert!(!a.snapshot().connected);
+        a.link.acquired(mac, Some(60.0));
+        a.link.disconnected();
+        // without an announcement: the usual loss
+        let mut b = quiet_actor();
+        let rx = b.opts.events.subscribe();
+        b.link.acquired(mac, None);
+        b.disconnected_with(false);
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            DeviceEvent::Link(akm_core::link::LinkEvent::Disconnected { mac: mac.into() })
+        );
     }
 
     #[test]

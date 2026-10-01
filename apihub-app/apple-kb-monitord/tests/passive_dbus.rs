@@ -132,7 +132,7 @@ fn inner() {
     };
     send(&mut w, "05 02");
     until("FnLock", || i32::try_from(get(&c, "FnLock")).unwrap() == 2);
-    send(&mut w, "13 01");
+    send(&mut w, "13 03");
     until("WakeCount", || {
         u64::try_from(get(&c, "WakeCount")).unwrap() == 1
     });
@@ -152,13 +152,24 @@ fn inner() {
     until("BatteryStatus", || {
         i32::try_from(get(&c, "BatteryStatus")).unwrap() == 0
     });
+    // #190: 13 with bit 1 = 0 is the keyboard switching off, not a wake.
+    assert!(!bool::try_from(get(&c, "PoweredOff")).unwrap());
+    send(&mut w, "13 00");
+    until("PoweredOff", || bool::try_from(get(&c, "PoweredOff")).unwrap());
+    // #189: the keyboard announces a low battery.
+    send(&mut w, "30 01");
+    until("BatteryStatus low", || {
+        i32::try_from(get(&c, "BatteryStatus")).unwrap() == 1
+    });
     // A key press: nothing visible, nothing stored.
     send(&mut w, "01 02 00 1a 1b 00 00 00 00");
     let json: String = String::try_from(get(&c, "State")).unwrap();
     let v: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(v["fn_lock"], 2);
-    assert_eq!(v["wake_count"], 1);
+    assert_eq!(v["wake_count"], 1, "a switch-off is not a wake");
     assert_eq!(v["eject_count"], 1);
+    assert_eq!((v["powered_off"].as_bool(), v["keyboard_off_count"].as_u64()), (Some(true), Some(1)));
+    assert_eq!(v["battery_state"], "low");
     assert!(!json.contains("1a") && v.get("keys").is_none());
 
     // Signals seen.
@@ -171,6 +182,8 @@ fn inner() {
         "SleepEvent",
         "EjectChanged",
         "FnLockUpdated",
+        "KeyboardOff",
+        "BatteryAlert",
         "PropertiesChanged",
     ] {
         assert!(seen.iter().any(|m| m == want), "{want} in {seen:?}");
@@ -183,6 +196,10 @@ fn inner() {
     });
     assert_eq!(i32::try_from(get(&c, "FnLock")).unwrap(), -1);
     assert_eq!(u64::try_from(get(&c, "WakeCount")).unwrap(), 1);
+    assert!(
+        bool::try_from(get(&c, "PoweredOff")).unwrap(),
+        "the Off state is what the disconnection becomes"
+    );
     // Reconnection (new node): listening again, events flow again.
     until("listening again", || {
         bool::try_from(get(&c, "Listening")).unwrap()
@@ -192,6 +209,7 @@ fn inner() {
     until("WakeCount 2", || {
         u64::try_from(get(&c, "WakeCount")).unwrap() == 2
     });
+    assert!(!bool::try_from(get(&c, "PoweredOff")).unwrap(), "powered on again");
     drop(w);
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -9,7 +9,7 @@
 //! | `0x04` | SLEEP notification | WICED `RPT_ID_IN_SLEEP` [source publique] |
 //! | `0x05` | FUNC_LOCK state byte | WICED `RPT_ID_IN_FUNC_LOCK` [source publique] |
 //! | `0x30` | BATT_STAT | FreeBSD bthidd `BATT_STAT_REPORT_ID` [source publique] |
-//! | `0x13` | ready (bit 0) / connection request (bit 1) | descriptor [mesuré] |
+//! | `0x13` | bit 1 = 1 powered on / connection request, **bit 1 = 0 the keyboard switches off** (`KeyboardOff`, #190) | descriptor [mesuré], macOS 26.5 [décompilé] |
 //! | `0x11` | Eject (bit 3) / Fn (bit 4) | descriptor [mesuré] |
 //! | `0x12` | media keys (bits 0-4) | descriptor [mesuré] |
 //!
@@ -53,9 +53,14 @@ pub enum PassiveEvent {
     FnLock { value: u8 },
     /// `0x30`: battery status byte.
     BattStat { value: u8 },
-    /// `0x13`: device ready / connection request (an all-zero report is a
-    /// release, not an event).
+    /// `0x13` with bit 1 set: the keyboard is powered on / asks for the
+    /// connection (`ready` = bit 0).
     Wake { ready: bool, conn_request: bool },
+    /// `0x13` with bit 1 = 0: the keyboard says it is switching off, exactly
+    /// the test macOS makes (`AppleBluetoothHIDKeyboard::processInterruptData`
+    /// -> `KeyboardOff`, #190). Distinct from a lost link: the disconnection
+    /// that follows is an `Off`, not a `Disconnected`.
+    KeyboardOff,
     /// `0x11`: Eject and Fn keys (false/false = both released).
     Keys { eject: bool, fn_key: bool },
     /// `0x12`: media keys bit field (0 = all released).
@@ -71,9 +76,11 @@ pub fn decode(report: &[u8]) -> Option<PassiveEvent> {
         ID_SLEEP => Some(PassiveEvent::Sleep { code: b }),
         ID_FUNC_LOCK => Some(PassiveEvent::FnLock { value: b }),
         ID_BATT_STAT => Some(PassiveEvent::BattStat { value: b }),
-        ID_WAKE => (b & 0x03 != 0).then_some(PassiveEvent::Wake {
+        // macOS only looks at bit 1, on a 3-byte packet (`A1 13 xx`).
+        ID_WAKE if b & 0x02 == 0 => (rest.len() == 1).then_some(PassiveEvent::KeyboardOff),
+        ID_WAKE => Some(PassiveEvent::Wake {
             ready: b & 0x01 != 0,
-            conn_request: b & 0x02 != 0,
+            conn_request: true,
         }),
         ID_EJECT_FN => Some(PassiveEvent::Keys {
             eject: b & 0x08 != 0,
@@ -125,6 +132,11 @@ pub struct PassiveState {
     pub media_bits: u8,
     /// Last `0x30` byte.
     pub batt_stat: Option<u8>,
+    /// The keyboard announced its switch-off (`0x13` bit 1 = 0) and has not
+    /// been seen powered on since (#190). Survives the disconnection.
+    pub powered_off: bool,
+    pub last_off_ts: u64,
+    pub off_count: u64,
     /// Number of Eject presses since start.
     pub eject_count: u64,
 }
@@ -140,10 +152,16 @@ impl PassiveState {
             }
             PassiveEvent::FnLock { value } => self.fn_lock = Some(value),
             PassiveEvent::BattStat { value } => self.batt_stat = Some(value),
+            PassiveEvent::KeyboardOff => {
+                self.powered_off = true;
+                self.last_off_ts = now;
+                self.off_count += 1;
+            }
             PassiveEvent::Wake {
                 ready,
                 conn_request,
             } => {
+                self.powered_off = false;
                 self.wake_count += 1;
                 self.last_wake_ts = now;
                 self.last_wake_ready = ready;
@@ -164,6 +182,7 @@ impl PassiveState {
     /// Link established on a node.
     pub fn connected(&mut self) {
         self.listening = true;
+        self.powered_off = false;
     }
 
     /// Link lost: held keys and the Fn-lock byte are no longer known;
@@ -192,6 +211,9 @@ impl PassiveState {
             "eject_count": self.eject_count,
             "fn_pressed": self.fn_pressed,
             "media_bits": self.media_bits,
+            "powered_off": self.powered_off,
+            "last_keyboard_off": ts(self.last_off_ts),
+            "keyboard_off_count": self.off_count,
             "battery_status": self.batt_stat,
             "battery_state": self.batt_stat.map(|b| crate::registry::BatteryState::from_byte(b).as_str()),
             "battery_low": self.batt_stat.map(|b| {
@@ -295,6 +317,12 @@ pub fn listen_fd(
             }
             crate::read_policy::note_input(); // timestamp only
             if let Some(ev) = decode(&buf[..n as usize]) {
+                match ev {
+                    // Before anything else: the link drops right after.
+                    PassiveEvent::KeyboardOff => crate::link::mark_keyboard_off(),
+                    PassiveEvent::Wake { .. } => crate::link::clear_keyboard_off(),
+                    _ => {}
+                }
                 on_event(ev);
             }
             continue;
@@ -446,11 +474,12 @@ mod tests {
             decode(&hex("30 00")),
             Some(PassiveEvent::BattStat { value: 0 })
         );
+        // #190: bit 1 = 1 powered on, bit 1 = 0 the keyboard switches off.
         assert_eq!(
-            decode(&hex("13 01")),
+            decode(&hex("13 03")),
             Some(PassiveEvent::Wake {
                 ready: true,
-                conn_request: false
+                conn_request: true
             })
         );
         assert_eq!(
@@ -460,8 +489,14 @@ mod tests {
                 conn_request: true
             })
         );
-        assert_eq!(decode(&hex("13 00")), None);
-        assert_eq!(decode(&hex("13 fc")), None);
+        assert_eq!(decode(&hex("13 00")), Some(PassiveEvent::KeyboardOff));
+        assert_eq!(decode(&hex("13 01")), Some(PassiveEvent::KeyboardOff));
+        assert_eq!(decode(&hex("13 fc")), Some(PassiveEvent::KeyboardOff));
+        assert_eq!(decode(&hex("13 fd")), Some(PassiveEvent::KeyboardOff));
+        assert_eq!(decode(&hex("13 fe")), Some(PassiveEvent::Wake { ready: false, conn_request: true }));
+        // macOS tests a 3-byte packet (`A1 13 xx`): a longer one is not an announcement
+        assert_eq!(decode(&hex("13 00 00")), None);
+        assert_eq!(decode(&hex("13")), None);
         assert_eq!(
             decode(&hex("11 08")),
             Some(PassiveEvent::Keys {
@@ -687,12 +722,12 @@ mod tests {
         // reconnection: a "new node" (same path, new writer)
         assert_eq!(rx.recv_timeout(t).unwrap(), Msg::Connected(node.clone()));
         let mut w = open_writer(&node);
-        w.write_all(&hex("13 01")).unwrap();
+        w.write_all(&hex("13 03")).unwrap();
         assert_eq!(
             rx.recv_timeout(t).unwrap(),
             Msg::Event(PassiveEvent::Wake {
                 ready: true,
-                conn_request: false
+                conn_request: true
             })
         );
         drop(w);
@@ -819,6 +854,46 @@ mod tests {
             assert_eq!(battery_state_alert(Some(0), b), None, "invalid {b}");
             assert_eq!(battery_state_alert(Some(b), 1), Some(B::Low), "invalid old counts as normal");
         }
+    }
+
+    #[test]
+    fn keyboard_off_state_survives_the_disconnection_until_power_on() {
+        let mut s = PassiveState::default();
+        s.connected();
+        assert!(s.apply(PassiveEvent::KeyboardOff, 40));
+        assert!(s.powered_off && s.off_count == 1 && s.last_off_ts == 40);
+        s.disconnected();
+        assert!(s.powered_off, "the Off state is what the disconnection becomes");
+        let j = s.to_json();
+        assert_eq!((j["powered_off"].as_bool(), j["keyboard_off_count"].as_u64(), j["last_keyboard_off"].as_u64()), (Some(true), Some(1), Some(40)));
+        s.connected();
+        assert!(!s.powered_off, "back on the air");
+        s.apply(PassiveEvent::KeyboardOff, 50);
+        s.apply(PassiveEvent::Wake { ready: true, conn_request: true }, 60);
+        assert!(!s.powered_off && s.off_count == 2);
+        assert!(PassiveState::default().to_json()["last_keyboard_off"].is_null());
+    }
+
+    #[test]
+    fn listener_marks_the_announcement_for_the_link_keeper() {
+        // End to end on a pipe: `13 00` marks, `13 03` clears; the mark is
+        // consumed once by the disconnection logic.
+        crate::link::clear_keyboard_off();
+        let mut fds = [0 as libc::c_int; 2];
+        // SAFETY: fds has room for two descriptors.
+        assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+        let payload = hex("13 00");
+        // SAFETY: valid fd and buffer.
+        unsafe { libc::write(fds[1], payload.as_ptr().cast(), payload.len()) };
+        let mut got = Vec::new();
+        let mut n = 0;
+        let exit = listen_fd(fds[0], 50, &mut || { n += 1; (n > 3).then_some(Exit::Stopped) }, &mut |e| got.push(e));
+        assert_eq!(exit, Exit::Stopped);
+        assert_eq!(got, vec![PassiveEvent::KeyboardOff]);
+        assert!(crate::link::take_keyboard_off());
+        assert!(!crate::link::take_keyboard_off(), "consumed once");
+        // SAFETY: closing our own descriptors.
+        unsafe { libc::close(fds[0]); libc::close(fds[1]) };
     }
 
     #[test]

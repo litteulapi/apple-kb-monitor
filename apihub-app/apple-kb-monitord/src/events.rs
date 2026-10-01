@@ -20,7 +20,8 @@ pub enum DeviceEvent {
         mac: String,
         replacement: Replacement,
     },
-    /// Disconnection / reconnection as notified to the user (#84).
+    /// Disconnection / reconnection as notified to the user (#84); a
+    /// switch-off announced by the keyboard is `LinkEvent::PoweredOff` (#190).
     Link(LinkEvent),
 }
 
@@ -30,6 +31,7 @@ impl DeviceEvent {
             DeviceEvent::BatteryLevelCrossed { mac, .. }
             | DeviceEvent::BatteryReplaced { mac, .. } => mac,
             DeviceEvent::Link(LinkEvent::Disconnected { mac })
+            | DeviceEvent::Link(LinkEvent::PoweredOff { mac })
             | DeviceEvent::Link(LinkEvent::Reconnected { mac, .. }) => mac,
         }
     }

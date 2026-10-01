@@ -16,10 +16,15 @@
 //! * `EjectPressed` b, `FnPressed` b: from `0x11`
 //! * `MediaKeys` u: `0x12` bit field held
 //! * `BatteryStatus` i: last `0x30` byte, -1 unknown
+//! * `PoweredOff` b: the keyboard announced its switch-off (`0x13` bit 1 = 0)
+//!   and has not been seen powered on since (#190)
 //! * `State` s: the whole state as JSON (read by `akmctl status --json`)
 //!
 //! Signals: `SleepEvent(t ts, y code)`, `Wake(b ready, b conn_request, t count)`,
-//! `EjectChanged(b pressed)`, `FnLockUpdated(i value)`.
+//! `EjectChanged(b pressed)`, `FnLockUpdated(i value)`,
+//! `KeyboardOff(t ts)` (the keyboard says it switches off, distinct from a lost
+//! link, #190), `BatteryAlert(s state)` (`low` / `critical`, announced by the
+//! keyboard itself, #189).
 //!
 //! Only state and timestamps leave the thread, never key codes.
 
@@ -29,6 +34,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use akm_core::alerts;
 use akm_core::passive::{self, Config, Msg, PassiveEvent, PassiveState};
 use akm_core::Watch;
 use zbus::blocking::Connection;
@@ -102,6 +108,11 @@ impl Input {
     fn battery_status(&self) -> i32 {
         lock(&self.state).batt_stat.map_or(-1, i32::from)
     }
+    /// The keyboard announced its switch-off and has not come back (#190).
+    #[zbus(property)]
+    fn powered_off(&self) -> bool {
+        lock(&self.state).powered_off
+    }
     #[zbus(property)]
     fn state(&self) -> String {
         lock(&self.state).to_json().to_string()
@@ -120,6 +131,10 @@ impl Input {
     async fn eject_changed(ctxt: &SignalContext<'_>, pressed: bool) -> zbus::Result<()>;
     #[zbus(signal)]
     async fn fn_lock_updated(ctxt: &SignalContext<'_>, value: i32) -> zbus::Result<()>;
+    #[zbus(signal)]
+    async fn keyboard_off(ctxt: &SignalContext<'_>, ts: u64) -> zbus::Result<()>;
+    #[zbus(signal)]
+    async fn battery_alert(ctxt: &SignalContext<'_>, state: &str) -> zbus::Result<()>;
 }
 
 /// Names of the properties that differ between two states.
@@ -138,6 +153,7 @@ pub fn changed_props(o: &PassiveState, n: &PassiveState) -> Vec<&'static str> {
     ch(o.fn_pressed != n.fn_pressed, "FnPressed");
     ch(o.media_bits != n.media_bits, "MediaKeys");
     ch(o.batt_stat != n.batt_stat, "BatteryStatus");
+    ch(o.powered_off != n.powered_off, "PoweredOff");
     if o != n {
         v.push("State");
     }
@@ -178,6 +194,22 @@ impl Publisher {
         Some(path)
     }
 
+    /// Notify the keyboard-driven alert unless the user already has the same
+    /// alert by percentage ([`alerts::AlertDedupe`]); the keyboard flashes its
+    /// CapsLock LED when critical, like the percentage alert does.
+    fn keyboard_alert(&self, st: akm_core::registry::BatteryState, now: u64) {
+        use akm_core::registry::BatteryState as B;
+        let rank = if st == B::Critical { 2 } else { 1 };
+        if !alerts::dedupe().allow_keyboard(rank, now) {
+            tracing::info!("keyboard {} alert not shown: the same alert was already raised", st.as_str());
+            return;
+        }
+        crate::notify::battery_state(st);
+        if st == B::Critical {
+            akm_core::led::flash_capslock_for(self.mac(), 5);
+        }
+    }
+
     fn handle(&mut self, msg: Msg) {
         let old = lock(&self.state);
         let mut sig: Option<PassiveEvent> = None;
@@ -185,7 +217,10 @@ impl Publisher {
         {
             let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
             match msg {
-                Msg::Connected(_) => s.connected(),
+                Msg::Connected(_) => {
+                    akm_core::link::clear_keyboard_off();
+                    s.connected()
+                }
                 Msg::Disconnected(_) => s.disconnected(),
                 Msg::Event(ev) => {
                     s.apply(ev, now);
@@ -195,13 +230,22 @@ impl Publisher {
         }
         let new = lock(&self.state);
         // The keyboard says its battery is low / critical (#189).
-        if let (Some(PassiveEvent::BattStat { value }), true) =
-            (sig, KEYBOARD_ALERTS.load(std::sync::atomic::Ordering::Relaxed))
-        {
-            if let Some(st) = passive::battery_state_alert(old.batt_stat, value) {
-                tracing::info!("keyboard reports battery state {}", st.as_str());
-                crate::notify::battery_state(st);
+        let mut battery_alert: Option<akm_core::registry::BatteryState> = None;
+        if let Some(PassiveEvent::BattStat { value }) = sig {
+            battery_alert = passive::battery_state_alert(old.batt_stat, value);
+            if akm_core::registry::BatteryState::from_byte(value) == akm_core::registry::BatteryState::Normal {
+                // the keyboard is back to normal: percentage alerts are armed again
+                alerts::dedupe().reset();
             }
+            if let Some(st) = battery_alert {
+                tracing::info!("keyboard reports battery state {}", st.as_str());
+                if KEYBOARD_ALERTS.load(std::sync::atomic::Ordering::Relaxed) {
+                    self.keyboard_alert(st, now);
+                }
+            }
+        }
+        if matches!(sig, Some(PassiveEvent::KeyboardOff)) {
+            tracing::info!("the keyboard announces that it switches off (0x13 bit 1 = 0): not a lost link");
         }
         let Some(path) = self.ensure() else { return };
         let Ok(iref) = self.conn.object_server().interface::<_, Input>(&path) else {
@@ -221,11 +265,16 @@ impl Publisher {
                     "FnPressed" => d.fn_pressed_changed(ctx).await?,
                     "MediaKeys" => d.media_keys_changed(ctx).await?,
                     "BatteryStatus" => d.battery_status_changed(ctx).await?,
+                    "PoweredOff" => d.powered_off_changed(ctx).await?,
                     "State" => d.state_changed(ctx).await?,
                     _ => {}
                 }
             }
+            if let Some(st) = battery_alert {
+                Input::battery_alert(ctx, st.as_str()).await?;
+            }
             match sig {
+                Some(PassiveEvent::KeyboardOff) => Input::keyboard_off(ctx, new.last_off_ts).await?,
                 Some(PassiveEvent::Sleep { code }) => {
                     Input::sleep_event(ctx, new.last_sleep_ts, code).await?
                 }

@@ -177,6 +177,84 @@ impl AlertState {
     }
 }
 
+// ── no double alert: percentage thresholds vs the keyboard's own 0x30 (#189) ─
+
+/// An alert of the keyboard and an alert by percentage that follows it (or
+/// precedes it) within this many seconds are one event for the user.
+pub const DEDUPE_WINDOW_S: u64 = 3600;
+
+/// Rank of an alert for the dedupe: `1` low, `2` critical.
+pub fn rank_of(u: Urgency) -> u8 {
+    if u == Urgency::Critical {
+        2
+    } else {
+        1
+    }
+}
+
+/// Keeps the two sources of "battery low / critical" from announcing the same
+/// thing twice (pure: the caller gives the clock).
+///
+/// * the keyboard is authoritative (macOS acts on `0x30` only): once it has
+///   announced rank `R`, percentage alerts of rank `<= R` are muted until it
+///   reports normal again or new batteries are detected; a higher rank still
+///   goes through;
+/// * a keyboard alert of rank `R` is muted if a percentage alert of rank
+///   `>= R` was shown within [`DEDUPE_WINDOW_S`] (same event, seen twice).
+///
+/// Without any `0x30` ever received the percentage thresholds work unchanged
+/// (the fallback of #189).
+#[derive(Debug, Default)]
+pub struct AlertDedupe {
+    kb_rank: u8,
+    pct: Option<(u64, u8)>,
+}
+
+impl AlertDedupe {
+    pub const fn new() -> Self {
+        Self { kb_rank: 0, pct: None }
+    }
+
+    /// May a percentage alert of `rank` be shown at `now`? Records it if so.
+    pub fn allow_percent(&mut self, rank: u8, now: u64) -> bool {
+        if self.kb_rank >= rank {
+            return false;
+        }
+        self.pct = Some((now, rank));
+        true
+    }
+
+    /// May a keyboard alert of `rank` be shown at `now`? Records it if so.
+    pub fn allow_keyboard(&mut self, rank: u8, now: u64) -> bool {
+        if self.kb_rank >= rank {
+            return false;
+        }
+        if let Some((t, r)) = self.pct {
+            if r >= rank && now.saturating_sub(t) <= DEDUPE_WINDOW_S {
+                // the user already has this alert: remember the keyboard said it
+                self.kb_rank = rank;
+                return false;
+            }
+        }
+        self.kb_rank = rank;
+        true
+    }
+
+    /// The keyboard reports a normal state again (`0x30` = 0), or new
+    /// batteries were detected: everything is armed again.
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+static DEDUPE: std::sync::Mutex<AlertDedupe> = std::sync::Mutex::new(AlertDedupe::new());
+
+/// The process-wide dedupe shared by the percentage alerts (acquisition
+/// thread) and the keyboard-driven ones (passive listener thread).
+pub fn dedupe() -> std::sync::MutexGuard<'static, AlertDedupe> {
+    DEDUPE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +374,36 @@ mod tests {
         assert!(run(&mut s, [1.0]).is_empty());
         assert_eq!(Urgency::Critical.hint(), 2);
         assert_eq!(Urgency::Low.as_str(), "low");
+    }
+
+    #[test]
+    fn keyboard_and_percentage_alerts_do_not_double_up() {
+        let (low, crit) = (rank_of(Urgency::Normal), rank_of(Urgency::Critical));
+        assert_eq!((low, crit), (1, 2));
+        // percentage first, then the keyboard says the same thing: muted
+        let mut d = AlertDedupe::new();
+        assert!(d.allow_percent(low, 1000));
+        assert!(!d.allow_keyboard(low, 1600), "same event within the window");
+        assert!(d.allow_keyboard(crit, 1700), "a higher rank is news");
+        // keyboard first: percentage alerts of the same or lower rank are muted
+        let mut d = AlertDedupe::new();
+        assert!(d.allow_keyboard(low, 10));
+        assert!(!d.allow_percent(low, 20), "30 % after the keyboard's low");
+        assert!(!d.allow_keyboard(low, 30), "a repeat from the keyboard");
+        assert!(d.allow_percent(crit, 40), "5 % critical is still news");
+        // the keyboard's critical covers every percentage alert
+        let mut d = AlertDedupe::new();
+        assert!(d.allow_keyboard(crit, 10));
+        assert!(!d.allow_percent(low, 11) && !d.allow_percent(crit, 12));
+        // back to normal / new batteries: everything is armed again
+        d.reset();
+        assert!(d.allow_percent(low, 13) && d.allow_keyboard(crit, 14));
+        // percentage alert long before: not the same event any more
+        let mut d = AlertDedupe::new();
+        assert!(d.allow_percent(low, 0));
+        assert!(d.allow_keyboard(low, DEDUPE_WINDOW_S + 1));
+        // no 0x30 ever: percentage thresholds all go through
+        let mut d = AlertDedupe::new();
+        assert!(d.allow_percent(low, 1) && d.allow_percent(low, 2) && d.allow_percent(crit, 3));
     }
 }
