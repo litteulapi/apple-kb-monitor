@@ -7,7 +7,9 @@ use std::collections::HashMap;
 use std::io;
 use std::time::{Duration, Instant};
 
-use crate::calibration::{adc_to_voltage, interpolate_battery, parse_calibration};
+use crate::calibration::{
+    estimate_percentage_mv, parse_calibration, MAX_SOURCE_GAP_MV, PLAUSIBLE_MV,
+};
 use crate::model::{family_from_uevent, mac_from_uevent, model_from_uevent, Family};
 use crate::power::BatteryReading;
 use crate::report::{KbReport, KbWake};
@@ -26,7 +28,8 @@ pub const HID_PROBE: u8 = 0xEA;
 /// Battery Strength (Generic Device Controls 0x06 / 0x20), 0..100.
 /// [source] `hid-input.c` quirk PERCENT|FEATURE; [mesuré] = kernel capacity.
 pub const HID_BATTERY_STRENGTH: u8 = 0x47;
-/// u16 big-endian, uninterpreted. [hypothèse] 10-bit ADC, 3.3 V reference.
+/// u16 big-endian, uninterpreted. [mesuré] constant (900) across a battery
+/// change: NOT a voltage (#139).
 pub const HID_ADC_RAW: u8 = 0xF5;
 /// 4 x u16 big-endian, strictly decreasing [mesuré]; [hypothèse] mV
 /// thresholds for [100 %, 75 %, 50 %, 25 %].
@@ -310,17 +313,24 @@ pub fn decode_bcm2042_with(
     }
 
     if let Some(buf) = frames.get(&HID_ADC_RAW).filter(|b| b.len() >= 3) {
-        let adc = u32::from(u16::from_be_bytes([buf[1], buf[2]]));
-        report.battery.adc_raw = Some(adc);
-        report.battery.voltage = Some(adc_to_voltage(adc));
+        report.battery.adc_raw = Some(u32::from(u16::from_be_bytes([buf[1], buf[2]])));
     }
+
+    decode_voltage(&frames, &mut report.battery);
 
     // No curve read from the device: no estimate (the old default had no source).
     let calib = frames
         .get(&HID_CALIBRATION)
         .and_then(|b| parse_calibration(b));
-    if let (Some(v), Some(c)) = (report.battery.voltage, calib) {
-        report.battery.percentage_interpolated = interpolate_battery(v, &c).map(f64::round);
+    // [hypothèse] the firmware computes on the filtered voltage (0x49).
+    let basis = report
+        .battery
+        .voltage_filtered_mv
+        .or(report.battery.voltage_mv);
+    if let (Some(mv), Some(c)) = (basis, calib) {
+        let est = estimate_percentage_mv(f64::from(mv), &c);
+        report.battery.percentage_estimate = est;
+        report.battery.percentage_interpolated = est;
     }
 
     if let Some(buf) = frames.get(&HID_VERSION).filter(|b| b.len() >= 2) {
@@ -354,6 +364,36 @@ pub fn decode_bcm2042_with(
     // An answering probe means the link is up.
     report.bluetooth.connected = true;
     true
+}
+
+/// u16 from `buf[1..3]`, kept only if it is a plausible cell voltage.
+fn plausible_mv(v: u16) -> Option<u32> {
+    PLAUSIBLE_MV.contains(&v).then_some(u32::from(v))
+}
+
+/// Cell voltage: 0x46 (u16 LE) [mesuré], cross-checked against 0xFF bytes 1-2
+/// (u16 BE, same value) [mesuré]; 0x49 (u16 LE) is the filtered voltage
+/// [hypothèse]. A gap above 20 mV between 0x46 and 0xFF flags the sample as
+/// doubtful and keeps 0x46.
+fn decode_voltage(frames: &HashMap<u8, Vec<u8>>, bat: &mut crate::report::KbBattery) {
+    let v46 = frames
+        .get(&HID_RAW_46)
+        .filter(|b| b.len() >= 3)
+        .and_then(|b| plausible_mv(u16::from_le_bytes([b[1], b[2]])));
+    let vff = frames
+        .get(&HID_RAW_FF)
+        .filter(|b| b.len() >= 3)
+        .and_then(|b| plausible_mv(u16::from_be_bytes([b[1], b[2]])));
+    bat.voltage_filtered_mv = frames
+        .get(&HID_RAW_49)
+        .filter(|b| b.len() >= 3)
+        .and_then(|b| plausible_mv(u16::from_le_bytes([b[1], b[2]])));
+    bat.voltage_doubtful = match (v46, vff) {
+        (Some(a), Some(b)) => a.abs_diff(b) > u32::from(MAX_SOURCE_GAP_MV),
+        _ => false,
+    };
+    bat.voltage_mv = v46.or(vff);
+    bat.voltage = bat.voltage_mv.map(|mv| f64::from(mv) / 1000.0);
 }
 
 /// Build a full report from the HID `uevent` of the device, the kernel
@@ -438,9 +478,16 @@ mod tests {
         assert_eq!(r.battery.percentage, Some(99.0));
         assert_eq!(r.battery_pct(), Some(99.0));
         assert_eq!(r.raw.get("0xea").map(String::as_str), Some("62"));
+        // #139: voltage = 0x46 LE (2991 mV), cross-checked with 0xFF BE; 0xF5
+        // (900) is kept raw and never converted.
         assert_eq!(r.battery.adc_raw, Some(900));
-        assert!((r.battery.voltage.unwrap() - 2.903).abs() < 0.001);
-        assert_eq!(r.battery.percentage_interpolated, Some(97.0));
+        assert_eq!(r.battery.voltage_mv, Some(2991));
+        assert!((r.battery.voltage.unwrap() - 2.991).abs() < 1e-9);
+        assert_eq!(r.battery.voltage_filtered_mv, Some(2953));
+        assert!(!r.battery.voltage_doubtful);
+        // 0x49 = 2953 mV on 2954/2506/... -> 99.9 % (estimate); 0x47 stays 99.
+        assert_eq!(r.battery.percentage_estimate, Some(99.9));
+        assert_eq!(r.battery.percentage_interpolated, Some(99.9));
         assert_eq!(r.firmware.version.as_deref(), Some("0x0050"));
         assert_eq!(r.device.name.as_deref(), Some("Clavier de maria #1"));
         // #131 / #132: kept raw, never interpreted.
@@ -613,7 +660,7 @@ mod tests {
         let f = real().with(&[0x09, 0, 0, 0]);
         let mut r = KbReport::default();
         decode_bcm2042(&f, &mut r);
-        assert_eq!(r.battery.percentage_interpolated, Some(97.0));
+        assert_eq!(r.battery.percentage_estimate, Some(99.9));
         assert_eq!(r.raw.get("0x09").map(String::as_str), Some("000000"));
     }
 
@@ -624,6 +671,56 @@ mod tests {
         decode_bcm2042(&f, &mut r);
         assert!(r.battery.voltage.is_some());
         assert!(r.battery.percentage_interpolated.is_none());
+        assert!(r.battery.percentage_estimate.is_none());
+    }
+
+    #[test]
+    fn voltage_sources_and_coherence() {
+        // 0x46 absent: fallback on 0xFF bytes 1-2 (BE).
+        let mut f = real();
+        f = f.with(&[0x46]);
+        let mut r = KbReport::default();
+        decode_bcm2042(&f, &mut r);
+        assert_eq!(r.battery.voltage_mv, Some(2991), "0xFF fallback");
+        assert!(!r.battery.voltage_doubtful);
+        // 0x46 and 0xFF diverge by 50 mV: doubtful, 0x46 kept.
+        let f = real().with(&[0x46, 0xE1, 0x0B]); // 3041 mV
+        let mut r = KbReport::default();
+        decode_bcm2042(&f, &mut r);
+        assert_eq!(r.battery.voltage_mv, Some(3041));
+        assert!(r.battery.voltage_doubtful);
+        // 20 mV gap is still coherent.
+        let f = real().with(&[0x46, 0xC3, 0x0B]); // 3011 mV
+        let mut r = KbReport::default();
+        decode_bcm2042(&f, &mut r);
+        assert!(!r.battery.voltage_doubtful);
+        // Implausible value dropped; no 0x49 -> basis is 0x46.
+        let f = real()
+            .with(&[0x46, 0, 0])
+            .with(&[0xFF, 0, 0, 0])
+            .with(&[0x49]);
+        let mut r = KbReport::default();
+        decode_bcm2042(&f, &mut r);
+        assert_eq!(r.battery.voltage_mv, None);
+        assert_eq!(r.battery.voltage, None);
+        assert_eq!(r.battery.percentage_estimate, None);
+        let f = real().with(&[0x49]);
+        let mut r = KbReport::default();
+        decode_bcm2042(&f, &mut r);
+        assert_eq!(r.battery.voltage_filtered_mv, None);
+        assert_eq!(r.battery.percentage_estimate, Some(100.0), "0x46 = 2991");
+    }
+
+    #[test]
+    fn estimate_never_nan_and_clamped() {
+        for v in [[0x46u8, 0xFF, 0xFF], [0x46, 0x10, 0x00], [0x46, 0x00, 0x11]] {
+            let f = real().with(&v).with(&[0x49]);
+            let mut r = KbReport::default();
+            decode_bcm2042(&f, &mut r);
+            if let Some(p) = r.battery.percentage_estimate {
+                assert!(p.is_finite() && (0.0..=100.0).contains(&p));
+            }
+        }
     }
 
     #[test]

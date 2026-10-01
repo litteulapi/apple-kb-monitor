@@ -30,13 +30,26 @@ pub struct KbBattery {
     /// value" claim was refuted (0xEA = 98 while 0x47 = kernel = 99, #136).
     /// 0xEA is kept uninterpreted in [`KbReport::raw`].
     pub percentage_fine: Option<f64>,
-    /// [hypothèse] Estimate from `voltage` and the 0x5A curve; only computed
-    /// when a valid curve was read, bounded by the cut-off voltage.
+    /// [hypothèse] Estimate at 0.1 % from the filtered voltage (0x49, else
+    /// 0x46) on the 0x5A curve of the unit. Only an **estimate**: shown only
+    /// when no kernel/0x47 percentage exists.
+    pub percentage_estimate: Option<f64>,
+    /// Compatibility alias of `percentage_estimate` (former name, now 0.1 %
+    /// instead of an integer).
     pub percentage_interpolated: Option<f64>,
-    /// [hypothèse] Estimate `adc_raw * 3.3 / 1023`: the scale is not proven
-    /// (0x46/0x49/0xFF read as mV give 2.95-2.99 V against 2.903 V).
+    /// [mesuré] Cell voltage in volts = `voltage_mv / 1000` (report 0x46, else
+    /// 0xFF bytes 1-2). Never derived from 0xF5 (#139).
     pub voltage: Option<f64>,
-    /// [mesuré] Report 0xF5, u16 big-endian, uninterpreted.
+    /// [mesuré] Cell voltage in mV: report 0x46 as u16 little-endian, fallback
+    /// report 0xFF bytes 1-2 as u16 big-endian.
+    pub voltage_mv: Option<u32>,
+    /// [mesuré] value, [hypothèse] "filtered": report 0x49, u16 LE, mV.
+    pub voltage_filtered_mv: Option<u32>,
+    /// 0x46 and 0xFF were both read and differ by more than 20 mV: the
+    /// sample is doubtful (0x46 is kept).
+    pub voltage_doubtful: bool,
+    /// [mesuré] Report 0xF5, u16 big-endian, uninterpreted (constant across a
+    /// battery change: not a voltage).
     pub adc_raw: Option<u32>,
 }
 
@@ -104,6 +117,7 @@ impl KbReport {
         let ok = |p: Option<f64>| p.filter(|v| v.is_finite() && (0.0..=100.0).contains(v));
         ok(self.battery.percentage)
             .or(ok(self.battery.percentage_fine))
+            .or(ok(self.battery.percentage_estimate))
             .or(ok(self.battery.percentage_interpolated))
     }
 }
@@ -126,7 +140,7 @@ mod tests {
     fn battery_pct_priority_and_nan() {
         let mut r = KbReport::default();
         assert_eq!(r.battery_pct(), None);
-        r.battery.percentage_interpolated = Some(60.0);
+        r.battery.percentage_estimate = Some(60.0);
         assert_eq!(r.battery_pct(), Some(60.0));
         r.battery.percentage_fine = Some(90.0);
         assert_eq!(r.battery_pct(), Some(90.0));
@@ -138,7 +152,7 @@ mod tests {
         assert_eq!(r.battery_pct(), Some(90.0));
         r.battery.percentage_fine = Some(f64::INFINITY);
         assert_eq!(r.battery_pct(), Some(60.0));
-        r.battery.percentage_interpolated = None;
+        r.battery.percentage_estimate = None;
         assert_eq!(r.battery_pct(), None);
     }
 

@@ -4,8 +4,12 @@
 //! - [mesuré] report 0x5A carries 4 big-endian u16, strictly decreasing
 //!   (`0b8a 09ca 0964 0806` = 2954, 2506, 2404, 2054), identical to 0x60 and 0xEB.
 //! - [hypothèse] these are mV thresholds for [100 %, 75 %, 50 %, 25 %].
-//! - [hypothèse] the voltage is `adc * 3.3 / 1023` from report 0xF5: never
-//!   demonstrated; 0xF4 (1740) does not enter the formula.
+//! - [mesuré] the cell voltage is the u16 LE of report 0x46 (2986-2991 mV) and
+//!   the u16 BE of bytes 1-2 of report 0xFF (same value); 0x49 is a u16 LE
+//!   (2953 then 2950 mV, [hypothèse] filtered voltage). 0xF5 (900) is constant
+//!   across a battery change: it is **not** a voltage (#139).
+//! - [hypothèse] the estimate is made on the filtered voltage (0x49, else
+//!   0x46): 0x49 = 2950 mV gives 99.78 %, i.e. 99 = 0x47 = kernel.
 //! - [hypothèse] below the 25 % threshold the charge decays linearly down to
 //!   [`CUTOFF_MV`] (0 %), not to 0 mV (a keyboard at 1.8 V is out of service).
 //!
@@ -13,18 +17,14 @@
 //! default curve `[2900, 2450, 2350, 2000]` had no source. The displayed
 //! percentage comes from the kernel (`power`) or report 0x47.
 
-/// ADC max value, assuming a 10-bit converter [hypothèse].
-pub const ADC_MAX: u32 = 1023;
-/// ADC reference voltage (V) [hypothèse].
-pub const ADC_VREF: f64 = 3.3;
 /// 0 % point of the estimate: 2 × 0.9 V, the usual end-of-discharge of two
 /// alkaline AA cells in series [hypothèse].
 pub const CUTOFF_MV: u16 = 1800;
-
-/// Voltage estimate of report 0xF5 [hypothèse: 10-bit ADC, 3.3 V reference].
-pub fn adc_to_voltage(adc: u32) -> f64 {
-    adc as f64 * ADC_VREF / ADC_MAX as f64
-}
+/// Plausible range (mV) of a 2 x AA cell voltage read from the device;
+/// anything outside is a corrupt read and is dropped.
+pub const PLAUSIBLE_MV: std::ops::RangeInclusive<u16> = 1000..=4500;
+/// Max gap (mV) between 0x46 and 0xFF before a sample is flagged doubtful.
+pub const MAX_SOURCE_GAP_MV: u16 = 20;
 
 /// A calibration curve is usable only if it is strictly decreasing and non-zero.
 pub fn calibration_valid(t: &[u16; 4]) -> bool {
@@ -44,14 +44,19 @@ pub fn parse_calibration(buf: &[u8]) -> Option<[u16; 4]> {
     calibration_valid(&c).then_some(c)
 }
 
-/// Estimated battery % from a voltage and a curve read from the device
-/// [hypothèse, see module doc]. `None` if the curve is invalid or the voltage
-/// is not finite. Bounded to 0..=100; 0 % at/below [`CUTOFF_MV`].
-pub fn interpolate_battery(voltage_v: f64, thresholds_mv: &[u16; 4]) -> Option<f64> {
-    if !calibration_valid(thresholds_mv) || !voltage_v.is_finite() {
+/// Round to one decimal (0.1 %).
+fn tenth(p: f64) -> f64 {
+    (p * 10.0).round() / 10.0
+}
+
+/// Estimated battery % (0.1 % resolution) of a voltage in mV on the curve
+/// read from the device (report 0x5A as [100, 75, 50, 25] % thresholds, linear
+/// between points, linear down to [`CUTOFF_MV`] = 0 %) [hypothèse]. `None` if
+/// the curve is invalid or the voltage is not finite. Always within 0..=100.
+pub fn estimate_percentage_mv(mv: f64, thresholds_mv: &[u16; 4]) -> Option<f64> {
+    if !calibration_valid(thresholds_mv) || !mv.is_finite() {
         return None;
     }
-    let mv = voltage_v * 1000.0;
     let cutoff = f64::from(CUTOFF_MV.min(thresholds_mv[3]));
     let levels_pct = [100.0, 75.0, 50.0, 25.0, 0.0];
     let levels_mv = [
@@ -74,10 +79,16 @@ pub fn interpolate_battery(voltage_v: f64, thresholds_mv: &[u16; 4]) -> Option<f
                 return Some(levels_pct[i + 1]);
             }
             let frac = (mv - lo) / (hi - lo);
-            return Some(levels_pct[i + 1] + frac * (levels_pct[i] - levels_pct[i + 1]));
+            let p = levels_pct[i + 1] + frac * (levels_pct[i] - levels_pct[i + 1]);
+            return Some(tenth(p).clamp(0.0, 100.0));
         }
     }
     Some(0.0)
+}
+
+/// Same as [`estimate_percentage_mv`] for a voltage in volts.
+pub fn interpolate_battery(voltage_v: f64, thresholds_mv: &[u16; 4]) -> Option<f64> {
+    estimate_percentage_mv(voltage_v * 1000.0, thresholds_mv)
 }
 
 /// Guess of the battery chemistry from the voltage estimate (2 x AA in
@@ -136,8 +147,10 @@ mod tests {
         assert_eq!(p(0.0), 0.0);
         assert_eq!(p(-1.0), 0.0);
         assert!((p(1.927) - 12.5).abs() < 0.01);
-        // [mesuré] 0xF5 = 900 -> 2.903 V -> 97 % (same as the Python decoder).
-        assert_eq!(p(adc_to_voltage(900)).round(), 97.0);
+        // [mesuré] 0x49 = 2950 mV -> 99.8 % (99.78, floor = 0x47 = 99).
+        assert_eq!(estimate_percentage_mv(2950.0, &c), Some(99.8));
+        assert_eq!(estimate_percentage_mv(2991.0, &c), Some(100.0));
+        assert_eq!(estimate_percentage_mv(f64::INFINITY, &c), None);
         assert!(interpolate_battery(f64::NAN, &c).is_none());
     }
 
@@ -155,12 +168,6 @@ mod tests {
             let p = interpolate_battery(mv, &low).unwrap();
             assert!((0.0..=100.0).contains(&p), "{mv} -> {p}");
         }
-    }
-
-    #[test]
-    fn adc_voltage() {
-        assert!((adc_to_voltage(1023) - 3.3).abs() < 1e-9);
-        assert!((adc_to_voltage(900) - 2.903).abs() < 0.001);
     }
 
     #[test]

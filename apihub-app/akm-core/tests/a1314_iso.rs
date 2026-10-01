@@ -132,6 +132,11 @@ fn read_keyboard_on_fixture_frames() {
     assert_eq!(r.battery_pct(), Some(90.0));
     assert_eq!(r.battery.percentage, Some(90.0));
     assert_eq!(r.battery.adc_raw, Some(900));
+    // #139: real voltage from 0x46 (LE) = 2991 mV, coherent with 0xFF.
+    assert_eq!(r.battery.voltage_mv, Some(2991));
+    assert_eq!(r.battery.voltage_filtered_mv, Some(2953));
+    assert!(!r.battery.voltage_doubtful);
+    assert_eq!(r.battery.percentage_estimate, Some(99.9));
     assert_eq!(r.firmware.version.as_deref(), Some("0x0050"));
     assert_eq!(r.raw.get("0x46").map(String::as_str), Some("af0b"));
     assert_eq!(r.raw.get("0xff").map(String::as_str), Some("0baf01"));
