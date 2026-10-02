@@ -141,6 +141,14 @@ impl ConnState {
     pub fn frame(&self, id: u8) -> Option<&[u8]> {
         self.values.get(&id).map(Vec::as_slice)
     }
+    /// Forget these ids only (claim and cached value): each may be requested
+    /// once more in this connection. Everything else is untouched.
+    pub fn forget(&mut self, ids: &[u8]) {
+        for id in ids {
+            self.done.remove(id);
+            self.values.remove(id);
+        }
+    }
 }
 
 static CONN: Mutex<ConnState> = Mutex::new(ConnState::new());
@@ -153,6 +161,13 @@ fn global_conn() -> std::sync::MutexGuard<'static, ConnState> {
 /// connection, if any.
 pub fn cached_frame(id: u8) -> Option<Vec<u8>> {
     global_conn().frame(id).map(<[u8]>::to_vec)
+}
+
+/// The name stored in the keyboard was just rewritten (`akmctl rename
+/// --device-name`, D-Bus `RereadName`): forget the four fragments `0x51`-`0x54`
+/// and nothing else, so that the next burst reads them once more.
+pub fn forget_name_fragments() {
+    global_conn().forget(&crate::devname::FRAGMENT_IDS);
 }
 
 // ── input activity (timestamp only) ────────────────────────────────────────
@@ -1064,6 +1079,26 @@ mod tests {
         }
         // NeverRead ids in particular: 0xFE and 0x4C.
         assert!(!spy.log.borrow().contains(&0xFE) && !spy.log.borrow().contains(&0x4C));
+    }
+
+    #[test]
+    fn forgetting_the_name_fragments_frees_these_four_ids_only() {
+        let mut st = ConnState::new();
+        for id in [0x4F, 0x60, 0x51, 0x52, 0x53, 0x54] {
+            assert!(st.claim(id));
+            st.store(id, vec![id, 1]);
+        }
+        st.forget(&crate::devname::FRAGMENT_IDS);
+        for id in crate::devname::FRAGMENT_IDS {
+            assert!(!st.requested(id) && st.frame(id).is_none(), "{id:#04x}");
+            assert!(st.claim(id), "{id:#04x} may be requested once more");
+        }
+        for id in [0x4F, 0x60] {
+            assert!(st.requested(id) && st.frame(id).is_some(), "{id:#04x} kept");
+        }
+        // The process-wide entry point only ever names these four ids.
+        assert_eq!(crate::devname::FRAGMENT_IDS, [0x51, 0x52, 0x53, 0x54]);
+        forget_name_fragments();
     }
 
     #[test]

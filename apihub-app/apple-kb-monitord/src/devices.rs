@@ -140,6 +140,17 @@ impl Shared {
         }
     }
 
+    /// `RereadName()`: handed to the actor, which bounds it (30 s) itself.
+    pub fn reread_name(&self) -> zbus::fdo::Result<()> {
+        if self.mailbox.send(Msg::RereadName) {
+            Ok(())
+        } else {
+            Err(zbus::fdo::Error::Failed(
+                "acquisition thread not running".into(),
+            ))
+        }
+    }
+
     pub fn history_json(&self, since: u64) -> zbus::fdo::Result<String> {
         let entries = self
             .history

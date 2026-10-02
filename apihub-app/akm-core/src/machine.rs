@@ -29,6 +29,9 @@ pub const SLOW_READ_PERIOD: Duration = APPLE.battery_period;
 /// (#206 : sinon toute appli de la session declenche des salves GET_REPORT
 /// pendant la frappe, cause de coupures de liaison).
 pub const FORCE_REFRESH_FLOOR: Duration = Duration::from_secs(5 * 60);
+/// Floor between two accepted `RereadName()` (D-Bus): a name written by
+/// `akmctl rename --device-name` is read again by the daemon at most this often.
+pub const NAME_REREAD_FLOOR: Duration = Duration::from_secs(30);
 
 pub const RSSI_PERIOD: Duration = Duration::from_secs(45);
 /// A measurement older than this is shown as absent.
@@ -102,6 +105,8 @@ pub struct Machine {
     /// Derniere lecture complete reussie / derniere relance acceptee (#206).
     last_read: Option<Instant>,
     last_forced: Option<Instant>,
+    /// Last accepted `RereadName()` (bounded by [`NAME_REREAD_FLOOR`]).
+    last_name_reread: Option<Instant>,
 }
 
 /// Retry delay after `attempt` failed acquisitions: 0.5, 1, 2, 4 ... capped.
@@ -134,6 +139,7 @@ impl Machine {
             last_kernel: None,
             last_read: None,
             last_forced: None,
+            last_name_reread: None,
         }
     }
 
@@ -169,6 +175,29 @@ impl Machine {
             self.attempt = 0;
             self.next_acquire = Some(now);
         }
+        true
+    }
+
+    /// D-Bus `RereadName()`: the name stored in the keyboard was just rewritten
+    /// (`akmctl rename --device-name`); a read is due now so that `0x51`-`0x54`
+    /// (forgotten by the caller when this returns true) are read again. No
+    /// effect while disconnected; accepted at most once per
+    /// [`NAME_REREAD_FLOOR`], else nothing happens.
+    pub fn request_name_reread(&mut self, now: Instant) -> bool {
+        if !self.connected {
+            return false;
+        }
+        if self
+            .last_name_reread
+            .is_some_and(|t| now.saturating_duration_since(t) < NAME_REREAD_FLOOR)
+        {
+            return false;
+        }
+        self.last_name_reread = Some(now);
+        if self.acquired {
+            self.forced = Some(now);
+        }
+        // Not acquired yet: the pending acquisition reads the name anyway.
         true
     }
 
@@ -686,6 +715,30 @@ mod tests {
         assert!(m.force_refresh(t2));
         assert!(m.due(t2).contains(&Action::Acquire));
         assert!(m.is_connected() && !m.is_acquired());
+    }
+
+    #[test]
+    fn name_reread_is_accepted_once_per_30_s_and_only_when_connected() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        assert!(!m.request_name_reread(t0), "disconnected: no effect");
+        assert!(m.due(t0).is_empty());
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        m.acquire_done(true, t0);
+        m.due(t0);
+        // Right after a read (where Refresh is ignored), the re-read is accepted.
+        assert!(m.request_name_reread(t0 + s(1)));
+        assert!(m.due(t0 + s(1)).contains(&Action::Acquire));
+        m.acquire_done(true, t0 + s(2));
+        // Again within 30 s: nothing happens.
+        assert!(!m.request_name_reread(t0 + s(10)));
+        assert!(!m.request_name_reread(t0 + s(30)));
+        assert!(!m.due(t0 + s(30)).contains(&Action::Acquire));
+        // After the floor: accepted again.
+        let t1 = t0 + s(1) + NAME_REREAD_FLOOR;
+        assert!(m.request_name_reread(t1));
+        assert!(m.due(t1).contains(&Action::Acquire));
+        assert_eq!(NAME_REREAD_FLOOR, s(30));
     }
 
     #[test]

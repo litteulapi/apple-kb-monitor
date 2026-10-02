@@ -137,6 +137,21 @@ fn inner() {
         Msg::Refresh
     );
 
+    // RereadName() (#248): reaches the actor as its own message, no argument,
+    // no return value (the 30 s bound and the forgetting are the actor's).
+    c.call_method(
+        Some(apple_kb_monitord::service::BUS_NAME),
+        apple_kb_monitord::service::OBJECT_PATH,
+        Some(apple_kb_monitord::service::INTERFACE),
+        "RereadName",
+        &(),
+    )
+    .unwrap();
+    assert_eq!(
+        rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+        Msg::RereadName
+    );
+
     // Signals: subscribe, publish a change, expect PropertiesChanged(Battery)
     // and StateChanged with the new revision.
     let sub = Connection::session().unwrap();

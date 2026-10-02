@@ -23,10 +23,12 @@
 //!   (`up_to_date` / `update_available` / `unknown`, never empty)
 //! * name stored in the keyboard (#248): `DeviceNameOnKeyboard` s (`0x51`-`0x54`
 //!   read once per connection, **empty = not read yet**). Read-only: no D-Bus
-//!   method writes the keyboard's name (only `akmctl rename --device-name`,
-//!   interactive, and refused until the sequence is proven)
+//!   method writes the keyboard's name (only `akmctl rename --device-name`);
+//!   `RereadName()` makes the daemon read it again after such a write
 //!
-//! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `SetAlias(s mac, s name) -> s`
+//! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `RereadName()` (forget `0x51`-`0x54`
+//! and read them again now; at most once per 30 s, no effect while disconnected; writes
+//! nothing to the keyboard, #248), `SetAlias(s mac, s name) -> s`
 //! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (JSON array of
 //! `{ts,pct,voltage?,event?,schema?,mv_0x46?,mv_0x49?,voltage_valid?}`, `voltage_valid=false` = legacy value, #180); since API 2 `GetDevices() -> ao`,
 //! `BatterySets() -> s`, `NotifyShutdown() -> (b, s)` (the one write macOS does: `WillShutdown`, #191),
@@ -226,6 +228,15 @@ impl Monitor {
     /// Ask for a full read now (no effect while the keyboard is disconnected).
     fn refresh(&self) -> zbus::fdo::Result<()> {
         self.shared.refresh()
+    }
+
+    /// The name stored in the keyboard was just rewritten by `akmctl rename
+    /// --device-name` (#248): forget the four fragments `0x51`-`0x54` (claims
+    /// and cached values, nothing else) and read them again now. At most once
+    /// per 30 s (otherwise nothing happens); no effect while the keyboard is
+    /// disconnected. Writes nothing to the keyboard.
+    fn reread_name(&self) -> zbus::fdo::Result<()> {
+        self.shared.reread_name()
     }
 
     /// Tell the keyboard the computer is shutting down: the one write macOS

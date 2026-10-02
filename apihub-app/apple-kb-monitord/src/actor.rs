@@ -37,6 +37,8 @@ pub enum Msg {
     Bus(Event),
     /// Explicit refresh (D-Bus `Refresh()`).
     Refresh,
+    /// The name stored in the keyboard was rewritten (D-Bus `RereadName()`).
+    RereadName,
     /// The BlueZ alias of a keyboard is now this (`None` = unknown).
     Alias(String, Option<String>),
     /// Stop the actor.
@@ -196,6 +198,19 @@ pub fn alias_change_log(
 const HISTORY_SPACING: Duration = Duration::from_secs(300);
 /// The published snapshot (LED, RSSI expiry) is refreshed at least this often.
 const TICK: Duration = Duration::from_secs(5);
+
+/// D-Bus `RereadName()` in the actor: when the machine accepts it (connected,
+/// not asked in the last 30 s), `forget` drops the four fragments `0x51`-`0x54`
+/// (claims and cached values) and a read is due now. Otherwise nothing at all
+/// happens. Returns whether it was accepted.
+pub(crate) fn reread_name(machine: &mut Machine, now: Instant, forget: &mut dyn FnMut()) -> bool {
+    let accepted = machine.request_name_reread(now);
+    if accepted {
+        forget();
+        tracing::info!("RereadName: 0x51-0x54 forgotten, read due now");
+    }
+    accepted
+}
 
 fn unix_now() -> u64 {
     SystemClock.now()
@@ -949,6 +964,11 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             Ok(Msg::Refresh) => {
                 let _ = machine.force_refresh(Instant::now());
             }
+            Ok(Msg::RereadName) => {
+                let _ = reread_name(&mut machine, Instant::now(), &mut || {
+                    akm_core::read_policy::forget_name_fragments()
+                });
+            }
             Ok(Msg::Alias(mac, alias)) => actor.set_alias(&mac, alias),
             Ok(Msg::Quit) => break,
             Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -1392,6 +1412,34 @@ mod tests {
         let (c, _) = akm_core::config::parse("[battery]\nchemistry = \"lithium\"\n");
         o.apply_config(&c);
         assert_eq!(o.chemistry, Chemistry::Lithium);
+    }
+
+    #[test]
+    fn reread_name_forgets_the_fragments_at_most_once_per_30_s_and_only_connected() {
+        let t0 = Instant::now();
+        let s = Duration::from_secs;
+        let mut m = Machine::new();
+        let mut forgotten = 0;
+        // Disconnected: no effect, nothing forgotten.
+        assert!(!reread_name(&mut m, t0, &mut || forgotten += 1));
+        assert_eq!(forgotten, 0);
+        m.on_event(&Event::Connected("AA:BB:CC:DD:EE:F1".into()), t0);
+        m.acquire_done(true, t0);
+        m.due(t0);
+        assert!(reread_name(&mut m, t0 + s(1), &mut || forgotten += 1));
+        assert_eq!(forgotten, 1);
+        assert!(
+            m.due(t0 + s(1)).contains(&Action::Acquire),
+            "a read is due now"
+        );
+        m.acquire_done(true, t0 + s(2));
+        // Within 30 s: does nothing (the cache is not dropped again).
+        for dt in [2, 15, 30] {
+            assert!(!reread_name(&mut m, t0 + s(dt), &mut || forgotten += 1));
+        }
+        assert_eq!(forgotten, 1);
+        assert!(reread_name(&mut m, t0 + s(32), &mut || forgotten += 1));
+        assert_eq!(forgotten, 2);
     }
 
     #[test]
