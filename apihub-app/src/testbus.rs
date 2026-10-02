@@ -184,4 +184,9 @@ impl FakeDaemon {
     pub fn refuse(&self, refuse: bool) {
         self.state.lock().unwrap().refuse = refuse;
     }
+
+    /// The JSON served by `GetState` and the `Json` property.
+    pub fn set_json(&self, json: &str) {
+        self.state.lock().unwrap().json = json.to_string();
+    }
 }

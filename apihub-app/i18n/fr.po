@@ -493,3 +493,45 @@ msgstr "pas de bus de session : {}"
 
 msgid "Fn mode: {}"
 msgstr "Mode Fn : {}"
+
+msgid "Apple keyboard: monitor stopped"
+msgstr "Clavier Apple : moniteur arrêté"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord n’est pas sur le bus de session"
+
+msgid "Apple keyboard: not connected"
+msgstr "Clavier Apple : non connecté"
+
+msgid "Open the monitor window"
+msgstr "Ouvrir la fenêtre du moniteur"
+
+msgid "Apple keyboard"
+msgstr "Clavier Apple"
+
+msgid "Toggle the function keys"
+msgstr "Basculer les touches de fonction"
+
+msgid "Open the Apple keyboard monitor"
+msgstr "Ouvrir le moniteur de clavier Apple"
+
+msgid "Battery, history, keys and diagnostics"
+msgstr "Piles, historique, touches et diagnostic"
+
+msgid "Apple keyboard settings"
+msgstr "Réglages du clavier Apple"
+
+msgid "System Settings module"
+msgstr "Module de Configuration du système"
+
+msgid "{}: battery {}"
+msgstr "{} : piles {}"
+
+msgid "autonomy {}"
+msgstr "autonomie {}"
+
+msgid "read {}"
+msgstr "lu {}"
+
+msgid "Now: {}"
+msgstr "Actuellement : {}"

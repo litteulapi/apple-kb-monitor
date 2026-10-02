@@ -10,6 +10,7 @@ mod history_view;
 mod instance;
 mod keyboard;
 mod keys_tab;
+mod krunner;
 mod portal;
 mod rename;
 mod source;
@@ -493,10 +494,12 @@ fn open_window(state: &State, raise: &Arc<AtomicBool>, open: &Arc<AtomicBool>) -
 }
 
 fn main() {
-    // Windowless mode, thin D-Bus client of the daemon: the command of the
-    // global shortcut (#99).
-    if std::env::args().nth(1).as_deref() == Some(fn_toggle::FLAG) {
-        std::process::exit(fn_toggle::run());
+    // Windowless modes, thin D-Bus clients of the daemon: the command of the
+    // global shortcut (#99) and the KRunner runner (#98).
+    match std::env::args().nth(1).as_deref() {
+        Some(fn_toggle::FLAG) => std::process::exit(fn_toggle::run()),
+        Some(krunner::FLAG) => std::process::exit(krunner::run()),
+        _ => {}
     }
     // One window = one process (#226): `apihub-app` or D-Bus
     // `org.freedesktop.Application` Activate opens the window; a second launch

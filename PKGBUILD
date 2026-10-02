@@ -163,6 +163,8 @@ package() {
     install -Dm644 "$startdir/data/apple-kb-monitor.notifyrc"                    "$pkgdir/usr/share/knotifications6/apple-kb-monitor.notifyrc"
     install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.service"
     install -Dm644 "$startdir/data/com.agenceapi.AppleKbMonitor.shortcuts.desktop" "$pkgdir/usr/share/kglobalaccel/com.agenceapi.AppleKbMonitor.shortcuts.desktop"
+    install -Dm644 "$startdir/data/plasma-runner-applekeyboard.desktop" "$pkgdir/usr/share/krunner/dbusplugins/plasma-runner-applekeyboard.desktop"
+    install -Dm644 "$startdir/plasma/krunner/com.agenceapi.AppleKbMonitor.Runner.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.Runner.service"
 
     # ── System Settings → Input Devices → Keyboard → Apple Keyboard (#250):
     #    lib/qt6/plugins/plasma/kcms/systemsettings/kcm_applekeyboard.so,

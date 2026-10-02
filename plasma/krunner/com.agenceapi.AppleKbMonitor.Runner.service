@@ -1,0 +1,5 @@
+[D-BUS Service]
+# KRunner runner of the Apple keyboard monitor (#98): started on demand by
+# KRunner, thin client of apple-kb-monitord, exits after 2 minutes idle.
+Name=com.agenceapi.AppleKbMonitor.Runner
+Exec=/usr/bin/apihub-app --krunner

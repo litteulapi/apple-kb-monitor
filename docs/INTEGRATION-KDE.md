@@ -165,3 +165,37 @@ Tests : `fn_toggle::tests` (bus privé sans répertoire de services, faux démon
 contenu du fichier `.desktop` ; ligne du PKGBUILD). Non testé ici : la liaison
 réelle d'une touche dans une session Plasma (demande `kglobalacceld`) et l'OSD de
 #100.
+
+## 10. KRunner (#98)
+
+| Saisie | Résultats |
+|---|---|
+| `clavier`, `keyboard` (dès 3 lettres : `cla`, `key`) | « *nom* : piles 96 % » (autonomie, tension, source, âge de la lecture) · Basculer les touches de fonction · Ouvrir le moniteur de clavier Apple · Réglages du clavier Apple |
+| `batterie`, `battery`, `piles` (seuls ou avec `clavier`) | la ligne des piles |
+| `fn`, `fn lock`, `touches de fonction`, `function keys` | Basculer les touches de fonction (sous-texte : mode actuel) |
+
+Valider la ligne des piles ou « Ouvrir » appelle `org.freedesktop.Application.Activate`
+sur `com.agenceapi.AppleKbMonitor` (la fenêtre démarre par activation D-Bus) ;
+« Réglages » lance `systemsettings kcm_applekeyboard` (à défaut `kcmshell6`) ;
+« Basculer » suit le chemin du §9. Démon absent : la ligne dit « moniteur arrêté » et
+la bascule n'est pas proposée ; le runner ne démarre jamais le démon.
+
+Pièces :
+
+* `data/plasma-runner-applekeyboard.desktop` → `/usr/share/krunner/dbusplugins/`
+  (`X-Plasma-API=DBus`, service `com.agenceapi.AppleKbMonitor.Runner`, chemin
+  `/runner`, `X-Plasma-Runner-Match-Regex` : KRunner n'interroge le service que pour
+  une saisie commençant un des mots ci-dessus) ;
+* `plasma/krunner/com.agenceapi.AppleKbMonitor.Runner.service` →
+  `/usr/share/dbus-1/services/` : `apihub-app --krunner`, démarré par activation
+  D-Bus à la première saisie concernée ;
+* `apihub-app/src/krunner.rs` : interface `org.kde.krunner1` (`Match`, `Actions`,
+  `Run`). Sans fenêtre, client du démon (propriété `Json`, `Device.FnMode`, attente
+  bornée à 0,8 s), deux connexions (une sert l'objet, l'autre appelle le démon), fin
+  du processus après 2 min sans requête.
+
+Le service vit dans `apihub-app`, pas dans le démon : rien à brancher côté démon.
+
+Tests : `krunner::tests` (correspondances, service réel `org.kde.krunner1` sur bus
+privé avec faux démon, signature `a(sssida{sv})`, fichiers `.desktop` / `.service` /
+PKGBUILD). Non testé ici : l'affichage dans KRunner d'une session Plasma.

@@ -1,0 +1,23 @@
+# KRunner D-Bus runner of the Apple keyboard monitor (#98), installed in
+# /usr/share/krunner/dbusplugins/. The service is `apihub-app --krunner`,
+# started by D-Bus activation at the first matching query
+# (com.agenceapi.AppleKbMonitor.Runner.service); it leaves when idle.
+[Desktop Entry]
+Name=Apple Keyboard
+Name[fr]=Clavier Apple
+Comment=Battery of the Apple keyboard, monitor window, settings, function keys
+Comment[fr]=Piles du clavier Apple, fenêtre du moniteur, réglages, touches de fonction
+Type=Service
+Icon=apihub-scarab
+X-KDE-PluginInfo-Name=applekeyboard
+X-KDE-PluginInfo-Version=1.0
+X-KDE-PluginInfo-License=GPL-2.0-only
+X-KDE-PluginInfo-EnabledByDefault=true
+X-Plasma-API=DBus
+X-Plasma-DBusRunner-Service=com.agenceapi.AppleKbMonitor.Runner
+X-Plasma-DBusRunner-Path=/runner
+X-Plasma-Request-Actions-Once=true
+X-Plasma-Runner-Min-Letter-Count=2
+X-Plasma-Runner-Match-Regex=(?i)(^| )(cla|key|bat|pil|fn|tou|fun)
+X-Plasma-Runner-Syntaxes=clavier,keyboard,batterie clavier,fn lock
+X-Plasma-Runner-Syntax-Descriptions=Battery level of the Apple keyboard and its monitor window.,Battery level of the Apple keyboard and its monitor window.,Battery level and estimated autonomy.,Toggle the function keys (media keys / F1–F12).
