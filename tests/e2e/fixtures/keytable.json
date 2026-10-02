@@ -1,0 +1,284 @@
+{
+  "connected": true,
+  "fn_table": "magic_keyboard_alu_fn_keys",
+  "installed": {
+    "overrides": 0,
+    "path": "/etc/udev/hwdb.d/90-apple-kb-monitor.hwdb",
+    "present": false
+  },
+  "module_loaded": true,
+  "params": {
+    "fnmode": 1,
+    "iso_layout": 0,
+    "swap_ctrl_cmd": 0,
+    "swap_fn_leftctrl": 0,
+    "swap_opt_cmd": 0
+  },
+  "pending": false,
+  "pid": "0256",
+  "preset": null,
+  "profile": "default",
+  "rows": [
+    {
+      "base": "KEY_F1",
+      "fn": {
+        "code": "KEY_F1",
+        "keysym": "F1",
+        "qt_key": 16777264,
+        "qt_name": "F1"
+      },
+      "key": "F1",
+      "legend": "Luminosité −",
+      "note": null,
+      "plain": {
+        "code": "KEY_BRIGHTNESSDOWN",
+        "keysym": "XF86MonBrightnessDown",
+        "qt_key": 16777395,
+        "qt_name": "Monitor Brightness Down"
+      },
+      "remapped": false,
+      "scancode": "0x7003a"
+    },
+    {
+      "base": "KEY_F2",
+      "fn": {
+        "code": "KEY_F2",
+        "keysym": "F2",
+        "qt_key": 16777265,
+        "qt_name": "F2"
+      },
+      "key": "F2",
+      "legend": "Luminosité +",
+      "note": null,
+      "plain": {
+        "code": "KEY_BRIGHTNESSUP",
+        "keysym": "XF86MonBrightnessUp",
+        "qt_key": 16777394,
+        "qt_name": "Monitor Brightness Up"
+      },
+      "remapped": false,
+      "scancode": "0x7003b"
+    },
+    {
+      "base": "KEY_F3",
+      "fn": {
+        "code": "KEY_F3",
+        "keysym": "F3",
+        "qt_key": 16777266,
+        "qt_name": "F3"
+      },
+      "key": "F3",
+      "legend": "Exposé / Mission Control",
+      "note": null,
+      "plain": {
+        "code": "KEY_SCALE",
+        "keysym": "XF86LaunchA",
+        "qt_key": 16777390,
+        "qt_name": "Launch (C)"
+      },
+      "remapped": false,
+      "scancode": "0x7003c"
+    },
+    {
+      "base": "KEY_F4",
+      "fn": {
+        "code": "KEY_F4",
+        "keysym": "F4",
+        "qt_key": 16777267,
+        "qt_name": "F4"
+      },
+      "key": "F4",
+      "legend": "Dashboard / Launchpad",
+      "note": null,
+      "plain": {
+        "code": "KEY_ALL_APPLICATIONS",
+        "keysym": "XF86LaunchB",
+        "qt_key": 16777391,
+        "qt_name": "Launch (D)"
+      },
+      "remapped": false,
+      "scancode": "0x7003d"
+    },
+    {
+      "base": "KEY_F5",
+      "fn": {
+        "code": "KEY_F5",
+        "keysym": "F5",
+        "qt_key": 16777268,
+        "qt_name": "F5"
+      },
+      "key": "F5",
+      "legend": "(sans pictogramme)",
+      "note": null,
+      "plain": {
+        "code": "KEY_F5",
+        "keysym": "F5",
+        "qt_key": 16777268,
+        "qt_name": "F5"
+      },
+      "remapped": false,
+      "scancode": "0x7003e"
+    },
+    {
+      "base": "KEY_F6",
+      "fn": {
+        "code": "KEY_F6",
+        "keysym": "F6",
+        "qt_key": 16777269,
+        "qt_name": "F6"
+      },
+      "key": "F6",
+      "legend": "(sans pictogramme)",
+      "note": "NumLock: with the NumLock LED on, hid_apple turns J K L U I O 7 8 9 M 0 ; / P - into keypad keys (APPLE_NUMLOCK_EMULATION); press again to leave",
+      "plain": {
+        "code": "KEY_NUMLOCK",
+        "keysym": "Num_Lock",
+        "qt_key": 16777253,
+        "qt_name": "NumLock"
+      },
+      "remapped": false,
+      "scancode": "0x7003f"
+    },
+    {
+      "base": "KEY_F7",
+      "fn": {
+        "code": "KEY_F7",
+        "keysym": "F7",
+        "qt_key": 16777270,
+        "qt_name": "F7"
+      },
+      "key": "F7",
+      "legend": "Piste précédente",
+      "note": null,
+      "plain": {
+        "code": "KEY_PREVIOUSSONG",
+        "keysym": "XF86AudioPrev",
+        "qt_key": 16777346,
+        "qt_name": "Media Previous"
+      },
+      "remapped": false,
+      "scancode": "0x70040"
+    },
+    {
+      "base": "KEY_F8",
+      "fn": {
+        "code": "KEY_F8",
+        "keysym": "F8",
+        "qt_key": 16777271,
+        "qt_name": "F8"
+      },
+      "key": "F8",
+      "legend": "Lecture / Pause",
+      "note": null,
+      "plain": {
+        "code": "KEY_PLAYPAUSE",
+        "keysym": "XF86AudioPlay",
+        "qt_key": 16777344,
+        "qt_name": "Media Play"
+      },
+      "remapped": false,
+      "scancode": "0x70041"
+    },
+    {
+      "base": "KEY_F9",
+      "fn": {
+        "code": "KEY_F9",
+        "keysym": "F9",
+        "qt_key": 16777272,
+        "qt_name": "F9"
+      },
+      "key": "F9",
+      "legend": "Piste suivante",
+      "note": null,
+      "plain": {
+        "code": "KEY_NEXTSONG",
+        "keysym": "XF86AudioNext",
+        "qt_key": 16777347,
+        "qt_name": "Media Next"
+      },
+      "remapped": false,
+      "scancode": "0x70042"
+    },
+    {
+      "base": "KEY_F10",
+      "fn": {
+        "code": "KEY_F10",
+        "keysym": "F10",
+        "qt_key": 16777273,
+        "qt_name": "F10"
+      },
+      "key": "F10",
+      "legend": "Muet",
+      "note": null,
+      "plain": {
+        "code": "KEY_MUTE",
+        "keysym": "XF86AudioMute",
+        "qt_key": 16777329,
+        "qt_name": "Volume Mute"
+      },
+      "remapped": false,
+      "scancode": "0x70043"
+    },
+    {
+      "base": "KEY_F11",
+      "fn": {
+        "code": "KEY_F11",
+        "keysym": "F11",
+        "qt_key": 16777274,
+        "qt_name": "F11"
+      },
+      "key": "F11",
+      "legend": "Volume −",
+      "note": null,
+      "plain": {
+        "code": "KEY_VOLUMEDOWN",
+        "keysym": "XF86AudioLowerVolume",
+        "qt_key": 16777328,
+        "qt_name": "Volume Down"
+      },
+      "remapped": false,
+      "scancode": "0x70044"
+    },
+    {
+      "base": "KEY_F12",
+      "fn": {
+        "code": "KEY_F12",
+        "keysym": "F12",
+        "qt_key": 16777275,
+        "qt_name": "F12"
+      },
+      "key": "F12",
+      "legend": "Volume +",
+      "note": null,
+      "plain": {
+        "code": "KEY_VOLUMEUP",
+        "keysym": "XF86AudioRaiseVolume",
+        "qt_key": 16777330,
+        "qt_name": "Volume Up"
+      },
+      "remapped": false,
+      "scancode": "0x70045"
+    },
+    {
+      "base": "KEY_EJECTCD",
+      "fn": {
+        "code": "KEY_EJECTCD",
+        "keysym": "XF86Eject",
+        "qt_key": 16777401,
+        "qt_name": "Eject"
+      },
+      "key": "Eject",
+      "legend": "Éjecter ⏏",
+      "note": null,
+      "plain": {
+        "code": "KEY_EJECTCD",
+        "keysym": "XF86Eject",
+        "qt_key": 16777401,
+        "qt_name": "Eject"
+      },
+      "remapped": false,
+      "scancode": "0xc00b8"
+    }
+  ],
+  "schema": 1
+}

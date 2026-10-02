@@ -12,6 +12,13 @@ MODE of the fake apple-kb-monitord (com.agenceapi.AppleKbMonitor1):
            that is alive but busy must never freeze a client
   die      behaves normally, then exits abruptly after --die-after seconds
   garbage  Json/GetState return invalid JSON, History a non-array
+  disconnected  as static, but the keyboard is known and its link is down
+                (last values kept, batteries low): the "offline" screens
+
+The fake daemon also serves what the tabs of the window read: the keyboard
+object (Device: FnMode, SetFnMode), the key table and the keymap (Keymap
+interface, fixtures/keytable.json and keymap.json, produced by akm-core),
+Link.Reconnect, and with --kde the KGlobalAccel "action" method.
 
 Every method call received is appended to the spy file as one JSON line
 ({"t":..., "bus":..., "dest":..., "path":..., "iface":..., "method":...}):
@@ -153,13 +160,46 @@ DAEMON_XML = """
  </interface>
  <interface name="com.agenceapi.AppleKbMonitor1.Link">
   <method name="Status"><arg type="s" direction="out"/></method>
+  <method name="Reconnect"><arg type="b" direction="out"/></method>
+ </interface>
+ <interface name="com.agenceapi.AppleKbMonitor1.Keymap">
+  <method name="KeyTable"><arg type="b" direction="in"/><arg type="s" direction="out"/></method>
+  <method name="Keymap"><arg type="s" direction="out"/></method>
+  <method name="SetKey"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+  <method name="SetPreset"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
+  <method name="Apply"><arg type="s" direction="out"/></method>
+  <method name="Reset"><arg type="s" direction="out"/></method>
+ </interface>
+ <interface name="com.agenceapi.AppleKbMonitor1.Device">
+  <method name="SetFnMode"><arg type="i" direction="in"/></method>
+  <property name="FnMode" type="i" access="read"/>
+  <property name="Connected" type="b" access="read"/>
+ </interface>
+ <interface name="org.kde.KGlobalAccel">
+  <method name="action"><arg type="i" direction="in"/><arg type="as" direction="out"/></method>
  </interface>
 </node>"""
 
+DEVICE_OBJ = "/com/agenceapi/AppleKbMonitor1/devices/" + MAC.replace(":", "_")
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+# Qt key -> what KGlobalAccel answers for it (component, action).
+KDE_ACTIONS = {
+    16777395: ("PowerDevil", "Decrease Screen Brightness"),
+    16777394: ("PowerDevil", "Increase Screen Brightness"),
+    16777344: ("Media Controller", "Media playback previous"),
+    16777350: ("Media Controller", "Play/Pause media playback"),
+    16777347: ("Media Controller", "Media playback next"),
+    16777329: ("Audio Volume", "Mute"),
+    16777328: ("Audio Volume", "Decrease Volume"),
+    16777330: ("Audio Volume", "Increase Volume"),
+}
 
-def snapshot(rev):
+
+def snapshot(rev, offline=False):
     now = int(time.time())
     pct = 87.0 - (rev % 7)
+    if offline:
+        return offline_snapshot(now)
     return {
         "schema": 1, "version": rev, "connected": True,
         "keyboard": {
@@ -170,16 +210,50 @@ def snapshot(rev):
             "battery": {"percentage": pct, "percentage_fine": pct + 0.4, "percentage_estimate": None,
                         "percentage_interpolated": None, "voltage": 2.91, "voltage_mv": 2910,
                         "voltage_filtered_mv": 2905, "voltage_doubtful": False, "adc_raw": None,
-                        "charge_estimate": None, "new_batteries": False},
+                        "charge_estimate": None, "new_batteries": False,
+                        "thresholds": {"full_mv": 2954, "low_mv": 2506, "critical_mv": 2404, "empty_mv": 2054},
+                        "threshold_level": "ok", "threshold_margins_mv": [-49, 399, 501, 851],
+                        "apple_display_pct": 100.0, "state": 0},
             "bluetooth": {"connected": True, "paired": True, "rssi_dbus": None, "tx_power_dbus": None,
-                          "paired_host_addr": None},
+                          "paired_host_addr": "AA:BB:CC:DD:EE:F2"},
             "radio": {"rssi_dbm": -(rev % 4), "rssi_rel_db": -(rev % 4), "rssi_kind": "bredr-golden-range",
                       "rssi_quality": "excellent", "tx_power_dbm": 8},
-            "firmware": {"version": None}, "raw": {}, "incomplete": False,
+            "firmware": {"version": "0x0050", "version_hex": "0x0050", "latest_known": "0x0050",
+                         "status": "up_to_date", "source": "Apple", "table_date": "2026-09-01"},
+            "raw": {}, "incomplete": False,
         },
         "kb_error": None, "caps_lock": rev % 2 == 1, "num_lock": False,
         "remaining_display": "~41 jours", "rssi_at": now - 5, "last_update": now - 60,
         "last_error": None, "forecast": None, "batteries_installed_at": now - 40 * 86400,
+    }
+
+
+def offline_snapshot(now):
+    """The keyboard is known, its link is down, the batteries are low."""
+    t = {"full_mv": 2954, "low_mv": 2506, "critical_mv": 2404, "empty_mv": 2054}
+    return {
+        "schema": 1, "version": 1, "connected": False,
+        "keyboard": {
+            "wake": {"last_age_s": 5400.0, "count": 3},
+            "device": {"model": "Apple Wireless Keyboard (A1314, aluminum, ISO)", "name": "Clavier de test",
+                       "alias": "Clavier de test", "mac": MAC, "chip": "BCM2042", "driver": "hid-apple"},
+            "battery": {"percentage": 18.0, "percentage_fine": 18.2, "percentage_estimate": None,
+                        "percentage_interpolated": None, "voltage": 2.47, "voltage_mv": 2470,
+                        "voltage_filtered_mv": 2470, "voltage_doubtful": False, "adc_raw": None,
+                        "charge_estimate": None, "new_batteries": False, "thresholds": t,
+                        "threshold_level": "low", "threshold_margins_mv": [-484, -36, 66, 416],
+                        "kept": True},
+            "bluetooth": {"connected": False, "paired": True, "rssi_dbus": None, "tx_power_dbus": None,
+                          "paired_host_addr": None},
+            "radio": {"rssi_dbm": None, "rssi_rel_db": None, "rssi_kind": None, "rssi_quality": None,
+                      "tx_power_dbm": None},
+            "firmware": {"version": "0x0050", "version_hex": "0x0050", "latest_known": "0x0050",
+                         "status": "up_to_date", "source": "Apple", "table_date": "2026-09-01"},
+            "raw": {}, "incomplete": False,
+        },
+        "kb_error": None, "caps_lock": False, "num_lock": False,
+        "remaining_display": None, "rssi_at": None, "last_update": now - 5400,
+        "last_error": None, "forecast": None, "batteries_installed_at": now - 200 * 86400,
     }
 
 
@@ -198,13 +272,19 @@ def run_daemon(a):
                     pass
         history = json.dumps(entries)
     garbage = a.mode == "garbage"
+    offline = a.mode == "disconnected"
+    state["fnmode"] = 1
+
+    def fixture(name):
+        with open(os.path.join(FIXTURES, name), encoding="utf-8") as f:
+            return f.read()
 
     def slow():
         if a.mode == "slow":
             time.sleep(a.delay)
 
     def js():
-        return '{"schema":1,"version":' if garbage else json.dumps(snapshot(state["rev"]))
+        return '{"schema":1,"version":' if garbage else json.dumps(snapshot(state["rev"], offline))
 
     def method(c, sender, path, iface, name, params, inv):
         spy("session", "com.agenceapi.AppleKbMonitor1", path, iface, name, params.unpack() if params else None)
@@ -216,7 +296,20 @@ def run_daemon(a):
         elif name == "Status":
             inv.return_value(GLib.Variant("(s)", (json.dumps([{"mac": MAC, "health": "connected"}]),)))
         elif name == "GetDevices":
-            inv.return_value(GLib.Variant("(ao)", ([],)))
+            inv.return_value(GLib.Variant("(ao)", ([DEVICE_OBJ],)))
+        elif name == "Reconnect":
+            inv.return_value(GLib.Variant("(b)", (True,)))
+        elif name == "KeyTable":
+            inv.return_value(GLib.Variant("(s)", (fixture("keytable.json"),)))
+        elif name == "Keymap":
+            inv.return_value(GLib.Variant("(s)", (fixture("keymap.json"),)))
+        elif name == "SetFnMode":
+            # Recorded; the mode of the fake follows, nothing else exists.
+            state["fnmode"] = params.unpack()[0]
+            inv.return_value(None)
+        elif name == "action":
+            act = KDE_ACTIONS.get(params.unpack()[0])
+            inv.return_value(GLib.Variant("(as)", (["kde", "", act[0], act[1]] if act else [],)))
         elif name == "BatterySets":
             inv.return_value(GLib.Variant("(s)", ("[]",)))
         elif name == "Refresh":
@@ -234,8 +327,17 @@ def run_daemon(a):
         }.get(prop)
 
     conn.register_object("/com/agenceapi/AppleKbMonitor1", info.interfaces[0], method, get_prop, None)
+    def device_prop(c, sender, path, iface, prop):
+        return {"FnMode": GLib.Variant("i", state["fnmode"]),
+                "Connected": GLib.Variant("b", not offline)}.get(prop)
+
     conn.register_object("/com/agenceapi/AppleKbMonitor1/Link", info.interfaces[1], method, None, None)
+    conn.register_object("/com/agenceapi/AppleKbMonitor1", info.interfaces[2], method, None, None)
+    conn.register_object(DEVICE_OBJ, info.interfaces[3], method, device_prop, None)
     own(conn, "com.agenceapi.AppleKbMonitor1")
+    if a.kde:
+        conn.register_object("/kglobalaccel", info.interfaces[4], method, None, None)
+        own(conn, "org.kde.kglobalaccel")
     print("ready", flush=True)
 
     def tick():
@@ -244,7 +346,7 @@ def run_daemon(a):
                          GLib.Variant("(ts)", (state["rev"], js())))
         return True
 
-    if a.mode != "static":
+    if a.mode not in ("static", "disconnected"):
         GLib.timeout_add(1000, tick)
     if a.mode == "die":
         GLib.timeout_add(int(a.die_after * 1000), lambda: os._exit(3))
@@ -326,7 +428,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("what", choices=["system", "daemon", "desktop"])
     p.add_argument("--spy", required=True)
-    p.add_argument("--mode", default="normal", choices=["normal", "static", "slow", "die", "garbage"])
+    p.add_argument("--mode", default="normal", choices=["normal", "static", "slow", "die", "garbage", "disconnected"])
+    p.add_argument("--kde", action="store_true", help="also answer as KGlobalAccel (daemon)")
     p.add_argument("--history")
     p.add_argument("--die-after", type=float, default=10.0)
     p.add_argument("--delay", type=float, default=3.0)
