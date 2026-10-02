@@ -4,22 +4,27 @@ use eframe::egui;
 
 use crate::history_view::Loader;
 use crate::i18n::tr;
-use crate::view::Palette;
+use crate::view::{Palette, Range};
 use crate::widgets::tile;
 
-/// Battery + voltage history chart (last 24 h). Pure drawing: the data
-/// is loaded by a worker thread and laid out by `crate::view::chart_model`, so a
-/// frame never waits on D-Bus or the disk and never lays out an
+/// Battery + voltage history chart over the chosen period: 24 h, 7, 30 or
+/// 90 days (#96). Pure drawing: the data is loaded by a worker thread and
+/// laid out by `crate::view::chart_model`, which bounds the number of
+/// points, so a frame never waits on D-Bus or the disk and never lays out an
 /// unbounded string (#230).
-pub fn show(ui: &mut egui::Ui, history: &Loader, palette: &Palette) {
+pub fn show(ui: &mut egui::Ui, history: &Loader, palette: &Palette, range: &mut Range) {
     let data = history.data();
     tile(ui, |ui| {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(
-                egui::RichText::new(tr("Battery History (24 h)"))
+                egui::RichText::new(tr("Battery History"))
                     .strong()
                     .size(18.0),
             );
+            for r in Range::ALL {
+                ui.selectable_value(range, r, egui::RichText::new(r.button()).size(14.0))
+                    .on_hover_text(r.text());
+            }
             let refresh = ui.add_enabled(
                 !data.loading,
                 egui::Button::new(egui::RichText::new(tr("Refresh")).size(14.0)),
@@ -40,6 +45,7 @@ pub fn show(ui: &mut egui::Ui, history: &Loader, palette: &Palette) {
             &data.battery,
             &data.voltage,
             crate::unix_now() as f64,
+            *range,
         ) {
             Ok(m) => m,
             Err(msg) => {

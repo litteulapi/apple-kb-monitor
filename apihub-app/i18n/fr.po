@@ -149,6 +149,33 @@ msgstr "il y a {} h"
 msgid "{} d ago"
 msgstr "il y a {} j"
 
+msgid "{} d"
+msgstr "{} j"
+
+msgid "24 h"
+msgstr "24 h"
+
+msgid "7 d"
+msgstr "7 j"
+
+msgid "30 d"
+msgstr "30 j"
+
+msgid "90 d"
+msgstr "90 j"
+
+msgid "7 days"
+msgstr "7 jours"
+
+msgid "30 days"
+msgstr "30 jours"
+
+msgid "90 days"
+msgstr "90 jours"
+
+msgid "{} d ago"
+msgstr "il y a {} j"
+
 msgid "keyboard indication"
 msgstr "indication du clavier"
 
@@ -179,11 +206,11 @@ msgstr "{} ({} depuis le démarrage)"
 msgid "No history data yet."
 msgstr "Pas encore de données d’historique."
 
-msgid "No data in the last 24 h."
-msgstr "Aucune donnée sur les dernières 24 h."
+msgid "No data in the last {}."
+msgstr "Aucune donnée sur {}."
 
-msgid "Only one reading in the last 24 h: {}."
-msgstr "Une seule mesure sur les dernières 24 h : {}."
+msgid "Only one reading in the last {}: {}."
+msgstr "Une seule mesure sur {} : {}."
 
 msgid "Battery %"
 msgstr "Batterie %"
@@ -323,8 +350,8 @@ msgstr "Réinitialiser"
 msgid "Restore the keyboard's own name"
 msgstr "Rétablir le nom d’origine du clavier"
 
-msgid "Battery History (24 h)"
-msgstr "Historique de la batterie (24 h)"
+msgid "Battery History"
+msgstr "Historique de la batterie"
 
 msgid "Loading history..."
 msgstr "Chargement de l’historique…"

@@ -290,19 +290,99 @@ pub fn two_columns(width: f32) -> bool {
     width >= TWO_COLUMNS_MIN_WIDTH
 }
 
-/// Width of the history chart (seconds).
-pub const CHART_WINDOW_S: f64 = 24.0 * 3600.0;
+/// Period shown by the history chart (#96). The daemon keeps 90 days.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Range {
+    #[default]
+    Day,
+    Week,
+    Month,
+    Quarter,
+}
+
+impl Range {
+    pub const ALL: [Range; 4] = [Range::Day, Range::Week, Range::Month, Range::Quarter];
+
+    pub fn seconds(self) -> f64 {
+        86_400.0
+            * match self {
+                Range::Day => 1.0,
+                Range::Week => 7.0,
+                Range::Month => 30.0,
+                Range::Quarter => 90.0,
+            }
+    }
+
+    /// Short text of the selector button.
+    pub fn button(self) -> &'static str {
+        match self {
+            Range::Day => tr("24 h"),
+            Range::Week => tr("7 d"),
+            Range::Month => tr("30 d"),
+            Range::Quarter => tr("90 d"),
+        }
+    }
+
+    /// The period in words, for the messages and the screen reader.
+    pub fn text(self) -> &'static str {
+        match self {
+            Range::Day => tr("24 h"),
+            Range::Week => tr("7 days"),
+            Range::Month => tr("30 days"),
+            Range::Quarter => tr("90 days"),
+        }
+    }
+}
+
+/// Most points one series of the chart ever draws, whatever the period and
+/// the size of the history (#96): 90 days of readings are reduced to this
+/// before reaching the painter.
+pub const CHART_POINTS_MAX: usize = 720;
+
+/// Reduce a time-sorted series to at most `max` points, keeping the first
+/// and last points and the lowest and highest value of each slice, so that a
+/// dip or a battery change stays visible. Unchanged when it already fits.
+pub fn downsample(pts: Vec<(f64, f64)>, max: usize) -> Vec<(f64, f64)> {
+    if pts.len() <= max || max < 4 {
+        return pts;
+    }
+    let inner = &pts[1..pts.len() - 1];
+    let buckets = (max - 2) / 2;
+    let mut out = Vec::with_capacity(max);
+    out.push(pts[0]);
+    for b in 0..buckets {
+        let s = &inner[b * inner.len() / buckets..(b + 1) * inner.len() / buckets];
+        let (mut lo, mut hi) = (0, 0);
+        for (i, p) in s.iter().enumerate() {
+            if p.1 < s[lo].1 {
+                lo = i;
+            }
+            if p.1 > s[hi].1 {
+                hi = i;
+            }
+        }
+        if let Some(first) = s.get(lo.min(hi)) {
+            out.push(*first);
+            if lo != hi {
+                out.push(s[lo.max(hi)]);
+            }
+        }
+    }
+    out.push(pts[pts.len() - 1]);
+    out
+}
 /// Clock skew tolerated after "now" before a point counts as future (#236).
 pub const CLOCK_SLACK_S: f64 = 600.0;
 
 /// History points that can be drawn: finite, percentage in 0..=100, positive
-/// voltage, inside the 24 h window starting at `cutoff` (a point dated in the
-/// future would squash the real 24 h into a few pixels, #236), sorted by time.
-pub fn chart_points(pts: &[(f64, f64)], cutoff: f64, pct: bool) -> Vec<(f64, f64)> {
+/// voltage, inside the window of `window` seconds starting at `cutoff` (a
+/// point dated in the future would squash the real period into a few pixels,
+/// #236), sorted by time.
+pub fn chart_points(pts: &[(f64, f64)], cutoff: f64, window: f64, pct: bool) -> Vec<(f64, f64)> {
     let mut v: Vec<(f64, f64)> = pts
         .iter()
         .copied()
-        .filter(|(t, y)| t.is_finite() && y.is_finite() && *t >= cutoff && *t <= cutoff + CHART_WINDOW_S + CLOCK_SLACK_S)
+        .filter(|(t, y)| t.is_finite() && y.is_finite() && *t >= cutoff && *t <= cutoff + window + CLOCK_SLACK_S)
         .filter(|(_, y)| if pct { (0.0..=100.0).contains(y) } else { *y > 0.0 && *y < 10.0 })
         .collect();
     v.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -332,18 +412,33 @@ pub struct ChartModel {
     pub summary: String,
 }
 
-/// Why there is no chart: the text shown instead.
-pub fn chart_model(battery: &[(f64, f64)], voltage: &[(f64, f64)], now: f64) -> Result<ChartModel, String> {
-    let cutoff = now - CHART_WINDOW_S;
-    let batt = chart_points(battery, cutoff, true);
+/// The chart of the last `range` (#96), each series reduced to
+/// [`CHART_POINTS_MAX`] points. `Err` = the text shown instead of a chart.
+pub fn chart_model(
+    battery: &[(f64, f64)],
+    voltage: &[(f64, f64)],
+    now: f64,
+    range: Range,
+) -> Result<ChartModel, String> {
+    let window = range.seconds();
+    let batt = chart_points(battery, now - window, window, true);
     if batt.is_empty() {
-        return Err(if battery.is_empty() { tr("No history data yet.").into() } else { tr("No data in the last 24 h.").into() });
+        return Err(if battery.is_empty() {
+            tr("No history data yet.").into()
+        } else {
+            trf("No data in the last {}.", &[&range.text()])
+        });
     }
     let (t_min, t_max) = (batt[0].0, batt[batt.len() - 1].0);
     if batt.len() < 2 || t_max - t_min < 1.0 {
-        return Err(trf("Only one reading in the last 24 h: {}.", &[&pct_text(Some(batt[batt.len() - 1].1), 0)]));
+        let last = pct_text(Some(batt[batt.len() - 1].1), 0);
+        return Err(trf("Only one reading in the last {}: {}.", &[&range.text(), &last]));
     }
-    let volt: Vec<(f64, f64)> = chart_points(voltage, t_min, false).into_iter().filter(|p| p.0 <= t_max).collect();
+    let volt: Vec<(f64, f64)> = chart_points(voltage, t_min, window, false).into_iter().filter(|p| p.0 <= t_max).collect();
+    // The summary counts the real readings; the painter gets a bounded series.
+    let readings = batt.len();
+    let batt = downsample(batt, CHART_POINTS_MAX);
+    let volt = downsample(volt, CHART_POINTS_MAX);
     let mut legend = vec![tr("Battery %").to_string()];
     let volt_axis = if volt.len() >= 2 {
         let lo = volt.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
@@ -362,7 +457,7 @@ pub fn chart_model(battery: &[(f64, f64)], voltage: &[(f64, f64)], now: f64) -> 
     let hours = (t_max - t_min) / 3600.0;
     Ok(ChartModel {
         x_ticks: time_ticks(t_min, t_max, now),
-        summary: trf("{} points over {}", &[&batt.len(), &span_text(hours)]),
+        summary: trf("{} points over {}", &[&readings, &span_text(hours)]),
         batt,
         volt,
         t_min,
@@ -383,8 +478,10 @@ fn clip_label(s: &str) -> String {
 fn span_text(hours: f64) -> String {
     if hours < 1.0 {
         trf("{} min", &[&format!("{:.0}", (hours * 60.0).max(1.0))])
-    } else {
+    } else if hours < 48.0 {
         trf("{} h", &[&dec_in(is_french(), format!("{hours:.1}"))])
+    } else {
+        trf("{} d", &[&dec_in(is_french(), format!("{:.1}", hours / 24.0))])
     }
 }
 
@@ -394,9 +491,10 @@ pub fn time_ticks(t_min: f64, t_max: f64, now: f64) -> Vec<(f64, String)> {
     if !(t_min.is_finite() && t_max.is_finite() && now.is_finite()) || t_max <= t_min {
         return Vec::new();
     }
-    const STEPS: [f64; 10] = [300.0, 600.0, 900.0, 1800.0, 3600.0, 7200.0, 10800.0, 21600.0, 43200.0, 86400.0];
+    const DAY: f64 = 86400.0;
+    const STEPS: [f64; 14] = [300.0, 600.0, 900.0, 1800.0, 3600.0, 7200.0, 10800.0, 21600.0, 43200.0, DAY, 2.0 * DAY, 7.0 * DAY, 14.0 * DAY, 30.0 * DAY];
     let span = t_max - t_min;
-    let step = STEPS.iter().copied().find(|s| span / s <= (CHART_TICKS_MAX - 1) as f64).unwrap_or(86400.0);
+    let step = STEPS.iter().copied().find(|s| span / s <= (CHART_TICKS_MAX - 1) as f64).unwrap_or(30.0 * DAY);
     // Ticks at whole multiples of `step` before `now`, inside [t_min, t_max].
     let mut ticks = Vec::new();
     let mut k = ((now - t_max) / step).ceil().max(0.0);
@@ -409,7 +507,8 @@ pub fn time_ticks(t_min: f64, t_max: f64, now: f64) -> Vec<(f64, String)> {
         let label = match ago {
             0 => tr("now").to_string(),
             a if a < 3600 => trf("{} min ago", &[&(a / 60)]),
-            a => trf("{} h ago", &[&(a / 3600)]),
+            a if a < 172_800 => trf("{} h ago", &[&(a / 3600)]),
+            a => trf("{} d ago", &[&(a / 86_400)]),
         };
         ticks.push((t, label));
         k += 1.0;
@@ -611,9 +710,9 @@ mod tests {
     #[test]
     fn chart_drops_unusable_points() {
         let pts = [(10.0, 50.0), (5.0, 60.0), (11.0, f64::NAN), (12.0, 1e308), (13.0, -1.0), (1.0, 70.0), (f64::INFINITY, 1.0)];
-        assert_eq!(chart_points(&pts, 2.0, true), vec![(5.0, 60.0), (10.0, 50.0)]);
+        assert_eq!(chart_points(&pts, 2.0, 86_400.0, true), vec![(5.0, 60.0), (10.0, 50.0)]);
         let v = [(1.0, 2.9), (2.0, 0.0), (3.0, 1e9)];
-        assert_eq!(chart_points(&v, 0.0, false), vec![(1.0, 2.9)]);
+        assert_eq!(chart_points(&v, 0.0, 86_400.0, false), vec![(1.0, 2.9)]);
     }
 
     fn labels_are_short(m: &ChartModel) {
@@ -630,7 +729,7 @@ mod tests {
     fn real_history_without_reliable_voltage_has_a_short_legend() {
         let now = 1_790_858_400.0;
         let batt: Vec<(f64, f64)> = (0..56).map(|i| (now - 43_200.0 + i as f64 * 785.0, if i < 7 { 90.0 } else { 96.0 })).collect();
-        let m = chart_model(&batt, &[], now).unwrap();
+        let m = chart_model(&batt, &[], now, Range::Day).unwrap();
         assert_eq!(m.legend, vec!["Battery %".to_string()]);
         assert_eq!(m.volt_axis, None);
         assert_eq!(m.summary, "56 points over 12.0 h");
@@ -642,27 +741,27 @@ mod tests {
     #[test]
     fn chart_handles_empty_single_constant_and_nan() {
         let now = 100_000.0;
-        assert_eq!(chart_model(&[], &[], now), Err("No history data yet.".into()));
-        assert_eq!(chart_model(&[(1.0, 50.0)], &[], now), Err("No data in the last 24 h.".into()));
-        assert_eq!(chart_model(&[(now - 10.0, 42.0)], &[], now), Err("Only one reading in the last 24 h: 42%.".into()));
+        assert_eq!(chart_model(&[], &[], now, Range::Day), Err("No history data yet.".into()));
+        assert_eq!(chart_model(&[(1.0, 50.0)], &[], now, Range::Day), Err("No data in the last 24 h.".into()));
+        assert_eq!(chart_model(&[(now - 10.0, 42.0)], &[], now, Range::Day), Err("Only one reading in the last 24 h: 42%.".into()));
         let nan = [(now - 100.0, f64::NAN), (now - 50.0, f64::NAN)];
-        assert_eq!(chart_model(&nan, &nan, now), Err("No data in the last 24 h.".into()));
+        assert_eq!(chart_model(&nan, &nan, now, Range::Day), Err("No data in the last 24 h.".into()));
         // Constant battery and voltage: a padded axis, no division by zero.
         let batt = [(now - 7200.0, 80.0), (now - 3600.0, 80.0), (now, 80.0)];
         let volt = [(now - 7200.0, 2.9), (now - 3600.0, 2.9), (now, 2.9)];
-        let m = chart_model(&batt, &volt, now).unwrap();
+        let m = chart_model(&batt, &volt, now, Range::Day).unwrap();
         let (lo, hi) = m.volt_axis.unwrap();
         assert!(lo < 2.9 && hi > 2.9 && (hi - lo) < 1.0);
         assert_eq!(m.legend[1], "Voltage 2.90\u{2013}2.90 V");
         assert_eq!(m.x_ticks.last().map(|t| t.1.as_str()), Some("now"));
         labels_are_short(&m);
         // Absurd voltages are dropped, never formatted.
-        let m = chart_model(&batt, &[(now - 10.0, f64::MAX), (now - 5.0, f64::MIN)], now).unwrap();
+        let m = chart_model(&batt, &[(now - 10.0, f64::MAX), (now - 5.0, f64::MIN)], now, Range::Day).unwrap();
         assert_eq!(m.legend.len(), 1);
         // A point dated in 30 days does not stretch the time axis (#236).
         let mut fut = batt.to_vec();
         fut.push((now + 30.0 * 86_400.0, 50.0));
-        let m = chart_model(&fut, &[], now).unwrap();
+        let m = chart_model(&fut, &[], now, Range::Day).unwrap();
         assert_eq!(m.t_max, now);
         assert_eq!(m.summary, "3 points over 2.0 h");
     }
@@ -678,6 +777,94 @@ mod tests {
         assert_eq!(time_ticks(now - 43_200.0, now, now).iter().map(|t| t.1.as_str()).collect::<Vec<_>>(), ["12 h ago", "9 h ago", "6 h ago", "3 h ago", "now"]);
         assert!(time_ticks(f64::NAN, now, now).is_empty());
         assert!(time_ticks(now, now, now).is_empty());
+    }
+
+    /// #96: 7, 30 and 90 days, each drawn with a bounded number of points.
+    #[test]
+    fn ranges_select_the_period_and_bound_the_drawn_points() {
+        let now = 1_790_858_400.0;
+        // One reading every 30 s for 90 days: 259 200 points, voltage sagging.
+        let n = 259_200;
+        let batt: Vec<(f64, f64)> = (0..n)
+            .map(|i| {
+                (
+                    now - 30.0 * (n - 1 - i) as f64,
+                    100.0 - 60.0 * i as f64 / n as f64,
+                )
+            })
+            .collect();
+        let volt: Vec<(f64, f64)> = batt.iter().map(|&(t, p)| (t, 2.0 + p / 100.0)).collect();
+        for (range, readings, span, first_tick) in [
+            (Range::Day, 2_881, "24.0 h", "24 h ago"),
+            (Range::Week, 20_161, "7.0 d", "6 d ago"),
+            (Range::Month, 86_401, "30.0 d", "28 d ago"),
+            (Range::Quarter, 259_200, "90.0 d", "60 d ago"),
+        ] {
+            let m = chart_model(&batt, &volt, now, range).unwrap();
+            assert!(
+                m.batt.len() <= CHART_POINTS_MAX && m.volt.len() <= CHART_POINTS_MAX,
+                "{range:?}: {} points",
+                m.batt.len()
+            );
+            assert!(
+                m.batt.len() > CHART_POINTS_MAX / 2,
+                "{range:?}: {} points",
+                m.batt.len()
+            );
+            assert!(
+                m.batt.windows(2).all(|w| w[0].0 <= w[1].0),
+                "{range:?}: not sorted by time"
+            );
+            assert_eq!(m.summary, format!("{readings} points over {span}"));
+            assert_eq!(
+                (m.t_min, m.t_max),
+                (m.batt[0].0, m.batt[m.batt.len() - 1].0)
+            );
+            assert!((m.t_max - m.t_min - (readings - 1) as f64 * 30.0).abs() < 1.0);
+            assert_eq!(
+                m.x_ticks.first().map(|t| t.1.as_str()),
+                Some(first_tick),
+                "{range:?}: {:?}",
+                m.x_ticks
+            );
+            assert!(m.x_ticks.len() <= CHART_TICKS_MAX);
+            labels_are_short(&m);
+        }
+        assert_eq!(
+            chart_model(&batt[..10], &[], now, Range::Week),
+            Err("No data in the last 7 days.".into())
+        );
+        assert_eq!(Range::default(), Range::Day);
+        assert_eq!(
+            Range::ALL.map(Range::button),
+            ["24 h", "7 d", "30 d", "90 d"]
+        );
+    }
+
+    #[test]
+    fn downsampling_keeps_the_ends_and_the_extremes() {
+        let mut pts: Vec<(f64, f64)> = (0..50_000).map(|i| (i as f64, 50.0)).collect();
+        pts[12_345].1 = 3.0; // a dip one reading wide
+        pts[40_000].1 = 99.0; // a spike one reading wide
+        let d = downsample(pts.clone(), CHART_POINTS_MAX);
+        assert!(d.len() <= CHART_POINTS_MAX, "{}", d.len());
+        assert_eq!((d[0], d[d.len() - 1]), (pts[0], pts[49_999]));
+        assert!(d.contains(&(12_345.0, 3.0)) && d.contains(&(40_000.0, 99.0)));
+        assert!(d.windows(2).all(|w| w[0].0 < w[1].0));
+        // Already small enough, or a bound too small to slice: untouched.
+        assert_eq!(
+            downsample(pts[..700].to_vec(), CHART_POINTS_MAX),
+            pts[..700].to_vec()
+        );
+        assert_eq!(downsample(pts[..10].to_vec(), 3).len(), 10);
+        for max in [4, 5, 6, 7, 100, 719, 720] {
+            for len in [max + 1, max + 2, 2 * max, 10 * max + 3] {
+                assert!(
+                    downsample(pts[..len].to_vec(), max).len() <= max,
+                    "max {max} len {len}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -96,7 +96,7 @@ proptest! {
         cutoff in ts(),
         pct in any::<bool>(),
     ) {
-        let out = view::chart_points(&pts, cutoff, pct);
+        let out = view::chart_points(&pts, cutoff, 86_400.0, pct);
         prop_assert!(out.len() <= pts.len());
         for w in out.windows(2) {
             prop_assert!(w[0].0 <= w[1].0, "not sorted: {:?}", w);
@@ -122,7 +122,7 @@ proptest! {
         w in 1.0f32..8000.0, h in 1.0f32..8000.0,
     ) {
         let pts: Vec<(f64, f64)> = raw.iter().map(|&(t, y)| (t as f64, y)).collect();
-        let b = view::chart_points(&pts, 1_790_000_000.0 - 86_400.0, true);
+        let b = view::chart_points(&pts, 1_790_000_000.0 - 86_400.0, 86_400.0, true);
         prop_assume!(b.len() >= 2);
         let (t_min, t_max) = (b[0].0, b[b.len() - 1].0);
         for &(t, p) in &b {
@@ -131,7 +131,7 @@ proptest! {
             prop_assert!((-0.01..=w + 0.01).contains(&x), "x={x} w={w}");
             prop_assert!((-0.01..=h + 0.01).contains(&y), "y={y} h={h}");
         }
-        let v = view::chart_points(&pts, t_min, false);
+        let v = view::chart_points(&pts, t_min, 86_400.0, false);
         if v.len() >= 2 {
             let (_, _, lo, hi) = chart::volt_scale(&v);
             prop_assert!(hi > lo && (hi - lo).is_finite());
@@ -149,7 +149,7 @@ proptest! {
     fn chart_legend_is_bounded(
         pts in prop::collection::vec((ts(), hostile_f64()), 0..300),
     ) {
-        let v = view::chart_points(&pts, f64::MIN, false);
+        let v = view::chart_points(&pts, f64::MIN, 86_400.0, false);
         let (v_min, v_max, _, _) = chart::volt_scale(&v);
         let legend = chart::legend(v_min, v_max, v.len() >= 2);
         prop_assert!(legend.len() <= 2);
@@ -294,7 +294,12 @@ fn measure_history_costs_on_the_ui_thread() {
         let pts: Vec<(f64, f64)> = entries.iter().map(|e| (e.ts as f64, e.pct)).collect();
         let t = std::time::Instant::now();
         for _ in 0..10 {
-            std::hint::black_box(view::chart_points(&pts, 1_790_000_000.0 - 86_400.0, true));
+            std::hint::black_box(view::chart_points(
+                &pts,
+                1_790_000_000.0 - 86_400.0,
+                86_400.0,
+                true,
+            ));
         }
         let per_frame = t.elapsed() / 10;
         println!(
@@ -313,6 +318,6 @@ fn future_points_are_not_drawn_as_last_24h() {
     let now = 1_790_000_000.0;
     let mut pts: Vec<(f64, f64)> = (0..200).map(|i| (now - 82_800.0 + f64::from(i) * 414.0, 90.0)).collect();
     pts.push((now + 30.0 * 86_400.0, 50.0));
-    let out = view::chart_points(&pts, now - 86_400.0, true);
+    let out = view::chart_points(&pts, now - 86_400.0, 86_400.0, true);
     assert!(out.iter().all(|p| p.0 <= now + 3_600.0), "future point kept: {:?}", out.last());
 }

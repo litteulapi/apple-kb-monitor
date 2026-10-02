@@ -52,6 +52,8 @@ struct ApiHubApp {
     palette: Palette,
     // Battery history graph: loaded by a worker thread, only read here.
     history: history_view::Loader,
+    // Period of the history chart (#96): 24 h, 7, 30 or 90 days.
+    history_range: view::Range,
     // Rename field (#141)
     rename_buf: String,
     rename_loaded: Option<String>,
@@ -84,6 +86,7 @@ impl ApiHubApp {
             applied: None,
             palette: Palette::new(cc.egui_ctx.style().visuals.dark_mode),
             history,
+            history_range: view::Range::default(),
             rename_buf: String::new(),
             rename_loaded: None,
             rename_status: Arc::new(Mutex::new(None)),
@@ -207,7 +210,7 @@ impl ApiHubApp {
             ui.add_space(8.0);
             self.tile_row(ui, wide, |me, ui| me.device_tile(ui, snap, kb), |me, ui| me.firmware_tile(ui, kb));
             ui.add_space(8.0);
-            history_chart::show(ui, &self.history, &self.palette);
+            history_chart::show(ui, &self.history, &self.palette, &mut self.history_range);
         });
     }
 
