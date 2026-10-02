@@ -225,3 +225,37 @@ chemin d'objet refusé pour une adresse invalide) et `tst_link.qml` contre le fa
 démon (`History`, `FnMode` lu, `SetFnMode(2)` appelé une seule fois, relu). Non
 testé ici : le rendu dans plasmashell (`plasmoidviewer` ouvrirait une fenêtre sur
 le bureau).
+
+## 12. Widget : pages Historique et Diagnostic (#120)
+
+Le popup a trois onglets : **État** (l'affichage d'avant, §11), **Historique**,
+**Diagnostic**. Tout vient de méthodes D-Bus que le démon expose déjà ; le widget ne
+lance aucun processus et ne lit aucun fichier.
+
+| Page | Contenu | Source D-Bus |
+|---|---|---|
+| Historique (`HistoryPage.qml`) | piles (0–100 %) et tension sur 7, 30 ou 90 jours, nombre de mesures, étendues, dates de début et de fin | `History(t since)` |
+| Diagnostic (`DiagPage.qml`) | moniteur en service et version ; clavier connecté ou non, dernière erreur ; heure de la dernière lecture, lecture incomplète ; signal ; état de la liaison (tentatives, échecs, dernière erreur) ; firmware ; mode Fn | `GetState`, propriété `DaemonVersion`, `Link.Status()`, `Device.FnMode` |
+| Diagnostic, boutons | **Relire** et **Reconnecter** | `Refresh()`, `Link.Reconnect()` |
+
+La page Historique ne trace jamais plus de 240 points par série (`History.js`,
+`POINTS_MAX`), quelle que soit la période.
+
+Limites, à traiter côté démon :
+
+* **`Diagnose()` n'existe pas.** Les contrôles de l'onglet Diag de la fenêtre
+  (`apihub-app/src/diag_tab.rs` : binaires, unité systemd, hidraw, hwdb, règles udev,
+  `fnmode`, rssi-helper) lancent des commandes et lisent des fichiers ; le widget ne
+  le fait pas. La page renvoie à Configuration du système › Clavier Apple ›
+  Diagnostic. Quand le démon exposera `Diagnose()`, il suffira d'en afficher le
+  résultat dans `DiagPage.qml`.
+* **`History(since)` renvoie toute la période** : sur 90 jours, la réponse JSON est
+  analysée dans plasmashell avant d'être réduite à 240 points. Une variante bornée
+  côté démon (nombre maximal de points) éviterait ce transfert ; la page n'est
+  chargée qu'à l'ouverture de l'onglet.
+* La feature Cargo `gui` d'`apihub-app` (fenêtre optionnelle) n'est pas faite.
+
+Tests : `tst_pages.qml` instancie le popup complet et les deux pages hors écran,
+sur un faux applet, et échoue sur toute liaison vers un nom absent ; `tst_link.qml`
+vérifie `Link.Status`, `Reconnect`, `Refresh` et `DaemonVersion` contre le faux
+démon. Non testé ici : le rendu dans plasmashell.

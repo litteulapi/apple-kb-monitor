@@ -23,6 +23,16 @@ QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 qml6 "$here/tst_signal.qml" 
 # History series and Fn mode toggle of the widget (#97, #120), no bus needed.
 QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 qml6 "$here/tst_history.qml" 2>&1 | grep -q "PASS history" \
   || { QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 qml6 "$here/tst_history.qml" 2>&1 | tail -5 >&2; echo "FAIL: tst_history.qml" >&2; exit 1; }
+# The popup and its History / Diagnostic pages load offscreen against a
+# stand-in applet, without any binding on a missing name (#120). Needs the
+# Plasma QML modules; D-Bus is not used (DBUS_SESSION_BUS_ADDRESS is unset so
+# that nothing of the real session can be reached).
+pages=$(env -u DBUS_SESSION_BUS_ADDRESS QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 timeout 60 qml6 "$here/tst_pages.qml" 2>&1) || true
+if echo "$pages" | grep -qE "module \"org\.kde\.[a-z.]+\" is not installed"; then
+  echo "tst_pages.qml skipped: Plasma QML modules not installed"
+elif ! echo "$pages" | grep -q "PASS pages" || echo "$pages" | grep -E "ReferenceError|TypeError|is not defined|Unable to assign|Cannot read property|is not a type"; then
+  echo "$pages" | tail -15 >&2; echo "FAIL: tst_pages.qml" >&2; exit 1
+fi
 exec dbus-run-session -- sh -eu -c '
   here="$1"
   out=$(mktemp)

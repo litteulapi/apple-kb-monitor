@@ -58,7 +58,7 @@ PlasmaExtras.Representation {
         }
 
         PlasmaExtras.PlaceholderMessage {
-            visible: root.daemonRunning && !root.connected
+            visible: root.daemonRunning && !root.connected && tabs.currentIndex === 0
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.largeSpacing
             iconName: "input-keyboard"
@@ -66,8 +66,41 @@ PlasmaExtras.Representation {
             explanation: root.lastError
         }
 
+        // State / History / Diagnostics (#120): consult, diagnose and reconnect
+        // without opening the window.
+        PlasmaComponents3.TabBar {
+            id: tabs
+            visible: root.daemonRunning
+            Layout.fillWidth: true
+            PlasmaComponents3.TabButton {
+                text: i18n("State")
+            }
+            PlasmaComponents3.TabButton {
+                text: i18n("History")
+                onClicked: root.showHistory(root.historyDays)
+            }
+            PlasmaComponents3.TabButton {
+                text: i18n("Diagnostics")
+                onClicked: root.fetchDetails()
+            }
+        }
+
+        HistoryPage {
+            applet: root
+            visible: root.daemonRunning && tabs.currentIndex === 1
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.largeSpacing
+        }
+
+        DiagPage {
+            applet: root
+            visible: root.daemonRunning && tabs.currentIndex === 2
+            Layout.fillWidth: true
+            Layout.margins: Kirigami.Units.largeSpacing
+        }
+
         ColumnLayout {
-            visible: root.connected
+            visible: root.connected && tabs.currentIndex === 0
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.largeSpacing
             spacing: Kirigami.Units.smallSpacing

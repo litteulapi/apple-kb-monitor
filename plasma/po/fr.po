@@ -224,11 +224,74 @@ msgstr "touches multimédia d'abord"
 msgid "%1 (attempts: %2, failures: %3)"
 msgstr "%1 (tentatives : %2, échecs : %3)"
 
+msgid "%1 d"
+msgstr "%1 j"
+
+msgid "%1 readings over %2 days"
+msgstr "%1 mesures sur %2 jours"
+
+msgid "Asks the monitor for a new reading of the keyboard"
+msgstr "Demande au moniteur une nouvelle lecture du clavier"
+
+msgid "Asks the monitor to call the keyboard now"
+msgstr "Demande au moniteur d'appeler le clavier maintenant"
+
+msgid "Battery and voltage chart, last %1 days"
+msgstr "Graphique des piles et de la tension, %1 derniers jours"
+
+msgid "Battery: %1% to %2%"
+msgstr "Piles : %1 % à %2 %"
+
+msgid "Diagnostics"
+msgstr "Diagnostic"
+
+msgid "Full check of the installed components: System Settings, Apple Keyboard, Diagnostics."
+msgstr "Contrôle complet des composants installés : Configuration du système, Clavier Apple, Diagnostic."
+
+msgid "History"
+msgstr "Historique"
+
+msgid "History not available: %1"
+msgstr "Historique indisponible : %1"
+
+msgid "Keyboard:"
+msgstr "Clavier :"
+
+msgid "Last %1 days"
+msgstr "%1 derniers jours"
+
+msgid "Last error:"
+msgstr "Dernière erreur :"
+
+msgid "Last link error:"
+msgstr "Dernière erreur de liaison :"
+
+msgid "Link:"
+msgstr "Liaison :"
+
+msgid "Loading history…"
+msgstr "Chargement de l'historique…"
+
+msgid "Monitor:"
+msgstr "Moniteur :"
+
 msgid "New reading requested."
 msgstr "Nouvelle lecture demandée."
 
+msgid "Not enough readings over the last %1 days."
+msgstr "Pas assez de mesures sur les %1 derniers jours."
+
+msgid "Read again"
+msgstr "Relire"
+
 msgid "Reading not requested: %1"
 msgstr "Lecture non demandée : %1"
+
+msgid "Reading:"
+msgstr "Lecture :"
+
+msgid "Reconnect"
+msgstr "Reconnecter"
 
 msgid "Reconnection not requested: %1"
 msgstr "Reconnexion non demandée : %1"
@@ -236,14 +299,32 @@ msgstr "Reconnexion non demandée : %1"
 msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
 msgstr "Reconnexion demandée. Appuyez sur une touche du clavier s'il est en veille."
 
+msgid "Refresh"
+msgstr "Actualiser"
+
+msgid "State"
+msgstr "État"
+
+msgid "Voltage: %1 to %2 V"
+msgstr "Tension : %1 à %2 V"
+
 msgid "asleep"
 msgstr "en veille"
 
 msgid "connected"
 msgstr "connecté"
 
+msgid "incomplete (a report did not answer in time)"
+msgstr "incomplète (un rapport n'a pas répondu à temps)"
+
 msgid "refused by the monitor"
 msgstr "refusée par le moniteur"
+
+msgid "running"
+msgstr "en service"
+
+msgid "running, version %1"
+msgstr "en service, version %1"
 
 msgid "unreachable"
 msgstr "injoignable"

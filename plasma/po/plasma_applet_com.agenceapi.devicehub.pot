@@ -227,10 +227,73 @@ msgstr ""
 msgid "%1 (attempts: %2, failures: %3)"
 msgstr ""
 
+msgid "%1 d"
+msgstr ""
+
+msgid "%1 readings over %2 days"
+msgstr ""
+
+msgid "Asks the monitor for a new reading of the keyboard"
+msgstr ""
+
+msgid "Asks the monitor to call the keyboard now"
+msgstr ""
+
+msgid "Battery and voltage chart, last %1 days"
+msgstr ""
+
+msgid "Battery: %1% to %2%"
+msgstr ""
+
+msgid "Diagnostics"
+msgstr ""
+
+msgid "Full check of the installed components: System Settings, Apple Keyboard, Diagnostics."
+msgstr ""
+
+msgid "History"
+msgstr ""
+
+msgid "History not available: %1"
+msgstr ""
+
+msgid "Keyboard:"
+msgstr ""
+
+msgid "Last %1 days"
+msgstr ""
+
+msgid "Last error:"
+msgstr ""
+
+msgid "Last link error:"
+msgstr ""
+
+msgid "Link:"
+msgstr ""
+
+msgid "Loading history…"
+msgstr ""
+
+msgid "Monitor:"
+msgstr ""
+
 msgid "New reading requested."
 msgstr ""
 
+msgid "Not enough readings over the last %1 days."
+msgstr ""
+
+msgid "Read again"
+msgstr ""
+
 msgid "Reading not requested: %1"
+msgstr ""
+
+msgid "Reading:"
+msgstr ""
+
+msgid "Reconnect"
 msgstr ""
 
 msgid "Reconnection not requested: %1"
@@ -239,13 +302,31 @@ msgstr ""
 msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
 msgstr ""
 
+msgid "Refresh"
+msgstr ""
+
+msgid "State"
+msgstr ""
+
+msgid "Voltage: %1 to %2 V"
+msgstr ""
+
 msgid "asleep"
 msgstr ""
 
 msgid "connected"
 msgstr ""
 
+msgid "incomplete (a report did not answer in time)"
+msgstr ""
+
 msgid "refused by the monitor"
+msgstr ""
+
+msgid "running"
+msgstr ""
+
+msgid "running, version %1"
 msgstr ""
 
 msgid "unreachable"
