@@ -2,6 +2,7 @@
 
 * Corrigé le 2026-10-02 (issue #242) : §3.1 (boutisme, méthodes non listées, oubli = `0x41`), §3.2 et §8 (client du % remappé), §4 (34 commandes, `ReleaseAllChannels`, `HIDSuspend`, disjoncteur avec déconnexion), §5 et §7 (`0x4A` = `03` envoyé par `bluetoothd`) ; source : `RE-GHIDRA-IOBLUETOOTH.md`.
 * Corrigé le 2026-10-02 (issue #245) : §3.1, §4 et §7 : `HIDExitSuspend` ne met rien sur le fil (pas `0x14`) ; le disjoncteur bloque aussi `sendData` ; un refus HANDSHAKE compte comme réponse ; source : `RE-GHIDRA-KEXT.md` §2.2, §2.4, §2.5.
+* Corrigé le 2026-10-02 (issue #239) : `0xD5` n'est plus « inconnu » : commande de test radio PER des anciens HID Apple (`D5 07` / `D5 00`, CoreBluetooth `CBHIDPerformanceMonitor`) ; source : `RE-GHIDRA-IOBLUETOOTH.md` §4.
 
 Complément de [`RE-PILOTE-MACOS.md`](RE-PILOTE-MACOS.md). Cette analyse-là portait sur les collections de noyau **x86_64**,
 n'avait pas ouvert **IOBluetooth.framework** (cache dyld) et n'avait lu `bluetoothd` qu'en partie.
@@ -165,6 +166,11 @@ Les 11 IDs « sans GET » de notre clavier (`0x40 0x41 0x44 0x45 0x50 0x55 0xD0 
 BluetoothServices, BluetoothManager, CoreBluetooth, `bluetoothd`, `bluetoothuserd`, `BTLEServer`.
 Cela a été vérifié par balayage de tous les appels `setReport` et `getReport` à ID immédiat **[désassemblage]**.
 
+**Corrigé (#239) [décompilé]** : ce balayage avait manqué CoreBluetooth. Sa classe privée `CBHIDPerformanceMonitor` envoie
+**SET Feature `0xD5`** = `07` (démarrage) puis `00` (arrêt) d'un test radio « PER » (taux d'erreur paquets) aux PID
+`0x239-0x23B` et `0x255-0x257`, dont l'A1314 ; fil HIDP déduit : `53 D5 07` / `53 D5 00`. Aucun client de cette classe
+n'est livré dans macOS 26.5 (`RE-GHIDRA-IOBLUETOOTH.md` §4). Seuls `0xD0 0xD4 0xFA 0xFB` restent sans référence.
+
 ### 3.4 Écriture du nom dans le micrologiciel
 
 * **macOS 26.5 n'écrit jamais `DeviceNameChange` (`0x50`), `DeviceName1..4` ni `LongDeviceName` (`0x55`)** :
@@ -282,6 +288,7 @@ Seules les lignes nouvelles ou corrigées par rapport à `RE-PILOTE-MACOS.md` §
 ## 8. Ce qui reste inconnu
 
 1. `0xD0 0xD4 0xD5 0xFA 0xFB` : **absents de tout macOS 26.5**, noyau arm64e et espace utilisateur.
+   **Corrigé (#239)** : sauf `0xD5`, commande de test radio PER de CoreBluetooth (§3.3).
    Ce sont soit des registres du micrologiciel sans client Apple actuel, soit l'ancien canal de flash. Ils sont à chercher dans les paquets historiques (#188).
 2. Input `0x04`/`0x05` : aucune référence Apple.
 3. Sens de `0x4A` **en lecture** (18) par rapport aux valeurs écrites 1-4.

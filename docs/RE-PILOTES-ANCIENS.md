@@ -3,6 +3,7 @@
 * Corrigé le 2026-10-02 (issue #229) : §1 (le Combo 10.6.8 est exploitable), §3 (apparition par version), §4 (courbe d'affichage), §5 et §7 (`0x4A` depuis Bluetooth 1.5, douze logiciels examinés), §6.2 (protocole `bfu` complété) ; source : `RE-SYSTEMES-ANCIENS.md`.
 * Corrigé le 2026-10-02 (issue #242) : §5 et §7, devenir de L9 et L10 sur macOS 26.5 : `0x4A` = `03` envoyé par `bluetoothd`, oubli = `RecantConnection` (`0x41`) et non `0x44` ; source : `RE-GHIDRA-IOBLUETOOTH.md` §5.1-5.2.
 * Corrigé le 2026-10-02 (issue #245) : §5 (L6) et §7 : en 26.5 le noyau n'émet plus `13`/`14` de lui-même ; `getExtendedReport` exige `size` ; second chemin `0x09` par IOHID ; balayage exhaustif de 6 kexts ; source : `RE-GHIDRA-KEXT.md` §2.4, §4, §5.
+* Corrigé le 2026-10-02 (issue #239) : `0xD5` n'est plus « inconnu » : commande de test radio PER des anciens HID Apple (`D5 07` / `D5 00`, CoreBluetooth `CBHIDPerformanceMonitor`) ; source : `RE-GHIDRA-IOBLUETOOTH.md` §4.
 
 Analyse **statique, en lecture seule**, de logiciels Apple **publiquement distribués** par les serveurs
 d'Apple, à des fins d'interopérabilité avec le clavier du gérant (A1314 ISO, `05AC:0256` = 598,
@@ -261,7 +262,7 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
 | `0x5B` | Feature | `0xF4` ‖ `0xF5` ‖ zéros | [mesuré] | — | — |
 | `0x5C`, `0x5D` | Feature | vides | [mesuré] | — | — |
 | `0x60` | Feature | **`CalibratedBatteryThresholds3`** : `Full`/`Low`/`Critical`/`Empty` mV (4 × u16 BE) | [plist + désassemblage 10.7] | lecture | nouvelle issue |
-| `0xD0`, `0xD4`, `0xD5` | Feature WO | **inconnus** ; même plage que les opcodes de maintenance `0xD1-0xDB` de l'updater (PSM `0xF30D`) | [désassemblage bfu + déduction] | **inconnu, potentiellement maintenance** | **ne jamais écrire** |
+| `0xD0`, `0xD4`, `0xD5` | Feature WO | **inconnus** pour `0xD0` et `0xD4` ; **`0xD5` = test radio PER** (`D5 07` démarre, `D5 00` arrête ; CoreBluetooth 26.5, `RE-GHIDRA-IOBLUETOOTH.md` §4 ; corrigé #239) ; même plage que les opcodes de maintenance `0xD1-0xDB` de l'updater (PSM `0xF30D`) | [désassemblage bfu + déduction] | **inconnu, potentiellement maintenance** | **ne jamais écrire** |
 | `0xD1`, `0xD8` | Feature | inconnus (0) ; même plage `0xDx` | [mesuré] | lecture rare | — |
 | `0xEA` | Feature | second estimateur de % (hypothèse) ; jamais lu par Apple | [mesuré] | lecture | remplacer par `0x47` (#177) |
 | `0xF4`-`0xF7` | Feature | constantes (`0xF5` = 900 : délai de veille ?) ; jamais lus par Apple | [mesuré] | lecture rare | #173 |

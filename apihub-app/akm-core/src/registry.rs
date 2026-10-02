@@ -342,7 +342,7 @@ pub const TABLE: &[Entry] = &[
       E::None, D::Raw, P::Hypothesis, S::NeverWrite, "RE-COMMANDES-VENDEUR §1.3"),
     r(0xD4, F, None, None, "d4", "Unknown write-only register (maintenance range of the updater)", "-",
       E::None, D::Raw, P::Hypothesis, S::NeverWrite, "RE-COMMANDES-VENDEUR §1.3"),
-    r(0xD5, F, None, None, "d5", "Unknown write-only register (maintenance range of the updater)", "-",
+    r(0xD5, F, None, None, "d5", "Start / stop of the radio PER test of old Apple HID devices (CoreBluetooth CBHIDPerformanceMonitor, macOS 26.5: SET `D5 07` starts, `D5 00` stops; no shipped client; meaning of 07 unknown); write-only, never written without the manager's agreement (RE-GHIDRA-IOBLUETOOTH §4, #239)", "-",
       E::None, D::Raw, P::Hypothesis, S::NeverWrite, "RE-COMMANDES-VENDEUR §1.3"),
     r(0xD1, F, Some(2), None, "d1", "Unknown, constant 0", "-", E::None, D::U8, P::Measured,
       S::NeverWrite, "HARDWARE-RAPPORTS-HID §2"),

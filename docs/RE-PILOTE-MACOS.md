@@ -4,6 +4,7 @@
 * Corrigé le 2026-10-02 (issue #229) : §9 n° 6, la notification SCO `0x4A` n'est pas « de Lion » : elle existe depuis Bluetooth 1.5 (2004) (source : `RE-SYSTEMES-ANCIENS.md` §4.3).
 * Corrigé le 2026-10-02 (issue #242) : §5 (E1 : SET_PROTOCOL en échec annule `deviceReady` ; E5 : le noyau 26.5 n'émet plus SUSPEND), §5.1 et §8 (`0x41` envoyé à l'oubli, `0x4A` = `03` par `bluetoothd`) ; source : `RE-GHIDRA-IOBLUETOOTH.md` §3.3, §5.
 * Corrigé le 2026-10-02 (issue #245) : §1 et §2.1 (`Info.plist` du plug-in présent sur disque, trois clés ajoutées, diff x86_64/arm64e), §3 (`getExtendedReport` exige `size`), §4 (`IOBluetoothHIDChannel`), §5 E6 (le noyau n'émet jamais `0x14`), §5.1 (second chemin `0x09`), §7 (`'bsk2'` générique), §9 ; source : `RE-GHIDRA-KEXT.md`.
+* Corrigé le 2026-10-02 (issue #239) : `0xD5` n'est plus « inconnu » : commande de test radio PER des anciens HID Apple (`D5 07` / `D5 00`, CoreBluetooth `CBHIDPerformanceMonitor`) ; source : `RE-GHIDRA-IOBLUETOOTH.md` §4.
 
 Analyse **statique, en lecture seule**, des pilotes Apple installés sur le Mac du gérant (non reproductible depuis le poste Linux : aucun binaire ni extrait commité ; les faits [plist]/[désassemblage] n'ont pas pu être recontrôlés au contre-audit) (Neo01, Mac17,5, macOS 26.5 build 25F71).
 Elle sert l'interopérabilité avec **son** clavier Apple Wireless Keyboard A1314 ISO (VID `0x05AC`, PID `0x0256` = 598).
@@ -96,6 +97,7 @@ Les trackpads/souris Magic (2009-2011) ont la même carte plus `SuperMode` (`0xD
 
 **Six des onze IDs « sans GET » sont ainsi identifiés** : `0x40 0x41 0x44 0x45 0x50 0x55`.
 L'Input non déclaré `0x30` est `BatteryState`. Restent inconnus : `0xD0 0xD4 0xD5 0xFA 0xFB` et les Input `0x04`/`0x05`.
+Depuis (#239) : `0xD5` est la commande de test radio PER de CoreBluetooth (`RE-GHIDRA-IOBLUETOOTH.md` §4).
 
 
 `type` absent = Feature par défaut (`getExtendedReport`/`setExtendedReport` prennent 2 si la clé manque) **[désassemblage]**.
@@ -210,7 +212,7 @@ Format des requêtes, établi par le désassemblage de `getReportWL` :
 | Feature `0x50` | refus GET | **`DeviceNameChange`** : validation après écriture du nom | [plist] ; jamais envoyé | moyen (NVRAM) |
 | Feature `0x51`-`0x54` | nom 4 × 8 | `DeviceName1..4`, 8 octets chacun | [plist] | moyen (NVRAM) |
 | Feature `0x55` | refus GET ; #188 : « config vendeur 64 o » | **`LongDeviceName`**, 64 octets | [plist] — corrige #188 | moyen (NVRAM) |
-| Feature `0xD0`, `0xD4`, `0xD5`, `0xFA`, `0xFB` | refus GET | **inconnus de macOS** (aucune personnalité, aucun code) | — | **élevé** : candidats du canal de mise à jour (#188), ne pas toucher |
+| Feature `0xD0`, `0xD4`, `0xD5`, `0xFA`, `0xFB` | refus GET | **inconnus de macOS** (aucune personnalité, aucun code noyau). Corrigé (#239) : `0xD5` est la commande de **test radio PER** de CoreBluetooth (`D5 07` démarre, `D5 00` arrête, `RE-GHIDRA-IOBLUETOOTH.md` §4) | — | **élevé** pour `0xD0 0xD4 0xFA 0xFB` (inconnus ; ce n'est pas le canal de mise à jour, qui passe par le PSM `0xF30D`) ; **moyen** pour `0xD5` ; ne rien écrire sans l'accord du gérant |
 | Input `0x04`, `0x05` | `04 00`, `05 02` | **inconnus de macOS** | — | lecture passive seulement (hypothèses WICED de #187 non confirmées ici) |
 | Autres Feature (`0x46`, `0x49`, `0x4A`-`0x4C`, `0x4F`, `0x5A`-`0x60`, `0xD1`, `0xD8`, `0xEA`, `0xEB`, `0xF4`-`0xFF`) | voir HARDWARE-RAPPORTS-HID | **jamais lus par macOS** | [désassemblage] | — |
 

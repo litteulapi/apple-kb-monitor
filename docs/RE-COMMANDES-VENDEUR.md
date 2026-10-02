@@ -5,6 +5,7 @@
 * Corrigé le 2026-10-02 (issue #218) : §1.3, §4.3, §5 et §7 : `bfu` ne passe pas par HIDP (PSM L2CAP vendeur `0xF30D`) et vise `0x0239-0x023B`, pas notre `0x0256` ; `0x44` = oubli de tous les hôtes ; `0xFA`/`0xFB` « délai de veille » = spéculation sans trace (source : `RE-PILOTES-ANCIENS.md` §2, §5, §6, §7).
 * Corrigé le 2026-10-02 (issue #229) : §1.3, `0xFA`/`0xFB` et les ID `0xDx` sont absents des systèmes Apple de 10.2.8 à 10.7.5 ; `0xD1-0xDC` ne sont que des opcodes de l'updater sur le PSM `0xF30D` (source : `RE-SYSTEMES-ANCIENS.md` §4-5).
 * Corrigé le 2026-10-02 (issue #188) : §3.2 et §5.1, les commandes de remise à zéro existent (`0x44`, `0x45`, `0x41`) ; les onze registres refusés au GET ne sont pas le canal de flash ; classes actuelles du registre du projet (source : `RE-PILOTE-MACOS.md` §3, `RE-PILOTES-ANCIENS.md` §5-6, `registry.rs`).
+* Corrigé le 2026-10-02 (issue #239) : `0xD5` n'est plus « inconnu » : commande de test radio PER des anciens HID Apple (`D5 07` / `D5 00`, CoreBluetooth `CBHIDPerformanceMonitor`) ; source : `RE-GHIDRA-IOBLUETOOTH.md` §4.
 
 Recherche **documentaire uniquement**, **sans aucun accès au clavier** (il a décroché trois fois sous
 des rafales de lecture — voir #175). Objet : identifier, à partir de sources publiques, ce que sont
@@ -30,7 +31,7 @@ Convention de preuve :
 > `ExtendedFeatures` du pilote macOS pour le PID 598 (RE-PILOTE-MACOS §3, niveau [plist]) : `0x40` = WillShutdown,
 > `0x41` = RecantConnection, `0x44` = FullFactoryDefault, `0x45` = FactoryDefault, `0x50` = DeviceNameChange,
 > `0x55` = **LongDeviceName (64 o)** — pas un « registre de configuration ». Les déductions « famille batterie/identité »
-> et « config vendeur » sont donc fausses pour ces six IDs. Seuls `0xD0 0xD4 0xD5 0xFA 0xFB` restent inconnus.
+> et « config vendeur » sont donc fausses pour ces six IDs. Seuls `0xD0 0xD4 0xD5 0xFA 0xFB` restent inconnus (depuis, `0xD5` est identifié : test radio PER, #239, `RE-GHIDRA-IOBLUETOOTH.md` §4).
 > Au §2.1, le SDK WICED d'Infineon vise des puces récentes (CYW207xx) : c'est une **analogie**, pas une « preuve directe »
 > pour le micrologiciel Apple du BCM2042 ; `0x04`/`0x05` restent non confirmés (inconnus de macOS).
 
@@ -295,7 +296,8 @@ chaînes, méthodes Objective-C, `Parameters.plist`) :
 | **`0x55`** | Feature (WO) | **LongDeviceName** (64 o) | [plist] RE-PILOTE-MACOS §3 (remplace la déduction « config vendeur ») | moyen (NVRAM) | aucune écriture |
 | **`0x50`** | Feature (WO) | **DeviceNameChange** (validation du nom) | [plist] RE-PILOTE-MACOS §3 | **moyen** | aucune écriture |
 | **`0x40 0x41 0x44 0x45`** | Feature (WO) | **WillShutdown, RecantConnection, FullFactoryDefault, FactoryDefault** | [plist] RE-PILOTE-MACOS §3 (remplace la déduction « bloc batterie ») | `0x40` faible (macOS l'envoie) ; `0x41` élevé ; `0x44` = **oubli de tous les hôtes**, envoyé par Lion à la suppression du clavier (RE-PILOTES-ANCIENS §5) : fonction Apple, destructrice pour l'appairage, jamais sans accord explicite du gérant (#218) ; `0x45` **INTERDIT** (remise à zéro, effet exact inconnu) | aucune écriture |
-| **`0xD0 0xD4 0xD5`** | Feature (WO) | écriture bloc « état radio » | [déduction] (famille `0xDx`) | **inconnu** | lire `0xD1/0xD8` (passif) |
+| **`0xD0 0xD4`** | Feature (WO) | inconnue (famille `0xDx`) | [déduction] | **inconnu** : ne jamais écrire | lire `0xD1/0xD8` (passif) |
+| **`0xD5`** | Feature (WO) | **test radio PER** des anciens HID Apple : `D5 07` démarre, `D5 00` arrête (corrigé #239) | [décompilé] CoreBluetooth `CBHIDPerformanceMonitor`, RE-GHIDRA-IOBLUETOOTH §4 ; aucun client livré dans macOS 26.5 | **moyen** (mode de test radio, effet sur la saisie inconnu) : rien sans l'accord du gérant | aucune écriture |
 | **`0xFA 0xFB`** | Feature (WO) | **inconnue** (« délai de veille » : spéculation sans trace, corrigé #218) | aucune trace dans les logiciels Apple examinés (RE-PILOTES-ANCIENS §7) | **inconnu** : ne jamais écrire | mesure passive du délai de veille (#173) |
 | `0x04` | Input non décl. | SLEEP ? | [analogie] WICED `RPT_ID_IN_SLEEP=0x04` ; inconnu de macOS | n/a (entrée) | **lecture passive** du nœud hidraw |
 | `0x05` | Input non décl. | FUNC_LOCK ? | [analogie] WICED `RPT_ID_IN_FUNC_LOCK=0x05` + [mesuré] `05 02` ; inconnu de macOS | n/a (entrée) | lecture passive |

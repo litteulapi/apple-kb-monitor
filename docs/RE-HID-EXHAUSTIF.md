@@ -2,6 +2,7 @@
 
 * Corrigé le 2026-10-02 (issue #193) : noms Apple reportés aux §0.3, §2.1, §2.2, §4, §5 et plan d'écriture du §6 reclassé (`0x44`/`0x45` interdits, `0x41` élevé, `0x40` faible, sens de W6), d'après `RE-PILOTE-MACOS.md` §3, §7, §8.
 * Corrigé le 2026-10-02 (issue #194) : §3 et §5, l'hypothèse « `MVLT` = tension lue par macOS pour calculer le % » est réfutée pour l'A1314 ; macOS recopie `0x47`, borné à 100 (source : `RE-PILOTE-MACOS.md` §6, `RE-PILOTES-ANCIENS.md` §4).
+* Corrigé le 2026-10-02 (issue #239) : `0xD5` n'est plus « inconnu » : commande de test radio PER des anciens HID Apple (`D5 07` / `D5 00`, CoreBluetooth `CBHIDPerformanceMonitor`) ; source : `RE-GHIDRA-IOBLUETOOTH.md` §4.
 
 Date : 2026-10-01. Clavier : A1314 ISO « Clavier de alice #1 », `AA:BB:CC:DD:EE:F1`, `0005:05AC:0256`,
 bcdDevice `0x0050`, `/dev/hidraw7`, BlueZ 5.87, noyau 7.1.13. Suite de `HARDWARE-RAPPORTS-HID.md`
@@ -215,7 +216,7 @@ Ce tableau ne liste que les ajouts et corrections ; pour le reste, voir `HARDWAR
 | Rapport | Octet(s) | Sens | Preuve |
 |---|---|---|---|
 | Feature `0x40, 0x41, 0x44, 0x45, 0x50, 0x55` | — | ID connu du micrologiciel, GET non pris en charge ; noms Apple : `WillShutdown`, `RecantConnection`, `FullFactoryDefault`, `FactoryDefault`, `DeviceNameChange`, `LongDeviceName` (64 o), tous en écriture seule | [mesuré] ERR_UNSUPPORTED_REQUEST ; noms [plist] RE-PILOTE-MACOS §3 |
-| Feature `0xD0, 0xD4, 0xD5, 0xFA, 0xFB` | — | ID connu du micrologiciel, GET non pris en charge ; aucun nom dans les personnalités Apple | [mesuré] ERR_UNSUPPORTED_REQUEST ; sens inconnu |
+| Feature `0xD0, 0xD4, 0xD5, 0xFA, 0xFB` | — | ID connu du micrologiciel, GET non pris en charge ; aucun nom dans les personnalités Apple ; `0xD5` = commande de test radio PER de CoreBluetooth (`D5 07` démarre, `D5 00` arrête ; #239) | [mesuré] ERR_UNSUPPORTED_REQUEST ; `0xD5` [décompilé] RE-GHIDRA-IOBLUETOOTH §4 ; sens inconnu pour `0xD0 0xD4 0xFA 0xFB` |
 | Feature `0x43` | — | `UserMode` (1-3) déclaré par Apple, **absent** de notre micrologiciel | [plist] + [mesuré] ERR_INVALID_REPORT_ID |
 | Feature `0x09` | 1 | drapeau du **délai Verr. Maj du micrologiciel** : `01` = délai désactivé (notre valeur) ; macOS écrit `01` sur les claviers 2007 (`turnOffCapsLockDelay`, `setCapsLockDelay`) et applique 75 ms côté hôte | valeur [mesuré] ; sens [désassemblage] RE-PILOTE-MACOS §8 ; sens de `00` [déduction] |
 | Feature `0xFE` | 1-8 | normalement nuls ; `00 04` une fois (03:57) | [mesuré] valeur vivante ; sens [hypothèse] boîte de réponse ; **dangereux** |
@@ -272,7 +273,7 @@ En cas d'arrêt : retour arrière immédiat, puis fin définitive du palier.
 | **W4** identité, étalonnage | SET_FEATURE `0x5A` = valeur lue ; vérifier ensuite `0x60` et `0xEB`. Ne jamais écrire les copies directement | savoir si les 3 copies se resynchronisent (journal ou miroir) | moyen : un % faux si la table est corrompue | réécrire la valeur lue dans les 3 IDs |
 | **W5** valeur modifiée, réversible | renommer : `0x51-0x54` = nouveau nom ASCII ≤ 32 o, padding NUL. Puis `0xF5` 900 → 1200, en mesurant le délai de veille de façon passive (#173) | fonction « renommer » sans ré-appairage ; réglage du délai de veille | moyen : nom illisible ou veille trop longue (autonomie) | réécrire l'ancien nom ou 900 |
 | **W6** valeur modifiée, état | `0x09` : 01 → 00 = **réactiver le délai Verr. Maj interne** du micrologiciel (sens Apple, RE-PILOTE-MACOS §8 ; l'effet de `00` reste une déduction), avec observation de la touche Verr. Maj | confirmer le sens de `00` | faible, réversible | réécrire 01 ; à défaut, remise sous tension |
-| **W7** — **déconseillé** (reclassé, #193) | écriture vers les IDs « sans GET », un par un : `0x40` `WillShutdown` · `0x41` `RecantConnection` · `0x50` `DeviceNameChange` et `0x55` `LongDeviceName` · `0xD0 0xD4 0xD5 0xFA 0xFB` (sans nom Apple) | observer l'effet des commandes nommées | `0x40` : **faible** (macOS l'envoie à chaque arrêt, F39 #191) · `0x41` : **élevé** (coupe la liaison) · `0x50`/`0x55` : moyen (mémoire non volatile, #192) · `0xD0 0xD4 0xD5 0xFA 0xFB` : **élevé**, inconnus | aucun garanti |
+| **W7** — **déconseillé** (reclassé, #193) | écriture vers les IDs « sans GET », un par un : `0x40` `WillShutdown` · `0x41` `RecantConnection` · `0x50` `DeviceNameChange` et `0x55` `LongDeviceName` · `0xD0 0xD4 0xD5 0xFA 0xFB` (sans nom Apple) | observer l'effet des commandes nommées | `0x40` : **faible** (macOS l'envoie à chaque arrêt, F39 #191) · `0x41` : **élevé** (coupe la liaison) · `0x50`/`0x55` : moyen (mémoire non volatile, #192) · `0xD0 0xD4 0xFA 0xFB` : **élevé**, inconnus · `0xD5` : **moyen** (test radio PER, arrêt documenté `D5 00` ; rien sans l'accord du gérant, #239) | aucun garanti |
 | **Interdit** | `0x44` `FullFactoryDefault` et `0x45` `FactoryDefault` (remise à zéro, sortis de W7 par #193) ; `0x4C` (appairage) ; `0xFE` ; `0x46`, `0x47`, `0x49`, `0xFF`, `0xEA` (mesures) ; Output `0x01` (LED, hors du champ de la RE) | — | perte de l'appairage, blocage, aucun gain | — |
 
 ## 7. Reproduire (après accord, clavier stable)

@@ -1,5 +1,7 @@
 # RE — Systèmes Apple publiés de 10.2.8 à 10.6.8 : qui appelle quels registres du A1314
 
+* Corrigé le 2026-10-02 (issue #239) : `0xD5` n'est plus « inconnu » : commande de test radio PER des anciens HID Apple (`D5 07` / `D5 00`, CoreBluetooth `CBHIDPerformanceMonitor`) ; source : `RE-GHIDRA-IOBLUETOOTH.md` §4.
+
 Clavier visé : Apple Wireless Keyboard A1314 « 2009 B », BCM2042, PID `0x0256`, firmware `0x0050`.
 Complète `RE-PILOTES-ANCIENS.md` (2009, 10.7.5) et `RE-MACOS-SILICON.md` / `RE-PILOTE-MACOS.md` (macOS 26.5).
 Question du gérant : « il y a forcément des appels aux registres dans le système Apple publié ». Ce document
@@ -210,7 +212,7 @@ prouve aucun lien. Aucun outil de flashage n'a été écrit. `fw5001.hex` et `co
 |---|---|---|---|---|---|
 | `0xD0` (Feature WO) | **non** | inconnue | absent des 8 paquets (§1), de 10.7.5 et de 26.5 ; seulement des décalages de structure | inconnu → **ne jamais écrire** | aucune version |
 | `0xD4` (Feature WO) | **non** (comme ID HID) | inconnue ; `0xD4` est aussi l'opcode « préparation » de l'updater sur PSM `0xF30D` | `bfu` 2007/2009 [décompilé] | **potentiellement maintenance** → ne jamais écrire | opcode updater 2007, 2009 |
-| `0xD5` (Feature WO) | **non** (comme ID HID) | inconnue ; `0xD5` = acquit de `D4` côté updater | idem | idem | idem |
+| `0xD5` (Feature WO) | **non** (comme ID HID) dans ces systèmes | inconnue de 10.2.8 à 10.7.5 ; `0xD5` = acquit de `D4` côté updater. Depuis (#239) : commande de test radio PER dans CoreBluetooth 26.5 (`RE-GHIDRA-IOBLUETOOTH.md` §4) | idem | idem | idem |
 | `0xFA` (Feature WO) | **non** | inconnue | absent ; occurrences = types de paquets L2CAP, octets d'UUID | inconnu → ne jamais écrire | aucune |
 | `0xFB` (Feature WO) | **non** | inconnue | idem | idem | aucune |
 | `0x4B` (Feature, `00 08`) | **non** | inconnue ; la constante `0x4B` du pilote clavier est 75 ms de délai Verr. Maj, sans rapport | `AppleHIDKeyboardEventDriver::handleStart` [décompilé] | lecture rare | aucune (comme rapport) |
