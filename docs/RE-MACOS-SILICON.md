@@ -1,6 +1,7 @@
 # Rétro-ingénierie macOS Apple Silicon — ce que le code arm64e réellement exécuté ajoute pour l'A1314
 
 * Corrigé le 2026-10-02 (issue #242) : §3.1 (boutisme, méthodes non listées, oubli = `0x41`), §3.2 et §8 (client du % remappé), §4 (34 commandes, `ReleaseAllChannels`, `HIDSuspend`, disjoncteur avec déconnexion), §5 et §7 (`0x4A` = `03` envoyé par `bluetoothd`) ; source : `RE-GHIDRA-IOBLUETOOTH.md`.
+* Corrigé le 2026-10-02 (issue #245) : §3.1, §4 et §7 : `HIDExitSuspend` ne met rien sur le fil (pas `0x14`) ; le disjoncteur bloque aussi `sendData` ; un refus HANDSHAKE compte comme réponse ; source : `RE-GHIDRA-KEXT.md` §2.2, §2.4, §2.5.
 
 Complément de [`RE-PILOTE-MACOS.md`](RE-PILOTE-MACOS.md). Cette analyse-là portait sur les collections de noyau **x86_64**,
 n'avait pas ouvert **IOBluetooth.framework** (cache dyld) et n'avait lu `bluetoothd` qu'en partie.
@@ -86,7 +87,7 @@ Les octets sont donnés côté HID : ID puis données. Sur le fil HIDP, un SET F
 | **`-connectionCounts:`** | GET Feature `0x4E`, tampon de 10 ; renvoie deux `int` pris à partir de l'octet 5 | GET `4E` | 10 | [désassemblage] |
 | **`-sendConnectionIntervalUpdate:intervalSlots:transmitAttempts:asymmetricMultiplier:`** | SET Feature `0xC6` | `C6 en slots tx mult` | 5 | [désassemblage] |
 | **`-setLLREnabled:`** | SET Feature `0xDC` ; lit `IsConnectionLLREnabled` et `IsTBFCSuspended` | `DC on 00` | 3 | [désassemblage] |
-| `-suspendDevice:` | commande `HIDSuspend` ou `HIDExitSuspend` au pilote, soit HID_CONTROL `0x13` ou `0x14` | — | — | [désassemblage] |
+| `-suspendDevice:` | commande `HIDSuspend` ou `HIDExitSuspend` au pilote : HID_CONTROL `0x13` pour la première ; la seconde ne met rien sur le fil (corrigé #245) | — | — | [désassemblage] |
 | `-disconnect` | commande `ReleaseAllChannelsWithSleepForHIDUpdate` au pilote | — | — | [désassemblage] |
 | `-setFeatureReport:value:` | générique : taille lue dans `ExtendedFeatures`, de 0 à 4 octets, valeur en petit-boutiste | `ID [v0..v3]` | 1-5 | [désassemblage] |
 | `-setFeatureWithReportID:value:` | générique : ID et 1 octet | `ID vv` | 2 | [désassemblage] |
@@ -190,7 +191,8 @@ Commandes reconnues, chaînes exactes **[chaîne] + [désassemblage]** :
 | `IOBluetoothHIDDriver` | `GetProtocol`, `SetReportProtocol` (1), `SetBootProtocol` (0) | GET_PROTOCOL `0x60` ; SET_PROTOCOL `0x71` ou `0x70` |
 | | `GetIdle`, `SetIdle n` | GET_IDLE `0x80` ; SET_IDLE `0x90 n` |
 | | `HIDControl n` | HID_CONTROL `0x10|n` brut |
-| | `HIDSuspend` / `HIDExitSuspend` | HID_CONTROL `0x13` / `0x14` ; `HIDSuspend` n'est **pas** conditionné par `SuspendSupported` (corrigé #242) |
+| | `HIDSuspend` | HID_CONTROL `0x13`, **sans** condition sur `SuspendSupported` (corrigé #242) |
+| | `HIDExitSuspend` | **rien sur le fil** : n'appelle que `handleWake` (effacement de drapeaux) ; pas `0x14` (corrigé #245) |
 | | **`VirtualCableUnplug`** | **HID_CONTROL `0x15`** : débranchement du câble virtuel, l'appareil doit oublier l'hôte |
 | | `ForceReadDeviceName` | `readDeviceName()`, vide en arm64e |
 | | `ReleaseInterruptChannel`, `ReleaseControlChannel` | fermeture L2CAP du PSM 19 ou 17, sans message HID |
@@ -206,6 +208,7 @@ Le pilote décode aussi pour le journal `HID_CONTROL(NOP / HARD_RESET / SOFT_RES
 Il n'envoie de lui-même que SUSPEND et EXIT_SUSPEND.
 **Corrigé (#242)** : en 26.5, `handleSleep` du noyau **n'émet plus SUSPEND**, il marque seulement l'état ; l'émission est
 dans `bluetoothd` (`RE-GHIDRA-IOBLUETOOTH.md` §3.3, §5.3).
+**Corrigé (#245)** : il n'émet jamais EXIT_SUSPEND (`0x14`) non plus ; seule la commande brute `HIDControl 4` le fait (`RE-GHIDRA-KEXT.md` §2.4).
 
 **Délai et disjoncteur [chaîne]** : après **3 expirations consécutives** de GET_REPORT, `IOBluetoothHIDDriver::getReport`
 rend `kIOReturnDeviceError` **immédiatement**, sans plus rien émettre, jusqu'à la prochaine réponse.
@@ -215,6 +218,10 @@ attentes GET, SET et d'émission ; à la 3e expiration, le pilote **demande à `
 (`IOBluetoothDevice::SetHIDDriverReady(false)`). Le délai normal est `GetReportTimeoutMS` (3500 ms pour le 598, 5000 ms par
 défaut sans personnalité), la garde ce délai + 1000 ms. Après une veille, le compteur repart à **1** et le premier échange
 attend 4500 ms (garde 5500 ms).
+
+**Complété (#245) [décompilé]** (`RE-GHIDRA-KEXT.md` §2.2, §2.5) : le drapeau du disjoncteur est aussi testé dans `sendData`
+(`0xfffffe000a35b9cc`) : une fois levé, plus **aucune** émission (HID_CONTROL, SET_PROTOCOL, LED). Un refus par HANDSHAKE
+(`0x03`…) compte comme une réponse et remet le compteur à 0 : seul le silence arme le disjoncteur.
 
 C'est la protection d'Apple contre le blocage que nous observons (#175, #177).
 
@@ -268,7 +275,7 @@ Seules les lignes nouvelles ou corrigées par rapport à `RE-PILOTE-MACOS.md` §
 | `0x51`-`0x54` (lecture) | `deviceNameFromHardware` | [désassemblage] | lisible | lecture |
 | `0x50`, `0x55` (écriture) | **jamais écrits par macOS 26.5** ; le renommage est côté hôte | [désassemblage] | refus de GET | moyen (NVRAM) ; protocole non observé |
 | HID_CONTROL `0x15` | `VirtualCableUnplug` (commande de débogage, jamais émise d'office) | [chaîne] + [désassemblage] | — | **élevé** : désappairage demandé au clavier |
-| HID_CONTROL `0x13`/`0x14` | `HIDSuspend`/`HIDExitSuspend` (veille et réveil, déjà E5/E6) | [désassemblage] | — | faible |
+| HID_CONTROL `0x13`/`0x14` | `HIDSuspend`/`HIDExitSuspend` (veille et réveil, déjà E5/E6) ; `HIDExitSuspend` n'émet pas `0x14` (corrigé #245) | [désassemblage] ; [décompilé] RE-GHIDRA-KEXT §2.4 | — | faible |
 | GET_REPORT ou SET_REPORT ×3 sans réponse | disjoncteur : erreur immédiate, plus d'émission, **puis déconnexion demandée à `bluetoothd`** (corrigé #242) | [chaîne] ; [décompilé] RE-GHIDRA-IOBLUETOOTH §3.2 | — | sans risque : à imiter (#175, #243) |
 | Sniff | A1314 = « Apple classique », **11,25 ms seulement** | [désassemblage] + [chaîne] | — | lecture et réglage côté hôte |
 

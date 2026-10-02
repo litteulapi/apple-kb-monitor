@@ -2,6 +2,7 @@
 
 * Corrigé le 2026-10-02 (issue #229) : §1 (le Combo 10.6.8 est exploitable), §3 (apparition par version), §4 (courbe d'affichage), §5 et §7 (`0x4A` depuis Bluetooth 1.5, douze logiciels examinés), §6.2 (protocole `bfu` complété) ; source : `RE-SYSTEMES-ANCIENS.md`.
 * Corrigé le 2026-10-02 (issue #242) : §5 et §7, devenir de L9 et L10 sur macOS 26.5 : `0x4A` = `03` envoyé par `bluetoothd`, oubli = `RecantConnection` (`0x41`) et non `0x44` ; source : `RE-GHIDRA-IOBLUETOOTH.md` §5.1-5.2.
+* Corrigé le 2026-10-02 (issue #245) : §5 (L6) et §7 : en 26.5 le noyau n'émet plus `13`/`14` de lui-même ; `getExtendedReport` exige `size` ; second chemin `0x09` par IOHID ; balayage exhaustif de 6 kexts ; source : `RE-GHIDRA-KEXT.md` §2.4, §4, §5.
 
 Analyse **statique, en lecture seule**, de logiciels Apple **publiquement distribués** par les serveurs
 d'Apple, à des fins d'interopérabilité avec le clavier du gérant (A1314 ISO, `05AC:0256` = 598,
@@ -138,7 +139,7 @@ Chronologie complète, à comparer avec `RE-PILOTE-MACOS.md` §5 (macOS 26.5). O
 | L3 | juste après L2 | `AppleBluetoothHIDKeyboard` 160.7 | GET Feature **`0x49`** (`BatteryVoltage`) | `43 49` | [désassemblage] `getLatchedBatteryVoltage` |
 | L4 | juste après L3 | idem | GET Feature **`0x60`** (`CalibratedBatteryThresholds3`) | `43 60` | [désassemblage] `getVoltagesUsed` |
 | L5 | après chaque relevé, et sur `A1 30 xx` | `IOAppleBluetoothHIDDriver` | GET Input `0x30` | `41 30` | [désassemblage] |
-| L6 | veille / réveil | `IOBluetoothHIDDriver` (`SuspendSupported` posé à vrai par la classe Apple) | HID_CONTROL SUSPEND / EXIT_SUSPEND | `13` / `14` | [désassemblage] `handleSleep` → `hidControl(3)`, `handleWake` → `hidControl(4)` |
+| L6 | veille / réveil | `IOBluetoothHIDDriver` (`SuspendSupported` posé à vrai par la classe Apple) | HID_CONTROL SUSPEND / EXIT_SUSPEND | `13` / `14` | [désassemblage] `handleSleep` → `hidControl(3)`, `handleWake` → `hidControl(4)` (10.7.5 ; en 26.5, le noyau n'émet plus ni `13` ni `14` de lui-même, #242 et #245) |
 | L7 | arrêt / redémarrage | `IOAppleBluetoothHIDDriver` | SET Feature `0x40` (`WillShutdown`) | `53 40` | [désassemblage] identique à 26.5 |
 | L8 | Verr. Maj | idem | DATA Output `0x01` | `A2 01 02` / `A2 01 00` | [désassemblage] |
 | **L9** | **un lien audio SCO (casque) s'ouvre / se ferme** pendant que le clavier est connecté | `blued` (`BluetoothHIDManager`) via `IOBluetooth.framework` | **SET Feature `0x4A`** = `03` (`sendSCOLinkActive`) / `04` (`sendSCOLinkInactive`) | `53 4A 03` / `53 4A 04` | [désassemblage] liste de PID testée **avant** l'envoi : `0x0208-0x020A`, `0x022C-0x022E`, `0x0239-0x023B`, **`0x0255-0x0257`**, `0x0309`, `0x030C` ; [chaîne] `sending sendSCOLinkACTIVE to %s`, `resetSniffParameters - Setting to SCOActive? %d` |
@@ -237,7 +238,7 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
 | ID | Type | Fonction | Preuve | Risque | Usage projet |
 |---|---|---|---|---|---|
 | `0x01` | Out | LED Verr. Maj | [désassemblage] 2009/10.7/26 | nul | déjà géré par le noyau |
-| `0x09` | Feature | drapeau « délai Verr. Maj du firmware » (`01` = désactivé) ; écrit **seulement** pour `0x022C-0x022E` | [désassemblage] 10.7 = 26.5 | faible | lecture ; ne pas écrire |
+| `0x09` | Feature | drapeau « délai Verr. Maj du firmware » (`01` = désactivé) ; écrit **seulement** pour `0x022C-0x022E` ; en 26.5, second chemin par IOHID (`turnOffCapsLockDelay`, `FWCapsLockDelay`, PID USB `0x220-0x222`/`0x24F-0x251` de version ≥ `0x68`) ; aucun ne vise le 598 (#245) | [désassemblage] 10.7 = 26.5 | faible | lecture ; ne pas écrire |
 | `0x13` | In | bit 1 = sous tension (0 → `KeyboardOff`) | [désassemblage] 10.7 = 26.5 | nul | #190 |
 | `0x30` | In | `BatteryState` 0/1/2 (+3 accepté) | [plist + désassemblage] toutes époques | nul | #189 |
 | `0x40` | Feature WO | `WillShutdown` | [plist + désassemblage] envoyé à chaque arrêt (10.7, 26.5) | faible | #191 |
@@ -268,6 +269,12 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
 | `0xFE` | Feature | fige le firmware à la lecture | [mesuré] #175 | **lecture dangereuse** | exclu |
 | `0xFF` | Feature | tension (BE) + `01` | [mesuré] | lecture | — |
 | `0x04`, `0x05` | In (non déclarés) | inconnus d'Apple ; hypothèses WICED SLEEP / FUNC_LOCK | [source tierce] | nul (lecture passive) | — |
+
+**Ajouts (#245, `RE-GHIDRA-KEXT.md` §4-5) [décompilé]** : dans le noyau 26.5, `getExtendedReport` (`0xfffffe000a356a78`) exige la clé `size` ;
+`0x40 0x41 0x44 0x45 0x50` (« Feature WO » ci-dessus) sont donc illisibles par construction, la réponse est rejetée si
+`buf[0] != id`, et `processControlData` ignore toute réponse dont l'ID diffère de la requête (expiration). Un balayage
+exhaustif (immédiats et segments de données) de 6 kexts ne trouve **aucune** référence noyau à
+`0xD0 0xD4 0xD5 0xFA 0xFB 0x4B 0xD1 0xD8 0xF6 0xF7`, aux Input `0x04`/`0x05` ni aux PID `0x255-0x257`.
 
 Les inconnues **définitivement sans réponse logicielle publique** sont donc `0xD0 0xD4 0xD5 0xFA 0xFB` (écriture),
 `0x4B 0xD1 0xD8 0xF6 0xF7` (lecture) et les Input `0x04`/`0x05` : **aucun** des **douze** logiciels Apple examinés (systèmes 10.2.8 à 10.7.5, updaters 2007 et 2009, macOS 26.5 ; corrigé #229,
