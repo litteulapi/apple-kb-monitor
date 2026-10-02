@@ -120,6 +120,14 @@ Comment[fr]=Des piles neuves ont été détectées ; les alertes sont réarmées
 Icon=battery-full
 Action=Popup
 
+[Event/LinkUnstable]
+Name=Unstable link
+Name[fr]=Liaison instable
+Comment=The keyboard disconnected more than 3 times within an hour
+Comment[fr]=Le clavier s'est déconnecté plus de 3 fois en une heure
+Icon=network-wireless-disconnected
+Action=Popup
+
 [Event/BatteryAdvice]
 Name=Batteries changed too often
 Name[fr]=Piles changées trop souvent

@@ -21,6 +21,7 @@ chemistry = "alkaline"     # "alkaline" | "nimh" | "lithium" | "unknown" (#178)
 [notifications]
 connection = true          # "disconnected" / "reconnected (N %)" / "switched off", low urgency
 battery_replaced = true    # "new batteries detected"
+link_unstable = true       # "unstable link": more than 3 disconnections within an hour, once per episode (#105)
 battery_advice = true      # "batteries changed too often" after two sets in a row under 30 days (#108)
 defer_to_powerdevil = true # KDE PowerDevil already warns about this keyboard: one distinct reminder only (#254)
 quiet_hours = ""           # e.g. "22:00-07:00": non-critical notifications held until the range ends (#91)
@@ -50,6 +51,7 @@ disconnect_on_breaker = true   # after 3 unanswered requests: ask BlueZ once to 
 | `[battery]` | `chemistry` | string | `"alkaline"` | daemon, window, widget, module | Discharge curve of the estimate (see below). `"unknown"` = no estimate, alerts on the keyboard's percentage. |
 | `[notifications]` | `connection` | bool | `true` | daemon | Link notifications (`KeyboardDisconnected`, `KeyboardReconnected`, `KeyboardOff`). |
 | `[notifications]` | `battery_replaced` | bool | `true` | daemon | `BatteryReplaced` when fresh cells are detected. |
+| `[notifications]` | `link_unstable` | bool | `true` | daemon | `LinkUnstable` when the keyboard disconnected more than 3 times within an hour, once per episode (the episode ends when the last hour is back to 3 or fewer). Disconnections for a system suspend, asked from the tray, announced by `akmctl repair` or by the keyboard switching off do not count. The counts are kept either way. |
 | `[notifications]` | `battery_advice` | bool | `true` | daemon | `BatteryAdvice`, once, when the second set of batteries in a row is replaced within 30 days. The advice itself stays in `GetState` (`battery_advice: {days, since}`) and in the tray menu until the set in use has lasted 30 days. A set whose beginning is unknown (the history starts with it) is never counted. |
 | `[notifications]` | `defer_to_powerdevil` | bool | `true` | daemon | When PowerDevil shows its own low-battery warning for this keyboard, the 30 / 15 / 5 % alerts shrink to one `BatteryEstimate` reminder ([INTEGRATION-KDE.md](INTEGRATION-KDE.md) §3). |
 | `[notifications]` | `quiet_hours` | string `"HH:MM-HH:MM"`, several separated by commas | `""` (none) | daemon | Local time. Inside a range a notification that is not critical is not sent: it is journalled (`notification held until 07:00 ...`) and shown when the range ends, one per replacement slot (the latest). A range may cross midnight. Critical notifications (critical batteries, re-pairing needed, errors) are always shown at once. What waits is kept in `deferred-notifications.json` and survives a restart. A malformed value is a warning and no quiet hours. |
@@ -102,6 +104,10 @@ Next to it the daemon shows an **estimate** (#178): the voltage `0x49` (else `0x
 
 Every read of the A1314's battery costs radio traffic, and UPower alone sends two GET_REPORT every 30 s (measured with `btmon`). The daemon follows Apple's own schedule (`akm-core/src/apple_model.rs`, [PARITE-APPLE.md](PARITE-APPLE.md)): first read 60 s after the connection, then every 4 h (1 h after a failure); a routine burst is `0x47`, GET Input `0x30`, `0x46`, `0x49`, 1 s apart, 3 s budget, stop at the first failure; one reader at a time (process mutex + `flock` shared with `akmctl dump`); circuit breaker after 3 consecutive silences, published in `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` for the other emitters. A `Refresh()` (tray, D-Bus) is bounded to one per 5 min (#206). The estimate and the voltage history add no read. Optional, outside the daemon: `NoPollBatteries=true` in `UPower.conf` removes UPower's polling (`bluetooth/akm-conf.py upower`; `akmctl doctor` reports it).
 
+### Link quality (#105)
+
+The daemon records every disconnection with its reason (`timeout`, `remote`, `local`, `unknown`, `authentication`, `suspend`, `expected`, `off`, `user`) and, by the hour, the relative signal it measures, for 7 days. `GetState` carries `link_quality` for the keyboard followed: `disconnects_last_hour`, `disconnects_last_day`, `disconnects_7d`, `unexpected_last_hour`, `disconnects_by_hour` (24 values, oldest first), `disconnects_by_day` (7 values), `unstable`, `unstable_since`, `signal_7d` and `signal_by_day` (`{samples, mean, min, max}` in relative dB, 0 = ideal range). `Link.Status()` carries the same summary as `quality` (shown by `akmctl doctor` as the `link-quality` line, a warning while unstable), and `Link.Quality()` returns everything kept (events and hourly signal). The signal is the BR/EDR relative value of #174, not dBm: no alert is tied to a dBm threshold.
+
 ### Signal (#174)
 
 On the classic Bluetooth link (BR/EDR) the RSSI is **not in dBm**: it is the gap in dB to the controller's *Golden Receive Power Range* (Core Spec Vol 4 Part E §7.5.4); **0 = inside the ideal range**, negative = below, positive = above. The UI shows words first: "Signal: excellent (0)" for 0 or more, "good" for −1 to −5, "weak" below −5, with the raw value and no unit. JSON: `rssi_rel_db`, `rssi_quality`, `rssi_kind` (`bredr-golden-range`); `rssi_dbm` is kept as a **deprecated mirror** of `rssi_rel_db`. The D-Bus property `Rssi` (127 = unknown) carries the same relative value. `Signal: n/a` means the helper could not run: membership of the group `akm` is required.
@@ -131,6 +137,7 @@ Environment variables: `APPLE_KB_RSSI_HELPER` (development override of `/usr/lib
 |---|---|
 | `~/.local/state/apple-kb-monitor/history.jsonl` | battery history (`ts`, `pct`, `schema`, plus `mv_0x46` / `mv_0x49` when the voltages were read); invalid points are not written; `akmctl history import FILE` merges an older file without duplicates |
 | `~/.local/state/apple-kb-monitor/deferred-notifications.json` | `0600`: notifications to be shown later (held by the quiet hours, or "Remind me tomorrow"): due time and the texts shown, at most 32 entries |
+| `~/.local/state/apple-kb-monitor/link-quality.json` | `0600`: per keyboard, the disconnections of the last 7 days (time, reason; at most 2000) and the relative signal by the hour (count, sum, min, max; 168 buckets) (#105) |
 | `~/.local/state/apple-kb-monitor/usage.json` | `0600`, only with `[usage] active_time = true`: `{"days": {"YYYY-MM-DD": active minutes}}`, 90 days; no key, no key code, no time of day |
 | `~/.local/state/apple-kb-monitor/selfcheck.json` | last result of `akmctl selftest` |
 | `~/.local/state/apple-kb-monitor/devname-backup-<UTC>.json`, `forget-backup-<UTC>.json` | `0600`, never overwritten: name stored in the keyboard before a write; host-side pairing data (no link key) before a clean forget |

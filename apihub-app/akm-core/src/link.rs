@@ -113,7 +113,41 @@ pub fn mark_keyboard_off() {
 
 /// Called when the link drops: was a switch-off announced just before?
 pub fn take_keyboard_off() -> bool {
-    off().take(Instant::now())
+    let now = Instant::now();
+    let taken = off().take(now);
+    if taken {
+        *recent(&OFF_TAKEN) = Some(now);
+    }
+    taken
+}
+
+/// How long after it explained a disconnection an announcement still tells
+/// the other observers of that same disconnection why it happened.
+pub const RECENT_WINDOW: Duration = Duration::from_secs(5);
+
+static OFF_TAKEN: Mutex<Option<Instant>> = Mutex::new(None);
+static EXPECTED_TAKEN: Mutex<Option<Instant>> = Mutex::new(None);
+
+fn recent(m: &Mutex<Option<Instant>>) -> std::sync::MutexGuard<'_, Option<Instant>> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn is_recent(mark: &OffMark, taken: &Mutex<Option<Instant>>, now: Instant) -> bool {
+    mark.0
+        .is_some_and(|t| now.saturating_duration_since(t) <= OFF_WINDOW)
+        || recent(taken).is_some_and(|t| now.saturating_duration_since(t) <= RECENT_WINDOW)
+}
+
+/// Was a switch-off announced for the disconnection happening now? Unlike
+/// [`take_keyboard_off`] this consumes nothing: the link statistics ask it
+/// for the same disconnection the notification logic already took (#105).
+pub fn keyboard_off_recent() -> bool {
+    is_recent(&off(), &OFF_TAKEN, Instant::now())
+}
+
+/// Same for the disconnection `akmctl repair` announced.
+pub fn expected_disconnect_recent() -> bool {
+    is_recent(&expected(), &EXPECTED_TAKEN, Instant::now())
 }
 
 /// Called when the keyboard is back (new node, `0x13` with bit 1 = 1).
@@ -138,7 +172,12 @@ pub fn mark_expected_disconnect() {
 
 /// Called when the link drops: is this the expected disconnection?
 pub fn take_expected_disconnect() -> bool {
-    expected().take(Instant::now())
+    let now = Instant::now();
+    let taken = expected().take(now);
+    if taken {
+        *recent(&EXPECTED_TAKEN) = Some(now);
+    }
+    taken
 }
 
 /// Notification text `(summary, body)`.

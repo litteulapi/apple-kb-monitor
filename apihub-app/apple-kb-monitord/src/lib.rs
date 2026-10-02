@@ -14,6 +14,7 @@
 //! * [`diagnose`] D-Bus `Diagnose()`: the checks of the Diag tab, as JSON (#120)
 //! * [`events`]  in-process event hub (alerts, replacements, link changes)
 //! * [`passive`]  passive input-report listening, `...Input` interface (#130, #187, #129)
+//! * [`linkq`]   link quality: disconnection counts, 7 days of signal (#105)
 //! * [`repair`]  link keeper: health, reconnection, repair launcher (#144)
 //! * [`sleep`]   logind sleep / resume (#145) and shutdown hook
 //! * [`shutdown`] `WillShutdown` (Feature `0x40`) at shutdown, as macOS does (#191)
@@ -33,6 +34,7 @@ pub mod devices;
 pub mod diagnose;
 pub mod events;
 pub mod keymap;
+pub mod linkq;
 pub mod notify;
 pub mod notify_policy;
 pub mod osd;

@@ -620,6 +620,42 @@ fn journal_lines() -> Option<Vec<String>> {
     )
 }
 
+/// The daemon's link quality (#105, `quality` of a `Link.Status()` entry):
+/// disconnections of the last hour / day / 7 days and the relative signal.
+/// A warning while the link is unstable (more than 3 unexpected
+/// disconnections within an hour). `None` when the daemon keeps none.
+pub fn link_quality_finding(entry: &Value) -> Option<Finding> {
+    let q = entry.get("quality").filter(|q| q.is_object())?;
+    let n = |k: &str| q[k].as_u64().unwrap_or(0);
+    let unstable = q["unstable"].as_bool().unwrap_or(false);
+    let mut text = format!(
+        "link quality: {} disconnection(s) in the last hour, {} in 24 h, {} in 7 days",
+        n("disconnects_last_hour"),
+        n("disconnects_last_day"),
+        n("disconnects_7d")
+    );
+    if let Some(s) = q.get("signal_7d").filter(|s| s.is_object()) {
+        text += &format!(
+            "; relative signal over 7 days: mean {} dB, min {} dB ({} measurement(s))",
+            s["mean"].as_f64().unwrap_or(0.0),
+            s["min"].as_i64().unwrap_or(0),
+            s["samples"].as_u64().unwrap_or(0)
+        );
+    }
+    if unstable {
+        text += &format!(
+            " \u{2014} UNSTABLE: {} unexpected within the hour",
+            n("unexpected_last_hour")
+        );
+    }
+    Some(f(
+        if unstable { Level::Warn } else { Level::Ok },
+        "link-quality",
+        text,
+        unstable.then_some("check the batteries, the distance, USB 3 devices near the adapter"),
+    ))
+}
+
 fn daemon_link_status() -> Option<Value> {
     let conn = Connection::session().ok()?;
     let reply = conn
@@ -758,6 +794,17 @@ pub fn gather(mac: Option<&str>) -> Report {
             None,
         )),
     }
+    // Link quality kept by the daemon (#105).
+    let entry = daemon.as_ref().and_then(|v| {
+        let arr = v.as_array()?;
+        match kb.as_ref() {
+            Some(k) => arr
+                .iter()
+                .find(|e| e["mac"].as_str() == Some(k.mac.as_str())),
+            None => arr.first(),
+        }
+    });
+    fs.extend(entry.and_then(link_quality_finding));
     let connected = kb.as_ref().is_some_and(|k| k.connected);
     let verdict = verdict(&fs, health.as_deref(), connected);
     Report {
@@ -804,6 +851,43 @@ pub fn to_json(r: &Report) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #105: the link quality kept by the daemon is one finding of doctor.
+    #[test]
+    fn link_quality_of_the_daemon_is_a_finding() {
+        let stable = serde_json::json!({"mac": "AA:BB:CC:DD:EE:F1", "quality": {
+            "disconnects_last_hour": 1, "disconnects_last_day": 2, "disconnects_7d": 9,
+            "unexpected_last_hour": 1, "unstable": false,
+            "signal_7d": {"samples": 40, "mean": -2.5, "min": -9, "max": 0}
+        }});
+        let fi = link_quality_finding(&stable).unwrap();
+        assert_eq!(fi.level, Level::Ok);
+        assert_eq!(fi.topic, "link-quality");
+        assert!(
+            fi.text
+                .contains("1 disconnection(s) in the last hour, 2 in 24 h, 9 in 7 days"),
+            "{}",
+            fi.text
+        );
+        assert!(
+            fi.text
+                .contains("mean -2.5 dB, min -9 dB (40 measurement(s))"),
+            "{}",
+            fi.text
+        );
+        assert!(fi.fix.is_none());
+        let unstable = serde_json::json!({"quality": {
+            "disconnects_last_hour": 5, "disconnects_last_day": 5, "disconnects_7d": 5,
+            "unexpected_last_hour": 5, "unstable": true, "signal_7d": null
+        }});
+        let fi = link_quality_finding(&unstable).unwrap();
+        assert_eq!(fi.level, Level::Warn);
+        assert!(fi.text.contains("UNSTABLE: 5 unexpected") && !fi.text.contains("signal"));
+        assert!(fi.fix.is_some());
+        // An older daemon (no `quality`), or none recorded: no finding.
+        assert!(link_quality_finding(&serde_json::json!({"mac": "x"})).is_none());
+        assert!(link_quality_finding(&serde_json::json!({"quality": null})).is_none());
+    }
 
     const BAD_CONF: &str = "[General]\nExperimental = true\n#FastConnectable = false\n\n[Policy]\n#ReconnectAttempts=7\n\n[AdvMon]\nReconnectUUIDs=00001124-0000-1000-8000-00805f9b34fb\nReconnectAttempts=7\n";
     const GOOD_CONF: &str = "[General]\nFastConnectable = true\n[Policy]\nReconnectAttempts=7\nReconnectIntervals=1,2,4\n";

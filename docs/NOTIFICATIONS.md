@@ -31,6 +31,7 @@ installé). Les réglages de l'utilisateur sont écrits par Plasma dans
 | `KeyboardUnreachable` | clavier appairé qui ne répond plus | normale | Ouvrir | `link` |
 | `RepairNeeded` | ré-appairage nécessaire | critique, persistante | Réparer…, Ouvrir | `repair` |
 | `KeyboardRemoved` | clavier supprimé du poste depuis l'extérieur (Oublier de Plasma, `bluetoothctl remove`) (#252) | normale, 12 s | Réparer…, Ouvrir | `repair` |
+| `LinkUnstable` | « liaison instable » : plus de 3 déconnexions en une heure (hors veille du système, déconnexion demandée, clavier éteint), une fois par épisode (#105) | normale, 12 s | Ouvrir | `link-quality` |
 | `BatteryEstimate` | l'unique rappel « estimation selon vos piles » quand PowerDevil alerte déjà (#254) | normale, 12 s | Ouvrir, Me rappeler demain | `battery` |
 | `FirmwareUpdate` | firmware plus récent connu (table embarquée) : une fois par version, mémorisé | normale | Ouvrir, Me rappeler demain | `firmware` |
 | `BatteryReminder` | « changez les piles » : tension lissée `0x49` sous le seuil Bas puis Critique **du clavier** (`0x60` = `0x5A`, 2506 / 2404 mV sur A1314), avec l'indication du clavier en % | Bas : normale, 15 s ; Critique : critique, persistante | Ouvrir, Me rappeler demain, Ignorer ce rappel | `battery` |

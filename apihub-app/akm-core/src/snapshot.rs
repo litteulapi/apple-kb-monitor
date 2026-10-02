@@ -43,6 +43,9 @@ pub struct Snapshot {
     /// "Batteries changed too often": the last two sets lasted less than 30
     /// days each (#108); None = nothing to say.
     pub battery_advice: Option<crate::advice::ShortLife>,
+    /// Disconnection counts, 7 days of relative signal and the "unstable
+    /// link" state of the keyboard followed (#105); None = nothing recorded.
+    pub link_quality: Option<crate::linkstats::LinkQuality>,
     /// Active minutes per day, from the mere presence of input reports
     /// (#109); None = statistics disabled (the default).
     pub usage: Option<crate::usage::UsageSummary>,
@@ -65,6 +68,7 @@ impl Default for Snapshot {
             forecast: None,
             batteries_installed_at: None,
             battery_advice: None,
+            link_quality: None,
             usage: None,
         }
     }

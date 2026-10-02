@@ -14,6 +14,7 @@
 //! connection = true          # "disconnected" / "reconnected (N %)", low urgency
 //! battery_replaced = true    # "new batteries detected"
 //! defer_to_powerdevil = true # PowerDevil already warns about this keyboard: one distinct reminder only (#254)
+//! link_unstable = true      # "unstable link": more than 3 disconnections within an hour, once per episode (#105)
 //! battery_advice = true     # "batteries changed too often" after two sets under 30 days (#108)
 //! quiet_hours = "22:00-07:00" # non-critical notifications held until the range ends; "" = none (#91)
 //!
@@ -60,6 +61,9 @@ pub struct Config {
     pub alerts_enabled: bool,
     pub notify_connection: bool,
     pub notify_battery_replaced: bool,
+    /// "Unstable link" notification: more than 3 disconnections within an
+    /// hour, once per episode (#105). Default on.
+    pub notify_link_unstable: bool,
     /// "Batteries changed too often" notification, once, when the second set
     /// in a row is replaced within 30 days (#108). Default on.
     pub notify_battery_advice: bool,
@@ -105,6 +109,7 @@ impl Default for Config {
             notify_connection: true,
             notify_battery_replaced: true,
             notify_battery_advice: true,
+            notify_link_unstable: true,
             defer_to_powerdevil: true,
             quiet_hours: QuietHours::none(),
             osd_fn_mode: true,
@@ -246,6 +251,7 @@ impl Reader {
             ("apple", "allow_device_name_write") => flag(&mut self.cfg.allow_device_name_write),
             ("notifications", "connection") => flag(&mut self.cfg.notify_connection),
             ("notifications", "battery_replaced") => flag(&mut self.cfg.notify_battery_replaced),
+            ("notifications", "link_unstable") => flag(&mut self.cfg.notify_link_unstable),
             ("notifications", "battery_advice") => flag(&mut self.cfg.notify_battery_advice),
             ("notifications", "defer_to_powerdevil") => flag(&mut self.cfg.defer_to_powerdevil),
             ("notifications", "quiet_hours") => match typed::<String>(v) {
@@ -509,6 +515,17 @@ mod tests {
         let (c, w) = parse("[osd]\ncaps_lock = \"off\"\nvolume = true\n");
         assert_eq!(w.len(), 2, "{w:?}");
         assert!(c.osd_caps_lock, "a mistyped value keeps the default");
+    }
+
+    #[test]
+    fn unstable_link_notification_defaults_to_on() {
+        // #105
+        assert!(Config::default().notify_link_unstable);
+        let (c, w) = parse("[notifications]\nlink_unstable = false\n");
+        assert!(w.is_empty() && !c.notify_link_unstable);
+        let (c, w) = parse("[notifications]\nlink_unstable = 3\n");
+        assert_eq!(w.len(), 1);
+        assert!(c.notify_link_unstable, "a mistyped value keeps the default");
     }
 
     #[test]

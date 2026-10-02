@@ -128,6 +128,10 @@ pub struct Options {
     /// Plasma OSD at a change of Fn mode / at a Caps Lock press
     /// (`[osd] fn_mode`, `[osd] caps_lock`; #100, #101).
     pub osd: crate::osd::Enabled,
+    /// "Unstable link" notification (`[notifications] link_unstable`, #105).
+    pub notify_link_unstable: bool,
+    /// Link statistics shared with the link keeper (set by `main`, #105).
+    pub link_stats: Option<Arc<crate::linkq::Store>>,
     /// Count the active minutes per day (`[usage] active_time`, #109).
     pub usage_active_time: bool,
     /// The counter, when the statistics are on (set by `main`).
@@ -168,6 +172,8 @@ impl Default for Options {
                 fn_mode: true,
                 caps_lock: true,
             },
+            notify_link_unstable: true,
+            link_stats: None,
             usage_active_time: false,
             usage: None,
             chemistry: Chemistry::default(),
@@ -192,6 +198,7 @@ impl Options {
         self.defer_to_powerdevil = c.defer_to_powerdevil;
         self.quiet_hours = c.quiet_hours.clone();
         self.usage_active_time = c.usage_active_time;
+        self.notify_link_unstable = c.notify_link_unstable;
         self.osd = crate::osd::Enabled {
             fn_mode: c.osd_fn_mode,
             caps_lock: c.osd_caps_lock,
@@ -920,10 +927,21 @@ impl Actor {
             return;
         };
         let r = rssi::read_rssi(&mac);
-        if r.is_some() {
-            self.rssi_at = Some(unix_now());
+        if let Some((rel, _)) = r {
+            let now = unix_now();
+            self.rssi_at = Some(now);
+            // 7 days of relative signal, by the hour (#105).
+            if let Some(stats) = self.opts.link_stats.as_ref() {
+                stats.rssi(&mac, now, i32::from(rel));
+            }
         }
         self.rssi.record(&mac, r, Instant::now());
+    }
+
+    /// Link quality of the keyboard followed, at publication time (#105).
+    fn link_quality(&self) -> Option<akm_core::linkstats::LinkQuality> {
+        let mac = self.kb.as_ref()?.device.mac.as_deref()?;
+        self.opts.link_stats.as_ref()?.quality(mac, unix_now())
     }
 
     fn refresh_remaining(&mut self, now: Instant) {
@@ -996,6 +1014,7 @@ impl Actor {
             forecast: self.forecast.clone(),
             batteries_installed_at: self.installed_at,
             battery_advice: self.advice.clone(),
+            link_quality: self.link_quality(),
             usage: self.opts.usage.as_ref().map(|u| u.summary()),
             ..Default::default()
         }
@@ -1506,6 +1525,45 @@ mod tests {
         assert!(a.integrate(Some(other), None, None, true));
         assert_eq!(a.kb.as_ref().unwrap().battery_pct(), None);
         assert!(!a.kb.as_ref().unwrap().battery.kept);
+    }
+
+    /// #105: the published state carries the link quality of the keyboard
+    /// followed, and nothing while no statistics are kept.
+    #[test]
+    fn snapshot_carries_the_link_quality_of_the_keyboard_followed() {
+        const M: &str = "AA:BB:CC:DD:EE:F1";
+        let mut a = quiet_actor();
+        a.kb = Some(report(50.0, None));
+        a.linked = true;
+        assert_eq!(a.snapshot().link_quality, None, "no statistics kept");
+        let stats = crate::linkq::Store::new(None);
+        a.opts.link_stats = Some(stats.clone());
+        assert_eq!(a.snapshot().link_quality, None, "nothing recorded yet");
+        let now = unix_now();
+        stats.disconnect(M, now - 120, "timeout");
+        stats.rssi(M, now - 60, -4);
+        let q = a.snapshot().link_quality.expect("link quality");
+        assert_eq!((q.disconnects_last_hour, q.disconnects_last_day), (1, 1));
+        assert_eq!(
+            q.signal_7d.as_ref().map(|s| (s.samples, s.min)),
+            Some((1, -4))
+        );
+        assert!(!q.unstable);
+        let json = serde_json::to_value(a.snapshot()).unwrap();
+        assert_eq!(
+            json["link_quality"]["disconnects_by_hour"]
+                .as_array()
+                .unwrap()
+                .len(),
+            24
+        );
+        assert_eq!(
+            json["link_quality"]["disconnects_by_day"]
+                .as_array()
+                .unwrap()
+                .len(),
+            7
+        );
     }
 
     /// #108: the advice is raised by the replacement that ends the second

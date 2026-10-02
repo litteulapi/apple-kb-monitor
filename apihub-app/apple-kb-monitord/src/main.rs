@@ -255,9 +255,22 @@ fn run(mut opts: actor::Options, bus_name: Option<String>) -> ExitCode {
             .ok()
     });
     let (link_mailbox, link_notify) = (mailbox.clone(), opts.notify);
+    // Link quality (#105): one record shared by the actor (signal) and the
+    // link keeper (disconnections).
+    let link_stats = apple_kb_monitord::linkq::Store::new(
+        opts.history
+            .then(akm_core::linkstats::LinkStats::default_path),
+    );
+    opts.link_stats = Some(link_stats.clone());
+    let link_alert = opts.notify_link_unstable;
     let handle = actor::spawn(watch, mailbox, opts);
     // Link keeper: reconnection, system sleep, health, reconciliation (#144, #145, #165).
-    let link = apple_kb_monitord::repair::spawn(link_mailbox, link_notify);
+    let link = apple_kb_monitord::repair::spawn_with(
+        link_mailbox,
+        link_notify,
+        Some(link_stats),
+        link_alert,
+    );
     if let Some(c) = conn.as_ref() {
         if let Err(e) = apple_kb_monitord::repair::export(c, link) {
             tracing::warn!("link object not exported: {e}");

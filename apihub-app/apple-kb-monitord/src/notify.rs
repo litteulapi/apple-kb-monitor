@@ -162,6 +162,8 @@ pub enum Event {
     KeyboardUnreachable,
     RepairNeeded,
     KeyboardRemoved,
+    /// More than 3 disconnections within an hour (#105).
+    LinkUnstable,
     BatteryEstimate,
     FirmwareUpdate,
     BatteryReminder,
@@ -172,7 +174,7 @@ pub enum Event {
 }
 
 impl Event {
-    pub const ALL: [Event; 15] = [
+    pub const ALL: [Event; 16] = [
         Event::BatteryLow,
         Event::BatteryCritical,
         Event::KeyboardAlert,
@@ -182,6 +184,7 @@ impl Event {
         Event::KeyboardUnreachable,
         Event::RepairNeeded,
         Event::KeyboardRemoved,
+        Event::LinkUnstable,
         Event::BatteryEstimate,
         Event::FirmwareUpdate,
         Event::BatteryReminder,
@@ -202,6 +205,7 @@ impl Event {
             Event::KeyboardUnreachable => "KeyboardUnreachable",
             Event::RepairNeeded => "RepairNeeded",
             Event::KeyboardRemoved => "KeyboardRemoved",
+            Event::LinkUnstable => "LinkUnstable",
             Event::BatteryEstimate => "BatteryEstimate",
             Event::FirmwareUpdate => "FirmwareUpdate",
             Event::BatteryReminder => "BatteryReminder",
@@ -227,6 +231,7 @@ impl Event {
             | Event::KeyboardOff
             | Event::KeyboardUnreachable => "link",
             Event::RepairNeeded | Event::KeyboardRemoved => "repair",
+            Event::LinkUnstable => "link-quality",
             Event::FirmwareUpdate => "firmware",
             // Its own slot: "new batteries", sent just before, stays visible.
             Event::BatteryAdvice => "advice",
@@ -241,6 +246,7 @@ impl Event {
             Event::KeyboardDisconnected | Event::KeyboardOff | Event::KeyboardRemoved => {
                 "device.removed"
             }
+            Event::LinkUnstable => "device.error",
             Event::KeyboardUnreachable | Event::RepairNeeded | Event::Error => "device.error",
             _ => "device",
         }
@@ -755,6 +761,36 @@ pub fn estimate_notification(pct: f64, low_level: u8, lang: Lang) -> Notificatio
 
 pub fn battery_estimate(pct: f64, low_level: u8) {
     deliver(estimate_notification(pct, low_level, Lang::detect()));
+}
+
+/// The link keeps dropping: `count` disconnections within the last hour
+/// (#105). Says what was measured and what to look at; raised once per
+/// episode by the link keeper.
+pub fn unstable_notification(name: &str, count: usize, lang: Lang) -> Notification {
+    let body = match lang {
+        Lang::En => format!(
+            "\u{201c}{name}\u{201d} disconnected {count} times within the last hour. Check the \
+             batteries, the distance and USB 3 devices near the Bluetooth adapter; details: akmctl doctor."
+        ),
+        Lang::Fr => format!(
+            "\u{ab}\u{a0}{name}\u{a0}\u{bb} s'est d\u{e9}connect\u{e9} {count} fois en une heure. V\u{e9}rifiez \
+             les piles, la distance et les appareils USB 3 pr\u{e8}s de l'adaptateur Bluetooth\u{a0}; \
+             d\u{e9}tail\u{a0}: akmctl doctor."
+        ),
+    };
+    Notification::new(
+        Event::LinkUnstable,
+        lang,
+        lang.t("Keyboard: unstable link", "Clavier : liaison instable")
+            .into(),
+        body,
+        "network-wireless-disconnected",
+        Urgency::Normal,
+    )
+}
+
+pub fn link_unstable(name: &str, count: usize) {
+    deliver(unstable_notification(name, count, Lang::detect()));
 }
 
 /// The keyboard was removed from this computer from outside (Plasma "Forget",
@@ -1495,6 +1531,28 @@ mod tests {
             );
         }
         assert_eq!(Action::from_key("remind"), Some(Action::RemindTomorrow));
+    }
+
+    /// #105: the alert says how many disconnections and where to look.
+    #[test]
+    fn unstable_link_text_gives_the_count_and_the_next_step() {
+        let fr = unstable_notification("Clavier de alice", 4, Lang::Fr);
+        assert_eq!(fr.event, Event::LinkUnstable);
+        assert_eq!(fr.summary, "Clavier : liaison instable");
+        assert!(fr.body.contains("4 fois en une heure") && fr.body.contains("akmctl doctor"));
+        assert_eq!(fr.urgency, Urgency::Normal);
+        let en = unstable_notification("Kb <b>", 5, Lang::En);
+        assert!(en.body.contains("5 times within the last hour"));
+        assert!(
+            en.body.contains("&lt;b&gt;"),
+            "the name is data: {}",
+            en.body
+        );
+        // Its own slot: it does not replace "disconnected" / "reconnected".
+        assert_ne!(
+            Event::LinkUnstable.slot(),
+            Event::KeyboardDisconnected.slot()
+        );
     }
 
     /// #108: what was measured, then what to try, in both languages.

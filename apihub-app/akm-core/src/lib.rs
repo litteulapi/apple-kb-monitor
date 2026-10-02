@@ -25,6 +25,7 @@
 //! * [`activity`]    "the keyboard sent something": a call without any data (#109)
 //! * [`usage`]       active minutes per day, nothing else stored (#109)
 //! * [`link`]        connection / reconnection notification logic (#84)
+//! * [`linkstats`]   disconnection counts, 7 days of relative signal, unstable link (#105)
 //! * [`config`]      `config.toml` (small TOML subset, no dependency)
 //! * [`hid_params`]  `hid_apple` parameters: read + whitelist
 //! * [`keymap`]      special keys: kernel Fn table, effective table, manual
@@ -72,6 +73,7 @@ pub mod history;
 pub mod history_limits;
 pub mod led;
 pub mod link;
+pub mod linkstats;
 pub mod machine;
 pub mod model;
 pub mod parity;

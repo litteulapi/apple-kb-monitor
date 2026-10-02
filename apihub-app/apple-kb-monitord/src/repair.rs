@@ -95,6 +95,9 @@ pub trait LinkBus {
     /// The keyboard `name` was removed from the computer from outside; tell
     /// the user once what to do next (#252).
     fn removed(&mut self, _name: &str) {}
+    /// The link of keyboard `name` keeps dropping: `count` disconnections
+    /// within the last hour (#105). Told once per episode.
+    fn notify_unstable(&mut self, _name: &str, _count: usize) {}
     /// Fresh enumeration; `None` if BlueZ cannot be reached.
     fn enumerate(&mut self) -> Option<Vec<DevInfo>>;
 }
@@ -113,6 +116,8 @@ pub struct LinkStatus {
     pub last_reason: String,
     /// Unix time of the status.
     pub updated: u64,
+    /// Disconnection counts and signal of the last 7 days (#105).
+    pub quality: Option<akm_core::linkstats::LinkQuality>,
 }
 
 impl LinkStatus {
@@ -127,6 +132,7 @@ impl LinkStatus {
             "last_error": self.last_error,
             "last_reason": self.last_reason,
             "updated": self.updated,
+            "quality": self.quality,
         })
     }
 }
@@ -236,6 +242,11 @@ pub struct Keeper<B: LinkBus> {
     last_reconcile: Option<Instant>,
     notify: bool,
     fr: bool,
+    /// Link statistics (#105) and whether the "unstable link" alert is told.
+    stats: Option<Arc<crate::linkq::Store>>,
+    notify_unstable: bool,
+    /// An instant and the unix time it was: unix time of any later instant.
+    epoch: (Instant, u64),
 }
 
 impl<B: LinkBus> Keeper<B> {
@@ -250,6 +261,43 @@ impl<B: LinkBus> Keeper<B> {
             last_reconcile: None,
             notify,
             fr: french(),
+            stats: None,
+            notify_unstable: true,
+            epoch: (Instant::now(), unix_now()),
+        }
+    }
+
+    /// Record the disconnections in `stats` and raise the "unstable link"
+    /// alert (more than 3 within an hour, once per episode) if `alert`.
+    pub fn set_stats(&mut self, stats: Arc<crate::linkq::Store>, alert: bool) {
+        self.stats = Some(stats);
+        self.notify_unstable = alert;
+    }
+
+    /// Unix time of `now`.
+    fn unix(&self, now: Instant) -> u64 {
+        self.epoch.1 + now.saturating_duration_since(self.epoch.0).as_secs()
+    }
+
+    /// The reason recorded for a disconnection BlueZ explains by `reason`:
+    /// what the daemon knows better comes first (system sleep, a forget in
+    /// progress, the keyboard switched off by its button).
+    fn down_reason(&self, reason: DisconnectReason) -> &'static str {
+        if self.sleeping || reason == DisconnectReason::Suspend {
+            "suspend"
+        } else if akm_core::link::expected_disconnect_recent() {
+            "expected"
+        } else if akm_core::link::keyboard_off_recent() {
+            "off"
+        } else {
+            reason.as_str()
+        }
+    }
+
+    /// The keyboard `mac` went from connected to disconnected.
+    fn note_down(&self, mac: &str, reason: DisconnectReason, now: Instant) {
+        if let Some(s) = self.stats.as_ref() {
+            s.disconnect(mac, self.unix(now), self.down_reason(reason));
         }
     }
 
@@ -271,6 +319,8 @@ impl<B: LinkBus> Keeper<B> {
     fn sync(&mut self, list: Vec<DevInfo>, now: Instant) {
         self.bluez = true;
         let mut seen = Vec::new();
+        // Disconnections only this enumeration reveals (no signal seen).
+        let mut downs: Vec<String> = Vec::new();
         for info in &list {
             if !info.paired {
                 if let Some(d) = self.devs.get_mut(&info.mac) {
@@ -289,6 +339,7 @@ impl<B: LinkBus> Keeper<B> {
                         d.rec.on_connected(now);
                     } else if !info.connected && d.connected {
                         d.rec.on_disconnected(DisconnectReason::Unknown, now);
+                        downs.push(info.mac.clone());
                     }
                     d.connected = info.connected;
                 }
@@ -313,6 +364,9 @@ impl<B: LinkBus> Keeper<B> {
                     );
                 }
             }
+        }
+        for mac in downs {
+            self.note_down(&mac, DisconnectReason::Unknown, now);
         }
         // Removed from BlueZ (forgotten by the user): stop following, silently.
         self.devs.retain(|m, _| seen.contains(m));
@@ -343,11 +397,14 @@ impl<B: LinkBus> Keeper<B> {
             KMsg::Connected(path, c) => match self.mac_of(&path) {
                 Some(mac) => {
                     let d = self.devs.get_mut(&mac).expect("known");
-                    d.connected = c;
+                    let was = std::mem::replace(&mut d.connected, c);
                     if c {
                         d.rec.on_connected(now);
                     } else {
                         d.rec.on_disconnected(DisconnectReason::Unknown, now);
+                        if was {
+                            self.note_down(&mac, DisconnectReason::Unknown, now);
+                        }
                     }
                 }
                 None if c => self.resync(now), // a keyboard paired meanwhile
@@ -390,9 +447,18 @@ impl<B: LinkBus> Keeper<B> {
                 }
             }
             KMsg::Disconnected(path, reason) => {
-                if let Some(d) = self.mac_of(&path).and_then(|m| self.devs.get_mut(&m)) {
-                    d.connected = false;
-                    d.rec.on_disconnected(reason, now);
+                if let Some(mac) = self.mac_of(&path) {
+                    let mut was = false;
+                    if let Some(d) = self.devs.get_mut(&mac) {
+                        was = std::mem::replace(&mut d.connected, false);
+                        d.rec.on_disconnected(reason, now);
+                    }
+                    if was {
+                        self.note_down(&mac, reason, now);
+                    } else if let Some(s) = self.stats.as_ref() {
+                        // `Connected = false` came first: its record gets the reason.
+                        s.refine(&mac, self.unix(now), self.down_reason(reason));
+                    }
                 }
             }
             KMsg::Adapter(on) => {
@@ -411,12 +477,20 @@ impl<B: LinkBus> Keeper<B> {
                 self.sleeping = false;
                 // Fresh view first: what survived the sleep?
                 let fresh = self.bus.enumerate();
+                let mut lost_asleep = Vec::new();
                 if let Some(list) = fresh.as_ref() {
                     for info in list {
                         if let Some(d) = self.devs.get_mut(&info.mac) {
+                            if d.connected && !info.connected {
+                                lost_asleep.push(info.mac.clone());
+                            }
                             d.connected = info.connected;
                         }
                     }
+                }
+                // Links that did not survive the sleep: not an instability.
+                for mac in lost_asleep {
+                    self.note_down(&mac, DisconnectReason::Suspend, now);
                 }
                 for d in self.devs.values_mut() {
                     d.rec.on_resume(d.connected, now);
@@ -480,6 +554,22 @@ impl<B: LinkBus> Keeper<B> {
             tracing::info!("link: paging {mac}");
             self.bus.connect(&path, &mac);
         }
+        // Unstable link (#105): more than 3 disconnections within an hour,
+        // told once per episode.
+        if let Some(stats) = self.stats.clone() {
+            let unix = self.unix(now);
+            let due: Vec<(String, usize)> = self
+                .devs
+                .iter()
+                .filter_map(|(mac, d)| Some((d.name.clone(), stats.unstable_due(mac, unix)?)))
+                .collect();
+            for (name, count) in due {
+                tracing::warn!("link: {name} unstable, {count} disconnections within an hour");
+                if self.notify && self.notify_unstable {
+                    self.bus.notify_unstable(&name, count);
+                }
+            }
+        }
         for (n, name) in notes {
             let (s, b, u) = notice_text(&n, &name, now, self.fr);
             tracing::warn!("link: {s} — {b}");
@@ -518,6 +608,10 @@ impl<B: LinkBus> Keeper<B> {
                 last_error: d.rec.last_error().unwrap_or_default().into(),
                 last_reason: d.rec.last_reason().map_or("", |r| r.as_str()).into(),
                 updated: unow,
+                quality: self
+                    .stats
+                    .as_ref()
+                    .and_then(|s| s.quality(mac, self.unix(now))),
             })
             .collect()
     }
@@ -650,6 +744,10 @@ impl LinkBus for SystemBus {
 
     fn removed(&mut self, name: &str) {
         crate::notify::keyboard_removed(name);
+    }
+
+    fn notify_unstable(&mut self, name: &str, count: usize) {
+        crate::notify::link_unstable(name, count);
     }
 
     fn enumerate(&mut self) -> Option<Vec<DevInfo>> {
@@ -830,10 +928,23 @@ pub fn listen_on(conn: Connection, calls: Connection, tx: &Sender<KMsg>) -> zbus
 pub struct KeeperHandle {
     pub tx: Sender<KMsg>,
     pub shared: SharedStatus,
+    /// Link statistics, for `Link.Quality()` (#105).
+    pub stats: Option<Arc<crate::linkq::Store>>,
 }
 
 /// Start the keeper (listener + logind + decision threads).
 pub fn spawn(mailbox: Arc<Mailbox>, notify: bool) -> KeeperHandle {
+    spawn_with(mailbox, notify, None, true)
+}
+
+/// [`spawn`] recording the disconnections in `stats` (#105); `alert`: raise
+/// the "unstable link" notification.
+pub fn spawn_with(
+    mailbox: Arc<Mailbox>,
+    notify: bool,
+    stats: Option<Arc<crate::linkq::Store>>,
+    alert: bool,
+) -> KeeperHandle {
     let (tx, rx) = mpsc::channel::<KMsg>();
     let shared: SharedStatus = Arc::new(Mutex::new(Vec::new()));
     let ltx = tx.clone();
@@ -858,10 +969,17 @@ pub fn spawn(mailbox: Arc<Mailbox>, notify: bool) -> KeeperHandle {
         mailbox,
     };
     let sh = shared.clone();
+    let kstats = stats.clone();
     let _ = std::thread::Builder::new()
         .name("kb-link".into())
-        .spawn(move || run(Keeper::new(bus, sh, notify), rx));
-    KeeperHandle { tx, shared }
+        .spawn(move || {
+            let mut k = Keeper::new(bus, sh, notify);
+            if let Some(s) = kstats {
+                k.set_stats(s, alert);
+            }
+            run(k, rx)
+        });
+    KeeperHandle { tx, shared, stats }
 }
 
 fn run<B: LinkBus>(mut k: Keeper<B>, rx: Receiver<KMsg>) {
@@ -896,6 +1014,17 @@ impl LinkIface {
             .unwrap_or_else(|e| e.into_inner())
             .clone();
         serde_json::Value::Array(s.iter().map(LinkStatus::to_json).collect()).to_string()
+    }
+
+    /// Everything kept about the link of each keyboard (#105), as a JSON
+    /// object keyed by MAC: `{summary, disconnects: [{ts, reason}],
+    /// signal_by_hour: [{start, samples, mean, min, max}]}` (7 days). `{}`
+    /// when the statistics are not kept.
+    fn quality(&self) -> String {
+        self.handle
+            .stats
+            .as_ref()
+            .map_or_else(|| "{}".to_string(), |s| s.json(unix_now()).to_string())
     }
 
     /// Page the keyboard now (still rate-limited to one attempt per 20 s,
@@ -973,6 +1102,7 @@ mod tests {
         connects: Vec<Instant>,
         notes: Vec<(String, Urgency)>,
         removed: Vec<String>,
+        unstable: Vec<(String, usize)>,
         machine: Machine,
         clears: usize,
         now: Instant,
@@ -987,6 +1117,9 @@ mod tests {
         }
         fn removed(&mut self, name: &str) {
             self.removed.push(name.to_string());
+        }
+        fn notify_unstable(&mut self, name: &str, count: usize) {
+            self.unstable.push((name.to_string(), count));
         }
         fn reconcile(&mut self, connected: Vec<String>) {
             if self
@@ -1019,6 +1152,7 @@ mod tests {
             connects: Vec::new(),
             notes: Vec::new(),
             removed: Vec::new(),
+            unstable: Vec::new(),
             machine: Machine::new(),
             clears: 0,
             now: t0,
@@ -1280,6 +1414,166 @@ mod tests {
         assert!(k.status(t0).is_empty());
         k.handle(KMsg::Added(PATH.into()), t0);
         assert_eq!(k.status(t0).len(), 1);
+    }
+
+    /// One link loss then the keyboard back, `secs` later.
+    fn drop_and_return(k: &mut Keeper<Fake>, t: Instant, reason: DisconnectReason) -> Instant {
+        k.bus().world = vec![kb(false)];
+        k.handle(KMsg::Disconnected(PATH.into(), reason), t);
+        k.handle(KMsg::Connected(PATH.into(), false), t);
+        k.tick(t);
+        let back = t + Duration::from_secs(30);
+        k.bus().world = vec![kb(true)];
+        k.handle(KMsg::Connected(PATH.into(), true), back);
+        k.tick(back);
+        back
+    }
+
+    fn keeper_with_stats(t0: Instant) -> (Keeper<Fake>, Arc<crate::linkq::Store>) {
+        let mut k = keeper(true, t0);
+        let stats = crate::linkq::Store::new(None);
+        k.set_stats(stats.clone(), true);
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        (k, stats)
+    }
+
+    /// #105: more than 3 disconnections within an hour raise "unstable link"
+    /// once; a later burst is a new episode.
+    #[test]
+    fn four_link_losses_within_an_hour_raise_one_unstable_alert_per_episode() {
+        let t0 = Instant::now();
+        let (mut k, _stats) = keeper_with_stats(t0);
+        let mut t = t0;
+        for i in 0..3 {
+            t = drop_and_return(
+                &mut k,
+                t + Duration::from_secs(300),
+                DisconnectReason::Timeout,
+            );
+            assert!(k.bus().unstable.is_empty(), "{} is not more than 3", i + 1);
+        }
+        t = drop_and_return(
+            &mut k,
+            t + Duration::from_secs(300),
+            DisconnectReason::Timeout,
+        );
+        assert_eq!(k.bus().unstable, [("Clavier de alice #1".to_string(), 4)]);
+        // More of the same episode: nothing more.
+        t = drop_and_return(
+            &mut k,
+            t + Duration::from_secs(120),
+            DisconnectReason::Timeout,
+        );
+        run_for(&mut k, t, 600);
+        assert_eq!(k.bus().unstable.len(), 1, "once per episode");
+        let q = k.status(t)[0]
+            .quality
+            .clone()
+            .expect("quality in the status");
+        assert!(q.unstable);
+        assert_eq!((q.disconnects_last_hour, q.unexpected_last_hour), (5, 5));
+        let j = k.status(t)[0].to_json();
+        assert_eq!(j["quality"]["disconnects_last_hour"], 5);
+        // Two quiet hours, then a new burst: told again.
+        let mut t = run_for(&mut k, t, 2 * 3600);
+        assert!(!k.status(t)[0].quality.as_ref().unwrap().unstable);
+        for _ in 0..4 {
+            t = drop_and_return(
+                &mut k,
+                t + Duration::from_secs(60),
+                DisconnectReason::Timeout,
+            );
+        }
+        assert_eq!(k.bus().unstable.len(), 2);
+    }
+
+    /// #105: `Connected = false` and `Disconnected(reason)` are one
+    /// disconnection, whatever their order.
+    #[test]
+    fn the_two_bluez_signals_of_one_disconnection_are_counted_once() {
+        let t0 = Instant::now();
+        let (mut k, stats) = keeper_with_stats(t0);
+        let t = t0 + Duration::from_secs(60);
+        k.bus().world = vec![kb(false)];
+        // Property first, reason second.
+        k.handle(KMsg::Connected(PATH.into(), false), t);
+        k.handle(KMsg::Disconnected(PATH.into(), DisconnectReason::Remote), t);
+        let unix = k.unix(t);
+        let j = stats.json(unix);
+        assert_eq!(j[MAC]["disconnects"].as_array().unwrap().len(), 1);
+        assert_eq!(j[MAC]["disconnects"][0]["reason"], "remote", "refined");
+        // Back, then reason first, property second.
+        k.bus().world = vec![kb(true)];
+        k.handle(
+            KMsg::Connected(PATH.into(), true),
+            t + Duration::from_secs(30),
+        );
+        let t = drop_and_return(
+            &mut k,
+            t + Duration::from_secs(60),
+            DisconnectReason::Timeout,
+        );
+        let j = stats.json(k.unix(t));
+        assert_eq!(j[MAC]["disconnects"].as_array().unwrap().len(), 2);
+        assert_eq!(j[MAC]["disconnects"][1]["reason"], "timeout");
+    }
+
+    /// #105: going to sleep is not an unstable link.
+    #[test]
+    fn disconnections_for_system_sleep_never_raise_the_alert() {
+        let t0 = Instant::now();
+        let (mut k, stats) = keeper_with_stats(t0);
+        let mut t = t0;
+        for _ in 0..6 {
+            t += Duration::from_secs(120);
+            k.handle(KMsg::Sleep(SleepEvent::Sleeping), t);
+            k.bus().world = vec![kb(false)];
+            k.handle(
+                KMsg::Disconnected(PATH.into(), DisconnectReason::Suspend),
+                t,
+            );
+            t += Duration::from_secs(60);
+            k.bus().world = vec![kb(true)];
+            k.handle(KMsg::Sleep(SleepEvent::Resumed), t);
+            k.tick(t);
+        }
+        assert!(k.bus().unstable.is_empty());
+        let q = stats.quality(MAC, k.unix(t)).unwrap();
+        assert_eq!((q.disconnects_last_hour, q.unexpected_last_hour), (6, 0));
+        // A link that did not survive a sleep without any signal: same.
+        k.handle(KMsg::Sleep(SleepEvent::Sleeping), t);
+        k.bus().world = vec![kb(false)];
+        k.handle(
+            KMsg::Sleep(SleepEvent::Resumed),
+            t + Duration::from_secs(60),
+        );
+        let j = stats.json(k.unix(t) + 60);
+        assert_eq!(
+            j[MAC]["disconnects"].as_array().unwrap().last().unwrap()["reason"],
+            "suspend"
+        );
+    }
+
+    /// #105: with the alert turned off the counts are still kept.
+    #[test]
+    fn the_unstable_alert_can_be_turned_off() {
+        let t0 = Instant::now();
+        let mut k = keeper(true, t0);
+        let stats = crate::linkq::Store::new(None);
+        k.set_stats(stats.clone(), false);
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        let mut t = t0;
+        for _ in 0..5 {
+            t = drop_and_return(
+                &mut k,
+                t + Duration::from_secs(60),
+                DisconnectReason::Timeout,
+            );
+        }
+        assert!(k.bus().unstable.is_empty());
+        assert!(stats.quality(MAC, k.unix(t)).unwrap().unstable);
     }
 
     #[test]
