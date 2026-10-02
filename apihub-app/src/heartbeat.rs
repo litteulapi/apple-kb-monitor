@@ -38,7 +38,11 @@ pub struct Pacer {
 
 impl Pacer {
     pub fn new() -> Self {
-        Self { last_write: None, frames: 0, max: Duration::ZERO }
+        Self {
+            last_write: None,
+            frames: 0,
+            max: Duration::ZERO,
+        }
     }
 
     /// Records a finished frame. Returns `(frames, max, last)` when a line is
@@ -46,7 +50,9 @@ impl Pacer {
     pub fn frame(&mut self, now: Instant, took: Duration) -> Option<(u64, Duration, Duration)> {
         self.frames += 1;
         self.max = self.max.max(took);
-        let due = self.last_write.is_none_or(|t| now.saturating_duration_since(t) >= PERIOD);
+        let due = self
+            .last_write
+            .is_none_or(|t| now.saturating_duration_since(t) >= PERIOD);
         if !due {
             return None;
         }
@@ -117,14 +123,29 @@ impl Heartbeat {
                 }
             })
             .ok()?;
-        Some(Self { dir, pacer: Pacer::new(), tx: Some(tx), writer: Some(writer) })
+        Some(Self {
+            dir,
+            pacer: Pacer::new(),
+            tx: Some(tx),
+            writer: Some(writer),
+        })
     }
 
     /// End of a UI frame. Never blocks: a pending write is not queued twice.
     pub fn tick(&mut self, took: Duration) {
-        let Some((frames, max, last)) = self.pacer.frame(Instant::now(), took) else { return };
-        let ts_ms = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
-        let line = render(std::process::id(), ts_ms, frames, max.as_secs_f64() * 1e3, last.as_secs_f64() * 1e3);
+        let Some((frames, max, last)) = self.pacer.frame(Instant::now(), took) else {
+            return;
+        };
+        let ts_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_millis() as u64);
+        let line = render(
+            std::process::id(),
+            ts_ms,
+            frames,
+            max.as_secs_f64() * 1e3,
+            last.as_secs_f64() * 1e3,
+        );
         if let Some(tx) = &self.tx {
             match tx.try_send(line) {
                 Ok(()) | Err(TrySendError::Full(_)) => {}
@@ -217,7 +238,10 @@ mod tests {
         let d = tmpdir("dir");
         std::fs::create_dir_all(&d).unwrap();
         let loose = d.join("loose");
-        std::fs::DirBuilder::new().mode(0o755).create(&loose).unwrap();
+        std::fs::DirBuilder::new()
+            .mode(0o755)
+            .create(&loose)
+            .unwrap();
         ensure_dir(&loose).unwrap();
         assert_eq!(std::fs::metadata(&loose).unwrap().mode() & 0o777, 0o700);
         let link = d.join("link");
@@ -233,7 +257,10 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         let mut hb = Heartbeat::start(dir.clone()).unwrap();
         std::thread::sleep(Duration::from_millis(300));
-        assert!(!dir.join(FILE_NAME).exists(), "the writer thread never pulses by itself");
+        assert!(
+            !dir.join(FILE_NAME).exists(),
+            "the writer thread never pulses by itself"
+        );
         hb.tick(Duration::from_millis(7));
         let v: serde_json::Value = serde_json::from_str(&wait_for(&dir.join(FILE_NAME))).unwrap();
         assert_eq!(v["pid"], std::process::id());

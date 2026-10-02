@@ -2,13 +2,11 @@
 → application
 Note
 excellent
-Diag
-Batteries
 Signal
 MAC
 CAPS
 NUM
-Radio
 Firmware
 hid_apple fnmode
 OK
+Actions

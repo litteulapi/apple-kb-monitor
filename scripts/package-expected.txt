@@ -50,3 +50,4 @@ usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/FnMode.js
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/LineChart.qml
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/HistoryPage.qml
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/DiagPage.qml
+usr/share/licenses/apple-kb-monitor/OFL.txt

@@ -1,0 +1,231 @@
+{
+  "active": "default",
+  "kernel_params": [
+    {
+      "help": "0 disabled, 1 fkeyslast (media keys first), 2 fkeysfirst, 3 auto (= 1 on an Apple keyboard), 4 fkeysdisabled",
+      "max": 4,
+      "min": 0,
+      "name": "fnmode"
+    },
+    {
+      "help": "swap ` and < on ISO keyboards: -1 auto, 0 off, 1 on",
+      "max": 1,
+      "min": -1,
+      "name": "iso_layout"
+    },
+    {
+      "help": "swap Option (Alt) and Command (Meta): 0 Mac, 1 both sides (PC order), 2 left side only",
+      "max": 2,
+      "min": 0,
+      "name": "swap_opt_cmd"
+    },
+    {
+      "help": "swap Control and Command: 0 no, 1 yes",
+      "max": 1,
+      "min": 0,
+      "name": "swap_ctrl_cmd"
+    },
+    {
+      "help": "swap Fn and left Control: 0 no, 1 yes",
+      "max": 1,
+      "min": 0,
+      "name": "swap_fn_leftctrl"
+    }
+  ],
+  "keys": [
+    {
+      "id": "F1",
+      "legend": "Luminosité −",
+      "scancode": "0x7003a"
+    },
+    {
+      "id": "F2",
+      "legend": "Luminosité +",
+      "scancode": "0x7003b"
+    },
+    {
+      "id": "F3",
+      "legend": "Exposé / Mission Control",
+      "scancode": "0x7003c"
+    },
+    {
+      "id": "F4",
+      "legend": "Dashboard / Launchpad",
+      "scancode": "0x7003d"
+    },
+    {
+      "id": "F5",
+      "legend": "(sans pictogramme)",
+      "scancode": "0x7003e"
+    },
+    {
+      "id": "F6",
+      "legend": "(sans pictogramme)",
+      "scancode": "0x7003f"
+    },
+    {
+      "id": "F7",
+      "legend": "Piste précédente",
+      "scancode": "0x70040"
+    },
+    {
+      "id": "F8",
+      "legend": "Lecture / Pause",
+      "scancode": "0x70041"
+    },
+    {
+      "id": "F9",
+      "legend": "Piste suivante",
+      "scancode": "0x70042"
+    },
+    {
+      "id": "F10",
+      "legend": "Muet",
+      "scancode": "0x70043"
+    },
+    {
+      "id": "F11",
+      "legend": "Volume −",
+      "scancode": "0x70044"
+    },
+    {
+      "id": "F12",
+      "legend": "Volume +",
+      "scancode": "0x70045"
+    },
+    {
+      "id": "Eject",
+      "legend": "Éjecter ⏏",
+      "scancode": "0xc00b8"
+    },
+    {
+      "id": "Fn",
+      "legend": "fn",
+      "scancode": "0xff0003"
+    },
+    {
+      "id": "Esc",
+      "legend": "esc",
+      "scancode": "0x70029"
+    },
+    {
+      "id": "Backspace",
+      "legend": "Effacement ⌫",
+      "scancode": "0x7002a"
+    },
+    {
+      "id": "Enter",
+      "legend": "Entrée ↩",
+      "scancode": "0x70028"
+    },
+    {
+      "id": "CapsLock",
+      "legend": "Verr. maj ⇪",
+      "scancode": "0x70039"
+    },
+    {
+      "id": "Grave",
+      "legend": "usage 0x35 (` @)",
+      "scancode": "0x70035"
+    },
+    {
+      "id": "NonUS",
+      "legend": "usage 0x64 (< >)",
+      "scancode": "0x70064"
+    },
+    {
+      "id": "LeftCtrl",
+      "legend": "ctrl gauche",
+      "scancode": "0x700e0"
+    },
+    {
+      "id": "LeftShift",
+      "legend": "Maj gauche ⇧",
+      "scancode": "0x700e1"
+    },
+    {
+      "id": "LeftAlt",
+      "legend": "Option gauche ⌥",
+      "scancode": "0x700e2"
+    },
+    {
+      "id": "LeftCmd",
+      "legend": "Commande gauche ⌘",
+      "scancode": "0x700e3"
+    },
+    {
+      "id": "RightShift",
+      "legend": "Maj droite ⇧",
+      "scancode": "0x700e5"
+    },
+    {
+      "id": "RightAlt",
+      "legend": "Option droite ⌥",
+      "scancode": "0x700e6"
+    },
+    {
+      "id": "RightCmd",
+      "legend": "Commande droite ⌘",
+      "scancode": "0x700e7"
+    },
+    {
+      "id": "Right",
+      "legend": "→",
+      "scancode": "0x7004f"
+    },
+    {
+      "id": "Left",
+      "legend": "←",
+      "scancode": "0x70050"
+    },
+    {
+      "id": "Down",
+      "legend": "↓",
+      "scancode": "0x70051"
+    },
+    {
+      "id": "Up",
+      "legend": "↑",
+      "scancode": "0x70052"
+    }
+  ],
+  "path": "/home/alice/.config/apple-kb-monitor/keymap.toml",
+  "presets": [
+    {
+      "name": "apple",
+      "params": {
+        "fnmode": 1,
+        "swap_opt_cmd": 0
+      },
+      "title": "Apple (légende des touches)"
+    },
+    {
+      "name": "fkeys",
+      "params": {
+        "fnmode": 2,
+        "swap_opt_cmd": 0
+      },
+      "title": "F1-F12 classiques"
+    },
+    {
+      "name": "linux-pc",
+      "params": {
+        "fnmode": 1,
+        "swap_opt_cmd": 1
+      },
+      "title": "Linux PC (Cmd↔Alt)"
+    }
+  ],
+  "profiles": {
+    "default": {
+      "effective_params": {},
+      "keys": {},
+      "models": [
+        "05ac:0256"
+      ],
+      "params": {},
+      "preset": null
+    }
+  },
+  "schema": 1
+}

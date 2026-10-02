@@ -48,7 +48,10 @@ fn is_french_env() -> bool {
 pub fn parse_po(po: &str) -> HashMap<String, String> {
     fn unquote(l: &str) -> String {
         let l = l.trim();
-        let inner = l.strip_prefix('"').and_then(|r| r.strip_suffix('"')).unwrap_or("");
+        let inner = l
+            .strip_prefix('"')
+            .and_then(|r| r.strip_suffix('"'))
+            .unwrap_or("");
         let mut out = String::new();
         let mut it = inner.chars();
         while let Some(c) = it.next() {
@@ -181,15 +184,29 @@ mod tests {
     use std::path::Path;
 
     fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
-        move |k| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| v.to_string())
+        move |k| {
+            pairs
+                .iter()
+                .find(|(n, _)| *n == k)
+                .map(|(_, v)| v.to_string())
+        }
     }
 
     #[test]
     fn language_follows_lc_all_then_lc_messages_then_lang() {
         assert!(lang_is_french(env(&[("LANG", "fr_FR.UTF-8")])));
-        assert!(!lang_is_french(env(&[("LANG", "fr_FR.UTF-8"), ("LC_ALL", "en_US.UTF-8")])));
-        assert!(lang_is_french(env(&[("LANG", "en_US.UTF-8"), ("LC_MESSAGES", "fr_BE")])));
-        assert!(lang_is_french(env(&[("LC_ALL", ""), ("LANG", "fr_CA.UTF-8")])));
+        assert!(!lang_is_french(env(&[
+            ("LANG", "fr_FR.UTF-8"),
+            ("LC_ALL", "en_US.UTF-8")
+        ])));
+        assert!(lang_is_french(env(&[
+            ("LANG", "en_US.UTF-8"),
+            ("LC_MESSAGES", "fr_BE")
+        ])));
+        assert!(lang_is_french(env(&[
+            ("LC_ALL", ""),
+            ("LANG", "fr_CA.UTF-8")
+        ])));
         assert!(!lang_is_french(env(&[])), "English is the default");
         assert!(!lang_is_french(env(&[("LANG", "C")])));
     }
@@ -214,7 +231,10 @@ mod tests {
     fn french_and_english_lookup() {
         assert_eq!(tr_in(false, "Keyboard"), "Keyboard");
         assert_eq!(tr_in(true, "Keyboard"), "Clavier");
-        assert_eq!(tr_in(true, "not in the catalog at all"), "not in the catalog at all");
+        assert_eq!(
+            tr_in(true, "not in the catalog at all"),
+            "not in the catalog at all"
+        );
     }
 
     /// Every literal given to `tr(` / `trf(` / `tr_in(` / `trf_in(` in the
@@ -241,7 +261,10 @@ mod tests {
             for lit in literals(&src) {
                 used.insert(lit.clone());
                 match cat.get(&lit) {
-                    None => missing.push(format!("{}: {lit:?}", p.file_name().unwrap().to_string_lossy())),
+                    None => missing.push(format!(
+                        "{}: {lit:?}",
+                        p.file_name().unwrap().to_string_lossy()
+                    )),
                     Some(fr) if *fr == lit && !same.contains(&lit) => {
                         missing.push(format!("identical to English: {lit:?}"))
                     }
@@ -249,11 +272,18 @@ mod tests {
                 }
             }
         }
-        assert!(missing.is_empty(), "untranslated window texts:\n{}", missing.join("\n"));
+        assert!(
+            missing.is_empty(),
+            "untranslated window texts:\n{}",
+            missing.join("\n")
+        );
         // And no orphan entry left in the catalog.
         let mut orphans: Vec<&String> = cat.keys().filter(|k| !used.contains(*k)).collect();
         orphans.sort();
-        assert!(orphans.is_empty(), "catalog entries no source uses: {orphans:?}");
+        assert!(
+            orphans.is_empty(),
+            "catalog entries no source uses: {orphans:?}"
+        );
         assert!(used.len() > 100, "scan found only {} texts", used.len());
     }
 
@@ -266,7 +296,11 @@ mod tests {
                 let at = from + i;
                 from = at + f.len();
                 // a whole identifier: not `str(` or `my_tr(`
-                if src[..at].chars().next_back().is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                if src[..at]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_alphanumeric() || c == '_')
+                {
                     continue;
                 }
                 let mut args = &src[from..];
@@ -298,7 +332,9 @@ mod tests {
                                         }
                                         h.push(c);
                                     }
-                                    if let Some(ch) = u32::from_str_radix(&h, 16).ok().and_then(char::from_u32) {
+                                    if let Some(ch) =
+                                        u32::from_str_radix(&h, 16).ok().and_then(char::from_u32)
+                                    {
                                         s.push(ch);
                                     }
                                 }

@@ -25,6 +25,7 @@ sys.path.insert(0, str(HERE))
 from xprobe import Probe  # noqa: E402
 
 TITLE = "Apple Keyboard Monitor"
+TITLE_FR = "Moniteur de clavier Apple"
 WARMUP_S = 3.0
 
 
@@ -42,6 +43,7 @@ class Env:
         self.procs = []
         self.display = None
         self.base_env = None
+        self.title = TITLE
 
     # ── infrastructure ──────────────────────────────────────────────────────
     def spawn(self, argv, log, env=None, **kw):
@@ -136,7 +138,7 @@ class Env:
         if history:
             argv += ["--history", str(history)]
         for k, v in kw.items():
-            argv += ["--" + k.replace("_", "-"), str(v)]
+            argv += ["--" + k.replace("_", "-")] + ([] if v is True else [str(v)])
         p = self.spawn(argv, d / "fake-daemon.log", env=env, stdout=subprocess.PIPE)
         if p.stdout.readline().strip() != b"ready":
             raise Fail(f"fake daemon ({mode}) did not start, see {d / 'fake-daemon.log'}")
@@ -158,7 +160,7 @@ class Env:
         return self.spawn(argv, d / f"{tag}.log", env=env)
 
     def windows(self):
-        r = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", TITLE], env=self.base_env,
+        r = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", self.title], env=self.base_env,
                            capture_output=True, text=True)
         return [int(w) for w in r.stdout.split()]
 
@@ -177,7 +179,7 @@ class Env:
                 check_no_fallback(d)
             except Fail as ex:
                 raise Fail(f"no window after {timeout:.0f} s AND {ex}. Screen capture: {shot}")
-        raise Fail(f"no window titled '{TITLE}' after {timeout:.0f} s: start-up blocked (a synchronous call "
+        raise Fail(f"no window titled '{self.title}' after {timeout:.0f} s: start-up blocked (a synchronous call "
                    f"before the first frame?). Screen capture: {shot}")
 
     def screenshot(self, win, path):
@@ -566,27 +568,48 @@ def blank(shot):
     return st.stddev[0] < 3.0
 
 
+TABS = ["stat", "radio", "keys", "data", "diag"]
+SIZES = [(900, 700), (420, 700)]
+# Share of pixels allowed to differ from the reference. The clock of the
+# status bar moves; the DIAG log depends on what the host has installed.
+TOLERANCE = {"diag": 0.25}
+
+
 def sc_screens(env: Env):
-    """(g) fixed data, fixed sizes, compared with tests/e2e/refs/*.png."""
+    """(g) fixed data, fixed sizes, compared with tests/e2e/refs/*.png: every
+    tab (reached with its digit key), then the "keyboard disconnected" and
+    "daemon absent" states. French interface, as the captures of
+    docs/captures/pipboy."""
+    env.title = TITLE_FR
+    try:
+        return screens(env)
+    finally:
+        env.title = TITLE
+
+
+def screens(env: Env):
     d, e = env.scenario_env("screens", history=env.a.seed_history)
-    env.fake_daemon(d, e, "static", history=env.a.seed_history)
-    p = env.launch(d, e)
-    win = env.wait_window(p)
+    e.update({"LC_ALL": "fr_FR.UTF-8", "LANG": "fr_FR.UTF-8"})
     refs = HERE / "refs"
     probs, done = [], []
-    for w, h in [(900, 700), (420, 700)]:
-        subprocess.run(["xdotool", "windowsize", str(win), str(w), str(h)], env=env.base_env, capture_output=True)
-        subprocess.run(["xdotool", "mousemove", "1900", "1190"], env=env.base_env, capture_output=True)
-        time.sleep(2.5)
+
+    def key(win, name, wait=0.8):
+        subprocess.run(["xdotool", "windowfocus", str(win)], env=env.base_env, capture_output=True)
+        subprocess.run(["xdotool", "key", name], env=env.base_env, capture_output=True)
+        time.sleep(wait)
         env.probe.ping(win)
-        name = f"main-{w}x{h}.png"
+
+    def shoot(win, name):
+        subprocess.run(["xdotool", "mousemove", "1900", "1190"], env=env.base_env, capture_output=True)
+        time.sleep(0.4)
+        env.probe.ping(win)
         shot = env.screenshot(win, d / name)
         if not shot:
             probs.append(f"no screenshot for {name}")
-            continue
+            return
         if blank(shot):
             probs.append(f"{name}: the window is BLANK (uniform image): {shot}")
-            continue
+            return
         ref = refs / name
         if env.a.update_refs:
             refs.mkdir(exist_ok=True)
@@ -595,14 +618,84 @@ def sc_screens(env: Env):
         elif not ref.exists():
             done.append(f"{name}: no reference (tests/e2e/run.sh --update-refs)")
         else:
-            why = compare(ref, shot, d / ("diff-" + name))
+            why = compare(ref, shot, d / ("diff-" + name), tol_pixels=TOLERANCE.get(name.split("-")[0], 0.03))
             if why:
                 probs.append(f"{name} differs from the reference: {why}; capture: {shot}")
             else:
                 done.append(f"{name}: matches")
+
+    def resize(win, w, h):
+        subprocess.run(["xdotool", "windowsize", str(win), str(w), str(h)], env=env.base_env, capture_output=True)
+        time.sleep(1.5)
+        env.probe.ping(win)
+
+    # 1. Every tab, daemon present and keyboard connected.
+    fake = env.fake_daemon(d, e, "static", history=env.a.seed_history, kde=True)
+    p = env.launch(d, e)
+    win = env.wait_window(p)
+    time.sleep(2.0)
+    diag_run = False
+    for w, h in SIZES:
+        resize(win, w, h)
+        for i, tab in enumerate(TABS):
+            key(win, str(i + 1))
+            if tab == "diag" and not diag_run:
+                # F5 runs the checks; the slowest one is bounded to 3 s.
+                key(win, "F5", wait=9.0)
+                diag_run = True
+            shoot(win, f"{tab}-{w}x{h}.png")
     check_log(d)
     check_no_fallback(d)
     env.kill(p)
+    env.kill(fake)
+    time.sleep(0.5)
+
+    # 2. Keyboard disconnected (the daemon is there and says so).
+    fake = env.fake_daemon(d, e, "disconnected", history=env.a.seed_history)
+    p = env.launch(d, e, tag="app-offline")
+    win = env.wait_window(p)
+    time.sleep(2.0)
+    for w, h in SIZES:
+        resize(win, w, h)
+        key(win, "1")
+        shoot(win, f"offline-stat-{w}x{h}.png")
+    resize(win, *SIZES[0])
+    key(win, "2")
+    shoot(win, "offline-radio-900x700.png")
+    key(win, "4")
+    shoot(win, "offline-data-900x700.png")
+    check_log(d, "app-offline")
+    check_no_fallback(d, "app-offline")
+    env.kill(p)
+    env.kill(fake)
+    time.sleep(0.5)
+
+    # 3. Daemon absent: the window says so and reads the keyboard itself.
+    p = env.launch(d, e, tag="app-nodaemon")
+    win = env.wait_window(p)
+    time.sleep(4.0)
+    for w, h in SIZES:
+        resize(win, w, h)
+        key(win, "1")
+        shoot(win, f"nodaemon-stat-{w}x{h}.png")
+    check_log(d, "app-nodaemon")
+    env.kill(p)
+    time.sleep(0.5)
+
+    # 4. `[ui] crt_effects = false`: no scanline, no vignette, no glow.
+    conf = Path(e["XDG_CONFIG_HOME"]) / "apple-kb-monitor"
+    conf.mkdir(parents=True, exist_ok=True)
+    (conf / "config.toml").write_text("[ui]\ncrt_effects = false\n")
+    fake = env.fake_daemon(d, e, "static", history=env.a.seed_history, kde=True)
+    p = env.launch(d, e, tag="app-nocrt")
+    win = env.wait_window(p)
+    time.sleep(2.0)
+    resize(win, *SIZES[0])
+    key(win, "1")
+    shoot(win, "nocrt-stat-900x700.png")
+    check_log(d, "app-nocrt")
+    env.kill(p)
+    env.kill(fake)
     if probs:
         raise Fail("; ".join(probs))
     return {"screens": done}

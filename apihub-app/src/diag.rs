@@ -36,7 +36,9 @@ fn drain(r: Option<impl Read + Send + 'static>) -> mpsc::Receiver<Vec<u8>> {
 
 /// `cmd.output()` with a deadline; stdin is closed.
 pub fn run_bounded(cmd: &mut Command, timeout: Duration) -> Result<Output, RunError> {
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     // SAFETY: prctl is async-signal-safe; nothing else runs between fork and exec.
     unsafe {
         cmd.pre_exec(|| {
@@ -59,8 +61,15 @@ pub fn run_bounded(cmd: &mut Command, timeout: Duration) -> Result<Output, RunEr
         let _ = child.wait();
         return Err(RunError::Timeout);
     };
-    let rest = |rx: mpsc::Receiver<Vec<u8>>| rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).unwrap_or_default();
-    Ok(Output { status, stdout: rest(out), stderr: rest(err) })
+    let rest = |rx: mpsc::Receiver<Vec<u8>>| {
+        rx.recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            .unwrap_or_default()
+    };
+    Ok(Output {
+        status,
+        stdout: rest(out),
+        stderr: rest(err),
+    })
 }
 
 #[cfg(test)]
@@ -69,7 +78,11 @@ mod tests {
 
     #[test]
     fn output_and_status_are_kept() {
-        let o = run_bounded(Command::new("sh").args(["-c", "echo hi; echo err >&2; exit 3"]), COMMAND_TIMEOUT).unwrap();
+        let o = run_bounded(
+            Command::new("sh").args(["-c", "echo hi; echo err >&2; exit 3"]),
+            COMMAND_TIMEOUT,
+        )
+        .unwrap();
         assert_eq!(o.status.code(), Some(3));
         assert_eq!(o.stdout, b"hi\n");
         assert_eq!(o.stderr, b"err\n");
@@ -78,7 +91,10 @@ mod tests {
     #[test]
     fn a_hung_command_is_killed_at_the_deadline() {
         let t = Instant::now();
-        let r = run_bounded(Command::new("sleep").arg("100000"), Duration::from_millis(300));
+        let r = run_bounded(
+            Command::new("sleep").arg("100000"),
+            Duration::from_millis(300),
+        );
         assert_eq!(r.unwrap_err(), RunError::Timeout);
         assert!(t.elapsed() < Duration::from_secs(2), "{:?}", t.elapsed());
     }
@@ -87,13 +103,19 @@ mod tests {
     fn a_grandchild_keeping_the_pipe_open_does_not_block_the_caller() {
         // The shell exits at once but leaves a background child holding stdout.
         let t = Instant::now();
-        let r = run_bounded(Command::new("sh").args(["-c", "sleep 5 & echo ok"]), Duration::from_millis(400));
+        let r = run_bounded(
+            Command::new("sh").args(["-c", "sleep 5 & echo ok"]),
+            Duration::from_millis(400),
+        );
         assert!(r.unwrap().status.success());
         assert!(t.elapsed() < Duration::from_secs(2), "{:?}", t.elapsed());
     }
 
     #[test]
     fn missing_binary_is_reported() {
-        assert_eq!(run_bounded(&mut Command::new("/nonexistent/akm-diag"), COMMAND_TIMEOUT).unwrap_err(), RunError::Spawn);
+        assert_eq!(
+            run_bounded(&mut Command::new("/nonexistent/akm-diag"), COMMAND_TIMEOUT).unwrap_err(),
+            RunError::Spawn
+        );
     }
 }

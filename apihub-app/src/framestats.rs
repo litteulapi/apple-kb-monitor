@@ -16,9 +16,21 @@ pub struct FrameStats {
 
 impl FrameStats {
     pub fn from_env() -> Self {
-        let out = std::env::var_os("AKM_FRAME_STATS")
-            .and_then(|p| std::fs::OpenOptions::new().create(true).append(true).open(p).ok());
-        Self { out, window_start: Instant::now(), frames: 0, max_update: Duration::ZERO, max_cpu: 0.0, total_frames: 0 }
+        let out = std::env::var_os("AKM_FRAME_STATS").and_then(|p| {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(p)
+                .ok()
+        });
+        Self {
+            out,
+            window_start: Instant::now(),
+            frames: 0,
+            max_update: Duration::ZERO,
+            max_cpu: 0.0,
+            total_frames: 0,
+        }
     }
 
     /// `update`: time spent in `App::update`; `cpu`: eframe's measure of the

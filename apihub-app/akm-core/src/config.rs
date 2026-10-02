@@ -35,6 +35,9 @@
 //! will_shutdown = true       # tell the keyboard once, at shutdown / restart, what macOS tells it (#191)
 //! disconnect_on_breaker = true  # after 3 unanswered requests, have BlueZ disconnect it, as macOS (#251)
 //! allow_device_name_write = false  # OBSOLETE: read, ignored (was a lock of `akmctl rename --device-name`, #248)
+//!
+//! [ui]
+//! crt_effects = true         # scanlines, vignette and glow of the window (read by apihub-app, #265)
 //! ```
 //!
 //! The file is read by the `toml` crate and typed through `serde` (#12): any
@@ -105,6 +108,10 @@ pub struct Config {
     /// read so that an existing `config.toml` raises no warning; nothing uses
     /// it any more (the write asks one confirmation, or takes `--yes`).
     pub allow_device_name_write: bool,
+    /// `[ui] crt_effects`: scanlines, vignette and glow of the window
+    /// (#265). Read by `apihub-app` only; declared here so that the daemon
+    /// does not warn about it. Default **on**.
+    pub ui_crt_effects: bool,
 }
 
 impl Default for Config {
@@ -127,6 +134,7 @@ impl Default for Config {
             will_shutdown: true,
             disconnect_on_breaker: true,
             allow_device_name_write: false,
+            ui_crt_effects: true,
         }
     }
 }
@@ -269,6 +277,7 @@ impl Reader {
             ("apple", "will_shutdown") => flag(&mut self.cfg.will_shutdown),
             ("apple", "disconnect_on_breaker") => flag(&mut self.cfg.disconnect_on_breaker),
             ("apple", "allow_device_name_write") => flag(&mut self.cfg.allow_device_name_write),
+            ("ui", "crt_effects") => flag(&mut self.cfg.ui_crt_effects),
             ("notifications", "connection") => flag(&mut self.cfg.notify_connection),
             ("notifications", "battery_replaced") => flag(&mut self.cfg.notify_battery_replaced),
             ("notifications", "link_unstable") => flag(&mut self.cfg.notify_link_unstable),
@@ -604,6 +613,18 @@ mod tests {
             c.disconnect_on_breaker,
             "a mistyped value keeps the default"
         );
+    }
+
+    #[test]
+    fn the_ui_section_of_the_window_is_read_without_a_warning() {
+        // #265: `[ui] crt_effects` belongs to apihub-app; the daemon reads it silently.
+        assert!(Config::default().ui_crt_effects);
+        let (c, w) = parse("[ui]\ncrt_effects = false  # no scanlines\n");
+        assert!(w.is_empty(), "{w:?}");
+        assert!(!c.ui_crt_effects);
+        let (c, w) = parse("[ui]\ncrt_effects = \"false\"\n");
+        assert!(c.ui_crt_effects && w.len() == 1, "{w:?}");
+        assert!(parse("[display]\ncrt_effects = false\n").0.ui_crt_effects);
     }
 
     #[test]

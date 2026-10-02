@@ -33,7 +33,10 @@ pub type Series = Vec<(f64, f64)>;
 
 pub fn series(entries: &[HistoryEntry]) -> (Series, Series) {
     let battery = entries.iter().map(|e| (e.ts as f64, e.pct)).collect();
-    let voltage = entries.iter().filter_map(|e| e.reliable_voltage().map(|v| (e.ts as f64, v))).collect();
+    let voltage = entries
+        .iter()
+        .filter_map(|e| e.reliable_voltage().map(|v| (e.ts as f64, v)))
+        .collect();
     (battery, voltage)
 }
 
@@ -45,7 +48,11 @@ pub struct Loader {
 
 impl Loader {
     pub fn new() -> Self {
-        Self { data: Shared::default(), busy: Arc::new(AtomicBool::new(false)), daemon_call: Arc::new(AtomicBool::new(false)) }
+        Self {
+            data: Shared::default(),
+            busy: Arc::new(AtomicBool::new(false)),
+            daemon_call: Arc::new(AtomicBool::new(false)),
+        }
     }
 
     pub fn data(&self) -> Data {
@@ -54,7 +61,11 @@ impl Loader {
 
     /// Start a load unless one is running; `repaint` is called when done.
     pub fn request(&self, repaint: impl Fn() + Send + 'static) {
-        self.request_with(repaint, crate::source::load_history_from_daemon, crate::source::load_history_from_file);
+        self.request_with(
+            repaint,
+            crate::source::load_history_from_daemon,
+            crate::source::load_history_from_file,
+        );
     }
 
     pub fn request_with(
@@ -67,14 +78,25 @@ impl Loader {
             return;
         }
         self.data.lock().unwrap_or_else(|e| e.into_inner()).loading = true;
-        let (data, busy, daemon_call) = (self.data.clone(), self.busy.clone(), self.daemon_call.clone());
-        let spawned = std::thread::Builder::new().name("history-load".into()).spawn(move || {
-            let (entries, note) = load_bounded(&daemon_call, daemon, file);
-            let (battery, voltage) = series(&entries);
-            *data.lock().unwrap_or_else(|e| e.into_inner()) = Data { battery, voltage, loading: false, note };
-            busy.store(false, Ordering::Release);
-            repaint();
-        });
+        let (data, busy, daemon_call) = (
+            self.data.clone(),
+            self.busy.clone(),
+            self.daemon_call.clone(),
+        );
+        let spawned = std::thread::Builder::new()
+            .name("history-load".into())
+            .spawn(move || {
+                let (entries, note) = load_bounded(&daemon_call, daemon, file);
+                let (battery, voltage) = series(&entries);
+                *data.lock().unwrap_or_else(|e| e.into_inner()) = Data {
+                    battery,
+                    voltage,
+                    loading: false,
+                    note,
+                };
+                busy.store(false, Ordering::Release);
+                repaint();
+            });
         if spawned.is_err() {
             self.data.lock().unwrap_or_else(|e| e.into_inner()).loading = false;
             self.busy.store(false, Ordering::Release);
@@ -89,15 +111,20 @@ fn load_bounded(
     file: impl FnOnce() -> Vec<HistoryEntry>,
 ) -> (Vec<HistoryEntry>, Option<String>) {
     if daemon_call.swap(true, Ordering::AcqRel) {
-        return (file(), Some(crate::i18n::tr("daemon still busy: history read from the file").into()));
+        return (
+            file(),
+            Some(crate::i18n::tr("daemon still busy: history read from the file").into()),
+        );
     }
     let (tx, rx) = mpsc::channel();
     let flag = daemon_call.clone();
-    let spawned = std::thread::Builder::new().name("history-dbus".into()).spawn(move || {
-        let r = daemon();
-        flag.store(false, Ordering::Release);
-        let _ = tx.send(r);
-    });
+    let spawned = std::thread::Builder::new()
+        .name("history-dbus".into())
+        .spawn(move || {
+            let r = daemon();
+            flag.store(false, Ordering::Release);
+            let _ = tx.send(r);
+        });
     if spawned.is_err() {
         daemon_call.store(false, Ordering::Release);
         return (file(), None);
@@ -105,7 +132,13 @@ fn load_bounded(
     match rx.recv_timeout(DAEMON_TIMEOUT) {
         Ok(Some(h)) => (h, None),
         Ok(None) => (file(), None),
-        Err(_) => (file(), Some(crate::i18n::trf("daemon did not answer within {} s: history read from the file", &[&DAEMON_TIMEOUT.as_secs()]))),
+        Err(_) => (
+            file(),
+            Some(crate::i18n::trf(
+                "daemon did not answer within {} s: history read from the file",
+                &[&DAEMON_TIMEOUT.as_secs()],
+            )),
+        ),
     }
 }
 
@@ -136,8 +169,19 @@ mod tests {
     fn a_stuck_daemon_never_blocks_the_caller() {
         let l = Loader::new();
         let t = Instant::now();
-        l.request_with(|| {}, || { std::thread::sleep(Duration::from_secs(3600)); None }, || vec![entry(1, 50.0), entry(2, 51.0)]);
-        assert!(t.elapsed() < Duration::from_millis(50), "request blocked {:?}", t.elapsed());
+        l.request_with(
+            || {},
+            || {
+                std::thread::sleep(Duration::from_secs(3600));
+                None
+            },
+            || vec![entry(1, 50.0), entry(2, 51.0)],
+        );
+        assert!(
+            t.elapsed() < Duration::from_millis(50),
+            "request blocked {:?}",
+            t.elapsed()
+        );
         assert!(l.data().loading);
         let d = wait_loaded(&l);
         assert!(t.elapsed() >= DAEMON_TIMEOUT && t.elapsed() < DAEMON_TIMEOUT * 2);
@@ -145,7 +189,11 @@ mod tests {
         assert!(d.note.unwrap().contains("did not answer"));
         // The stuck call is still in flight: the next load does not wait again.
         let t = Instant::now();
-        l.request_with(|| {}, || unreachable!("second daemon call"), || vec![entry(3, 60.0)]);
+        l.request_with(
+            || {},
+            || unreachable!("second daemon call"),
+            || vec![entry(3, 60.0)],
+        );
         let d = wait_loaded(&l);
         assert!(t.elapsed() < Duration::from_secs(1));
         assert_eq!(d.battery, vec![(3.0, 60.0)]);
@@ -154,9 +202,20 @@ mod tests {
     #[test]
     fn daemon_answer_is_used_and_clicks_do_not_pile_up() {
         let l = Loader::new();
-        l.request_with(|| {}, || { std::thread::sleep(Duration::from_millis(200)); Some(vec![entry(5, 70.0)]) }, Vec::new);
+        l.request_with(
+            || {},
+            || {
+                std::thread::sleep(Duration::from_millis(200));
+                Some(vec![entry(5, 70.0)])
+            },
+            Vec::new,
+        );
         // Second click while loading: ignored (no second thread, no second call).
-        l.request_with(|| {}, || unreachable!("concurrent load"), || unreachable!("concurrent load"));
+        l.request_with(
+            || {},
+            || unreachable!("concurrent load"),
+            || unreachable!("concurrent load"),
+        );
         let d = wait_loaded(&l);
         assert_eq!(d.battery, vec![(5.0, 70.0)]);
         assert_eq!(d.note, None);

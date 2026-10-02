@@ -1,7 +1,7 @@
 # Maintainer: Han <han@agenceapi.com>
 pkgname=apple-kb-monitor
 pkgver=3.1.0
-pkgrel=23
+pkgrel=24
 pkgdesc="Telemetry and key mapping for Apple Bluetooth keyboards (BCM2042/BCM20733): battery, voltage, RSSI, BlueZ battery provider, KDE integration"
 arch=('x86_64')
 url="https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
@@ -148,6 +148,10 @@ package() {
     # only by `akmctl keymap apply`, never by the package (default = no change)
     install -Dm644 "$startdir/docs/TOUCHES.md"                        "$pkgdir/usr/share/doc/apple-kb-monitor/TOUCHES.md"
     install -Dm644 "$startdir/modprobe/hid_apple.conf"                    "$pkgdir/etc/modprobe.d/hid_apple.conf"
+
+    # ── Font of the window: VT323 (SIL Open Font License 1.1), embedded in
+    # apihub-app; its licence is shipped with the package (docs/DA-PIPBOY.md).
+    install -Dm644 "$startdir/apihub-app/assets/fonts/OFL.txt"         "$pkgdir/usr/share/licenses/apple-kb-monitor/OFL.txt"
 
     # ── Icons ───────────────────────────────────────────────────────────
     install -Dm644 "$startdir/icons/apihub-scarab.svg"                 "$pkgdir/usr/share/icons/hicolor/scalable/apps/apihub-scarab.svg"
