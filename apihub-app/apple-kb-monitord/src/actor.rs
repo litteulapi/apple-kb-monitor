@@ -365,6 +365,18 @@ impl Actor {
                             });
                     }
                 }
+                // A read without any battery value (keyboard silent) keeps the
+                // last known level instead of showing "n/a" (#264).
+                if k.battery_pct().is_none() {
+                    if let Some(prev) = self.kb.as_ref().filter(|p| p.device.mac == mac) {
+                        if prev.battery_pct().is_some() {
+                            k.battery = prev.battery.clone();
+                            self.last_error.get_or_insert_with(|| {
+                                "keyboard silent: battery level kept from the last read".into()
+                            });
+                        }
+                    }
+                }
                 if !self.opts.apple_percent {
                     k.battery.apple_display_pct = None;
                 }
@@ -927,6 +939,19 @@ pub fn spawn(watch: Arc<Watch>, mailbox: Arc<Mailbox>, opts: Options) -> ActorHa
 }
 
 /// Event loop. While the keyboard is disconnected nothing keyboard-related runs.
+/// After a system wake, has the keyboard stayed silent (no key press since)?
+/// `since_wake` = time since the wake (`None` = no wake pending), `input_age`
+/// = age of the last input report. While true no vendor report is requested:
+/// a keyboard still in its "host asleep" mode answers nothing, and each
+/// silence would count towards the breaker and a forced disconnection (#264).
+pub fn quiet_since_wake(since_wake: Option<Duration>, input_age: Option<Duration>) -> bool {
+    match (since_wake, input_age) {
+        (None, _) => false,
+        (Some(_), None) => true,
+        (Some(w), Some(a)) => a >= w,
+    }
+}
+
 fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Options) {
     let (tx, rx) = mpsc::channel::<Msg>();
     mailbox.install(tx.clone());
@@ -934,6 +959,10 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
     let mut machine = Machine::new();
     let mut actor = Actor::new(opts);
     let mut was_paused = false;
+    // Set at a system wake, cleared by a new connection or a key press: until
+    // then the keyboard may still be in its "host asleep" mode, where it
+    // answers no GET_REPORT (measured 2026-10-02, #264).
+    let mut woke_at: Option<Instant> = None;
     watch.publish(actor.snapshot());
 
     loop {
@@ -959,6 +988,7 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
                 // (breaker closed, counter 0; #214, #251).
                 if machine.is_connected() && (!before.0 || machine.mac() != before.1.as_deref()) {
                     akm_core::read_policy::note_connection();
+                    woke_at = None;
                 }
             }
             Ok(Msg::Refresh) => {
@@ -986,6 +1016,7 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
                 akm_core::read_policy::note_sleep();
             } else {
                 machine.on_wake(Instant::now());
+                woke_at = Some(Instant::now());
             }
         }
         let _io = (!paused).then(crate::sleep::io_guard);
@@ -999,7 +1030,17 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
                 Action::Acquire => {
                     let mac = machine.mac().map(str::to_string);
                     // The Apple model decides whether vendor reports are read (#251).
-                    akm_core::read_policy::set_schedule(Some(machine.vendor_reads_due()));
+                    let now = Instant::now();
+                    let quiet = quiet_since_wake(
+                        woke_at.map(|w| now.saturating_duration_since(w)),
+                        akm_core::read_policy::last_input_age(now),
+                    );
+                    if !quiet {
+                        woke_at = None;
+                    }
+                    akm_core::read_policy::set_schedule(Some(
+                        machine.vendor_reads_due() && !quiet,
+                    ));
                     let ok = actor.acquire(mac.as_deref());
                     let read_ok = akm_core::read_policy::take_last_outcome()
                         .is_some_and(akm_core::read_policy::SafeRead::is_success);
@@ -1118,6 +1159,17 @@ mod tests {
             a.kb.as_ref().unwrap().device.alias.as_deref(),
             Some("Bureau")
         );
+    }
+
+    #[test]
+    fn no_vendor_read_after_a_wake_until_a_key_press() {
+        let s = Duration::from_secs;
+        assert!(!quiet_since_wake(None, None), "no wake pending");
+        assert!(!quiet_since_wake(None, Some(s(900))));
+        assert!(quiet_since_wake(Some(s(60)), None), "never typed");
+        assert!(quiet_since_wake(Some(s(60)), Some(s(600))), "typed before the sleep");
+        assert!(quiet_since_wake(Some(s(60)), Some(s(60))));
+        assert!(!quiet_since_wake(Some(s(60)), Some(s(5))), "typed since the wake");
     }
 
     #[test]
