@@ -1116,6 +1116,28 @@ mod tests {
         }
     }
 
+    /// `[apple] call_audio_hint` (Apple's `SET 0x4A = 03` at each sniff
+    /// re-adjust while BT audio is active) is NOT implemented
+    /// (docs/PARITE-APPLE.md): `0x4A` stays in the never-written list, owned by
+    /// no named operation, and even a session that already wrote nothing
+    /// refuses it; a repeated hint would also break the "once per session"
+    /// rule. Changing this test means weakening the register map.
+    #[test]
+    fn sco_audio_hint_0x4a_stays_refused() {
+        assert!(NEVER.contains(&0x4A));
+        assert_eq!(WriteOp::of_id(0x4A), None);
+        assert!(!writable_feature_ids().contains(&0x4A));
+        assert!(check_write(0x4A, Direction::Feature).is_err());
+        let mut s = WriteSession::new();
+        for op in WriteOp::ALL {
+            assert!(
+                s.authorize(op, 0x4A, Direction::Feature, &[0x03]).is_err(),
+                "{op:?}"
+            );
+        }
+        assert!(!s.is_used(), "a refusal consumes nothing");
+    }
+
     /// Ids that must never be written, whatever the operation (manager's list).
     const NEVER: [u8; 18] = [
         0x44, 0x45, 0x4A, 0x4C, 0x09, 0xD5, 0x50, 0x51, 0x52, 0x53, 0x54, 0xD0, 0xD4, 0xFB, 0xFA,

@@ -273,6 +273,11 @@ mod tests {
         // A typo in one of OUR sections is still reported.
         let (_, warn) = parse("[apple]\nwill_shutdwn = true\n");
         assert_eq!(warn.len(), 1, "{warn:?}");
+        // `call_audio_hint` (0x4A) is deliberately not implemented
+        // (docs/PARITE-APPLE.md): the key is reported, never silently taken.
+        let (_, warn) = parse("[apple]\ncall_audio_hint = \"auto\"\n");
+        assert_eq!(warn.len(), 1, "{warn:?}");
+        assert!(warn[0].contains("call_audio_hint"), "{warn:?}");
     }
 
     use super::*;
