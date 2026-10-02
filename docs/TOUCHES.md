@@ -272,3 +272,42 @@ un navigateur ouvert, un lecteur audio (MPRIS) qui joue, un éditeur de texte.
 - [ ] Mapping manuel (facultatif, réversible) : `akmctl keymap set Eject KEY_DELETE && akmctl keymap apply`,
       puis ⏏ supprime à droite et `akmctl keys` affiche `Eject [hwdb: KEY_DELETE]` ;
       `akmctl keymap reset` : ⏏ redevient sans effet, sans reconnecter le clavier.
+
+## 8. Preuve à faire : `<>` émet `KEY_102ND` (#90)
+
+Ce que le code garantit, et qui est testé sans clavier
+(`iso_layout_decides_which_code_the_two_iso_keys_get`, crate `akmctl`) : `iso_layout` vaut
+−1, 0 ou 1 ; à 1 les codes `KEY_GRAVE` (41) et `KEY_102ND` (86) sont échangés, dans les deux sens
+et pour ces deux touches seulement ; à 0 ils ne le sont pas ; à −1 (« auto », défaut du noyau)
+`hid_apple` décide d'après le code pays du clavier, que le modèle ne devine pas : `akmctl keys --all`
+l'affiche non échangé et le signale.
+
+Ce qui **n'est pas mesuré** : ce qu'émet réellement la touche `<>` du clavier ISO français. La
+mesure demande un appui physique ; elle reste à faire par le propriétaire du clavier. Procédure :
+
+1. Relever le réglage : `akmctl get param iso_layout` (attendu : `-1`).
+2. Lancer la vue, au choix :
+   - `akmctl keys --live` (§3.1) ;
+   - ou `evtest` : `sudo evtest`, choisir le clavier Apple dans la liste (`/dev/input/eventN`,
+     nom du clavier ; ne pas choisir `keyd virtual keyboard`). Si keyd tient le clavier, l'arrêter
+     le temps du test (`sudo systemctl stop keyd`), sinon `evtest` ne reçoit rien de ce nœud.
+3. Appuyer une fois sur `<>` (à droite de Maj gauche), puis une fois sur `@ #` (à gauche de `&`/1).
+4. Résultat attendu pour `<>` :
+
+   ```text
+   Event: type 4 (EV_MSC), code 4 (MSC_SCAN), value 7xxxx
+   Event: type 1 (EV_KEY), code 86 (KEY_102ND), value 1
+   ```
+
+   soit, avec `akmctl keys --live`, une ligne `… 86  KEY_102ND  down`. Et pour `@ #` :
+   `code 41 (KEY_GRAVE)`.
+5. Noter les deux valeurs `MSC_SCAN` (usage HID : `70064` ou `70035`) : elles disent si le clavier
+   annonce ses deux touches dans l'ordre PC ou dans l'ordre Apple, donc si l'échange a eu lieu.
+6. Si `<>` donne `KEY_GRAVE` (et `@ #` donne `KEY_102ND`) : l'échange automatique ne s'applique pas
+   à ce clavier. Le forcer : `akmctl set param iso_layout 1` (ajouter `--persist` pour le garder),
+   refaire l'étape 3, puis vérifier dans un éditeur que `<` et `>` sortent bien.
+7. Consigner le résultat (les quatre lignes, le noyau `uname -r`, la valeur d'`iso_layout`) dans
+   l'issue #90, et cocher ci-dessous.
+
+- [ ] `<>` → `KEY_102ND` avec `iso_layout = -1` *(à mesurer par le gérant)*
+- [ ] `@ #` → `KEY_GRAVE` avec `iso_layout = -1` *(à mesurer par le gérant)*

@@ -646,6 +646,86 @@ mod tests {
     }
 
     #[test]
+    fn iso_layout_decides_which_code_the_two_iso_keys_get() {
+        // #90: the model `akmctl keys` shows for `iso_layout` -1 / 0 / 1, on the
+        // two keys hid_apple swaps (KEY_GRAVE 41 <-> KEY_102ND 86) and no other.
+        use akm_core::keymap::{effective_table, fn_table, row_note, translate, HidState};
+        use std::collections::BTreeMap;
+        let (grave, nd102) = (
+            keymap::code_of("KEY_GRAVE").unwrap(),
+            keymap::code_of("KEY_102ND").unwrap(),
+        );
+        assert_eq!((grave, nd102), (41, 86));
+        let table = fn_table(0x0256);
+        let with = |iso: i32| HidState {
+            iso_layout: Some(iso),
+            ..HidState::KERNEL_DEFAULT
+        };
+        // 1: swapped, both ways, with or without Fn
+        for fn_on in [false, true] {
+            assert_eq!(translate(table, &with(1), nd102, fn_on), grave);
+            assert_eq!(translate(table, &with(1), grave, fn_on), nd102);
+            // 0: as the keyboard reports them
+            assert_eq!(translate(table, &with(0), nd102, fn_on), nd102);
+            assert_eq!(translate(table, &with(0), grave, fn_on), grave);
+            // -1 (auto, the kernel default): the model does not guess the
+            // country code of the keyboard; shown unswapped, and flagged
+            assert_eq!(translate(table, &with(-1), nd102, fn_on), nd102);
+            assert_eq!(translate(table, &with(-1), grave, fn_on), grave);
+        }
+        // no other key moves with iso_layout
+        for k in keytable::keys(true) {
+            if k.code != grave && k.code != nd102 {
+                assert_eq!(
+                    translate(table, &with(1), k.code, false),
+                    translate(table, &with(0), k.code, false),
+                    "{}",
+                    k.id
+                );
+            }
+        }
+        // the physical table: usage 0x64 is KEY_102ND, usage 0x35 is KEY_GRAVE
+        let keys = keytable::keys(true);
+        let phys = |id: &str| *keys.iter().find(|k| k.id == id).unwrap();
+        assert_eq!(
+            (phys("NonUS").scancode, phys("NonUS").code),
+            (0x7_0064, nd102)
+        );
+        assert_eq!(
+            (phys("Grave").scancode, phys("Grave").code),
+            (0x7_0035, grave)
+        );
+        // and the table of `akmctl keys --all`: swapped at 1, warned at -1 only
+        for (iso, nonus_code, noted) in [(1, grave, false), (0, nd102, false), (-1, nd102, true)] {
+            let rows = effective_table(0x0256, &with(iso), &BTreeMap::new(), &keys);
+            let row = rows.iter().find(|r| r.key.id == "NonUS").unwrap();
+            assert_eq!(
+                (row.plain, row.with_fn),
+                (nonus_code, nonus_code),
+                "iso_layout={iso}"
+            );
+            assert_eq!(
+                row_note(row, &with(iso)).is_some_and(|n| n.contains("iso_layout=-1")),
+                noted,
+                "iso_layout={iso}"
+            );
+        }
+        // what the live view prints for the proof of docs/TOUCHES.md §8
+        let shown = line(
+            "apple",
+            &KeyEvent {
+                hid: Some(0x7_0064),
+                code: nd102,
+                state: State::Down,
+            },
+        );
+        assert!(
+            shown.contains("0007:0064") && shown.contains("86") && shown.contains("KEY_102ND"),
+            "{shown}"
+        );
+    }
+
+    #[test]
     fn the_view_cannot_write_grab_or_record() {
         // Read-only by construction: the only open is `File::open`, and the
         // code before the tests has no write access, no ioctl, no file made.
