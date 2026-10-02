@@ -460,6 +460,16 @@ int AkmBridge::runDeviceName(const QString &name, bool checkOnly)
     return run(QStringLiteral("akmctl"), args, kDeviceNameTimeout);
 }
 
+QString AkmBridge::deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut) const
+{
+    return AkmDeviceName::verdict(exitCode, checkOnly, timedOut);
+}
+
+QString AkmBridge::deviceNameCommand(const QString &name, const QString &flag) const
+{
+    return AkmDeviceName::copyCommand(name, flag);
+}
+
 void AkmBridge::onStateChanged(qulonglong revision, const QString &)
 {
     Q_EMIT daemonStateChanged(revision);

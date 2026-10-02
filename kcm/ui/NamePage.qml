@@ -45,15 +45,12 @@ ColumnLayout {
         return root.validDeviceName(t) ? t : i18nc("placeholder in a command", "NAME");
     }
 
-    // POSIX single quotes: the copied command never runs anything else.
-    function shellQuote(t) {
-        return "'" + String(t).replace(/'/g, "'\\''") + "'";
-    }
-
     // Run akmctl on the name stored in the keyboard (C++: QProcess with an
     // argument list, never a shell; the name is one literal argument) and show
     // its verdict in the page. Exit codes of akmctl: 0 done, 11 pre-flight
-    // refused, 13 written but not read back, 14 read back different.
+    // refused, 13 written but not read back, 14 read back different, 15 the
+    // write failed on its way (a frame may have been sent: never "not
+    // written"). Their meaning is decided in C++ (Store.deviceNameVerdict).
     function runDeviceName(checkOnly) {
         const name = deviceNameField.text;
         root.deviceBusy = true;
@@ -61,24 +58,31 @@ ColumnLayout {
         root.store.deviceName(name, checkOnly, function (code, out, err, timedOut) {
             root.deviceBusy = false;
             const detail = (String(out || "").trim() || String(err || "").trim());
-            if (timedOut) {
+            const verdict = root.store.deviceNameVerdict(code, checkOnly, timedOut);
+            if (verdict === "timeout") {
                 deviceResult.type = Kirigami.MessageType.Error;
                 deviceResult.text = i18n("No answer in time. Nothing more is attempted; look at the stored name above in a moment.");
-            } else if (code === 0 && checkOnly) {
+            } else if (verdict === "check-ok") {
                 deviceResult.type = Kirigami.MessageType.Positive;
                 deviceResult.text = i18n("Check passed: “%1” can be written. Nothing was written.", name);
-            } else if (code === 0) {
+            } else if (verdict === "written") {
                 deviceResult.type = Kirigami.MessageType.Positive;
                 deviceResult.text = i18n("“%1” is now stored in the keyboard: written, then read back identical. This computer may show the old name until a later connection.", name);
-            } else if (code === 13) {
+            } else if (verdict === "unverified") {
                 deviceResult.type = Kirigami.MessageType.Warning;
                 deviceResult.text = i18n("The name was written, but it could not be read back. Look at the stored name above in a moment.\n%1", detail);
-            } else if (code === 14) {
+            } else if (verdict === "mismatch") {
                 deviceResult.type = Kirigami.MessageType.Error;
                 deviceResult.text = i18n("The name was written, but the keyboard reads back another one.\n%1", detail);
+            } else if (verdict === "uncertain") {
+                deviceResult.type = Kirigami.MessageType.Warning;
+                deviceResult.text = i18n("The write failed on its way: the name may or may not have been written. Look at the stored name above in a moment.\n%1", detail);
+            } else if (verdict === "check-failed") {
+                deviceResult.type = Kirigami.MessageType.Error;
+                deviceResult.text = i18n("Check failed, nothing was written.\n%1", detail);
             } else {
                 deviceResult.type = Kirigami.MessageType.Error;
-                deviceResult.text = checkOnly ? i18n("Check failed, nothing was written.\n%1", detail) : i18n("Not written.\n%1", detail);
+                deviceResult.text = i18n("Not written.\n%1", detail);
             }
             deviceResult.visible = true;
             if (!checkOnly) root.store.fetchState();
@@ -255,11 +259,11 @@ ColumnLayout {
     Repeater {
         model: [
             { title: i18n("Name stored in the keyboard, preview (shows the bytes, writes nothing, no authentication):"),
-              cmd: "akmctl rename --device-name " + root.shellQuote(root.deviceName()) + " --dry-run" },
+              cmd: root.store.deviceNameCommand(root.deviceName(), "--dry-run") },
             { title: i18n("Every check and the backup of the current name (writes nothing):"),
-              cmd: "akmctl rename --device-name " + root.shellQuote(root.deviceName()) + " --check" },
+              cmd: root.store.deviceNameCommand(root.deviceName(), "--check") },
             { title: i18n("The write itself (checks, backup, one confirmation, one write, read back; issue #248):"),
-              cmd: "akmctl rename --device-name " + root.shellQuote(root.deviceName()) },
+              cmd: root.store.deviceNameCommand(root.deviceName(), "") },
             { title: i18n("Forget the keyboard cleanly, as macOS does, then pair it again (only after typing the confirmation word, issue #217):"),
               cmd: "akmctl repair --force" }
         ]

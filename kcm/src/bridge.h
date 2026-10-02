@@ -71,9 +71,14 @@ public:
     // one argv element. akmctl does the pre-flight, the backup, the single
     // write and the read-back; its exit code is the verdict (0 written and
     // read back identical, 11 pre-flight refused, 13 not read back, 14 read
-    // back different). Answer: runFinished(id, exitCode, stdout, stderr,
-    // timedOut); a refused name answers exitCode -1.
+    // back different, 15 write uncertain). Answer: runFinished(id, exitCode,
+    // stdout, stderr, timedOut); a refused name answers exitCode -1.
     Q_INVOKABLE int runDeviceName(const QString &name, bool checkOnly);
+    // What that exit code means for the page (AkmDeviceName::verdict), and
+    // the same command to copy into a terminal (AkmDeviceName::copyCommand:
+    // the name glued to `--device-name=`).
+    Q_INVOKABLE QString deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut) const;
+    Q_INVOKABLE QString deviceNameCommand(const QString &name, const QString &flag) const;
     // Ask the bus again whether the daemon is there (asynchronous).
     Q_INVOKABLE void checkDaemon();
 

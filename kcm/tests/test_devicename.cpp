@@ -55,6 +55,73 @@ private Q_SLOTS:
         QVERIFY(akmctlArgs(QStringLiteral("café"), false).isEmpty());
     }
 
+    // m3 of the final review: the command to copy glues the name to the
+    // option. `--device-name '-x'` is read by akmctl as an option and fails.
+    void theCopiedCommandGluesTheNameToTheOption()
+    {
+        QCOMPARE(copyCommand(QStringLiteral("Bureau"), QString()), QStringLiteral("akmctl rename --device-name='Bureau'"));
+        QCOMPARE(copyCommand(QStringLiteral("-x"), QStringLiteral("--check")), QStringLiteral("akmctl rename --device-name='-x' --check"));
+        QCOMPARE(copyCommand(QStringLiteral("--yes"), QStringLiteral("--dry-run")),
+                 QStringLiteral("akmctl rename --device-name='--yes' --dry-run"));
+        for (const QString &flag : {QString(), QStringLiteral("--check"), QStringLiteral("--dry-run")}) {
+            const QString c = copyCommand(QStringLiteral("-x"), flag);
+            QVERIFY2(!c.contains(QStringLiteral("--device-name ")), qPrintable(c));
+        }
+        // POSIX quoting: a quote inside the name never ends the word.
+        QCOMPARE(shellQuote(QStringLiteral("it's")), QStringLiteral("'it'\\''s'"));
+        QCOMPARE(copyCommand(QStringLiteral("a'; reboot; '"), QString()), QStringLiteral("akmctl rename --device-name='a'\\''; reboot; '\\'''"));
+    }
+
+    // The copied command through a real shell: one argument, the option and
+    // the name together, nothing executed.
+    void theCopiedCommandReachesAkmctlAsOneArgument()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString out = dir.filePath(QStringLiteral("argv.txt"));
+        QFile f(dir.filePath(QStringLiteral("akmctl")));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        const QString script = QStringLiteral("#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > '") + out + QStringLiteral("'\n");
+        f.write(script.toUtf8());
+        f.close();
+        QVERIFY(f.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        for (const QString &name : {QStringLiteral("-x"), QStringLiteral("a'; touch c; '"), QStringLiteral("$(touch c)")}) {
+            QFile::remove(out);
+            QProcess p;
+            p.setWorkingDirectory(dir.path());
+            p.setProgram(QStringLiteral("/bin/sh"));
+            p.setArguments({QStringLiteral("-c"), QStringLiteral("./") + copyCommand(name, QStringLiteral("--check"))});
+            p.setStandardInputFile(QProcess::nullDevice());
+            p.start();
+            QVERIFY(p.waitForFinished(5000));
+            QCOMPARE(p.exitCode(), 0);
+            QFile r(out);
+            QVERIFY(r.open(QIODevice::ReadOnly));
+            const QStringList lines = QString::fromUtf8(r.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+            QCOMPARE(lines, QStringList({QStringLiteral("rename"), QStringLiteral("--device-name=") + name, QStringLiteral("--check")}));
+            QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("c"))));
+        }
+    }
+
+    // m2 of the final review: exit code 15 (the write failed on its way, a
+    // frame may have been sent) is never shown as "not written".
+    void anUncertainWriteIsNeverReportedAsNotWritten()
+    {
+        QCOMPARE(verdict(15, false, false), QStringLiteral("uncertain"));
+        QCOMPARE(verdict(13, false, false), QStringLiteral("unverified"));
+        QCOMPARE(verdict(14, false, false), QStringLiteral("mismatch"));
+        QCOMPARE(verdict(0, false, false), QStringLiteral("written"));
+        QCOMPARE(verdict(0, true, false), QStringLiteral("check-ok"));
+        for (const int code : {-1, 1, 2, 10, 11, 12, 64}) {
+            QCOMPARE(verdict(code, false, false), QStringLiteral("not-written"));
+            QCOMPARE(verdict(code, true, false), QStringLiteral("check-failed"));
+        }
+        // --check never writes, whatever the code.
+        QCOMPARE(verdict(15, true, false), QStringLiteral("check-failed"));
+        QCOMPARE(verdict(0, false, true), QStringLiteral("timeout"));
+        QCOMPARE(verdict(15, false, true), QStringLiteral("timeout"));
+    }
+
     // The real process boundary, as AkmBridge::run crosses it (QProcess with a
     // program and an argument list): a fake "akmctl" records its argv. The
     // name with quotes, a semicolon, spaces and $(...) arrives as one line,

@@ -79,6 +79,15 @@ QtObject {
         _runs[id] = cb;
     }
 
+    // Meaning of akmctl's exit code and the command to copy (C++, unit
+    // tested: AkmDeviceName::verdict / copyCommand).
+    function deviceNameVerdict(code, checkOnly, timedOut) {
+        return bridge ? bridge.deviceNameVerdict(code, checkOnly, timedOut) : (checkOnly ? "check-failed" : "not-written");
+    }
+    function deviceNameCommand(name, flag) {
+        return bridge ? bridge.deviceNameCommand(name, flag) : "";
+    }
+
     readonly property Connections _c: Connections {
         target: store.bridge
         function onCallFinished(id, ok, value, error) {
