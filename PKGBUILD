@@ -25,15 +25,38 @@ backup=('etc/modprobe.d/hid_apple.conf' 'etc/apple-kb-monitor/hid-suspend.conf')
 install=apple-kb-monitor.install
 # makepkg only resolves local sources by basename in $startdir, so files in
 # subdirectories (systemd/, udev/, ...) are installed directly from $startdir.
+#
+# Sources and integrity (#14). This PKGBUILD lives INSIDE the source tree and
+# builds that tree: there is no published source archive (the Gitea forge is
+# internal, 403 from the Internet, and no release tarball or signed tag is
+# served), so there is nothing to download and nothing to checksum but the one
+# local file below, whose real sha256 is given (never SKIP; refresh with
+# `updpkgsums`, checked by tests/check-pkgbuild.sh). What a published source
+# repository would allow, and what cannot be done without one:
+#   - source=("git+$url.git#tag=v$pkgver") with its b2sum, or a release tarball;
+#   - building in "$srcdir" only, hence in a clean chroot (extra-x86_64-build):
+#     today build() and package() read "$startdir", which a chroot build
+#     does not have;
+#   - a pkgver() checked against the tag.
+# What is done meanwhile: the Rust dependencies are the ones of Cargo.lock and
+# no others (`cargo fetch --locked` in prepare(), `cargo build --locked` in
+# build(): a Cargo.lock that does not match Cargo.toml fails the build instead
+# of being silently rewritten), each crate being verified by cargo against the
+# checksum recorded in Cargo.lock.
 source=(
     'com.agenceapi.AppleKbMonitor.desktop'
 )
-sha256sums=('SKIP')
+sha256sums=('d3d4b33665fc9871a873e62d9f55f9f3a55434801d457bd589f10597aee494d6')
+
+prepare() {
+    cd "$startdir/apihub-app"
+    cargo fetch --locked --target "$(rustc --print host-tuple)"
+}
 
 build() {
     # apihub-app (Rust GUI)
     cd "$startdir/apihub-app"
-    cargo build --release --workspace --target-dir target
+    cargo build --locked --release --workspace --target-dir target
 
     # rssi-helper (C): the only binary carrying cap_net_admin (file capability
     # applied by apple-kb-monitor.install, see post_install)

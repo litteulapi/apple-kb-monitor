@@ -37,6 +37,6 @@ pkgbase = apple-kb-monitor
 	backup = etc/modprobe.d/hid_apple.conf
 	backup = etc/apple-kb-monitor/hid-suspend.conf
 	source = com.agenceapi.AppleKbMonitor.desktop
-	sha256sums = SKIP
+	sha256sums = d3d4b33665fc9871a873e62d9f55f9f3a55434801d457bd589f10597aee494d6
 
 pkgname = apple-kb-monitor

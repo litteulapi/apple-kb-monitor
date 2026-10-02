@@ -21,6 +21,10 @@ cd apple-kb-monitor
 makepkg -si
 ```
 
+The build is locked (#14): `prepare()` runs `cargo fetch --locked` and `build()` runs `cargo build --locked`, so the crates are exactly those of `apihub-app/Cargo.lock`, each verified by cargo against the checksum recorded there; a `Cargo.lock` that no longer matches a `Cargo.toml` fails the build instead of being rewritten. The only `source=()` entry, the `.desktop` file, has its real `sha256sums` (after editing it: `updpkgsums && makepkg --printsrcinfo > .SRCINFO`). `tests/check-pkgbuild.sh` checks all of this, and that `.SRCINFO` is what `makepkg --printsrcinfo` gives.
+
+Not done, and why: the `PKGBUILD` lives inside the source tree and builds it from `$startdir`; there is no published source archive (the forge is internal and serves no release tarball or signed tag). So there is no `source=("git+…#tag=…")` with a checksum, no build confined to `$srcdir`, and therefore no clean-chroot build (`extra-x86_64-build` does not carry `$startdir`). These three come together the day a source repository is published.
+
 `makepkg` compiles the Rust workspace (`apihub-app`, `apple-kb-monitord`, `akmctl`, `akm-helper`, `akm-keymap-helper`, `akm-hid-control`), the C helper `rssi-helper` and the C++/QML System Settings module, then installs:
 
 | Path | Content |

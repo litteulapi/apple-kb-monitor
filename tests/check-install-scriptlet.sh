@@ -74,5 +74,8 @@ for u in apple-kb-monitord.service apple-kb-monitor-shutdown.service apple-kb-mo
   grep -qE "ln -s \.\./$u " "$top/PKGBUILD" || no "PKGBUILD ships no .wants link for $u"
 done
 
+# 7. the PKGBUILD itself (#14: locked build, real checksums, .SRCINFO in sync)
+bash "$top/tests/check-pkgbuild.sh" || no "tests/check-pkgbuild.sh"
+
 [ $fail = 0 ] && echo "install scriptlet: no enable, /etc links dropped on remove/upgrade, orphans cleaned"
 exit $fail
