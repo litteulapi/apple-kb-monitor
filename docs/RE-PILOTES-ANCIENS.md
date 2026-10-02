@@ -1,6 +1,7 @@
 # RE — Pilotes et updaters Apple de l'époque (2009-2012) pour l'A1314 (BCM2042, firmware 0x0050)
 
 * Corrigé le 2026-10-02 (issue #229) : §1 (le Combo 10.6.8 est exploitable), §3 (apparition par version), §4 (courbe d'affichage), §5 et §7 (`0x4A` depuis Bluetooth 1.5, douze logiciels examinés), §6.2 (protocole `bfu` complété) ; source : `RE-SYSTEMES-ANCIENS.md`.
+* Corrigé le 2026-10-02 (issue #242) : §5 et §7, devenir de L9 et L10 sur macOS 26.5 : `0x4A` = `03` envoyé par `bluetoothd`, oubli = `RecantConnection` (`0x41`) et non `0x44` ; source : `RE-GHIDRA-IOBLUETOOTH.md` §5.1-5.2.
 
 Analyse **statique, en lecture seule**, de logiciels Apple **publiquement distribués** par les serveurs
 d'Apple, à des fins d'interopérabilité avec le clavier du gérant (A1314 ISO, `05AC:0256` = 598,
@@ -149,6 +150,15 @@ reconstruit dans `bluetoothd` 26.5 (`RE-PILOTE-MACOS.md` §7). Le bit 3 désigne
 qui reçoivent la notification de lien SCO** (`0x4A`) et dont `blued` ajuste les paramètres de sniff quand un casque
 est actif. C'est la réponse à l'inconnue n° 6 de `RE-PILOTE-MACOS.md` §9.
 
+**Sur macOS 26.5 (corrigé #242, `RE-GHIDRA-IOBLUETOOTH.md` §5.1-5.2) [décompilé]** :
+
+* **L9 survit dans `bluetoothd`**, pas dans IOBluetooth, dont l'API `sendSCO*` n'a aucun appelant : `FUN_1006a0488` envoie
+  SET Feature `0x4A` = `03` (`53 4A 03`) à tout HID Apple de la famille ancienne (bit 3, dont `0x0256`) à chaque réajustement
+  du sniff multi-HID ; `04` n'est jamais envoyé ;
+* **L10 change** : « Oublier » envoie `RecantConnection` (`0x41`, ID seul) aux HID Apple classiques (`bluetoothd`
+  `FUN_1005a41e4`, attente de 2000 ms), et non `FullFactoryDefault` (`0x44`) ; `fullFactoryDefault` et `deleteAllLinkKeys`
+  n'ont plus d'appelant.
+
 Valeurs de `0x4A` définies par `AppleBluetoothHIDDevice` **[désassemblage]** : `1` SCODevicePaired, `2` SCODeviceUnpaired,
 `3` SCOLinkActive, `4` SCOLinkInactive (seules 3 et 4 sont envoyées par `blued`). Notre lecture `4a 12` (= 18) **[mesuré]**
 n'est pas une de ces valeurs : le GET renvoie un état interne dont le codage reste inconnu.
@@ -231,14 +241,14 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
 | `0x13` | In | bit 1 = sous tension (0 → `KeyboardOff`) | [désassemblage] 10.7 = 26.5 | nul | #190 |
 | `0x30` | In | `BatteryState` 0/1/2 (+3 accepté) | [plist + désassemblage] toutes époques | nul | #189 |
 | `0x40` | Feature WO | `WillShutdown` | [plist + désassemblage] envoyé à chaque arrêt (10.7, 26.5) | faible | #191 |
-| `0x41` | Feature WO | `RecantConnection` = « virtual cable unplug » version Apple | [désassemblage] `recantConnection` ; `blued` ne l'utilise que pour l'émulation HID | élevé (coupe/oublie l'hôte) | ne pas exposer |
+| `0x41` | Feature WO | `RecantConnection` = « virtual cable unplug » version Apple | [désassemblage] `recantConnection` ; `blued` ne l'utilise que pour l'émulation HID ; en 26.5, `bluetoothd` l'envoie à l'oubli du clavier (#242) | élevé (coupe/oublie l'hôte) | ne pas exposer |
 | `0x43` | Feature | `UserMode` | absent du firmware `0x0050` [mesuré] | — | aucun |
-| `0x44` | Feature WO | `FullFactoryDefault` = efface **toutes** les clés de lien (`deleteAllLinkKeys` en 2009) | [désassemblage] **envoyé par Lion à la suppression du clavier** | **élevé mais voulu** : le clavier oublie tous ses hôtes, ré-appairage obligatoire | « oublier proprement », accord du gérant (issue dédiée) |
+| `0x44` | Feature WO | `FullFactoryDefault` = efface **toutes** les clés de lien (`deleteAllLinkKeys` en 2009) | [désassemblage] **envoyé par Lion à la suppression du clavier** ; plus en 26.5, qui envoie `0x41` (#242) | **élevé mais voulu** : le clavier oublie tous ses hôtes, ré-appairage obligatoire | « oublier proprement », accord du gérant (issue dédiée) |
 | `0x45` | Feature WO | `FactoryDefault` | [plist + désassemblage] jamais appelé par aucun client Apple examiné | élevé, effet exact inconnu | ne pas écrire |
 | `0x46` | Feature | tension instantanée mV (LE) | [mesuré] ; jamais lue par Apple | lecture | ≤ 1/5 min (#177) |
 | `0x47` | Feature | `BatteryPercent` (calculé par le firmware) | toutes époques | lecture | en production |
 | `0x49` | Feature | **`BatteryVoltage`** = tension `Latched` mV (LE) | [plist + désassemblage 10.7] | lecture | rythme Apple : 1/4 h (#139, nouvelle issue) |
-| `0x4A` | Feature | état / notification de **lien SCO** : écrit `03`/`04` par `blued` (Lion ; l'écriture existe depuis Bluetooth 1.5, 2004, #229) ; GET = `0x12` (codage inconnu) | [désassemblage] | faible (Apple l'écrivait en production) | issue « coexistence casque », accord requis |
+| `0x4A` | Feature | état / notification de **lien SCO** : écrit `03`/`04` par `blued` (Lion ; l'écriture existe depuis Bluetooth 1.5, 2004, #229) ; `03` seul par `bluetoothd` en 26.5 (#242) ; GET = `0x12` (codage inconnu) | [désassemblage] | faible (Apple l'écrivait en production) | issue « coexistence casque », accord requis |
 | `0x4B` | Feature | inconnu (`00 08`) | — | — | lecture rare |
 | `0x4C` | Feature | adresse de l'hôte appairé + 12 o | [mesuré] | lecture sensible | #140 |
 | `0x4E` | Feature | `connectionCounts` (10 o) des produits `0x0310` | [désassemblage] | — | absent chez nous |

@@ -1,5 +1,7 @@
 # Rétro-ingénierie macOS Apple Silicon — ce que le code arm64e réellement exécuté ajoute pour l'A1314
 
+* Corrigé le 2026-10-02 (issue #242) : §3.1 (boutisme, méthodes non listées, oubli = `0x41`), §3.2 et §8 (client du % remappé), §4 (34 commandes, `ReleaseAllChannels`, `HIDSuspend`, disjoncteur avec déconnexion), §5 et §7 (`0x4A` = `03` envoyé par `bluetoothd`) ; source : `RE-GHIDRA-IOBLUETOOTH.md`.
+
 Complément de [`RE-PILOTE-MACOS.md`](RE-PILOTE-MACOS.md). Cette analyse-là portait sur les collections de noyau **x86_64**,
 n'avait pas ouvert **IOBluetooth.framework** (cache dyld) et n'avait lu `bluetoothd` qu'en partie.
 Cette étude reprend les **binaires arm64e réellement démarrés** sur le Mac du gérant (Neo01, Mac17,5, macOS 26.5 build 25F71).
@@ -93,8 +95,21 @@ Les octets sont donnés côté HID : ID puis données. Sur le fil HIDP, un SET F
 Dans `-setFeatureReport:value:`, quand la taille déclarée vaut 0, les PID `0x265 0x267 0x269 0x26C 0x310 0x29A 0x29C` reçoivent une taille forcée à 1.
 Les autres PID, dont le **598**, n'envoient **que l'ID** **[désassemblage]**.
 
+**Compléments du décompilateur (#242, `RE-GHIDRA-IOBLUETOOTH.md` §2.1) [décompilé]** :
+
+* `getFeatureReport:` assemble la valeur lue en **gros-boutiste**, alors que `setFeatureReport:value:` écrit en
+  **petit-boutiste** ; sans effet pour l'A1314, qui n'a aucun rapport de plus d'un octet sur ce chemin ;
+* méthodes absentes du tableau : `sendCommandFeatureReport:` (chemin commun de `fullFactoryDefault`, `factoryDefault` et
+  `recantConnection` ; lit la clé facultative `value`), `getFloatFeatureReport:`, `setFloatFeatureReport:value:` et
+  `report:info:` ;
+* `deviceNameFromHardware` copie `longueur_rendue − 2` octets par morceau.
+
 Avant `FactoryDefault`, `FullFactoryDefault` et `RecantConnection`, Apple désactive la notification de déconnexion.
 Cela confirme que ces trois commandes **font tomber la liaison**.
+
+**Corrigé (#242)** : sur macOS 26.5, `fullFactoryDefault` et `deleteAllLinkKeys` n'ont plus d'appelant. « Oublier » un HID
+Apple classique envoie **`RecantConnection` (`0x41`, ID seul)** depuis `bluetoothd` (`FUN_1005a41e4`, attente de 2000 ms),
+et non `FullFactoryDefault` (`0x44`) **[décompilé]** (`RE-GHIDRA-IOBLUETOOTH.md` §5.2).
 
 Le nom de méthode `deleteAllLinkKeys` le confirme pour `0x44` : la remise à zéro complète **efface les clés d'appairage du clavier** **[désassemblage] + [chaîne]**.
 
@@ -131,6 +146,8 @@ Les constantes en double précision sont lues dans `__TEXT,__const` d'IOBluetoot
   La courbe Apple ne sert qu'à afficher un « % façon macOS » ;
 * l'étude n'a pas établi quel client actuel de macOS 26.5 affiche ce chiffre.
   `bluetoothd` ne contient pas cette courbe : il lit `BatteryPercent` brut via `kCBMsgArgBatteryPercent` **[chaîne]**.
+  **Corrigé (#242)** : le seul client du % remappé est **IOBluetoothUI** (icône de batterie de la liste héritée). Réglages
+  (`Bluetooth.appex`) passe par `CBBatteryInfo` (CoreBluetooth → `bluetoothd`), donc par le % brut (`RE-GHIDRA-IOBLUETOOTH.md` §2.2).
 
 ### 3.3 Nouveaux rapports nommés par Apple, croisés avec nos mesures
 
@@ -165,26 +182,39 @@ Cela a été vérifié par balayage de tous les appels `setReport` et `getReport
 
 Commandes reconnues, chaînes exactes **[chaîne] + [désassemblage]** :
 
+> **Corrigé (#242)**, au décompilateur (`RE-GHIDRA-IOBLUETOOTH.md` §3.1) : l'interface compte **34 commandes** (13 propres à la classe Apple,
+> 21 génériques), et non la vingtaine du tableau ci-dessous, qui omet notamment `SuspendSupported [n]`.
+
 | Classe | Commande | Effet sur le fil |
 |---|---|---|
 | `IOBluetoothHIDDriver` | `GetProtocol`, `SetReportProtocol` (1), `SetBootProtocol` (0) | GET_PROTOCOL `0x60` ; SET_PROTOCOL `0x71` ou `0x70` |
 | | `GetIdle`, `SetIdle n` | GET_IDLE `0x80` ; SET_IDLE `0x90 n` |
 | | `HIDControl n` | HID_CONTROL `0x10|n` brut |
-| | `HIDSuspend` / `HIDExitSuspend` | HID_CONTROL `0x13` / `0x14` ; conditionné par `SuspendSupported` |
+| | `HIDSuspend` / `HIDExitSuspend` | HID_CONTROL `0x13` / `0x14` ; `HIDSuspend` n'est **pas** conditionné par `SuspendSupported` (corrigé #242) |
 | | **`VirtualCableUnplug`** | **HID_CONTROL `0x15`** : débranchement du câble virtuel, l'appareil doit oublier l'hôte |
 | | `ForceReadDeviceName` | `readDeviceName()`, vide en arm64e |
-| | `ReleaseInterruptChannel`, `ReleaseControlChannel`, `ReleaseAllChannels`, **`ReleaseAllChannelsWithSleepForHIDUpdate`** | fermeture L2CAP de PSM 19 et/ou 17, sans message HID |
+| | `ReleaseInterruptChannel`, `ReleaseControlChannel` | fermeture L2CAP du PSM 19 ou 17, sans message HID |
+| | `ReleaseAllChannels` | **`IOBluetoothDevice::closeConnection`** : coupe la connexion de l'appareil, ce n'est pas une simple fermeture L2CAP (corrigé #242) |
+| | **`ReleaseAllChannelsWithSleepForHIDUpdate`** | ferme le canal d'interruption, attend 1300 ms, ferme le canal de contrôle, attend 1300 ms ; sans message HID (précisé #242) |
 | | `SuppressDisconnectNotifications`, `Verbose`, `LogPackets`, `DecodePackets`, `ShowMTU`, `Identity`, `SetAuthenticated` | journalisation et état interne, rien sur le fil |
 | `IOAppleBluetoothHIDDriver` | `WillShutdown` | SET Feature `0x40` (E7 de l'étude précédente) |
 | | `UpdateBatteryLevel`, `UpdateBatteryState` | GET `0x47` ; GET Input `0x30` |
-| | `ForceBatteryPercent n`, `DontForceBatteryPercent`, `BatteryUpdateInterval n`, `DefaultBatteryUpdateInterval`, `StartBatteryUpdate`, `StopBatteryUpdate`, `BatteryState`, `BatteryStateNotifications` | cadence et simulation du relevé batterie |
+| | `ForceBatteryPercent n`, `DontForceBatteryPercent`, `BatteryUpdateInterval n`, `DefaultBatteryUpdateInterval`, `StartBatteryUpdate`, `StopBatteryUpdate`, `BatteryState`, `BatteryStateNotifications` | cadence et simulation du relevé batterie ; `ForceBatteryPercent 0` est ignoré et `BatteryState n` **simule** l'état n (précisé #242) |
 | | `CapsLock n` | Output `0x01` (E8) |
 
 Le pilote décode aussi pour le journal `HID_CONTROL(NOP / HARD_RESET / SOFT_RESET / SUSPEND / EXIT_SUSPEND / VIRTUAL_CABLE_UNPLUG)`.
 Il n'envoie de lui-même que SUSPEND et EXIT_SUSPEND.
+**Corrigé (#242)** : en 26.5, `handleSleep` du noyau **n'émet plus SUSPEND**, il marque seulement l'état ; l'émission est
+dans `bluetoothd` (`RE-GHIDRA-IOBLUETOOTH.md` §3.3, §5.3).
 
 **Délai et disjoncteur [chaîne]** : après **3 expirations consécutives** de GET_REPORT, `IOBluetoothHIDDriver::getReport`
 rend `kIOReturnDeviceError` **immédiatement**, sans plus rien émettre, jusqu'à la prochaine réponse.
+
+**Corrigé (#242) [décompilé]** (`RE-GHIDRA-IOBLUETOOTH.md` §3.2) : le disjoncteur protège aussi **SET_REPORT** ; le compteur est commun aux
+attentes GET, SET et d'émission ; à la 3e expiration, le pilote **demande à `bluetoothd` de déconnecter** le clavier
+(`IOBluetoothDevice::SetHIDDriverReady(false)`). Le délai normal est `GetReportTimeoutMS` (3500 ms pour le 598, 5000 ms par
+défaut sans personnalité), la garde ce délai + 1000 ms. Après une veille, le compteur repart à **1** et le premier échange
+attend 4500 ms (garde 5500 ms).
 
 C'est la protection d'Apple contre le blocage que nous observons (#175, #177).
 
@@ -200,6 +230,10 @@ L'octet de classement `[appareil + 0x310]` a été retrouvé en arm64e : les acc
   `numAppleHID / numOldAppleHID / numIncompatibleHID / numTwoSniffApple / numSCODevice / numOfLEHID`.
   Cette fonction choisit l'intervalle de sniff commun quand plusieurs HID sont connectés **[désassemblage partiel]**.
   Cela répond en grande partie à l'inconnue n° 6 de `RE-PILOTE-MACOS.md` : bit 3 = « ancien HID Apple » pour le calcul du sniff.
+  **Corrigé (#242) [décompilé]** : la notification SCO de Lion (L9 de `RE-PILOTES-ANCIENS.md` §5) survit en 26.5 **dans
+  `bluetoothd`**, pas dans IOBluetooth, dont l'API `sendSCO*` n'a aucun appelant. `FUN_1006a0488` envoie **SET Feature
+  `0x4A` = `03`** (fil `53 4A 03`) à tout HID Apple de la famille ancienne (bit 3, dont `0x0256`) à chaque réajustement du
+  sniff multi-HID ; `04` n'est jamais envoyé (`RE-GHIDRA-IOBLUETOOTH.md` §5.1).
 * La politique d'« Apple HID à 15 ms » (`moveAllAppleHIDsTo15`) **exclut** donc l'A1314 : macOS le maintient à **11,25 ms** (18 slots) de sniff.
 * Les mécanismes `setReportWithKeyhole` et `getReportWithKeyhole` (`KeyholeReportID`) de `bluetoothd` ne visent que les appareils récents
   (périphérique `IOHIDUserDevice`). Rien ne relie l'A1314 à ce chemin **[chaîne]**.
@@ -224,10 +258,10 @@ Seules les lignes nouvelles ou corrigées par rapport à `RE-PILOTE-MACOS.md` §
 | Registre / commande | Fonction Apple | Preuve | Notre clavier | Risque d'écriture |
 |---|---|---|---|---|
 | `0x47` (lecture) | % brut ; **courbe d'affichage IOBluetooth** pour 0x255-0x257 (§3.2) | [désassemblage] | lisible | aucun : calcul côté hôte |
-| `0x44` | `FullFactoryDefault` = **`deleteAllLinkKeys`** (oublie toutes les clés d'appairage) | [désassemblage] + [chaîne] | refus de GET | **INTERDIT** |
+| `0x44` | `FullFactoryDefault` = **`deleteAllLinkKeys`** (oublie toutes les clés d'appairage) ; sans appelant en 26.5, où « Oublier » envoie `0x41` (corrigé #242) | [désassemblage] + [chaîne] | refus de GET | **INTERDIT** |
 | `0x45` | `FactoryDefault` ; Apple coupe la notification de déconnexion avant l'envoi | [désassemblage] | refus de GET | **INTERDIT** |
-| `0x41` | `RecantConnection` ; même précaution | [désassemblage] | refus de GET | élevé : coupe la liaison |
-| `0x4A` | état SCO écrit par l'hôte (1-4) | [désassemblage] | lit 18 | moyen : effet radio inconnu ; aucun intérêt pour un clavier sans audio |
+| `0x41` | `RecantConnection` ; même précaution ; **envoyé par `bluetoothd` quand l'utilisateur oublie le clavier** (ID seul, attente 2000 ms ; corrigé #242) | [désassemblage] ; [décompilé] RE-GHIDRA-IOBLUETOOTH §5.2 | refus de GET | élevé : coupe la liaison |
+| `0x4A` | état SCO écrit par l'hôte (1-4) ; en 26.5, `bluetoothd` écrit `03` à l'A1314 à chaque réajustement du sniff (corrigé #242) | [désassemblage] ; [décompilé] RE-GHIDRA-IOBLUETOOTH §5.1 | lit 18 | faible pour `03` (trafic de production Apple) ; moyen pour les autres valeurs |
 | `0x4E` | compteurs de connexion (GET de 10 octets) | [désassemblage] | absent | sans objet |
 | `0xC6` | intervalle de connexion (SET de 5 octets) | [désassemblage] | absent | sans objet |
 | `0xDC` | LLR (SET de 3 octets) | [désassemblage] | absent | sans objet |
@@ -235,7 +269,7 @@ Seules les lignes nouvelles ou corrigées par rapport à `RE-PILOTE-MACOS.md` §
 | `0x50`, `0x55` (écriture) | **jamais écrits par macOS 26.5** ; le renommage est côté hôte | [désassemblage] | refus de GET | moyen (NVRAM) ; protocole non observé |
 | HID_CONTROL `0x15` | `VirtualCableUnplug` (commande de débogage, jamais émise d'office) | [chaîne] + [désassemblage] | — | **élevé** : désappairage demandé au clavier |
 | HID_CONTROL `0x13`/`0x14` | `HIDSuspend`/`HIDExitSuspend` (veille et réveil, déjà E5/E6) | [désassemblage] | — | faible |
-| GET_REPORT ×3 sans réponse | disjoncteur : erreur immédiate, plus d'émission | [chaîne] | — | sans risque : à imiter (#175) |
+| GET_REPORT ou SET_REPORT ×3 sans réponse | disjoncteur : erreur immédiate, plus d'émission, **puis déconnexion demandée à `bluetoothd`** (corrigé #242) | [chaîne] ; [décompilé] RE-GHIDRA-IOBLUETOOTH §3.2 | — | sans risque : à imiter (#175, #243) |
 | Sniff | A1314 = « Apple classique », **11,25 ms seulement** | [désassemblage] + [chaîne] | — | lecture et réglage côté hôte |
 
 ## 8. Ce qui reste inconnu
@@ -245,6 +279,7 @@ Seules les lignes nouvelles ou corrigées par rapport à `RE-PILOTE-MACOS.md` §
 2. Input `0x04`/`0x05` : aucune référence Apple.
 3. Sens de `0x4A` **en lecture** (18) par rapport aux valeurs écrites 1-4.
 4. Le client actuel de `-[AppleBluetoothHIDDevice batteryPercent]` sur macOS 26.5 (Réglages, menu, `system_profiler` ?) : non identifié.
+   **Résolu (#242)** : IOBluetoothUI seul ; Réglages lit le % brut par CoreBluetooth (§3.2).
 5. Effets exacts de `WillShutdown` et `RecantConnection` sur le clavier : non observables sans écriture (#182).
 6. Usage exact du bit 3 dans le compteur `numOldAppleHID` (désassemblage partiel).
 
