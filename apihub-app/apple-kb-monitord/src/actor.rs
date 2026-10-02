@@ -114,6 +114,8 @@ pub struct Options {
     pub notify_connection: bool,
     /// "New batteries" notification (#85).
     pub notify_battery_replaced: bool,
+    /// "Batteries changed too often" notification (#108).
+    pub notify_battery_advice: bool,
     /// Defer percentage alerts to KDE PowerDevil when it covers this keyboard
     /// (`[notifications] defer_to_powerdevil`, #254).
     pub defer_to_powerdevil: bool,
@@ -151,6 +153,7 @@ impl Default for Options {
             alerts_enabled: true,
             notify_connection: true,
             notify_battery_replaced: true,
+            notify_battery_advice: true,
             defer_to_powerdevil: true,
             powerdevil: Arc::new(crate::powerdevil::SystemProbe::default()),
             quiet_hours: akm_core::quiet::QuietHours::none(),
@@ -172,6 +175,7 @@ impl Options {
         self.alerts_enabled = c.alerts_enabled;
         self.notify_connection = c.notify_connection;
         self.notify_battery_replaced = c.notify_battery_replaced;
+        self.notify_battery_advice = c.notify_battery_advice;
         self.defer_to_powerdevil = c.defer_to_powerdevil;
         self.quiet_hours = c.quiet_hours.clone();
         self.chemistry = c.chemistry;
@@ -226,6 +230,16 @@ pub fn alias_change_log(
             format!("BlueZ alias of {mac} changed outside this monitor: {old:?} -> {new_s:?} (no alias remembered)"),
         ),
     })
+}
+
+/// The "batteries changed too often" advice a replacement at `ts` raises:
+/// the one of the history, only when this very replacement is what ended the
+/// second short set (said once, not at every later replacement check).
+pub fn replacement_advice(
+    entries: &[HistoryEntry],
+    ts: u64,
+) -> Option<akm_core::advice::ShortLife> {
+    akm_core::advice::short_life(&batteries::battery_sets(entries)).filter(|a| a.since == ts)
 }
 
 /// Minimum spacing between two history samples.
@@ -286,6 +300,8 @@ struct Actor {
     detector: Detector,
     link: LinkTracker,
     forecast: Option<Forecast>,
+    /// "Batteries changed too often" (#108), from the sets of the history.
+    advice: Option<akm_core::advice::ShortLife>,
     installed_at: Option<u64>,
     history: Option<History>,
     last_history: Option<Instant>,
@@ -345,6 +361,7 @@ impl Actor {
             detector: Detector::primed(&past),
             link: LinkTracker::new(),
             forecast: None,
+            advice: akm_core::advice::short_life(&batteries::battery_sets(&past)),
             installed_at: batteries::current_set_start(&past),
             opts,
             kb: None,
@@ -863,6 +880,15 @@ impl Actor {
         if self.opts.notify && self.opts.notify_battery_replaced {
             notify::battery_replaced(&r);
         }
+        // Second set in a row replaced within 30 days: say it once (#108).
+        let entries = self.history.as_ref().map(History::read).unwrap_or_default();
+        self.advice = replacement_advice(&entries, r.ts);
+        if let Some(a) = self.advice.as_ref() {
+            tracing::warn!("{}", akm_core::advice::line(a, false));
+            if self.opts.notify && self.opts.notify_battery_advice {
+                notify::battery_advice(a);
+            }
+        }
         if let Some(mac) = mac {
             self.opts.events.publish(DeviceEvent::BatteryReplaced {
                 mac: mac.to_string(),
@@ -894,6 +920,9 @@ impl Actor {
         self.remaining = akm_core::history::estimate_remaining(&entries)
             .map(|(rate, hours)| format_remaining(rate, hours));
         self.forecast = forecast::estimate(&entries).ok();
+        if self.history.is_some() {
+            self.advice = akm_core::advice::short_life(&batteries::battery_sets(&entries));
+        }
         if let Some(t) = batteries::current_set_start(&entries) {
             self.installed_at = Some(t);
         }
@@ -948,6 +977,7 @@ impl Actor {
             last_error: self.last_error.clone(),
             forecast: self.forecast.clone(),
             batteries_installed_at: self.installed_at,
+            battery_advice: self.advice.clone(),
             ..Default::default()
         }
     }
@@ -1457,6 +1487,42 @@ mod tests {
         assert!(a.integrate(Some(other), None, None, true));
         assert_eq!(a.kb.as_ref().unwrap().battery_pct(), None);
         assert!(!a.kb.as_ref().unwrap().battery.kept);
+    }
+
+    /// #108: the advice is raised by the replacement that ends the second
+    /// short set, and by that one only.
+    #[test]
+    fn the_advice_is_raised_once_by_the_replacement_that_ends_the_second_short_set() {
+        const DAY: u64 = 86_400;
+        let t0 = 1_780_000_000u64;
+        let mut h = Vec::new();
+        let mut set = |start: u64, days: u64| {
+            for i in 0..days * 4 {
+                let pct = 100.0 - 90.0 * i as f64 / (days * 4) as f64;
+                h.push(HistoryEntry::sample(start + i * DAY / 4, pct, None));
+            }
+        };
+        set(t0, 40);
+        set(t0 + 40 * DAY, 12);
+        set(t0 + 52 * DAY, 18);
+        // First sample on the third set of fresh cells.
+        h.push(HistoryEntry::sample(t0 + 70 * DAY, 100.0, None));
+        let a = replacement_advice(&h, t0 + 70 * DAY).expect("advice");
+        assert_eq!(a.days, [12.0, 18.0]);
+        assert_eq!(
+            replacement_advice(&h, t0 + 52 * DAY),
+            None,
+            "an older replacement"
+        );
+        assert_eq!(
+            replacement_advice(&h[..h.len() - 1], t0 + 52 * DAY),
+            None,
+            "one short set"
+        );
+        // The published state carries it.
+        let mut actor = quiet_actor();
+        actor.advice = Some(a.clone());
+        assert_eq!(actor.snapshot().battery_advice, Some(a));
     }
 
     #[test]

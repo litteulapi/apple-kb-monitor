@@ -21,6 +21,7 @@ chemistry = "alkaline"     # "alkaline" | "nimh" | "lithium" | "unknown" (#178)
 [notifications]
 connection = true          # "disconnected" / "reconnected (N %)" / "switched off", low urgency
 battery_replaced = true    # "new batteries detected"
+battery_advice = true      # "batteries changed too often" after two sets in a row under 30 days (#108)
 defer_to_powerdevil = true # KDE PowerDevil already warns about this keyboard: one distinct reminder only (#254)
 quiet_hours = ""           # e.g. "22:00-07:00": non-critical notifications held until the range ends (#91)
 
@@ -42,6 +43,7 @@ disconnect_on_breaker = true   # after 3 unanswered requests: ask BlueZ once to 
 | `[battery]` | `chemistry` | string | `"alkaline"` | daemon, window, widget, module | Discharge curve of the estimate (see below). `"unknown"` = no estimate, alerts on the keyboard's percentage. |
 | `[notifications]` | `connection` | bool | `true` | daemon | Link notifications (`KeyboardDisconnected`, `KeyboardReconnected`, `KeyboardOff`). |
 | `[notifications]` | `battery_replaced` | bool | `true` | daemon | `BatteryReplaced` when fresh cells are detected. |
+| `[notifications]` | `battery_advice` | bool | `true` | daemon | `BatteryAdvice`, once, when the second set of batteries in a row is replaced within 30 days. The advice itself stays in `GetState` (`battery_advice: {days, since}`) and in the tray menu until the set in use has lasted 30 days. A set whose beginning is unknown (the history starts with it) is never counted. |
 | `[notifications]` | `defer_to_powerdevil` | bool | `true` | daemon | When PowerDevil shows its own low-battery warning for this keyboard, the 30 / 15 / 5 % alerts shrink to one `BatteryEstimate` reminder ([INTEGRATION-KDE.md](INTEGRATION-KDE.md) §3). |
 | `[notifications]` | `quiet_hours` | string `"HH:MM-HH:MM"`, several separated by commas | `""` (none) | daemon | Local time. Inside a range a notification that is not critical is not sent: it is journalled (`notification held until 07:00 ...`) and shown when the range ends, one per replacement slot (the latest). A range may cross midnight. Critical notifications (critical batteries, re-pairing needed, errors) are always shown at once. What waits is kept in `deferred-notifications.json` and survives a restart. A malformed value is a warning and no quiet hours. |
 | `[display]` | `apple_percent` | bool | `true` | daemon (JSON), tray, window, widget, `akmctl status` | Secondary figure only; alerts and the estimate never use it. IOBluetooth remaps the raw `0x47` value: 54..100 → 100 %, 21..53 → 21 + (raw − 21) × 2.4375, below 21 unchanged. |

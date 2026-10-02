@@ -21,6 +21,7 @@
 //! * [`alerts`]      multi-threshold low-battery alerts with hysteresis (#82)
 //! * [`forecast`]    autonomy forecast in days from the history (#83)
 //! * [`batteries`]   battery replacement detection, per-set lifetime (#85)
+//! * [`advice`]      "batteries changed too often": two sets under 30 days (#108)
 //! * [`link`]        connection / reconnection notification logic (#84)
 //! * [`config`]      `config.toml` (small TOML subset, no dependency)
 //! * [`hid_params`]  `hid_apple` parameters: read + whitelist
@@ -44,6 +45,7 @@
 //!   `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` for the other emitters
 //!   (`akm-hid-control`, `akmctl`; #244, #251)
 
+pub mod advice;
 pub mod alerts;
 pub mod alias;
 pub mod apple_model;

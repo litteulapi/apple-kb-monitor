@@ -14,6 +14,7 @@
 //! connection = true          # "disconnected" / "reconnected (N %)", low urgency
 //! battery_replaced = true    # "new batteries detected"
 //! defer_to_powerdevil = true # PowerDevil already warns about this keyboard: one distinct reminder only (#254)
+//! battery_advice = true     # "batteries changed too often" after two sets under 30 days (#108)
 //! quiet_hours = "22:00-07:00" # non-critical notifications held until the range ends; "" = none (#91)
 //!
 //! [display]
@@ -52,6 +53,9 @@ pub struct Config {
     pub alerts_enabled: bool,
     pub notify_connection: bool,
     pub notify_battery_replaced: bool,
+    /// "Batteries changed too often" notification, once, when the second set
+    /// in a row is replaced within 30 days (#108). Default on.
+    pub notify_battery_advice: bool,
     /// When KDE PowerDevil already raises its low-battery notification for
     /// this keyboard, our percentage alerts shrink to one distinct reminder
     /// ("estimate from your batteries", #254). Default **on**.
@@ -86,6 +90,7 @@ impl Default for Config {
             alerts_enabled: true,
             notify_connection: true,
             notify_battery_replaced: true,
+            notify_battery_advice: true,
             defer_to_powerdevil: true,
             quiet_hours: QuietHours::none(),
             chemistry: Chemistry::default(),
@@ -221,6 +226,7 @@ impl Reader {
             ("apple", "allow_device_name_write") => flag(&mut self.cfg.allow_device_name_write),
             ("notifications", "connection") => flag(&mut self.cfg.notify_connection),
             ("notifications", "battery_replaced") => flag(&mut self.cfg.notify_battery_replaced),
+            ("notifications", "battery_advice") => flag(&mut self.cfg.notify_battery_advice),
             ("notifications", "defer_to_powerdevil") => flag(&mut self.cfg.defer_to_powerdevil),
             ("notifications", "quiet_hours") => match typed::<String>(v) {
                 Some(text) => {
@@ -443,6 +449,20 @@ mod tests {
         let (c, w) = parse("[notifications]\nquiet_hours = 22\n");
         assert_eq!(w.len(), 1);
         assert!(w[0].contains("mistyped") && c.quiet_hours.is_empty());
+    }
+
+    #[test]
+    fn battery_advice_notification_defaults_to_on() {
+        // #108
+        assert!(Config::default().notify_battery_advice);
+        let (c, w) = parse("[notifications]\nbattery_advice = false\n");
+        assert!(w.is_empty() && !c.notify_battery_advice);
+        let (c, w) = parse("[notifications]\nbattery_advice = \"no\"\n");
+        assert_eq!(w.len(), 1);
+        assert!(
+            c.notify_battery_advice,
+            "a mistyped value keeps the default"
+        );
     }
 
     #[test]

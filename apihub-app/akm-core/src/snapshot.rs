@@ -40,6 +40,9 @@ pub struct Snapshot {
     pub forecast: Option<Forecast>,
     /// Unix time the current batteries were installed (#85), if detected.
     pub batteries_installed_at: Option<u64>,
+    /// "Batteries changed too often": the last two sets lasted less than 30
+    /// days each (#108); None = nothing to say.
+    pub battery_advice: Option<crate::advice::ShortLife>,
 }
 
 impl Default for Snapshot {
@@ -58,6 +61,7 @@ impl Default for Snapshot {
             last_error: None,
             forecast: None,
             batteries_installed_at: None,
+            battery_advice: None,
         }
     }
 }

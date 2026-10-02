@@ -166,11 +166,13 @@ pub enum Event {
     FirmwareUpdate,
     BatteryReminder,
     BatteryReplaced,
+    /// "Batteries changed too often" (#108).
+    BatteryAdvice,
     Error,
 }
 
 impl Event {
-    pub const ALL: [Event; 14] = [
+    pub const ALL: [Event; 15] = [
         Event::BatteryLow,
         Event::BatteryCritical,
         Event::KeyboardAlert,
@@ -184,6 +186,7 @@ impl Event {
         Event::FirmwareUpdate,
         Event::BatteryReminder,
         Event::BatteryReplaced,
+        Event::BatteryAdvice,
         Event::Error,
     ];
 
@@ -203,6 +206,7 @@ impl Event {
             Event::FirmwareUpdate => "FirmwareUpdate",
             Event::BatteryReminder => "BatteryReminder",
             Event::BatteryReplaced => "BatteryReplaced",
+            Event::BatteryAdvice => "BatteryAdvice",
             Event::Error => "Error",
         }
     }
@@ -224,6 +228,8 @@ impl Event {
             | Event::KeyboardUnreachable => "link",
             Event::RepairNeeded | Event::KeyboardRemoved => "repair",
             Event::FirmwareUpdate => "firmware",
+            // Its own slot: "new batteries", sent just before, stays visible.
+            Event::BatteryAdvice => "advice",
             Event::Error => "error",
         }
     }
@@ -629,6 +635,32 @@ pub fn replaced_notification(r: &Replacement, lang: Lang) -> Notification {
         "battery-full",
         Urgency::Normal,
     )
+}
+
+/// "Batteries changed too often": the last two sets lasted less than 30 days
+/// each (#108). What was measured, then what to try.
+pub fn advice_notification(a: &akm_core::advice::ShortLife, lang: Lang) -> Notification {
+    let fr = lang == Lang::Fr;
+    Notification::new(
+        Event::BatteryAdvice,
+        lang,
+        lang.t(
+            "Apple Keyboard \u{2014} batteries changed too often",
+            "Clavier Apple \u{2014} piles chang\u{e9}es trop souvent",
+        )
+        .into(),
+        format!(
+            "{}. {}",
+            akm_core::advice::line(a, fr),
+            akm_core::advice::recommendation(fr)
+        ),
+        "battery-caution",
+        Urgency::Normal,
+    )
+}
+
+pub fn battery_advice(a: &akm_core::advice::ShortLife) {
+    deliver(advice_notification(a, Lang::detect()));
 }
 
 pub fn battery_replaced(r: &Replacement) {
@@ -1463,6 +1495,30 @@ mod tests {
             );
         }
         assert_eq!(Action::from_key("remind"), Some(Action::RemindTomorrow));
+    }
+
+    /// #108: what was measured, then what to try, in both languages.
+    #[test]
+    fn battery_advice_says_what_was_measured_and_what_to_try() {
+        let a = akm_core::advice::ShortLife {
+            days: [12.0, 18.0],
+            since: 1,
+        };
+        let fr = advice_notification(&a, Lang::Fr);
+        assert_eq!(fr.event, Event::BatteryAdvice);
+        assert_eq!(fr.urgency, Urgency::Normal);
+        assert!(fr.summary.contains("trop souvent"));
+        assert!(
+            fr.body.contains("12 j puis 18 j") && fr.body.contains("NiMH"),
+            "{}",
+            fr.body
+        );
+        let en = advice_notification(&a, Lang::En);
+        assert!(en.body.contains("12 d then 18 d") && en.summary.contains("too often"));
+        assert_ne!(fr.body, en.body);
+        // Its own slot: it does not replace "new batteries".
+        assert_ne!(Event::BatteryAdvice.slot(), Event::BatteryReplaced.slot());
+        assert_eq!(fr.action_list(), ["default", "Ouvrir", "open", "Ouvrir"]);
     }
 
     /// A notification put aside comes back identical (texts, buttons, hints).

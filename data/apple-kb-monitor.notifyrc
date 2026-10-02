@@ -120,6 +120,14 @@ Comment[fr]=Des piles neuves ont été détectées ; les alertes sont réarmées
 Icon=battery-full
 Action=Popup
 
+[Event/BatteryAdvice]
+Name=Batteries changed too often
+Name[fr]=Piles changées trop souvent
+Comment=Two sets of batteries in a row lasted less than 30 days
+Comment[fr]=Deux jeux de piles consécutifs ont duré moins de 30 jours
+Icon=battery-caution
+Action=Popup
+
 [Event/Error]
 Name=Error
 Name[fr]=Erreur

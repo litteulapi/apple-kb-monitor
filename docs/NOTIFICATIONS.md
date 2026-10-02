@@ -35,6 +35,7 @@ installé). Les réglages de l'utilisateur sont écrits par Plasma dans
 | `FirmwareUpdate` | firmware plus récent connu (table embarquée) : une fois par version, mémorisé | normale | Ouvrir, Me rappeler demain | `firmware` |
 | `BatteryReminder` | « changez les piles » : tension lissée `0x49` sous le seuil Bas puis Critique **du clavier** (`0x60` = `0x5A`, 2506 / 2404 mV sur A1314), avec l'indication du clavier en % | Bas : normale, 15 s ; Critique : critique, persistante | Ouvrir, Me rappeler demain, Ignorer ce rappel | `battery` |
 | `BatteryReplaced` | piles neuves détectées | normale | Ouvrir | `battery` |
+| `BatteryAdvice` | « piles changées trop souvent » : deux jeux de piles consécutifs de moins de 30 jours, dit une fois, au remplacement du second (#108) ; durées mesurées puis conseils (chimie déclarée, autre série de piles ou accus NiMH à faible autodécharge, éteindre le clavier) | normale, 12 s | Ouvrir | `advice` |
 | `Error` | échec d'une opération | critique | aucun | `error` |
 
 * Urgence critique : `expire_timeout = 0` (ne disparaît pas seule). Basse : 6 s,

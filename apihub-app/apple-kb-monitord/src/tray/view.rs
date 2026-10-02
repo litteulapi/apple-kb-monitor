@@ -243,6 +243,8 @@ pub mod id {
     pub const CAPS: i32 = 6;
     /// Charge estimated by chemistry (#178).
     pub const ESTIMATE: i32 = 7;
+    /// "Batteries changed too often" (#108).
+    pub const ADVICE: i32 = 8;
     pub const SEP1: i32 = 10;
     pub const OPEN: i32 = 11;
     pub const REFRESH: i32 = 12;
@@ -260,9 +262,9 @@ pub mod id {
     pub const SEP2: i32 = 20;
     pub const QUIT: i32 = 21;
     #[cfg(test)]
-    pub const ALL: [i32; 20] = [
-        HEADER, BATTERY, ESTIMATE, CONNECTION, SIGNAL, AUTONOMY, CAPS, SEP1, OPEN, REFRESH, COPY,
-        BLUETOOTH, RENAME, REPAIR, SEP_FN, FN_MODE, FN_MEDIA, FN_FKEYS, SEP2, QUIT,
+    pub const ALL: [i32; 21] = [
+        HEADER, BATTERY, ESTIMATE, CONNECTION, SIGNAL, AUTONOMY, ADVICE, CAPS, SEP1, OPEN, REFRESH,
+        COPY, BLUETOOTH, RENAME, REPAIR, SEP_FN, FN_MODE, FN_MEDIA, FN_FKEYS, SEP2, QUIT,
     ];
 }
 
@@ -524,6 +526,11 @@ impl View {
                     lang.t("Autonomie estimée :", "Estimated runtime:")
                 )
             });
+        // "Batteries changed too often" (#108): shown connected or not.
+        let advice = snap
+            .battery_advice
+            .as_ref()
+            .map(|a| akm_core::advice::line(a, lang == Lang::Fr).replacen(" :", "\u{a0}:", 1));
         let conn_line = if snap.connected {
             lang.t("Connecté", "Connected").to_string()
         } else if snap.keyboard.is_some() {
@@ -573,6 +580,7 @@ impl View {
                 tooltip_lines.push(conn_line.clone());
             }
         }
+        tooltip_lines.extend(advice.clone());
 
         // Menu
         let disposition = match pct {
@@ -609,6 +617,14 @@ impl View {
             info(id::CONNECTION, conn_line, None),
             rssi.map_or_else(|| hidden(id::SIGNAL), |l| info(id::SIGNAL, l, None)),
             autonomy.map_or_else(|| hidden(id::AUTONOMY), |l| info(id::AUTONOMY, l, None)),
+            advice.map_or_else(
+                || hidden(id::ADVICE),
+                |l| {
+                    let mut e = info(id::ADVICE, l, None);
+                    e.props.push(("disposition", Prop::Str("warning".into())));
+                    e
+                },
+            ),
             if snap.connected && snap.caps_lock {
                 info(
                     id::CAPS,
@@ -724,6 +740,48 @@ pub fn clipboard_text(snap: &Snapshot, charging: bool, lang: Lang, now: u64) -> 
 mod tests {
     use super::*;
     use akm_core::KbReport;
+
+    /// #108: the advice is one line of the menu and of the tooltip, hidden
+    /// when there is nothing to say.
+    #[test]
+    fn battery_advice_line_appears_only_when_due() {
+        let mut k = KbReport::default();
+        k.battery.percentage_fine = Some(90.0);
+        let mut s = Snapshot {
+            connected: true,
+            keyboard: Some(k),
+            ..Default::default()
+        };
+        let v = View::build(&s, false, None, Lang::Fr);
+        assert!(!v.entry(id::ADVICE).unwrap().visible());
+        assert!(!v.tooltip_lines.iter().any(|l| l.contains("trop souvent")));
+        s.battery_advice = Some(akm_core::advice::ShortLife {
+            days: [12.0, 18.0],
+            since: 1,
+        });
+        let v = View::build(&s, false, None, Lang::Fr);
+        let e = v.entry(id::ADVICE).unwrap();
+        assert!(e.visible());
+        assert_eq!(
+            e.get("label"),
+            Some(&Prop::Str(
+                "Piles chang\u{e9}es trop souvent\u{a0}: 12 j puis 18 j (moins de 30 j)".into()
+            ))
+        );
+        assert_eq!(e.get("disposition"), Some(&Prop::Str("warning".into())));
+        assert!(v.tooltip_lines.iter().any(|l| l.contains("12 j puis 18 j")));
+        let en = View::build(&s, false, None, Lang::En);
+        assert!(en
+            .tooltip_lines
+            .iter()
+            .any(|l| l.contains("12 d then 18 d")));
+        // Still said while the keyboard is offline.
+        s.connected = false;
+        assert!(View::build(&s, false, None, Lang::Fr)
+            .entry(id::ADVICE)
+            .unwrap()
+            .visible());
+    }
 
     /// "Mode Fn" entry: state read from sysfs, two radio items, hidden when
     /// hid_apple is not loaded, disabled without a known keyboard.
