@@ -275,8 +275,8 @@ Les valeurs affichées sont illustratives (sauf 99 %, 2,90 V, ADC 900 et la MAC,
 │  [Clavier]  [Historique]  [Diagnostic]                    │   couleurs et accent du portail
 ├───────────────────────────────────────────────────────────┤
 │  Batterie                         Radio                   │
-│  99 %  ▰▰▰▰▰▰▰▰▰▱  alcaline       RSSI −48 dBm  ▂▄▆█       │
-│  Tension 2,903 V   ADC 900        TX 8 dBm               │
+│  99 %  ▰▰▰▰▰▰▰▰▰▱  alcaline       Signal +0 dB (rel.) ▂▄▆█ │
+│  Tension 2,903 V                  TX 8 dBm               │
 │  Autonomie ≈ 41 j                 Lien 15 ms / 2,0 s      │
 │  Appareil : A1314 · ISO · AA:BB:CC:DD:EE:F1 · fw 0x0050   │
 └───────────────────────────────────────────────────────────┘

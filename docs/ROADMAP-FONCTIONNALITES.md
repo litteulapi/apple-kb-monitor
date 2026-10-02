@@ -50,7 +50,7 @@ Légende des preuves : **[mesuré]** = constaté sur le poste (noyau 7.1.13, Mag
 | Batterie | **[mesuré]** `power_supply hid-aa:bb:cc:dd:ee:f1-battery-71` : `capacity`=99, `status`=Discharging, `scope`=Device ; UPower l'expose | — |
 | Batterie BT Magic Keyboard 2021 / Trackpad 2 / Mouse 2 | **[source]** `hid-magicmouse` ne lit la batterie qu'en USB ; en BT le power_supply reste à 0 %. Série de correctifs Alec Hall (juil.–août 2026, respin demandé) | [Phoronix](https://www.phoronix.com/news/Linux-7.0-Fix-Magic-Trackpad-2), [patch](https://ratatoskr.run/linux-input/2026/07/17256372/t) |
 | Rapport `0x90` (trackpad/souris) | **[source]** `HIDIOCGINPUT` : octet 1 drapeaux (bit 1 = en charge), octet 2 capacité 0–100 | [magic-trackpad-battery](https://github.com/mmarfil/magic-trackpad-battery) |
-| Feature reports BCM2042 (A1314) | **[source projet]** 21 rapports lus (`0xEA` % précis, `0xF5` ADC, `0x5A` courbe, `0x4F` firmware, `0xFF` build…) — lecture seule | README, akm-core/decode.rs |
+| Feature reports BCM2042 (A1314) | **[source projet]** 21 rapports lus (`0xEA` % précis, `0xF5` constante de sens inconnu, `0x5A` seuils des piles, `0x4F` firmware, `0xFF` build…) — lecture seule | README, akm-core/decode.rs |
 | LED CapsLock | **[mesuré]** `/sys/class/leds/input49::capslock/brightness`, `root 644` ; pilotée par l'état du verrouillage (cf. #68) | — |
 | Rétroéclairage | **[source]** `APPLE_BACKLIGHT_CTL` / `APPLE_MAGIC_BACKLIGHT` = claviers **internes** MacBook T2 et Touch Bar uniquement. **Aucun Magic Keyboard externe n'a de rétroéclairage.** → non retenu | hid-apple.c |
 | Touch ID (Magic Keyboard 2021/2024) | **[source]** réservé aux Mac Apple Silicon (Secure Enclave), non pris en charge par Linux → non retenu | [Phoronix 5.16](https://www.phoronix.com/news/Linux-5.16-Apple-Magic-2021), [Apple](https://support.apple.com/en-au/guide/mac-studio/apde6983e836/2022/mac/13) |
@@ -135,7 +135,7 @@ Valeur : ★★★ forte · ★★ moyenne · ★ faible. Effort : S ≤ 1 j, M 
 - **F22** — 3 profils livrés ; `keyd check` exécuté avant toute application, échec = refus ; application atomique + rollback automatique si aucun appui de confirmation sous 15 s ; Eject remappable.
 - **F23** — deux claviers avec réglages différents : à la reconnexion de chacun, ses réglages keyd sont réappliqués ; pour les paramètres `hid_apple` globaux, l'UI l'indique explicitement.
 - **F24** — « Reconnecter », « Déconnecter », « Oublier » appellent BlueZ (vérifié par `busctl monitor`) ; « Oublier » demande confirmation.
-- **F25** — RSSI conservé 7 j ; > 3 déconnexions/h ou RSSI < -80 dBm pendant 10 min → notification « liaison instable ».
+- **F25** — RSSI conservé 7 j ; > 3 déconnexions/h ou écart RSSI relatif durablement négatif pendant 10 min (en BR/EDR le RSSI est un écart à la plage idéale, pas des dBm : #174) → notification « liaison instable ».
 - **F26** — chaque contrôle renvoie OK/KO + correctif ; les correctifs root passent par le helper ; test par environnement simulé (règle udev absente → KO).
 - **F27** — focus d'une fenêtre listée → couche keyd activée en < 200 ms (KWin script ou D-Bus) ; retour à la couche par défaut au changement de focus.
 - **F28** — tension et % tracés ensemble ; choix du type de piles dans la config adapte la courbe ; recommandation affichée sous 2 jeux de piles consécutifs < 30 jours.
