@@ -34,7 +34,8 @@
 //! `{ts,pct,voltage?,event?,schema?,mv_0x46?,mv_0x49?,voltage_valid?}`, `voltage_valid=false` = legacy value, #180); since API 2 `GetDevices() -> ao`,
 //! `BatterySets() -> s`, `NotifyShutdown() -> (b, s)` (the one write macOS does: `WillShutdown`, #191),
 //! `ExpectDisconnect() -> b` (mute the next disconnection notification for 15 s while `akmctl repair`
-//! forgets the keyboard; writes nothing to it, #217). Signal: `StateChanged(t revision, s json)`.
+//! forgets the keyboard; writes nothing to it, #217), `Diagnose() -> s` (the checks of the Diag tab as JSON,
+//! never touches the keyboard, #120). Signal: `StateChanged(t revision, s json)`.
 //!
 //! Since #247 the same object also carries `com.agenceapi.AppleKbMonitor1.Keymap`
 //! (special keys, manual key mapping): see [`crate::keymap`].
@@ -282,6 +283,21 @@ impl Monitor {
         self.shared.history_json_max(since, max)
     }
 
+    /// The checks of the window's "Diag" tab, run by the daemon, as JSON
+    /// (`{schema, daemon_version, passed, total, checks: [{id, label, ok,
+    /// detail}]}`, #120). Never touches the keyboard; every program run is
+    /// bounded to 3 s. See [`crate::diagnose`].
+    async fn diagnose(&self) -> String {
+        // Programs are run: off the bus executor.
+        let probe = self.shared.diag.clone();
+        crate::devices::unblock(move || {
+            let lang = crate::notify::Lang::detect();
+            crate::diagnose::to_json(&crate::diagnose::run_checks(probe.as_ref(), lang, true))
+                .to_string()
+        })
+        .await
+    }
+
     /// Object paths of the known keyboards (API 2).
     fn get_devices(&self) -> Vec<OwnedObjectPath> {
         self.shared.device_paths()
@@ -338,6 +354,8 @@ pub struct ServeOptions {
     pub alias: Arc<dyn AliasBackend>,
     /// Well-known name to take (tests / side-by-side instances).
     pub bus_name: String,
+    /// What `Diagnose()` looks at (the real system; a fixture in tests).
+    pub diag: Arc<dyn crate::diagnose::Probe>,
 }
 
 impl ServeOptions {
@@ -350,6 +368,7 @@ impl ServeOptions {
             settings: Arc::new(HelperBackend::default()),
             alias: Arc::new(BluezAlias::default()),
             bus_name: BUS_NAME.to_string(),
+            diag: Arc::new(crate::diagnose::SystemProbe),
         }
     }
 }
@@ -373,6 +392,7 @@ pub fn export_on(conn: &Connection, o: &ServeOptions) -> Result<Arc<Shared>, Ser
         history: o.history.clone(),
         settings: o.settings.clone(),
         alias: o.alias.clone(),
+        diag: o.diag.clone(),
         devices: Mutex::new(Vec::new()),
     });
     conn.object_server().at(

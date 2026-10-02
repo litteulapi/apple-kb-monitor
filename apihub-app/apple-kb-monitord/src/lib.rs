@@ -9,6 +9,7 @@
 //! * [`client`]  D-Bus client + direct one-shot read (daemon absent)
 //! * [`notify`]  desktop notifications (zbus, no notify-rust)
 //! * [`devices`] D-Bus API v2: one object per keyboard (#93)
+//! * [`diagnose`] D-Bus `Diagnose()`: the checks of the Diag tab, as JSON (#120)
 //! * [`events`]  in-process event hub (alerts, replacements, link changes)
 //! * [`passive`]  passive input-report listening, `...Input` interface (#130, #187, #129)
 //! * [`repair`]  link keeper: health, reconnection, repair launcher (#144)
@@ -26,6 +27,7 @@ pub mod alias;
 pub mod bluez;
 pub mod client;
 pub mod devices;
+pub mod diagnose;
 pub mod events;
 pub mod keymap;
 pub mod notify;

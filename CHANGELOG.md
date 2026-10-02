@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Daemon
 - History file bounded to 5 MiB (oldest ordinary samples dropped down to 4 MiB, battery replacements kept, `.prev` copy); D-Bus `History(since)` thinned by the daemon to 2000 points and new `HistoryMax(since, max)` on the root and keyboard objects (#96).
+- D-Bus `Diagnose() -> s`: the checks of the window's Diag tab run by the daemon and returned as JSON (`{schema, daemon_version, passed, total, checks: [{id, label, ok, detail}]}`), in the daemon's language; the hidraw node is tested with `access(2)`, never opened; programs bounded to 3 s (#120).
 
 ### Tests
 - Every D-Bus test of the daemon runs on a private `dbus-daemon` whose configuration has no service directory (`apple_kb_monitord::testbus`), session and system bus alike: a test can no longer activate the installed daemon nor reach the real BlueZ.

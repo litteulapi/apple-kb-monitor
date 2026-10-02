@@ -123,6 +123,8 @@ pub struct Shared {
     pub settings: Arc<dyn SettingsBackend>,
     /// Alias (name on this computer) of the keyboards.
     pub alias: Arc<dyn AliasBackend>,
+    /// What `Diagnose()` looks at.
+    pub diag: Arc<dyn crate::diagnose::Probe>,
     /// MACs with an exported device object, in creation order.
     pub devices: Mutex<Vec<String>>,
 }
