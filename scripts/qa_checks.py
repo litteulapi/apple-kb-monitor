@@ -326,6 +326,21 @@ def cmd_package(pkg: str) -> int:
     cv = cargo_version()
     if not m or m.group(1) != cv:
         f.add(".PKGINFO", 0, "version", f"package version {m.group(1) if m else '?'} != Cargo {cv}")
+    # #68: /etc/modprobe.d/hid_apple.conf is the file `akm-helper --persist`
+    # rewrites. It must be in the package AND declared backup, or an upgrade
+    # replaces the Fn mode the user persisted; one active line, fnmode=1, the
+    # value post_install applies.
+    conf = "etc/modprobe.d/hid_apple.conf"
+    if conf in names:
+        if not re.search(rf"(?m)^backup = {re.escape(conf)}$", pkginfo):
+            f.add(".PKGINFO", 0, "modprobe-backup", f"{conf} is shipped without backup= (the persisted Fn mode would be overwritten)")
+        active = [l.strip() for l in member(conf).splitlines() if l.strip() and not l.lstrip().startswith("#")]
+        if active != ["options hid_apple fnmode=1"]:
+            f.add(conf, 0, "modprobe-content", f"active lines must be exactly 'options hid_apple fnmode=1', found {active}")
+        if "#68" not in member(conf):
+            f.add(conf, 0, "modprobe-why", "the shipped file must say why it is still shipped (#68)")
+        if names[conf][:10] != "-rw-r--r--":
+            f.add(conf, 0, "modprobe-mode", f"{names[conf]} {conf}: must be 0644")
     if re.search(r"(?m)^depend = python", pkginfo):
         f.add(".PKGINFO", 0, "python", "the package must not depend on Python")
     return f.done(f"package {Path(pkg).name} ({len(names)} entries)")

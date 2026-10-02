@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # PKGBUILD / .SRCINFO (#14): the build uses the locked dependencies, every
 # source has a real checksum that matches the file, and .SRCINFO is the one
-# makepkg generates from the PKGBUILD. Static: builds nothing, downloads
+# makepkg generates from the PKGBUILD; the modprobe file is shipped as a
+# backup= file and says why (#68). Static: builds nothing, downloads
 # nothing, writes nothing. Exit 0 = all checks pass.
 set -uo pipefail
 top=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -63,5 +64,18 @@ fi
 # 4. what cannot be done without a published source repository is written down
 grep -q 'no published source archive' "$pk" || no "the PKGBUILD no longer says why it builds from \$startdir"
 
-[ $fail = 0 ] && echo "PKGBUILD: cargo --locked, ${#sources[@]} source(s) with a matching sha256, .SRCINFO in sync"
+# 5. modprobe/hid_apple.conf (#68): still shipped, as a backup= file, with
+#    exactly one active line and the reason it is kept written in it
+mp="$top/modprobe/hid_apple.conf"
+active=$(grep -vE '^[[:space:]]*(#|$)' "$mp")
+[ "$active" = "options hid_apple fnmode=1" ] || no "modprobe/hid_apple.conf: active lines are not exactly 'options hid_apple fnmode=1': $active"
+grep -q '^# Why this file is still shipped (#68)' "$mp" || no "modprobe/hid_apple.conf no longer says why it is shipped"
+grep -q -- '--persist' "$mp" || no "modprobe/hid_apple.conf no longer names akmctl set fnmode --persist"
+body package | grep -qF 'modprobe/hid_apple.conf"' || no "package() does not install modprobe/hid_apple.conf"
+bash -c 'source "$1" >/dev/null 2>&1; printf "%s\n" "${backup[@]}"' _ "$pk" | grep -qxF 'etc/modprobe.d/hid_apple.conf' \
+  || no "etc/modprobe.d/hid_apple.conf is not in backup=() (an upgrade would overwrite the persisted Fn mode)"
+grep -qF 'const MODPROBE_CONF: &str = "/etc/modprobe.d/hid_apple.conf";' "$top/apihub-app/crates/akm-helper/src/main.rs" \
+  || no "akm-helper no longer persists into /etc/modprobe.d/hid_apple.conf: the reason to ship the file is gone, see #68"
+
+[ $fail = 0 ] && echo "PKGBUILD: cargo --locked, ${#sources[@]} source(s) with a matching sha256, .SRCINFO in sync, modprobe file kept as backup="
 exit $fail
