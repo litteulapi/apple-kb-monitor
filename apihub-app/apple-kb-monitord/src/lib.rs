@@ -22,6 +22,7 @@
 //! * [`settings`] `hid_apple` write path through the privileged helper
 //! * [`powerdevil`] KDE PowerDevil low-battery overlap (#254)
 //! * [`usage`]   active minutes per day, without any key logging (#109)
+//! * [`reapply`] Fn mode remembered per keyboard, put back at its reconnection (#103)
 //! * [`alias`]   keyboard name on this computer (BlueZ `Alias`, #141)
 //! * [`testbus`] test support: a private bus that can activate nothing
 //!
@@ -42,6 +43,7 @@ pub mod notify_policy;
 pub mod osd;
 pub mod passive;
 pub mod powerdevil;
+pub mod reapply;
 pub mod repair;
 pub mod service;
 pub mod settings;

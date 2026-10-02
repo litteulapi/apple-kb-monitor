@@ -356,6 +356,8 @@ pub struct ServeOptions {
     pub bus_name: String,
     /// What `Diagnose()` looks at (the real system; a fixture in tests).
     pub diag: Arc<dyn crate::diagnose::Probe>,
+    /// Settings remembered per keyboard (#103).
+    pub reapply: Option<Arc<crate::reapply::Reapplier>>,
 }
 
 impl ServeOptions {
@@ -369,6 +371,7 @@ impl ServeOptions {
             alias: Arc::new(BluezAlias::default()),
             bus_name: BUS_NAME.to_string(),
             diag: Arc::new(crate::diagnose::SystemProbe),
+            reapply: None,
         }
     }
 }
@@ -393,6 +396,7 @@ pub fn export_on(conn: &Connection, o: &ServeOptions) -> Result<Arc<Shared>, Ser
         settings: o.settings.clone(),
         alias: o.alias.clone(),
         diag: o.diag.clone(),
+        reapply: o.reapply.clone(),
         devices: Mutex::new(Vec::new()),
     });
     conn.object_server().at(

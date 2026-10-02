@@ -120,6 +120,14 @@ Comment[fr]=Des piles neuves ont été détectées ; les alertes sont réarmées
 Icon=battery-full
 Action=Popup
 
+[Event/SettingsReapply]
+Name=Remembered Fn mode
+Name[fr]=Mode Fn mémorisé
+Comment=The keyboard that reconnected has another Fn mode remembered than the one in effect (button: Apply)
+Comment[fr]=Le clavier reconnecté a un autre mode Fn mémorisé que celui en vigueur (bouton : Appliquer)
+Icon=input-keyboard
+Action=Popup
+
 [Event/ForgetConfirm]
 Name=Confirmation before forgetting the keyboard
 Name[fr]=Confirmation avant d'oublier le clavier

@@ -26,6 +26,9 @@ battery_advice = true      # "batteries changed too often" after two sets in a r
 defer_to_powerdevil = true # KDE PowerDevil already warns about this keyboard: one distinct reminder only (#254)
 quiet_hours = ""           # e.g. "22:00-07:00": non-critical notifications held until the range ends (#91)
 
+[devices]
+reapply_settings = "ask"   # Fn mode remembered for a keyboard, at its reconnection: "ask" | "auto" | "off" (#103)
+
 [osd]
 fn_mode = true             # Plasma OSD when hid_apple's Fn mode (or iso_layout) changes (#100)
 caps_lock = true           # Plasma OSD "Caps Lock on / off" when the key is pressed (#101)
@@ -55,6 +58,7 @@ disconnect_on_breaker = true   # after 3 unanswered requests: ask BlueZ once to 
 | `[notifications]` | `battery_advice` | bool | `true` | daemon | `BatteryAdvice`, once, when the second set of batteries in a row is replaced within 30 days. The advice itself stays in `GetState` (`battery_advice: {days, since}`) and in the tray menu until the set in use has lasted 30 days. A set whose beginning is unknown (the history starts with it) is never counted. |
 | `[notifications]` | `defer_to_powerdevil` | bool | `true` | daemon | When PowerDevil shows its own low-battery warning for this keyboard, the 30 / 15 / 5 % alerts shrink to one `BatteryEstimate` reminder ([INTEGRATION-KDE.md](INTEGRATION-KDE.md) §3). |
 | `[notifications]` | `quiet_hours` | string `"HH:MM-HH:MM"`, several separated by commas | `""` (none) | daemon | Local time. Inside a range a notification that is not critical is not sent: it is journalled (`notification held until 07:00 ...`) and shown when the range ends, one per replacement slot (the latest). A range may cross midnight. Critical notifications (critical batteries, re-pairing needed, errors) are always shown at once. What waits is kept in `deferred-notifications.json` and survives a restart. A malformed value is a warning and no quiet hours. |
+| `[devices]` | `reapply_settings` | `"ask"`, `"auto"` or `"off"` | `"ask"` | daemon | `SetFnMode` on a keyboard's object remembers the mode for THAT keyboard (by address). When the keyboard reconnects and another mode is in effect: `ask` raises `SettingsReapply` with an "Apply" button (then the usual polkit authentication); `auto` applies at once (the authentication dialog appears unless the administrator allowed the polkit action); `off` does nothing. `hid_apple` has one Fn mode for every Apple keyboard of the computer: the notification says so. |
 | `[osd]` | `fn_mode` | bool | `true` | daemon | On-screen display of Plasma (`org.kde.osdService.showText` on `org.kde.plasmashell`) with the new state when `hid_apple.fnmode` or `iso_layout` changes, whoever changed it. The first value seen after a start only records the state. Without Plasma nothing is shown. |
 | `[osd]` | `caps_lock` | bool | `true` | daemon | OSD "Caps Lock on / off" when the keyboard's Caps Lock LED changes right after the keyboard sent something (no key is looked at). Independent of it, the tray icon carries a badge (`OverlayIconName = input-caps-on`) while Caps Lock is on. |
 | `[usage]` | `active_time` | bool | `false` | daemon | Usage statistics **without key logging**: a minute counts as active when at least one input report arrived during it (the passive listener only says "something arrived", with no data). Stored: one counter per local day, 90 days (`usage.json`). Published in `GetState` as `usage: {today_active_minutes, days: [{day, active_minutes, active_hours}]}` (last 7 days); absent while off. |
@@ -142,6 +146,7 @@ Environment variables: `APPLE_KB_RSSI_HELPER` (development override of `/usr/lib
 | `~/.local/state/apple-kb-monitor/history.jsonl` | battery history (`ts`, `pct`, `schema`, plus `mv_0x46` / `mv_0x49` when the voltages were read); invalid points are not written; `akmctl history import FILE` merges an older file without duplicates |
 | `~/.local/state/apple-kb-monitor/deferred-notifications.json` | `0600`: notifications to be shown later (held by the quiet hours, or "Remind me tomorrow"): due time and the texts shown, at most 32 entries |
 | `~/.local/state/apple-kb-monitor/link-quality.json` | `0600`: per keyboard, the disconnections of the last 7 days (time, reason; at most 2000) and the relative signal by the hour (count, sum, min, max; 168 buckets) (#105) |
+| `~/.local/state/apple-kb-monitor/device-settings.json` | `0600`: Fn mode remembered per keyboard address, at most 16 keyboards (#103) |
 | `~/.local/state/apple-kb-monitor/usage.json` | `0600`, only with `[usage] active_time = true`: `{"days": {"YYYY-MM-DD": active minutes}}`, 90 days; no key, no key code, no time of day |
 | `~/.local/state/apple-kb-monitor/selfcheck.json` | last result of `akmctl selftest` |
 | `~/.local/state/apple-kb-monitor/devname-backup-<UTC>.json`, `forget-backup-<UTC>.json` | `0600`, never overwritten: name stored in the keyboard before a write; host-side pairing data (no link key) before a clean forget |

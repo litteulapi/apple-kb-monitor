@@ -135,6 +135,11 @@ pub struct Options {
     /// The paired keyboards as the link keeper sees them (BlueZ), for the
     /// roster of the published state (set by `main`, #94).
     pub roster: Option<crate::repair::SharedStatus>,
+    /// What to do with the Fn mode remembered for a keyboard when it
+    /// reconnects (`[devices] reapply_settings`, #103).
+    pub reapply_policy: akm_core::device_settings::Reapply,
+    /// The memory of the settings per keyboard (set by `main`, #103).
+    pub reapply: Option<Arc<crate::reapply::Reapplier>>,
     /// Count the active minutes per day (`[usage] active_time`, #109).
     pub usage_active_time: bool,
     /// The counter, when the statistics are on (set by `main`).
@@ -178,6 +183,8 @@ impl Default for Options {
             notify_link_unstable: true,
             link_stats: None,
             roster: None,
+            reapply_policy: akm_core::device_settings::Reapply::default(),
+            reapply: None,
             usage_active_time: false,
             usage: None,
             chemistry: Chemistry::default(),
@@ -202,6 +209,7 @@ impl Options {
         self.defer_to_powerdevil = c.defer_to_powerdevil;
         self.quiet_hours = c.quiet_hours.clone();
         self.usage_active_time = c.usage_active_time;
+        self.reapply_policy = c.reapply_settings;
         self.notify_link_unstable = c.notify_link_unstable;
         self.osd = crate::osd::Enabled {
             fn_mode: c.osd_fn_mode,
@@ -521,6 +529,18 @@ impl Actor {
                             "battery state {:?} read, no passive publisher to tell",
                             k.battery.state
                         );
+                    }
+                }
+                // A keyboard that just (re)connected gets its remembered
+                // settings back, or the offer to (#103).
+                if !self.linked {
+                    if let (Some(r), Some(m)) = (self.opts.reapply.as_ref(), mac.as_deref()) {
+                        let name = [k.device.alias.as_deref(), k.device.name.as_deref()]
+                            .into_iter()
+                            .flatten()
+                            .find(|n| !n.is_empty())
+                            .unwrap_or(m);
+                        r.on_connected(m, name);
                     }
                 }
                 self.kb = Some(k);
@@ -1568,6 +1588,51 @@ mod tests {
         assert!(a.integrate(Some(other), None, None, true));
         assert_eq!(a.kb.as_ref().unwrap().battery_pct(), None);
         assert!(!a.kb.as_ref().unwrap().battery.kept);
+    }
+
+    /// #103: the remembered mode is offered when the keyboard (re)connects,
+    /// not at every read while it stays connected.
+    #[test]
+    fn remembered_settings_are_offered_at_each_connection_only() {
+        use crate::settings::{SetError, SettingsBackend};
+        use akm_core::device_settings::Reapply;
+        use akm_core::hid_params::Param;
+        struct Live;
+        impl SettingsBackend for Live {
+            fn get(&self, _: Param) -> i32 {
+                1
+            }
+            fn apply(&self, _: Param, _: i32) -> Result<(), SetError> {
+                Ok(())
+            }
+        }
+        const M: &str = "AA:BB:CC:DD:EE:F1";
+        let offers = Arc::new(Mutex::new(Vec::new()));
+        let o = offers.clone();
+        let r = crate::reapply::Reapplier::with_notifier(
+            None,
+            Arc::new(Live),
+            Reapply::Ask,
+            Arc::new(move |n: notify::Notification| o.lock().unwrap().push(n.event)),
+        );
+        r.remember(M, 2);
+        let mut a = quiet_actor();
+        a.opts.reapply = Some(r);
+        assert!(a.integrate(Some(report(60.0, None)), None, Some(M), false));
+        assert_eq!(*offers.lock().unwrap(), [notify::Event::SettingsReapply]);
+        // Still connected: further reads offer nothing more.
+        assert!(a.integrate(Some(report(59.0, None)), None, Some(M), false));
+        assert_eq!(offers.lock().unwrap().len(), 1);
+        // Gone and back: offered again.
+        a.disconnected();
+        assert!(a.integrate(Some(report(59.0, None)), None, Some(M), false));
+        assert_eq!(offers.lock().unwrap().len(), 2);
+        // Another keyboard, nothing remembered for it: nothing.
+        a.disconnected();
+        let mut other = report(70.0, None);
+        other.device.mac = Some("AA:BB:CC:DD:EE:F2".into());
+        assert!(a.integrate(Some(other), None, None, false));
+        assert_eq!(offers.lock().unwrap().len(), 2);
     }
 
     /// #94 / #119: the published state lists every keyboard, the one read

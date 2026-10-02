@@ -125,6 +125,8 @@ pub struct Shared {
     pub alias: Arc<dyn AliasBackend>,
     /// What `Diagnose()` looks at.
     pub diag: Arc<dyn crate::diagnose::Probe>,
+    /// Settings remembered per keyboard (#103); `None`: nothing remembered.
+    pub reapply: Option<Arc<crate::reapply::Reapplier>>,
     /// MACs with an exported device object, in creation order.
     pub devices: Mutex<Vec<String>>,
 }
@@ -427,6 +429,10 @@ impl Device {
         let _ = self.fn_mode_changed(&ctxt).await;
         // The new mode on screen (Plasma OSD, #100).
         crate::osd::poke();
+        // Chosen while THIS keyboard was addressed: remembered for it (#103).
+        if let Some(r) = self.shared.reapply.as_ref() {
+            r.remember(&self.mac, mode);
+        }
         Ok(())
     }
 

@@ -27,6 +27,8 @@
 //! * [`link`]        connection / reconnection notification logic (#84)
 //! * [`linkstats`]   disconnection counts, 7 days of relative signal, unstable link (#105)
 //! * [`roster`]      every known keyboard side by side, the weakest one (#94, #119)
+//! * [`device_settings`] settings remembered per keyboard, put back at its
+//!   reconnection (#103)
 //! * [`config`]      `config.toml` (small TOML subset, no dependency)
 //! * [`hid_params`]  `hid_apple` parameters: read + whitelist
 //! * [`keymap`]      special keys: kernel Fn table, effective table, manual
@@ -61,6 +63,7 @@ pub mod chemistry;
 pub mod config;
 pub mod decode;
 pub mod deferred;
+pub mod device_settings;
 pub mod devname;
 pub mod discover;
 pub mod firmware;

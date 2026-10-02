@@ -18,6 +18,9 @@
 //! battery_advice = true     # "batteries changed too often" after two sets under 30 days (#108)
 //! quiet_hours = "22:00-07:00" # non-critical notifications held until the range ends; "" = none (#91)
 //!
+//! [devices]
+//! reapply_settings = "ask"   # at a keyboard's reconnection, its remembered Fn mode: "ask" | "auto" | "off" (#103)
+//!
 //! [osd]
 //! fn_mode = true             # Plasma OSD when the Fn mode changes (#100)
 //! caps_lock = true           # Plasma OSD "Caps Lock on / off" when the key is pressed (#101)
@@ -75,6 +78,9 @@ pub struct Config {
     /// shown when they end (`"22:00-07:00"`, several separated by commas;
     /// #91). Default: none.
     pub quiet_hours: QuietHours,
+    /// What to do with the Fn mode remembered for a keyboard when it
+    /// reconnects (`[devices] reapply_settings`, #103). Default: ask.
+    pub reapply_settings: crate::device_settings::Reapply,
     /// Plasma OSD when `hid_apple.fnmode` changes (`[osd] fn_mode`, #100).
     pub osd_fn_mode: bool,
     /// Plasma OSD when Caps Lock is pressed (`[osd] caps_lock`, #101).
@@ -112,6 +118,7 @@ impl Default for Config {
             notify_link_unstable: true,
             defer_to_powerdevil: true,
             quiet_hours: QuietHours::none(),
+            reapply_settings: crate::device_settings::Reapply::default(),
             osd_fn_mode: true,
             osd_caps_lock: true,
             usage_active_time: false,
@@ -236,6 +243,19 @@ impl Reader {
                         None => self.warn(
                             line,
                             "chemistry must be alkaline, nimh, lithium or unknown (alkaline kept)",
+                        ),
+                    }
+                    true
+                }
+                None => false,
+            },
+            ("devices", "reapply_settings") => match typed::<String>(v) {
+                Some(name) => {
+                    match crate::device_settings::Reapply::parse(&name) {
+                        Some(p) => self.cfg.reapply_settings = p,
+                        None => self.warn(
+                            line,
+                            "reapply_settings must be \"ask\", \"auto\" or \"off\" (ask kept)",
                         ),
                     }
                     true
@@ -526,6 +546,32 @@ mod tests {
         let (c, w) = parse("[notifications]\nlink_unstable = 3\n");
         assert_eq!(w.len(), 1);
         assert!(c.notify_link_unstable, "a mistyped value keeps the default");
+    }
+
+    #[test]
+    fn remembered_settings_are_offered_by_default_never_applied_silently() {
+        // #103
+        use crate::device_settings::Reapply;
+        assert_eq!(Config::default().reapply_settings, Reapply::Ask);
+        for (text, want) in [
+            ("auto", Reapply::Auto),
+            ("off", Reapply::Off),
+            ("ask", Reapply::Ask),
+        ] {
+            let (c, w) = parse(&format!("[devices]\nreapply_settings = \"{text}\"\n"));
+            assert!(w.is_empty(), "{w:?}");
+            assert_eq!(c.reapply_settings, want);
+        }
+        let (c, w) = parse("[devices]\nreapply_settings = \"yes\"\n");
+        assert_eq!(w.len(), 1);
+        assert_eq!(
+            c.reapply_settings,
+            Reapply::Ask,
+            "an unknown word keeps the default"
+        );
+        let (c, w) = parse("[devices]\nreapply_settings = true\n");
+        assert_eq!(w.len(), 1);
+        assert_eq!(c.reapply_settings, Reapply::Ask);
     }
 
     #[test]

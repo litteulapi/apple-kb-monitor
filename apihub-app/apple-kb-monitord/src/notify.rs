@@ -166,6 +166,9 @@ pub enum Event {
     LinkUnstable,
     /// "Forget the keyboard?": the confirmation asked by the tray (#104).
     ForgetConfirm,
+    /// The Fn mode remembered for the keyboard that reconnected differs
+    /// from the one in effect (#103).
+    SettingsReapply,
     BatteryEstimate,
     FirmwareUpdate,
     BatteryReminder,
@@ -176,7 +179,7 @@ pub enum Event {
 }
 
 impl Event {
-    pub const ALL: [Event; 17] = [
+    pub const ALL: [Event; 18] = [
         Event::BatteryLow,
         Event::BatteryCritical,
         Event::KeyboardAlert,
@@ -188,6 +191,7 @@ impl Event {
         Event::KeyboardRemoved,
         Event::LinkUnstable,
         Event::ForgetConfirm,
+        Event::SettingsReapply,
         Event::BatteryEstimate,
         Event::FirmwareUpdate,
         Event::BatteryReminder,
@@ -210,6 +214,7 @@ impl Event {
             Event::KeyboardRemoved => "KeyboardRemoved",
             Event::LinkUnstable => "LinkUnstable",
             Event::ForgetConfirm => "ForgetConfirm",
+            Event::SettingsReapply => "SettingsReapply",
             Event::BatteryEstimate => "BatteryEstimate",
             Event::FirmwareUpdate => "FirmwareUpdate",
             Event::BatteryReminder => "BatteryReminder",
@@ -237,6 +242,7 @@ impl Event {
             Event::RepairNeeded | Event::KeyboardRemoved => "repair",
             Event::LinkUnstable => "link-quality",
             Event::ForgetConfirm => "forget",
+            Event::SettingsReapply => "settings",
             Event::FirmwareUpdate => "firmware",
             // Its own slot: "new batteries", sent just before, stays visible.
             Event::BatteryAdvice => "advice",
@@ -269,6 +275,8 @@ impl Event {
             Event::RepairNeeded | Event::KeyboardRemoved => &[Action::Repair, Action::Open],
             // One button, and no `default`: a click on the body forgets nothing.
             Event::ForgetConfirm => &[Action::Forget],
+            // No `default` either: an authentication follows the button.
+            Event::SettingsReapply => &[Action::ApplySettings],
             Event::BatteryReminder => &[Action::Open, Action::RemindTomorrow, Action::Ignore],
             // Nothing urgent: may be shown again tomorrow (#110).
             Event::BatteryLow | Event::BatteryEstimate | Event::FirmwareUpdate => {
@@ -293,6 +301,8 @@ pub enum Action {
     RemindTomorrow,
     /// Confirm "Forget this keyboard" asked from the tray (#104).
     Forget,
+    /// Put back the Fn mode remembered for the keyboard (#103).
+    ApplySettings,
 }
 
 impl Action {
@@ -304,6 +314,7 @@ impl Action {
             Action::Ignore => "ignore",
             Action::RemindTomorrow => "remind",
             Action::Forget => "forget",
+            Action::ApplySettings => "apply",
         }
     }
 
@@ -314,6 +325,7 @@ impl Action {
             Action::Ignore => lang.t("Ignore this reminder", "Ignorer ce rappel"),
             Action::RemindTomorrow => lang.t("Remind me tomorrow", "Me rappeler demain"),
             Action::Forget => lang.t("Forget", "Oublier"),
+            Action::ApplySettings => lang.t("Apply", "Appliquer"),
         }
     }
 
@@ -325,6 +337,7 @@ impl Action {
             "ignore" => Some(Action::Ignore),
             "remind" => Some(Action::RemindTomorrow),
             "forget" => Some(Action::Forget),
+            "apply" => Some(Action::ApplySettings),
             _ => None,
         }
     }
@@ -777,6 +790,45 @@ pub fn battery_estimate(pct: f64, low_level: u8) {
     deliver(estimate_notification(pct, low_level, Lang::detect()));
 }
 
+/// The keyboard `name` reconnected and the Fn mode remembered for it
+/// (`want`) is not the one in effect (`live`) (#103). Says that the setting
+/// is common to every Apple keyboard, and that applying it authenticates.
+pub fn reapply_notification(name: &str, want: i32, live: i32, lang: Lang) -> Notification {
+    let word = |m: i32| {
+        crate::osd::fn_mode_text(lang, m)
+            .and_then(|t| t.split_once(": ").map(|(_, w)| w.trim().to_string()))
+            .unwrap_or_else(|| m.to_string())
+    };
+    let body = match lang {
+        Lang::En => format!(
+            "\u{201c}{name}\u{201d} reconnected. Fn mode remembered for it: {}; in effect: {}. \
+             This setting (hid_apple) is common to every Apple keyboard of this computer; \
+             applying it asks for an authentication.",
+            word(want),
+            word(live)
+        ),
+        Lang::Fr => format!(
+            "\u{ab}\u{a0}{name}\u{a0}\u{bb} s'est reconnect\u{e9}. Mode Fn m\u{e9}moris\u{e9} pour lui\u{a0}: {} ; \
+             en vigueur\u{a0}: {}. Ce r\u{e9}glage (hid_apple) est commun \u{e0} tous les claviers Apple \
+             de ce poste ; l'appliquer demande une authentification.",
+            word(want),
+            word(live)
+        ),
+    };
+    Notification::new(
+        Event::SettingsReapply,
+        lang,
+        lang.t(
+            "Apple Keyboard \u{2014} remembered Fn mode",
+            "Clavier Apple \u{2014} mode Fn m\u{e9}moris\u{e9}",
+        )
+        .into(),
+        body,
+        "input-keyboard",
+        Urgency::Normal,
+    )
+}
+
 /// "Forget the keyboard?": the confirmation of the tray's "Forget this
 /// keyboard" (#104). Critical so that it is shown at once whatever the
 /// quiet hours: the user just asked for it.
@@ -1172,6 +1224,7 @@ fn run_action(action: Action, token: Option<String>, content: Option<Notificatio
         Action::Forget => {
             crate::forget::confirmed();
         }
+        Action::ApplySettings => crate::reapply::apply_pending(),
     }
 }
 
@@ -1575,6 +1628,39 @@ mod tests {
             );
         }
         assert_eq!(Action::from_key("remind"), Some(Action::RemindTomorrow));
+    }
+
+    /// #103: the offer names both modes, says the setting is global and
+    /// that an authentication follows; one button, no default action.
+    #[test]
+    fn the_reapply_offer_says_the_setting_is_common_to_every_apple_keyboard() {
+        let fr = reapply_notification("Bureau", 2, 1, Lang::Fr);
+        assert_eq!(fr.event, Event::SettingsReapply);
+        assert_eq!(fr.action_list(), ["apply", "Appliquer"]);
+        assert!(fr.body.contains("F1\u{2013}F12 d'abord"), "{}", fr.body);
+        assert!(
+            fr.body.contains("touches multim\u{e9}dia d'abord"),
+            "{}",
+            fr.body
+        );
+        assert!(fr.body.contains("commun \u{e0} tous les claviers Apple"));
+        assert!(fr.body.contains("authentification"));
+        let en = reapply_notification("Desk", 1, 2, Lang::En);
+        assert_eq!(en.action_list(), ["apply", "Apply"]);
+        assert!(en.body.contains("common to every Apple keyboard"));
+        assert!(en
+            .body
+            .contains("remembered for it: media keys first; in effect: F1\u{2013}F12 first"));
+        let mut r = Registry::default();
+        r.record("settings", 3, Event::SettingsReapply);
+        assert!(
+            r.take_action(3, "default").is_none(),
+            "a click on the body applies nothing"
+        );
+        assert_eq!(
+            r.take_action(3, "apply"),
+            Some((Action::ApplySettings, None))
+        );
     }
 
     /// #104: the confirmation has ONE button and no default action: a click

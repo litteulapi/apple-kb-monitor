@@ -190,6 +190,17 @@ fn run(mut opts: actor::Options, bus_name: Option<String>) -> ExitCode {
     let mut so = service::ServeOptions::new(watch.clone(), mailbox.clone(), history);
     so.events = opts.events.clone();
     so.settings = Arc::new(settings::HelperBackend::default());
+    // Fn mode remembered per keyboard, put back (or offered) when it
+    // reconnects (#103); same write path as `SetFnMode`.
+    let reapply = apple_kb_monitord::reapply::Reapplier::new(
+        opts.history
+            .then(akm_core::device_settings::DeviceSettings::default_path),
+        so.settings.clone(),
+        opts.reapply_policy,
+    );
+    apple_kb_monitord::reapply::install(reapply.clone());
+    so.reapply = Some(reapply.clone());
+    opts.reapply = Some(reapply);
     so.alias = opts.alias.clone();
     if let Some(n) = bus_name {
         so.bus_name = n;
