@@ -57,7 +57,7 @@ cmake --build /tmp/kcm-build
 | **État** | nom (alias), modèle, adresse, connexion ; batterie : indication du clavier, affichage Apple, charge estimée avec fourchette et chimie, tension, autonomie, date des piles ; signal (qualité + écart en dB), âge de la dernière mesure (mis à jour chaque seconde sans relire), firmware (version, dernière connue, statut), version du démon | D-Bus `GetState` (JSON schéma 1), propriété `DaemonVersion`, signal `StateChanged` |
 | **Touches** | table effective F1-F12 / Éjecter pour le mode Fn courant (code evdev, touche Qt, action KDE liée) ; mode Fn 0-4, `swap_opt_cmd`, `swap_ctrl_cmd`, `swap_fn_leftctrl`, `iso_layout` avec l'avertissement « TOUS les claviers Apple » ; mapping manuel (préréglages apple / fkeys / linux-pc, ajout et retrait de touches, installation, retour au noyau) ; « Lier F4 au lanceur d'applications » | `akmctl keys --json` (avec actions KDE) et D-Bus `.Keymap.KeyTable` en parallèle ; `.Keymap.Keymap/SetKey/SetPreset/Apply/Reset` (sinon `akmctl keymap …`) ; `akmctl set param NOM VALEUR --persist` ; `akmctl keymap kde-apply` |
 | **Notifications** | alertes de batterie (activées, seuils, critique, réarmement, un seul rappel quand PowerDevil prévient déjà), chimie des piles, affichage Apple, notifications de connexion et de piles neuves, **WillShutdown** | `~/.config/apple-kb-monitor/config.toml`, enregistré par le bouton **Appliquer** des Paramètres système |
-| **Nom** | alias sur cet ordinateur (renommer, reprendre le nom propre) ; nom stocké dans le clavier (lecture seule) ; **aucune écriture dans le clavier** : l'écriture de ce nom et l'oubli propre restent en terminal, commandes à copier affichées (`akmctl rename --device-name '…' --dry-run`, puis `--write-device-name` ; `akmctl repair --force`) | D-Bus `SetAlias(mac, nom)`, `keyboard.device.name_on_keyboard` de `GetState` |
+| **Nom** | alias sur cet ordinateur (renommer, reprendre le nom propre) ; nom stocké dans le clavier : affiché, et **écrit** par « Écrire le nom dans le clavier… » (boîte de confirmation « Écrire « X » dans la mémoire du clavier ? », puis `akmctl rename --device-name=<nom> --yes`) ; « Vérifier (sans écrire) » lance la même commande avec `--check` ; le résultat s'affiche dans la page ; l'oubli propre reste une commande à copier (`akmctl repair --force`) | D-Bus `SetAlias(mac, nom)`, `keyboard.device.name_on_keyboard` de `GetState`, `akmctl` par `QProcess` (liste d'arguments, jamais de shell, 90 s au plus) |
 | **Diagnostic** | `akmctl doctor --json` (verdict + constats), `akmctl selftest --json --no-save`, « Reconnecter », « Copier le diagnostic » (état + table + résultats, pour un ticket), lien vers TROUBLESHOOTING.md | `akmctl`, D-Bus `.Link.Reconnect` |
 
 ![État](../kcm/captures/state.png)
@@ -178,9 +178,10 @@ usr/share/locale/fr/LC_MESSAGES/kcm_applekeyboard.mo
 
 ## Limites connues
 
-* L'écriture du nom stocké dans le clavier (`akmctl rename --device-name … --write-device-name`,
-  #248, refusée tant que la séquence n'est pas prouvée) et l'oubli propre (`akmctl repair
-  --force`, #217) ne sont que montrés, à copier : le module n'aura jamais de bouton pour elles.
+* L'écriture du nom stocké dans le clavier (#248) passe par `akmctl` : le module ne parle jamais
+  au clavier lui-même. Le nom voyage en un seul argument (`--device-name=<nom>`), sans shell ni
+  terminal ; `kcm/tests/test_devicename.cpp` le vérifie avec un nom contenant guillemets, `;`,
+  espaces et `$(…)`. L'oubli propre (`akmctl repair --force`, #217) n'est que montré, à copier.
 * Un paramètre `hid_apple` modifié = une authentification (politique `auth_admin`).
 * Les réglages de notifications s'appliquent au redémarrage du démon (bouton proposé).
 * Le module affiche le premier clavier que décrit `GetState` ; plusieurs claviers (#119)

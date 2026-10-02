@@ -39,7 +39,7 @@ Status legend: **hardware** = verified on the real A1314 ISO; **code** = covered
 | Keyboard-driven alerts, GET Input `0x30` | hardware (`30 00` read without incident) | `passive.rs` |
 | Firmware version `0x4F` vs embedded table, thresholds `0x60` | hardware (`0x0050` measured) | `firmware.rs`, `docs/FIRMWARE.md` |
 | Name stored in the keyboard, read (`0x51`-`0x54`) | hardware | `devname.rs` |
-| Name stored in the keyboard, write (`0x55`) | **locked** (three locks, risks not measured) | `docs/RENOMMER-CLAVIER.md` |
+| Name stored in the keyboard, write (`0x55`) | hardware: proven on the keyboard on 2026-10-02 (`akmctl rename --device-name <name>`, one confirmation, read back at once) | `docs/RENOMMER-CLAVIER.md` |
 | Alias on this computer (BlueZ `Alias`) | hardware | `akmctl rename` |
 | `WillShutdown` (`0x40`) at shutdown, as macOS | code (effect not observable) | `parity.rs`, `docs/PARITE-APPLE.md` |
 | HID_CONTROL SUSPEND / EXIT_SUSPEND at sleep / wake, as macOS | code (fake `bluetoothd` tests) | `akm-hid-control`, `docs/VEILLE-HID.md` |
@@ -130,7 +130,7 @@ Start with `akmctl doctor`, then `akmctl selftest`. Full table (symptom → caus
 
 - Only the A1314 ISO was tested on hardware; the 16 other models of the table rely on the kernel battery and are unverified ([#23](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/23)).
 - The register map still carries **13 entries of unknown meaning** (11 Feature ids `0x45 0x4B 0xD0 0xD1 0xD4 0xD5 0xD8 0xF6 0xF7 0xFA 0xFB`, 2 Input ids `0x04 0x05`; `akmctl info --json`). Eleven ids refuse GET (`ERR_UNSUPPORTED_REQUEST`); their meaning comes from Apple's driver names only.
-- The name stored in the keyboard is **not written by default**: the frame is established by disassembly, but the firmware's answer and the persistence across a battery change are not measured ([#248](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/248)).
+- The name stored in the keyboard is written by `akmctl rename --device-name <name>` (proven on the hardware); its persistence across a battery change is not measured ([#248](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/248)).
 - The effect on the keyboard of `WillShutdown`, of `RecantConnection` and of the sleep / wake bytes is not observable from the host.
 - BR/EDR RSSI is relative to the controller's golden receive range (0 = ideal), not a power level: the UI shows words, the JSON keeps `rssi_dbm` only as a deprecated mirror of `rssi_rel_db` ([#174](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/174)).
 - The BCM2042 is an 8051-based Bluetooth 2.0 controller (Broadcom brief `2042-PB03-R`); whether its firmware images are signed is unknown; nothing here flashes anything.

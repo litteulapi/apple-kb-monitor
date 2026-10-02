@@ -104,7 +104,7 @@ impl SequenceProof {
 /// State of the proof: construction established by E1 (docs/RE-NOM-PROPRE-E1.md).
 pub const SEQUENCE_PROOF: SequenceProof = SequenceProof::EstablishedByDisassembly;
 
-/// Settled by E1 (docs/RENOMMER-CLAVIER.md §5.3, docs/RE-NOM-PROPRE-E1.md §5).
+/// Settled by E1 (docs/RENOMMER-CLAVIER.md §3, docs/RE-NOM-PROPRE-E1.md §5).
 pub const RESOLVED_BY_DISASSEMBLY: &[&str] = &[
     "U1 content of the 64 bytes: UTF-8 name (trailing characters dropped until <= 64 bytes), 0x00 padding (calloc), no length prefix, no explicit terminator (a 64-byte name has no NUL) [désassemblage 0x4d3fe-0x4d444]",
     "U2 order: ONE SET Feature 0x55 of 65 bytes, then an HCI Remote Name Request; no GET before or after, no 0x50, no 0x51-0x54, no 0x44, no 0x41; empty or > 64 UTF-16 units refused before any frame (kIOReturnBadArgument) [désassemblage 0x4d3d3-0x4d4c8]",
@@ -909,7 +909,7 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    /// Reference of docs/RENOMMER-CLAVIER.md §5.2 for the measured name
+    /// Reference frame for the measured name
     /// "Clavier de alice #1" (construction confirmed by E1).
     const REF_CLAVIER: [u8; 65] = {
         let mut r = [0u8; 65];

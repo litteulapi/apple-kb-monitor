@@ -69,7 +69,7 @@ Every line below names the module that implements it (paths under `apihub-app/` 
 
 ## CLI `akmctl`
 
-The only command-line tool; everything but `dump`, `led`, `rename --write-device-name` and `repair`'s forget goes through the daemon on the session bus. Exit codes: 0, 1 error, 2 daemon absent, 64 usage. `akmctl completions {bash,zsh,fish}` and `akmctl man` generate the files shipped by the package.
+The only command-line tool; everything but `dump`, `led`, `rename --device-name` (write and read-back) and `repair`'s forget goes through the daemon on the session bus. Exit codes: 0, 1 error, 2 daemon absent, 64 usage. `akmctl completions {bash,zsh,fish}` and `akmctl man` generate the files shipped by the package.
 
 | Command | Role |
 |---|---|
@@ -77,7 +77,7 @@ The only command-line tool; everything but `dump`, `led`, `rename --write-device
 | `history [--since W] [--until W] [--last N] [--json]`, `history export --csv`, `history import [FILE]` | single store `$XDG_STATE_HOME/apple-kb-monitor/history.jsonl`; `W` = `90m`, `24h`, `7d`, `2w`, `YYYY-MM-DD`, `"YYYY-MM-DD HH:MM"` (UTC) |
 | `graph [--span 24h\|7d]`, `waybar`, `metrics` | terminal chart; waybar JSON (classes `good` > 50 %, `warning` 16-50 %, `critical` ≤ 15 %, `disconnected`); Prometheus text (`apple_kb_*`) |
 | `get/set fnmode`, `get/set param` | `hid_apple` parameters, polkit for `set` |
-| `rename [NAME] [--reset] [--mac]`, `rename --device-name [NAME] [--dry-run] [--write-device-name] [--show] [--restore BACKUP]` | alias on this computer / name stored in the keyboard (three locks) |
+| `rename [NAME] [--reset] [--mac]`, `rename --device-name [NAME] [--yes] [--check] [--dry-run] [--verbose] [--show] [--restore BACKUP]` | alias on this computer / name stored in the keyboard: written after one confirmation (`--yes` skips it), read back at once; exit codes 10 no confirmation possible, 11 pre-flight, 12 cancelled, 13 not read back, 14 read back different |
 | `keys [--check] [--all]`, `keymap {show,set,unset,preset,use,apply,reset,rollback,kde-apply}` | special keys |
 | `led <caps\|num\|scroll\|compose\|kana> <on\|off>` | evdev LED |
 | `info [--json]`, `firmware [--json]` | register map with cached values; firmware status |
@@ -90,7 +90,7 @@ Waybar: `"custom/kb": {"exec": "akmctl waybar", "return-type": "json", "interval
 
 ## D-Bus API (session bus, `com.agenceapi.AppleKbMonitor1`)
 
-Object `/com/agenceapi/AppleKbMonitor1` (`busctl --user tree com.agenceapi.AppleKbMonitor1`): properties `Battery`, `Voltage`, `Rssi` (127 = unknown), `Connected`, `Model`, `Mac`, `Name`, `LastUpdate`, `LastError`, `FirmwareVersion`, `FirmwareLatestKnown`, `FirmwareStatus`, `DeviceNameOnKeyboard`, `RemainingSeconds`, `Revision`, `Json`, `InterfaceVersion`, `DaemonVersion`; methods `GetState`, `Refresh` (bounded to one per 5 min), `NotifyShutdown`, `SetAlias`, `History(since)`, `GetDevices`, `BatterySets`, `ExpectDisconnect`; signal `StateChanged`. The same object carries `.Input` (passive events: `Listening`, `FnLock`, `LastSleepEvent`, `WakeCount`, `EjectPressed`, `FnPressed`, `PoweredOff`; signals `SleepEvent`, `Wake`, `EjectChanged`, `FnLockUpdated`, `KeyboardOff`, `BatteryAlert`) and `.Keymap` (`KeyTable`, `Keymap`, `SetKey`, `SetPreset`, `UseProfile`, `Apply`, `Reset`). Children: `/devices/<MAC with _>` implements `.Device` (telemetry plus `DischargeRate`, `EmptyAt`, `BatteriesInstalledAt`, method `SetFnMode`, signals `BatteryLevelCrossed`, `ConnectionChanged`, `BatteryReplaced`), `/Link` (`Status`, `Reconnect`), `/Tray`. `busctl --user introspect com.agenceapi.AppleKbMonitor1 /com/agenceapi/AppleKbMonitor1` lists the exact signatures.
+Object `/com/agenceapi/AppleKbMonitor1` (`busctl --user tree com.agenceapi.AppleKbMonitor1`): properties `Battery`, `Voltage`, `Rssi` (127 = unknown), `Connected`, `Model`, `Mac`, `Name`, `LastUpdate`, `LastError`, `FirmwareVersion`, `FirmwareLatestKnown`, `FirmwareStatus`, `DeviceNameOnKeyboard`, `RemainingSeconds`, `Revision`, `Json`, `InterfaceVersion`, `DaemonVersion`; methods `GetState`, `Refresh` (bounded to one per 5 min), `RereadName` (after `akmctl rename --device-name`: forget `0x51`-`0x54` and read them again; at most once per 30 s, no effect while disconnected, writes nothing), `NotifyShutdown`, `SetAlias`, `History(since)`, `GetDevices`, `BatterySets`, `ExpectDisconnect`; signal `StateChanged`. The same object carries `.Input` (passive events: `Listening`, `FnLock`, `LastSleepEvent`, `WakeCount`, `EjectPressed`, `FnPressed`, `PoweredOff`; signals `SleepEvent`, `Wake`, `EjectChanged`, `FnLockUpdated`, `KeyboardOff`, `BatteryAlert`) and `.Keymap` (`KeyTable`, `Keymap`, `SetKey`, `SetPreset`, `UseProfile`, `Apply`, `Reset`). Children: `/devices/<MAC with _>` implements `.Device` (telemetry plus `DischargeRate`, `EmptyAt`, `BatteriesInstalledAt`, method `SetFnMode`, signals `BatteryLevelCrossed`, `ConnectionChanged`, `BatteryReplaced`), `/Link` (`Status`, `Reconnect`), `/Tray`. `busctl --user introspect com.agenceapi.AppleKbMonitor1 /com/agenceapi/AppleKbMonitor1` lists the exact signatures.
 
 ## Quality
 

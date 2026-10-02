@@ -29,7 +29,7 @@ apple_percent = true       # also show the percentage "as macOS shows it", label
 [apple]
 will_shutdown = true           # send WillShutdown (Feature 0x40) once at shutdown / restart, as macOS (#191)
 disconnect_on_breaker = true   # after 3 unanswered requests: ask BlueZ once to disconnect, as macOS (#251); false = only stop the requests
-allow_device_name_write = false # lock 1 of `akmctl rename --device-name <name> --write-device-name` (#248)
+# allow_device_name_write: OBSOLETE (#248), still read, ignored; may be deleted
 ```
 
 | Section | Key | Type | Default | Read by | Effect |
@@ -45,7 +45,7 @@ allow_device_name_write = false # lock 1 of `akmctl rename --device-name <name> 
 | `[display]` | `apple_percent` | bool | `true` | daemon (JSON), tray, window, widget, `akmctl status` | Secondary figure only; alerts and the estimate never use it. IOBluetooth remaps the raw `0x47` value: 54..100 → 100 %, 21..53 → 21 + (raw − 21) × 2.4375, below 21 unchanged. |
 | `[apple]` | `will_shutdown` | bool | `true` | daemon, `akmctl status` (`Shutdown:` line, JSON `will_shutdown`) | See "WillShutdown" below. |
 | `[apple]` | `disconnect_on_breaker` | bool | `true` | daemon | After the third consecutive silence of the keyboard, one `org.bluez.Device1.Disconnect` (never `RemoveDevice`), bounded to 5 s, never retried. |
-| `[apple]` | `allow_device_name_write` | bool, must be exactly `true` | `false` | `akmctl rename --device-name` only | See "Name stored in the keyboard" below. `1`, `"true"`, `yes` or the key in another section leave the lock closed (with a warning). |
+| `[apple]` | `allow_device_name_write` | bool | `false` | nobody | **Obsolete.** Still read so that an existing file raises no warning; ignored. See "Name stored in the keyboard" below. |
 
 The **System Settings module** ("Apple Keyboard" → Notifications page) writes this file atomically (`QSaveFile`), rewriting only the keys it changed and keeping comments and unknown keys.
 
@@ -53,9 +53,9 @@ The **System Settings module** ("Apple Keyboard" → Notifications page) writes 
 
 Default **true**, because it is what macOS sends to this keyboard at every shutdown and restart. When the computer shuts down or restarts, the daemon sends **one** Feature report, `0x40` (`WillShutdown`), made of the report id alone (`53 40` on the Bluetooth link), exactly as Apple's driver does. Conditions, all required: option on, keyboard connected, nothing sent yet in this run, circuit breaker closed, at least 1 s since the previous hardware access. A failure is logged and never retried, and never delays the shutdown by more than 3.5 s. Two doors lead to the same single write: the logind `PrepareForShutdown` delay inhibitor held by the daemon, and the user unit `apple-kb-monitor-shutdown.service` (`ExecStop=akmctl shutdown-notify --only-if-stopping`). `systemctl --user mask apple-kb-monitor-shutdown.service` disables the unit; the inhibitor stays governed by the option. `false` sends nothing. Evidence and context: [PARITE-APPLE.md](PARITE-APPLE.md).
 
-### Name stored in the keyboard (`[apple] allow_device_name_write`, #248)
+### Name stored in the keyboard (`[apple] allow_device_name_write`, obsolete, #248)
 
-Default **false**. First of the **three locks** of `akmctl rename --device-name <name> --write-device-name`, the command that writes the name stored **in** the keyboard's firmware (one SET Feature `0x55` of 65 bytes, the frame Lion 10.7's `setDeviceName:` sends, established by disassembly: [RENOMMER-CLAVIER.md](RENOMMER-CLAVIER.md), [RE-NOM-PROPRE-E1.md](RE-NOM-PROPRE-E1.md)). While it is not exactly `true`, the command answers `REFUSED (lock 1, configuration)` and touches nothing: no pre-flight, no `pkexec`, no backup, no confirmation. Setting it to `true` lifts this lock only; the two others stay: the outgoing MTU of the L2CAP control channel, read on the live socket by `pkexec akm-hid-control inspect --mac <MAC>` (read-only), must be ≥ 66, and the name must be typed again in the terminal. Two risks are **not measured** and are the reason this lock exists: the firmware's answer (HANDSHAKE) to a SET `0x55`, and the persistence of the name across a battery change (RENOMMER-CLAVIER.md §5.3, §6). Nothing reads this key but `akmctl`; the daemon, the tray, the window, the widget and the module never write the name. Put it back to `false` after the write. The alias on this computer (`akmctl rename <name>`, BlueZ `Alias`) needs no lock and writes nothing to the keyboard.
+This key was a lock of `akmctl rename --device-name`. It is **obsolete**: the key is still read (no warning) and ignored, whatever its value; it can be deleted. Writing the name stored in the keyboard needs no configuration: `akmctl rename --device-name <name>` asks one confirmation (or takes `--yes`), see [RENOMMER-CLAVIER.md](RENOMMER-CLAVIER.md). The alias on this computer (`akmctl rename <name>`, BlueZ `Alias`) writes nothing to the keyboard.
 
 ## Battery: what is shown and what the alerts use
 
