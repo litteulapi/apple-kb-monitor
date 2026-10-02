@@ -1,5 +1,5 @@
 //! Regressions de l'audit securite 2 (docs/AUDIT-SECURITE-2.md), preuves
-//! d'origine inversees, sur un bus de session PRIVE (`dbus-run-session`) :
+//! d'origine inversees, sur un bus de session PRIVE (`dbus-daemon` without service directory, see `testbus`) :
 //!
 //! * #202/#203 : le backend lance `<helper> set-fnmode <n>` (jamais `set`),
 //!   le programme n'est plus choisi par l'environnement, ni `pkexec` par `$PATH` ;
@@ -11,7 +11,6 @@
 //! execute en root.
 
 use std::os::unix::fs::PermissionsExt;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -113,17 +112,15 @@ fn audit_sec2_regressions_private_bus() {
         inner();
         return;
     }
-    if Command::new("dbus-run-session").arg("--version").output().is_err() {
-        eprintln!("SKIP: dbus-run-session absent");
+    let Some((_bus, mut cmd)) = apple_kb_monitord::testbus::rerun() else {
+        eprintln!("SKIP: dbus-daemon not installed");
         return;
-    }
-    let out = Command::new("dbus-run-session")
-        .arg("--")
-        .arg(std::env::current_exe().unwrap())
+    };
+    let out = cmd
         .args(["--exact", "audit_sec2_regressions_private_bus", "--nocapture", "--test-threads=1"])
         .env(INNER, "1")
         .output()
-        .expect("dbus-run-session");
+        .expect("run on the private bus");
     let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
     assert!(out.status.success(), "{}", &text[text.len().saturating_sub(2500)..]);
 }

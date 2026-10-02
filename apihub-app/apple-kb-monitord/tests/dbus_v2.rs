@@ -1,9 +1,8 @@
-//! D-Bus API v2 (#93) on a PRIVATE session bus (`dbus-run-session`):
+//! D-Bus API v2 (#93) on a PRIVATE session bus (`dbus-daemon` without service directory, see `testbus`):
 //! device objects, ObjectManager, write methods (fake backend, nothing is
 //! written anywhere), event signals, and the v1 surface left intact.
 
 use std::collections::HashMap;
-use std::process::Command;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -470,18 +469,11 @@ fn api_v2_on_private_bus() {
         inner();
         return;
     }
-    if Command::new("dbus-run-session")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
-        eprintln!("SKIP: dbus-run-session not installed");
+    let Some((_bus, mut cmd)) = apple_kb_monitord::testbus::rerun() else {
+        eprintln!("SKIP: dbus-daemon not installed");
         return;
-    }
-    let exe = std::env::current_exe().unwrap();
-    let out = Command::new("dbus-run-session")
-        .arg("--")
-        .arg(exe)
+    };
+    let out = cmd
         .args([
             "--exact",
             "api_v2_on_private_bus",
@@ -490,7 +482,7 @@ fn api_v2_on_private_bus() {
         ])
         .env(INNER, "1")
         .output()
-        .expect("run under dbus-run-session");
+        .expect("run on the private bus");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

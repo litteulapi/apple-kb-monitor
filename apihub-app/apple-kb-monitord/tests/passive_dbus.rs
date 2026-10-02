@@ -5,7 +5,6 @@
 
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -220,18 +219,11 @@ fn passive_input_on_private_bus() {
         inner();
         return;
     }
-    if Command::new("dbus-run-session")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
-        eprintln!("SKIP: dbus-run-session not installed");
+    let Some((_bus, mut cmd)) = apple_kb_monitord::testbus::rerun() else {
+        eprintln!("SKIP: dbus-daemon not installed");
         return;
-    }
-    let exe = std::env::current_exe().unwrap();
-    let out = Command::new("dbus-run-session")
-        .arg("--")
-        .arg(exe)
+    };
+    let out = cmd
         .args([
             "--exact",
             "passive_input_on_private_bus",
@@ -240,7 +232,7 @@ fn passive_input_on_private_bus() {
         ])
         .env(INNER, "1")
         .output()
-        .expect("run under dbus-run-session");
+        .expect("run on the private bus");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

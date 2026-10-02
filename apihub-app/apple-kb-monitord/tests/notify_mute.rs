@@ -1,7 +1,6 @@
 //! #162: a notification server that owns the name but never answers must not
-//! block the caller. Private session bus (`dbus-run-session`).
+//! block the caller. Private session bus (`dbus-daemon` without service directory, see `testbus`).
 
-use std::process::Command;
 use std::time::{Duration, Instant};
 
 use akm_core::link::LinkEvent;
@@ -72,17 +71,15 @@ fn mute_notification_server_does_not_block() {
         inner();
         return;
     }
-    if Command::new("dbus-run-session").arg("--version").output().is_err() {
-        eprintln!("SKIP: dbus-run-session not installed");
+    let Some((_bus, mut cmd)) = apple_kb_monitord::testbus::rerun() else {
+        eprintln!("SKIP: dbus-daemon not installed");
         return;
-    }
-    let out = Command::new("dbus-run-session")
-        .arg("--")
-        .arg(std::env::current_exe().unwrap())
+    };
+    let out = cmd
         .args(["--exact", "mute_notification_server_does_not_block", "--nocapture"])
         .env(INNER, "1")
         .output()
-        .expect("run under dbus-run-session");
+        .expect("run on the private bus");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

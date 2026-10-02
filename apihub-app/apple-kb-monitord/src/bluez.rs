@@ -607,20 +607,6 @@ impl Worker {
 mod tests {
     use super::*;
 
-    fn private_bus() -> Option<(std::process::Child, String)> {
-        use std::io::{BufRead, BufReader};
-        let mut child = std::process::Command::new("dbus-daemon")
-            .args(["--session", "--nofork", "--print-address"])
-            .stdout(std::process::Stdio::piped())
-            .spawn()
-            .ok()?;
-        let mut addr = String::new();
-        BufReader::new(child.stdout.take()?)
-            .read_line(&mut addr)
-            .ok()?;
-        Some((child, addr.trim().to_string()))
-    }
-
     fn connect_to(addr: &str) -> zbus::Result<Connection> {
         zbus::blocking::connection::Builder::address(addr)
             .and_then(|b| b.serve_at(PROVIDER_ROOT, zbus::fdo::ObjectManager))
@@ -653,14 +639,16 @@ mod tests {
     #[test]
     fn provider_reconnects_after_the_bus_restarts() {
         // #170: the daemon of the bus is killed; the provider reconnects.
-        let Some((mut a, addr_a)) = private_bus() else {
+        // Private buses WITHOUT service directory (`crate::testbus`): the
+        // stock `--session` configuration could activate installed services.
+        let Some(mut a) = crate::testbus::private_bus() else {
             eprintln!("SKIP: dbus-daemon not installed");
             return;
         };
-        let Some((mut b, addr_b)) = private_bus() else {
-            let _ = a.kill();
+        let Some(b) = crate::testbus::private_bus() else {
             return;
         };
+        let (addr_a, addr_b) = (a.addr.clone(), b.addr.clone());
         let (tx, rx) = mpsc::channel();
         let calls = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
         let c = calls.clone();
@@ -677,8 +665,7 @@ mod tests {
         tx.send(Cmd::Set("AA:BB:CC:DD:EE:F1".into(), 50)).unwrap();
         thread::sleep(Duration::from_millis(800));
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
-        let _ = a.kill();
-        let _ = a.wait();
+        a.kill();
         // Detected within one WATCH_PERIOD, then reconnected.
         let t0 = Instant::now();
         while calls.load(std::sync::atomic::Ordering::SeqCst) < 2 && t0.elapsed() < Duration::from_secs(20)
@@ -692,8 +679,7 @@ mod tests {
         assert!(!h.is_finished());
         tx.send(Cmd::Stop).unwrap();
         h.join().unwrap();
-        let _ = b.kill();
-        let _ = b.wait();
+        drop(b);
     }
 
     #[test]

@@ -1,10 +1,9 @@
 //! #249: the daemon speaks KNotification's dialect to the notification server:
 //! hints binding it to `apple-kb-monitor.notifyrc`, buttons, replacement of the
-//! previous alert, French texts. Private session bus (`dbus-run-session`) and a
+//! previous alert, French texts. Private session bus (`dbus-daemon` without service directory, see `testbus`) and a
 //! fake notification server; no real notification reaches the desktop.
 
 use std::collections::HashMap;
-use std::process::Command;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -209,18 +208,16 @@ fn notifications_speak_the_kde_dialect() {
         inner();
         return;
     }
-    if Command::new("dbus-run-session").arg("--version").output().is_err() {
-        eprintln!("SKIP: dbus-run-session not installed");
+    let Some((_bus, mut cmd)) = apple_kb_monitord::testbus::rerun() else {
+        eprintln!("SKIP: dbus-daemon not installed");
         return;
-    }
-    let out = Command::new("dbus-run-session")
-        .arg("--")
-        .arg(std::env::current_exe().unwrap())
+    };
+    let out = cmd
         .args(["--exact", "notifications_speak_the_kde_dialect", "--nocapture"])
         .env(INNER, "1")
         .env("LC_ALL", "fr_FR.UTF-8")
         .output()
-        .expect("run under dbus-run-session");
+        .expect("run on the private bus");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

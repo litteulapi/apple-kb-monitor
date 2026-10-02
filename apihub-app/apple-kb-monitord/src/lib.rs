@@ -17,6 +17,7 @@
 //! * [`settings`] `hid_apple` write path through the privileged helper
 //! * [`powerdevil`] KDE PowerDevil low-battery overlap (#254)
 //! * [`alias`]   keyboard name on this computer (BlueZ `Alias`, #141)
+//! * [`testbus`] test support: a private bus that can activate nothing
 //!
 //! No GUI dependency: `apihub-app` (egui) is a client of this crate.
 
@@ -35,4 +36,6 @@ pub mod service;
 pub mod settings;
 pub mod shutdown;
 pub mod sleep;
+#[doc(hidden)]
+pub mod testbus;
 pub mod watcher;

@@ -1,9 +1,9 @@
 //! D-Bus integration test of `com.agenceapi.AppleKbMonitor1` on a PRIVATE
-//! session bus (`dbus-run-session`), without keyboard and without touching
+//! session bus (`dbus-daemon` without service directory, see `testbus`), without keyboard and without touching
 //! the user's session bus: the test re-executes itself under
-//! `dbus-run-session` and the inner run talks only to that bus.
+//! a private `dbus-daemon` (no service directory, see `testbus`) and the inner
+//! run talks only to that bus.
 
-use std::process::Command;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -54,8 +54,7 @@ fn busctl_like_get(conn: &Connection, prop: &str) -> zbus::zvariant::OwnedValue 
 }
 
 fn inner() {
-    let addr =
-        std::env::var("DBUS_SESSION_BUS_ADDRESS").expect("dbus-run-session sets the address");
+    let addr = std::env::var("DBUS_SESSION_BUS_ADDRESS").expect("the private bus address is set");
     assert!(!addr.is_empty());
 
     // Server side: watch + mailbox + history in a temp dir, no actor (no hardware).
@@ -249,18 +248,11 @@ fn session_interface_on_private_bus() {
         inner();
         return;
     }
-    if Command::new("dbus-run-session")
-        .arg("--version")
-        .output()
-        .is_err()
-    {
-        eprintln!("SKIP: dbus-run-session not installed");
+    let Some((_bus, mut cmd)) = apple_kb_monitord::testbus::rerun() else {
+        eprintln!("SKIP: dbus-daemon not installed");
         return;
-    }
-    let exe = std::env::current_exe().unwrap();
-    let out = Command::new("dbus-run-session")
-        .arg("--")
-        .arg(exe)
+    };
+    let out = cmd
         .args([
             "--exact",
             "session_interface_on_private_bus",
@@ -269,7 +261,7 @@ fn session_interface_on_private_bus() {
         ])
         .env(INNER, "1")
         .output()
-        .expect("run under dbus-run-session");
+        .expect("run on the private bus");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

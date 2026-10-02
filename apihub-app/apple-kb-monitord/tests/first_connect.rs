@@ -1,7 +1,6 @@
 //! #169: the FIRST connection of a keyboard after the daemon started with an
 //! empty snapshot must be signalled on its device object (private session bus).
 
-use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -71,17 +70,15 @@ fn first_connection_is_signalled() {
         inner();
         return;
     }
-    if Command::new("dbus-run-session").arg("--version").output().is_err() {
-        eprintln!("SKIP: dbus-run-session not installed");
+    let Some((_bus, mut cmd)) = apple_kb_monitord::testbus::rerun() else {
+        eprintln!("SKIP: dbus-daemon not installed");
         return;
-    }
-    let out = Command::new("dbus-run-session")
-        .arg("--")
-        .arg(std::env::current_exe().unwrap())
+    };
+    let out = cmd
         .args(["--exact", "first_connection_is_signalled", "--nocapture"])
         .env(INNER, "1")
         .output()
-        .expect("run under dbus-run-session");
+        .expect("run on the private bus");
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),

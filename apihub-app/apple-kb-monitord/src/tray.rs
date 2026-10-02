@@ -1031,17 +1031,15 @@ mod tests {
             claim_roundtrip_inner();
             return;
         }
-        if std::process::Command::new("dbus-run-session").arg("--version").output().is_err() {
-            eprintln!("SKIP: dbus-run-session not installed");
-            return;
-        }
-        let out = std::process::Command::new("dbus-run-session")
-            .arg("--")
-            .arg(std::env::current_exe().unwrap())
+        let Some((_bus, mut cmd)) = apple_kb_monitord::testbus::rerun() else {
+        eprintln!("SKIP: dbus-daemon not installed");
+        return;
+    };
+        let out = cmd
             .args(["--exact", "tray::tests::widget_claim_and_configuration_withdraw_and_restore_the_icon", "--nocapture"])
             .env("AKM_TRAY_CLAIM_INNER", "1")
             .output()
-            .expect("run under dbus-run-session");
+            .expect("run on the private bus");
         let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
         assert!(out.status.success(), "inner run failed:\n{text}");
         assert!(text.contains("1 passed"), "inner test did not run:\n{text}");
