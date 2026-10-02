@@ -1,5 +1,7 @@
 # Rétro-ingénierie du pilote macOS — ce que macOS envoie à l'A1314 (BCM2042)
 
+* Corrigé le 2026-10-02 (issue #218) : §5.1, §6, §7, §8 et §9 : « MVLT réfutée » ne vaut que pour 26.5 (Lion publiait `MV{LT}` = `0x49`) ; bit 3 = notification SCO (`0x4A`) et sniff ; `0x44` = oubli de tous les hôtes (source : `RE-PILOTES-ANCIENS.md` §4, §5, §9).
+
 Analyse **statique, en lecture seule**, des pilotes Apple installés sur le Mac du gérant (non reproductible depuis le poste Linux : aucun binaire ni extrait commité ; les faits [plist]/[désassemblage] n'ont pas pu être recontrôlés au contre-audit) (Neo01, Mac17,5, macOS 26.5 build 25F71).
 Elle sert l'interopérabilité avec **son** clavier Apple Wireless Keyboard A1314 ISO (VID `0x05AC`, PID `0x0256` = 598).
 
@@ -128,7 +130,7 @@ Format des requêtes, établi par le désassemblage de `getReportWL` :
 
 | Envoi absent | Preuve |
 |---|---|
-| `setCapsLockDelay`, SET Feature `0x09` = `09 01 00 00` | [désassemblage] `IOAppleBluetoothHIDDriver::handleStart` le réserve aux PID `0x022C-0x022E` (claviers 2007) dont le micrologiciel est ≥ `0x0137`. `AppleHIDKeyboardEventDriver::turnOffCapsLockDelay` (SET Feature `0x09`, données `01 00 00`) suit la même condition et exige `FWCapsLockDelay`, absent de la personnalité 598 |
+| `setCapsLockDelay`, SET Feature `0x09` = `09 01 00 00` | [désassemblage] `IOAppleBluetoothHIDDriver::handleStart` le réserve aux PID `0x022C-0x022E` (claviers 2007) dont le micrologiciel est ≥ `0x0137`. `AppleHIDKeyboardEventDriver::turnOffCapsLockDelay` (SET Feature `0x09`, données `01 00 00`) suit la même condition et exige `FWCapsLockDelay`, absent de la personnalité 598. Confirmé aussi pour les pilotes de 2009 et de 10.7.5 (`RE-PILOTES-ANCIENS.md` §5) |
 | Mode Fn, F1-F12, Verr. Maj | entièrement traités côté hôte (§2.2) ; le délai Verr. Maj de 75 ms est appliqué **par macOS** (`CapsLockDelay` = 75) |
 | Écriture du nom (`0x50-0x55`), `FactoryDefault`, `FullFactoryDefault`, `RecantConnection`, `UserMode` | déclarés dans le plist, mais **aucun appel** dans le noyau. Seuls `BatteryPercent`, `BatteryState` et `WillShutdown` sont référencés [désassemblage]. Ces noms sont aussi **absents** des chaînes de `bluetoothd` [chaîne]. IOBluetooth.framework (dans le cache dyld) n'a pas été examiné |
 | « Clear Wake Reason » : SET Feature `0xF0`, données `C5 00` | [désassemblage + émulation de la table des types] réservé aux appareils de « bit 2 » (PID `0x0265`, `0x0267`, `0x0269`, `0x026C`, `0x029A`-`0x029F`, `0x0320`-`0x0324` : Magic Keyboard/Trackpad/Mouse de 2015 et après) |
@@ -143,6 +145,9 @@ Format des requêtes, établi par le désassemblage de `getReportWL` :
   L'hypothèse « macOS tire le % d'une tension en mV » (RE-HID-EXHAUSTIF §3) est donc **réfutée pour l'A1314** (pilote 2026).
   *Contre-audit* : le bloc `"Battery" = <"MVLT…` relevé en 2014 (managingosx, revérifié) existe bien ; son origine
   (autre version du pilote, autre rapport) reste **inconnue** : seule la conversion mV → % est réfutée.
+  **Corrigé (#218)** : cette réfutation ne vaut que pour macOS 26.5. Lion (10.7.5) lisait `0x49` (`BatteryVoltage`) et la
+  publiait dans la propriété `Battery` sous la clé abrégée `MV{LT}` (`MeasuredVoltages.Latched`) : c'est l'origine du bloc
+  de 2014. Le pourcentage, lui, n'a jamais été converti par macOS (`RE-PILOTES-ANCIENS.md` §4).
 * **État** : Input `0x30`, lu par GET après chaque relevé et **poussé spontanément** par le clavier (`A1 30 xx`) [désassemblage].
 
   | `xx` | `BatteryLow` | `BatteryPanic` | Message IOKit | Notification |
@@ -170,6 +175,9 @@ Format des requêtes, établi par le désassemblage de `getReportWL` :
     `0x022C`-`0x022E`, `0x0239`-`0x023B`, `0x0255`-`0x0257`, `0x0309`, `0x030C`) ;
   * le bit 0 conditionne l'envoi de SUSPEND à la veille ;
   * le bit 3 intervient dans le choix des paramètres de liaison (sniff). Son effet exact n'a pas été établi **[désassemblage partiel]**.
+    **Corrigé (#218)** : le bit 3 désigne les anciens HID Apple qui reçoivent la notification de lien SCO (SET Feature `0x4A`)
+    et dont le sniff est ajusté quand un casque est actif ; sa liste de PID est exactement celle que `blued` testait sous Lion
+    avant cet envoi **[déduction forte]** (`RE-PILOTES-ANCIENS.md` §5).
 
 ## 8. Croisement avec nos rapports
 
@@ -181,7 +189,7 @@ Format des requêtes, établi par le désassemblage de `getReportWL` :
 | Feature `0x40` | refus GET | **`WillShutdown`** : SET sans données, envoyé à chaque arrêt de macOS | [plist] + [désassemblage] | **faible** : macOS l'envoie en production |
 | Feature `0x41` | refus GET | **`RecantConnection`** : « renoncer à la connexion » | [plist] ; jamais envoyé | **moyen à élevé** : peut couper la liaison ou faire oublier l'hôte [déduction] |
 | Feature `0x43` | `ERR_INVALID_REPORT_ID` | `UserMode` (1-3), **absent** de notre micrologiciel | [plist] + [mesuré] | sans objet |
-| Feature `0x44` | refus GET | **`FullFactoryDefault`** | [plist] ; jamais envoyé | **INTERDIT** : remise à zéro complète, perte d'appairage |
+| Feature `0x44` | refus GET | **`FullFactoryDefault`** = oubli de **tous** les hôtes | [plist] ; jamais envoyé par le noyau 26.5 ; Lion l'envoyait à la suppression du clavier (`RE-PILOTES-ANCIENS.md` §5, L10) | **INTERDIT** sans accord explicite du gérant : fonction Apple, mais le clavier oublie tous ses hôtes (ré-appairage obligatoire, #217) |
 | Feature `0x45` | refus GET | **`FactoryDefault`** | [plist] ; jamais envoyé | **INTERDIT** : remise à zéro, perte d'appairage probable |
 | Feature `0x47` | % | `BatteryPercent`, recopié tel quel, borné à 100 | [plist] + [désassemblage] | lecture |
 | Feature `0x50` | refus GET | **`DeviceNameChange`** : validation après écriture du nom | [plist] ; jamais envoyé | moyen (NVRAM) |
@@ -202,7 +210,8 @@ Les registres que nous balayons (`0xFE` notamment) ne sont jamais sollicités pa
 3. Sens de la valeur `00` dans `0x09` (délai interne actif ?) : déduit des noms Apple, non mesuré.
 4. Seuils du micrologiciel pour `BatteryState` 1 et 2.
 5. Kernelcache arm64e réellement exécuté sur le Mac : non examiné ; analyse faite sur les KC x86_64 de la même version (25F71).
-6. Effet du bit 3 de `bluetoothd` (paramètres de sniff des anciens claviers Apple).
+6. Effet du bit 3 de `bluetoothd` (paramètres de sniff des anciens claviers Apple). **Résolu (#218)** : bit 3 = appareils
+   notifiés du lien SCO (`0x4A`), avec sniff ajusté (`RE-PILOTES-ANCIENS.md` §5).
 
 ## 10. Reproduire (lecture seule)
 

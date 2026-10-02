@@ -2,6 +2,7 @@
 
 * Corrigé le 2026-10-02 (issue #193) : noms Apple des rapports reportés aux §2, §2.1 (nouveau) et §6 : `0x09`, `0x13`, `0x30`, `0x40`, `0x41`, `0x43`, `0x44`, `0x45`, `0x50`, `0x55` (source : `RE-PILOTE-MACOS.md` §3, §7, §8).
 * Corrigé le 2026-10-02 (issue #194) : §4, la fonction % = f(mV) est interne au micrologiciel ; macOS recopie `0x47` sans conversion (source : `RE-PILOTE-MACOS.md` §6).
+* Corrigé le 2026-10-02 (issue #218) : §2, §4 et §6, `0x5A`/`0x60`/`0xEB` ne sont pas des « seuils 100/75/50/25 % » mais Full / Low / Critical / Empty ; `0x49` = `BatteryVoltage`, tension `Latched` (source : `RE-PILOTES-ANCIENS.md` §3-4).
 
 Appareil étudié : Apple Wireless Keyboard A1314 ISO « Clavier de alice #1 », `AA:BB:CC:DD:EE:F1`,
 `0005:05AC:0256`, bcdDevice `0x0050`, pilote noyau `apple`, `/dev/hidraw7`.
@@ -60,7 +61,7 @@ Les IDs `0x54`, `0x5C`, `0x5D`, `0xD1`, `0xD8` n'étaient pas dans l'inventaire 
 | `0x09` | 4 | `09 01 00 00` | octet 1 = `0x01` (vendeur `FF01:0B`) = **drapeau du délai Verr. Maj du micrologiciel**, `01` = délai désactivé ; octets 2-3 = bourrage | descripteur [mesuré] ; sens [désassemblage] RE-PILOTE-MACOS §5.1 et §8 (macOS écrit `01` sur les claviers 2007 seulement, jamais sur le 598, et applique son délai de 75 ms côté hôte) ; sens de `00` [déduction] |
 | `0x46` | 3 | `46 aa 0b` / `46 af 0b` | **u16 LE = tension piles en mV** : 2986 / 2991 mV | [mesuré], voir §3 |
 | `0x47` | 2 | `47 63` | u8 = 99 % (Battery Strength) | [source] descripteur + quirk noyau ; = `power_supply/capacity` [mesuré] |
-| `0x49` | 3 | `49 89 0b` → `49 86 0b` | u16 LE = 2953 puis 2950 mV, varie lentement | grandeur vivante [mesuré] ; tension filtrée [hypothèse], voir §4 |
+| `0x49` | 3 | `49 89 0b` → `49 86 0b` | **`BatteryVoltage`** (nom Apple) : u16 LE = 2953 puis 2950 mV, varie lentement | grandeur vivante [mesuré] ; tension `Latched` (« verrouillée ») pour Apple [plist + désassemblage 10.7.5] RE-PILOTES-ANCIENS §3-4, voir §4 |
 | `0x4A` | 2 | `4a 12` | u8 = 18 | sens en lecture inconnu ; en écriture, état du lien SCO posé par l'hôte (1 à 4) [désassemblage] RE-MACOS-SILICON §3.3 |
 | `0x4B` | 3 | `4b 00 08` | `00 08` | inconnu |
 | `0x4C` | 20 | `4c 03` + 18 octets masqués | 1 octet `0x03` + **adresse BD_ADDR de l'hôte appairé** (6 o, LE) + 12 octets secrets | adresse [mesuré, §2bis] ; 12 o restants SENSIBLES [hypothèse] fragment de clé de lien |
@@ -69,11 +70,11 @@ Les IDs `0x54`, `0x5C`, `0x5D`, `0xD1`, `0xD8` n'étaient pas dans l'inventaire 
 | `0x52` | 9 | `52` + `"de alice"` | nom, fragment 2/4 | [mesuré] |
 | `0x53` | 9 | `53` + `" #1"` + NUL | nom, fragment 3/4 | [mesuré] |
 | `0x54` | 9 | `54` + 8 × NUL | nom, fragment 4/4 (vide ici) | [mesuré] ; nom ≤ 32 octets |
-| `0x5A` | 9 | `5a 0b8a 09ca 0964 0806` | 4 × u16 BE : 2954, 2506, 2404, 2054 mV | valeurs [mesuré] ; seuils de décharge [hypothèse forte] |
+| `0x5A` | 9 | `5a 0b8a 09ca 0964 0806` | 4 × u16 BE : 2954, 2506, 2404, 2054 mV = seuils **Full / Low / Critical / Empty** (noms Apple, donnés pour `0x60`) | valeurs [mesuré] ; noms [plist + désassemblage 10.7.5] RE-PILOTES-ANCIENS §4 |
 | `0x5B` | 9 | `5b 06cc 0384 00000000` | concaténation de `0xF4` et `0xF5` + 4 zéros | [mesuré] |
 | `0x5C` | 9 | 8 × `00` | vide | [mesuré] |
 | `0x5D` | 9 | 8 × `00` | vide | [mesuré] |
-| `0x60` | 9 | = `0x5A` | copie de `0x5A` | [mesuré] |
+| `0x60` | 9 | = `0x5A` | **`CalibratedBatteryThresholds3`** (nom Apple) : Full / Low / Critical / Empty ; même contenu que `0x5A` | [mesuré] ; nom [plist] RE-PILOTES-ANCIENS §3 |
 | `0xD1` | 2 | `d1 00` | u8 = 0 | inconnu |
 | `0xD8` | 2 | `d8 00` | u8 = 0 | inconnu |
 | `0xEA` | 2 | `ea 62` (une fois `ea 00`) | u8 = 98, 0 transitoire | [hypothèse] second estimateur de % ; 0 isolé à ignorer [mesuré] |
@@ -145,11 +146,15 @@ produits, sont absents de ce clavier (`RE-MACOS-SILICON.md` §3.3).
 * `0x5A` = `0x60` = `0xEB` (trois copies identiques **[mesuré]**) : 2954 / 2506 / 2404 / 2054 mV,
   strictement décroissants, cohérents avec la courbe d'une paire d'alcalines (1,48 / 1,25 / 1,20 / 1,03 V
   par élément). Le contrat du projet (`calibration.rs`) les associe à 100/75/50/25 % **[source projet,
-  non vérifié]**. Valeurs propres à l'unité (le défaut du code est 2900/2450/2350/2000).
+  non vérifié]**. **Corrigé (#218)** : ce ne sont pas des seuils 100/75/50/25 %. Apple nomme les quatre valeurs de `0x60`
+  (`CalibratedBatteryThresholds3`) **Full / Low / Critical / Empty** [plist + désassemblage 10.7.5] ; `Low` et `Critical`
+  correspondraient aux états 1 et 2 de `BatteryState` [déduction] (`RE-PILOTES-ANCIENS.md` §4). Valeurs propres à l'unité (le défaut du code est 2900/2450/2350/2000).
 * Contrôle de cohérence **[mesuré]** : avec 2986-2991 mV (> 2954), la courbe 100/75/50/25 donnerait 100 %,
   or `0x47` = 99 et `0xEA` = 98. En revanche `0x49` = 2953 mV, interpolé sur la même courbe, donne 99,94 %
   → 99 en troncature = `0x47`. **[hypothèse]** `0x49` est la tension filtrée (ou mesurée sous charge radio)
-  dont le firmware tire le pourcentage, `0x46`/`0xFF` la mesure instantanée.
+  dont le firmware tire le pourcentage, `0x46`/`0xFF` la mesure instantanée. **Corrigé (#218)** : Apple nomme `0x49`
+  `BatteryVoltage` et la publie comme tension `Latched`, mesurée puis figée par le micrologiciel [plist + désassemblage
+  10.7.5] (`RE-PILOTES-ANCIENS.md` §3-4). Que le pourcentage en soit tiré reste une hypothèse.
 * `0xEA` (98) ≠ `0x47` (99) : **[hypothèse]** second estimateur (autre filtre ou autre arrondi) ;
   l'ancienne interprétation « pourcentage avant arrondi » est incompatible avec 98 < 99.
 * **Corrigé (#194)** : la fonction % = f(mV) est **entièrement interne au micrologiciel**. macOS ne convertit rien : son pilote
@@ -219,7 +224,7 @@ Veille et déconnexion :
 | Statut | Rapports |
 |---|---|
 | **Décodé** (preuve mesurée) | `0x46` tension instantanée mV (LE) · `0xFF` même tension (BE) + octet `0x01` · `0x47` % (= noyau) · `0x4F` version `0x0050` · `0x51-0x53` nom ASCII · `0x4C` octets 2-7 = hôte appairé · `0x5A`/`0x60`/`0xEB` table de 4 tensions (3 copies) · `0x5B` = `0xF4`‖`0xF5` · `0x5C`/`0x5D`/`0xFE` vides · `0xF5` n'est **pas** une tension · `0x09` = drapeau du délai Verr. Maj du micrologiciel, `01` = désactivé (sens établi par le pilote Apple, §2) |
-| **Décodable** (hypothèse testable sans écriture) | `0x49` tension lissée (vivante, sans bruit) · `0x5A` = seuils 100/75/50/25 % (cohérent avec `0x47` via `0x49`) · `0xEA` second estimateur %, 0 transitoire · `0xF5` = 900 s de délai de veille (protocole §5) · `0xF4` = 1740 mV de coupure · `0x54` 4ᵉ fragment de nom (nom ≤ 32 o ; troncature à 24 o du code non démontrée, nom actuel de 19 o) · octet 3 de `0xFF` (drapeau, à surveiller en fin de piles) · `0x4C` octet `0x03` |
+| **Décodable** (hypothèse testable sans écriture) | `0x49` = `BatteryVoltage`, tension `Latched` d'Apple (vivante, sans bruit) · `0x5A`/`0x60`/`0xEB` = seuils Full / Low / Critical / Empty (noms Apple ; pas 100/75/50/25 %) · `0xEA` second estimateur %, 0 transitoire · `0xF5` = 900 s de délai de veille (protocole §5) · `0xF4` = 1740 mV de coupure · `0x54` 4ᵉ fragment de nom (nom ≤ 32 o ; troncature à 24 o du code non démontrée, nom actuel de 19 o) · octet 3 de `0xFF` (drapeau, à surveiller en fin de piles) · `0x4C` octet `0x03` |
 | **Inconnu** (constant, aucune corrélation possible en lecture) | `0x4A` en lecture (18 ; Apple n'y écrit que l'état SCO 1 à 4) · `0x4B` (`00 08`) · `0xD1`/`0xD8` (0) · `0xF6`/`0xF7` (4) · 12 derniers octets de `0x4C` (secrets, non étudiés) |
 
 Les rapports constants ne peuvent être élucidés qu'en écrivant (SET_REPORT), ce qui est exclu, ou en

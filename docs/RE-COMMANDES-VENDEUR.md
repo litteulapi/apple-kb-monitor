@@ -2,6 +2,7 @@
 
 * Corrigé le 2026-10-02 (issue #193) : §1.1 et §1.4, `0x55` n'est pas un « registre de configuration vendeur » mais `LongDeviceName` (source : `RE-PILOTE-MACOS.md` §3).
 * Corrigé le 2026-10-02 (issue #194) : §6 point 4, `MVLT` n'est pas une tension lue par macOS 26.5 pour calculer le % (source : `RE-PILOTE-MACOS.md` §6, `RE-PILOTES-ANCIENS.md` §4).
+* Corrigé le 2026-10-02 (issue #218) : §1.3, §4.3, §5 et §7 : `bfu` ne passe pas par HIDP (PSM L2CAP vendeur `0xF30D`) et vise `0x0239-0x023B`, pas notre `0x0256` ; `0x44` = oubli de tous les hôtes ; `0xFA`/`0xFB` « délai de veille » = spéculation sans trace (source : `RE-PILOTES-ANCIENS.md` §2, §5, §6, §7).
 
 Recherche **documentaire uniquement**, **sans aucun accès au clavier** (il a décroché trois fois sous
 des rafales de lecture — voir #175). Objet : identifier, à partir de sources publiques, ce que sont
@@ -79,6 +80,8 @@ Le **descripteur HID du Magic Keyboard BT** (`05AC:029C`, dump public, xloc, 202
 - **[déduction]** Ce sont les **écritures des blocs « état radio » (0xDx) et « alimentation/veille »
   (0xFx)**. Le bloc `0xFx` étant celui où `0xF5`=900 est l'hypothèse « délai de veille » (#173), `0xFA`
   ou `0xFB` pourraient être la **porte d'écriture du délai de veille** — **[spéculation]**, à ne pas écrire.
+  **Corrigé (#218)** : cette spéculation n'a aucune trace dans les logiciels Apple examinés (pilotes de 2009, 10.7.5, 26.5,
+  `bfu`) ; `0xFA`/`0xFB` sont à classer « inconnus » (`RE-PILOTES-ANCIENS.md` §7).
 
 ### 1.4 Verdict §1
 
@@ -234,6 +237,18 @@ RPT_ID_IN_CNT_CTL    = 0xcc,   // Connection Control (feature aussi)
 
 ### 4.3 Le vrai canal de mise à jour du A1314 : l'updater Bluetooth 2009 d'Apple (constat public)
 
+> **Corrigé (#218)**, d'après l'analyse statique de `bfu` (`RE-PILOTES-ANCIENS.md` §2 et §6) :
+>
+> * `bfu` ne passe **pas** par HIDP. Il isole le clavier, ouvre un canal L2CAP sur le **PSM vendeur `0xF30D`** et y envoie
+>   des trames brutes `[commande][longueur][paramètres]`, opcodes `D1` à `DB`. Les registres HID en écriture seule du §1
+>   ne sont donc pas le canal de flash ;
+> * `bfu` vise les PID **`0x0239-0x023B`** (micrologiciel `0x44` ou `0x46`, porté à `0x50`), **pas** notre `0x0256`.
+>   `FWVersion = 80` est la version cible de l'updater, non la preuve qu'il s'applique à notre clavier. Il n'existe aucun
+>   updater public pour `0x0255-0x0257`.
+>
+> Les passages ci-dessous « C'est **le** canal officiel du A1314 », « canal de contrôle HIDP » et « candidats naturels »
+> sont donc caducs.
+
 Le paquet officiel **`WirelessKybdFirmwareUpdate.dmg`** (Apple, « 2009 Aluminum Keyboard Firmware
 Update », toujours téléchargeable depuis `updates.cdn-apple.com`) contient l'updater bas niveau
 `.../WLKBFU/2/bfu` (Mach-O i386+ppc). Examen **statique non destructif** (métadonnées publiques :
@@ -270,9 +285,9 @@ chaînes, méthodes Objective-C, `Parameters.plist`) :
 |---|---|---|---|---|---|
 | **`0x55`** | Feature (WO) | **LongDeviceName** (64 o) | [plist] RE-PILOTE-MACOS §3 (remplace la déduction « config vendeur ») | moyen (NVRAM) | aucune écriture |
 | **`0x50`** | Feature (WO) | **DeviceNameChange** (validation du nom) | [plist] RE-PILOTE-MACOS §3 | **moyen** | aucune écriture |
-| **`0x40 0x41 0x44 0x45`** | Feature (WO) | **WillShutdown, RecantConnection, FullFactoryDefault, FactoryDefault** | [plist] RE-PILOTE-MACOS §3 (remplace la déduction « bloc batterie ») | `0x40` faible (macOS l'envoie) ; `0x41` élevé ; `0x44`/`0x45` **INTERDIT** (remise à zéro) | aucune écriture |
+| **`0x40 0x41 0x44 0x45`** | Feature (WO) | **WillShutdown, RecantConnection, FullFactoryDefault, FactoryDefault** | [plist] RE-PILOTE-MACOS §3 (remplace la déduction « bloc batterie ») | `0x40` faible (macOS l'envoie) ; `0x41` élevé ; `0x44` = **oubli de tous les hôtes**, envoyé par Lion à la suppression du clavier (RE-PILOTES-ANCIENS §5) : fonction Apple, destructrice pour l'appairage, jamais sans accord explicite du gérant (#218) ; `0x45` **INTERDIT** (remise à zéro, effet exact inconnu) | aucune écriture |
 | **`0xD0 0xD4 0xD5`** | Feature (WO) | écriture bloc « état radio » | [déduction] (famille `0xDx`) | **inconnu** | lire `0xD1/0xD8` (passif) |
-| **`0xFA 0xFB`** | Feature (WO) | écriture bloc alim/veille (p.ex. délai `0xF5`) | [déduction] (famille `0xFx`) + [spéculation] | **élevé** (alim/radio) | mesure passive du délai de veille (#173) |
+| **`0xFA 0xFB`** | Feature (WO) | **inconnue** (« délai de veille » : spéculation sans trace, corrigé #218) | aucune trace dans les logiciels Apple examinés (RE-PILOTES-ANCIENS §7) | **inconnu** : ne jamais écrire | mesure passive du délai de veille (#173) |
 | `0x04` | Input non décl. | SLEEP ? | [analogie] WICED `RPT_ID_IN_SLEEP=0x04` ; inconnu de macOS | n/a (entrée) | **lecture passive** du nœud hidraw |
 | `0x05` | Input non décl. | FUNC_LOCK ? | [analogie] WICED `RPT_ID_IN_FUNC_LOCK=0x05` + [mesuré] `05 02` ; inconnu de macOS | n/a (entrée) | lecture passive |
 | `0x30` | Input non décl. | **BatteryState** (0 normal, 1 bas, 2-3 critique) | [source] bthidd `BATT_STAT_REPORT_ID=0x30` + [plist/désassemblage] RE-PILOTE-MACOS | n/a (entrée) | lecture passive |
@@ -331,6 +346,8 @@ chaînes, méthodes Objective-C, `Parameters.plist`) :
   « bootloader non prouvé public » : **précision** — il existe un **canal de flash Bluetooth officiel**
   (`WirelessKybdFirmwareUpdate.dmg` → `bfu` → L2CAP/HIDP, `FWVersion=80=0x50`), mais il reste **réservé
   à l'updater macOS** et **non transposable** au bootloader Cypress de Chen. (§4.3)
+  **Corrigé (#218)** : ce canal est un PSM L2CAP vendeur (`0xF30D`), pas HIDP, et l'updater vise `0x0239-0x023B`, pas notre
+  `0x0256` (§4.3).
 - La mention « firmware signé » reste à éviter pour le A1314 (Chen : pas de signature gén. 2009 ;
   `config.hex` ici est **obfusqué/chiffré** via `FWDecrypt`, pas nécessairement signé — **[spéculation]**,
   non vérifié sans exécuter la routine, ce qui n'est pas fait).
