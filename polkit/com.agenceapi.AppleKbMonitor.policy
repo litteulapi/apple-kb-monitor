@@ -82,4 +82,25 @@
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-hid-inspect</annotate>
   </action>
+
+  <!-- #106: the corrections `akmctl doctor` proposes, applied by
+       `akmctl doctor --fix`. An executable of its own (one path, one action).
+       It takes identifiers of a closed list (bluez-conf, upower-conf,
+       adapter-autosuspend) and two switches, never a path, a key or a value:
+       it can only set FastConnectable and the [Policy] Reconnect* keys of
+       /etc/bluetooth/main.conf, NoPollBatteries of /etc/UPower/UPower.conf,
+       install the udev rule compiled into it, and run udevadm / systemctl
+       restart bluetooth|upower with fixed arguments. Each file rewritten
+       keeps its previous content as <name>.akm-bak. auth_admin, no "keep":
+       these are system files. -->
+  <action id="com.agenceapi.AppleKbMonitor.doctor-fix">
+    <description>Apply the corrections of the Apple keyboard diagnostic (BlueZ, UPower, udev)</description>
+    <message>Authentication is required to apply the corrections of the Apple keyboard diagnostic to the Bluetooth, UPower or udev configuration</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-doctor-fix</annotate>
+  </action>
 </policyconfig>

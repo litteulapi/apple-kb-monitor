@@ -178,7 +178,8 @@ pub enum Command {
     },
     /// Diagnose the Bluetooth link in one command (BlueZ, pairing, adapter
     /// power management, BlueZ/UPower configuration, journal, hidraw, daemon).
-    /// Read-only; run with sudo to also compare the stored and kernel link keys
+    /// Read-only unless --fix; run with sudo to also compare the stored and
+    /// kernel link keys
     Doctor {
         /// Machine-readable JSON
         #[arg(long)]
@@ -186,6 +187,22 @@ pub enum Command {
         /// Keyboard to check (default: the paired one)
         #[arg(long, value_name = "MAC")]
         mac: Option<String>,
+        /// Apply the corrections of the system files the diagnostic proposes
+        /// (BlueZ main.conf, udev rule of the adapter), through the
+        /// privileged helper: one administrator authentication, the previous
+        /// file kept as <name>.akm-bak
+        #[arg(long, conflicts_with = "json")]
+        fix: bool,
+        /// With --fix: show what would change, write nothing (no password)
+        #[arg(long, requires = "fix")]
+        dry_run: bool,
+        /// With --fix: also restart bluetooth / upower so the corrected file
+        /// is read now (drops every Bluetooth link for a few seconds)
+        #[arg(long, requires = "fix")]
+        restart_services: bool,
+        /// With --fix: also apply the corrections marked "optional" (UPower)
+        #[arg(long, requires = "fix")]
+        optional: bool,
     },
     /// Guided repair of the link: wake + reconnect first; re-pair only after a
     /// typed confirmation (the pairing is never removed otherwise)

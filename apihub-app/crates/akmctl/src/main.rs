@@ -4,6 +4,12 @@ mod bus;
 mod cli;
 mod devnamecmd;
 mod doctor;
+/// The helper's closed list of corrections (#106), compiled in from its own
+/// source: one definition of the identifiers and of the argument order.
+#[allow(dead_code)]
+#[path = "../../akm-helper/src/doctor_fix.rs"]
+mod doctor_fix;
+mod doctorfix;
 mod dump;
 mod fnmode;
 mod hid_control;
@@ -143,7 +149,22 @@ fn run(cmd: Command) -> u8 {
             }
             Err(e) => fail(&e),
         },
-        Command::Doctor { json, mac } => {
+        Command::Doctor {
+            mac,
+            fix: true,
+            dry_run,
+            restart_services,
+            optional,
+            ..
+        } => doctorfix::command(
+            mac.as_deref(),
+            doctorfix::Options {
+                dry_run,
+                restart: restart_services,
+                optional,
+            },
+        ),
+        Command::Doctor { json, mac, .. } => {
             let r = doctor::gather(mac.as_deref());
             if json {
                 println!("{}", doctor::to_json(&r));

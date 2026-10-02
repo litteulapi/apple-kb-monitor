@@ -8,6 +8,9 @@
 //!   the system units `apple-kb-monitor-{suspend,resume}.service`): one
 //!   HID_CONTROL byte, SUSPEND `0x13` / EXIT_SUSPEND `0x14`, on the HIDP control
 //!   socket of `bluetoothd` (#244, [`hidctl`]).
+//! * `akm-doctor-fix` (polkit `com.agenceapi.AppleKbMonitor.doctor-fix`): the
+//!   closed list of corrections of `akmctl doctor --fix` (#106,
+//!   [`doctor_fix`], [`doctor_apply`]).
 //!
 //! Separate programs because pkexec picks the polkit action from the program path
 //! (`org.freedesktop.policykit.exec.path`): one path, one action.
@@ -29,6 +32,8 @@ pub mod keymap;
 #[path = "../../../akm-core/src/model.rs"]
 pub mod model;
 
+pub mod doctor_apply;
+pub mod doctor_fix;
 pub mod hidctl;
 
 pub mod fsutil {

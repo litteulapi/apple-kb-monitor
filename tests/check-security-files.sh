@@ -62,6 +62,35 @@ echo "$ctl" | grep -q '<allow_active>auth_admin</allow_active>' || fail "hid-con
 if echo "$ctl" | grep -q 'exec.argv1'; then fail "hid-control must not be bound to an argv1"; fi
 if echo "$ctl" | grep -q '>yes<'; then fail "hid-control must never be allowed without authentication"; fi
 
+# #106: the corrections of `akmctl doctor --fix` go through one helper with
+# its own action: auth_admin (never yes, never keep), its own path, packaged,
+# the path akmctl runs; the helper takes no path and starts no shell.
+fix=$(action com.agenceapi.AppleKbMonitor.doctor-fix)
+[ -n "$fix" ] || fail "polkit action doctor-fix missing"
+[ "$(path_of "$fix")" = /usr/lib/apple-kb-monitor/akm-doctor-fix ] || fail "doctor-fix must be bound to its own executable akm-doctor-fix"
+echo "$fix" | grep -q '<allow_active>auth_admin</allow_active>' || fail "doctor-fix must be auth_admin"
+echo "$fix" | grep -q '<allow_any>no</allow_any>' || fail "doctor-fix must be refused outside the active local session"
+echo "$fix" | grep -q '<allow_inactive>no</allow_inactive>' || fail "doctor-fix must be refused for inactive sessions"
+if echo "$fix" | grep -q '>yes<'; then fail "doctor-fix must never be allowed without authentication"; fi
+hsrc="$top/apihub-app/crates/akm-helper/src"
+[ -f "$hsrc/bin/akm-doctor-fix.rs" ] || fail "akm-doctor-fix source missing"
+grep -q 'target/release/akm-doctor-fix".*"\$pkgdir/usr/lib/apple-kb-monitor/akm-doctor-fix"' "$top/PKGBUILD" \
+  || fail "PKGBUILD does not install akm-doctor-fix"
+grep -qx 'usr/lib/apple-kb-monitor/akm-doctor-fix' "$top/scripts/package-expected.txt" \
+  || fail "akm-doctor-fix missing from scripts/package-expected.txt"
+grep -q 'pub const HELPER: &str = "/usr/lib/apple-kb-monitor/akm-doctor-fix";' "$hsrc/doctor_fix.rs" \
+  || fail "the path of akm-doctor-fix is not the compiled constant"
+grep -q 'path = "../../akm-helper/src/doctor_fix.rs"' "$top/apihub-app/crates/akmctl/src/main.rs" \
+  || fail "akmctl must take the list of corrections from akm-helper/src/doctor_fix.rs"
+# no shell, no environment, no free path in the three files of the helper
+for f in "$hsrc/bin/akm-doctor-fix.rs" "$hsrc/doctor_fix.rs" "$hsrc/doctor_apply.rs"; do
+  code=$(sed -e 's|^[[:space:]]*//.*$||' "$f" | sed -n '/#\[cfg(test)\]/q;p')
+  if echo "$code" | grep -nE '"(/usr)?/bin/(ba|z|da)?sh"|"sh"|"-c"|env::var|Command::new|stdin\(\)' ; then
+    fail "$(basename "$f"): shell, environment, stdin or direct process start in the doctor-fix helper"
+  fi
+done
+grep -q 'vec!\[SYSTEMCTL, "restart", unit\]' "$hsrc/doctor_apply.rs" || fail "doctor_apply: systemctl restart must keep its fixed argument list"
+
 # #209: rssi-helper restricted to group akm, capability applied last.
 grep -q "sysusers.d/apple-kb-monitor.conf" "$top/PKGBUILD" || fail "PKGBUILD does not ship the akm group"
 grep -qx "g akm - -" "$top/sysusers/apple-kb-monitor.conf" || fail "sysusers entry"

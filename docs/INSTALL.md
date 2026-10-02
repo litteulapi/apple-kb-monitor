@@ -25,12 +25,12 @@ The build is locked (#14): `prepare()` runs `cargo fetch --locked` and `build()`
 
 Not done, and why: the `PKGBUILD` lives inside the source tree and builds it from `$startdir`; there is no published source archive (the forge is internal and serves no release tarball or signed tag). So there is no `source=("git+…#tag=…")` with a checksum, no build confined to `$srcdir`, and therefore no clean-chroot build (`extra-x86_64-build` does not carry `$startdir`). These three come together the day a source repository is published.
 
-`makepkg` compiles the Rust workspace (`apihub-app`, `apple-kb-monitord`, `akmctl`, `akm-helper`, `akm-keymap-helper`, `akm-hid-control`), the C helper `rssi-helper` and the C++/QML System Settings module, then installs:
+`makepkg` compiles the Rust workspace (`apihub-app`, `apple-kb-monitord`, `akmctl`, `akm-helper`, `akm-keymap-helper`, `akm-hid-control`, `akm-hid-inspect`, `akm-doctor-fix`), the C helper `rssi-helper` and the C++/QML System Settings module, then installs:
 
 | Path | Content |
 |---|---|
 | `/usr/bin/` | `akmctl`, `apihub-app`, `apple-kb-monitord` |
-| `/usr/lib/apple-kb-monitor/` | `rssi-helper`, `akm-helper`, `akm-keymap-helper`, `akm-hid-control` |
+| `/usr/lib/apple-kb-monitor/` | `rssi-helper`, `akm-helper`, `akm-keymap-helper`, `akm-hid-control`, `akm-hid-inspect`, `akm-doctor-fix` |
 | `/usr/lib/systemd/user/` | `apple-kb-monitord.service`, `apple-kb-monitor-shutdown.service`, `apple-kb-monitor-selfcheck.{service,timer}` (+ `.wants` symlinks) |
 | `/usr/lib/systemd/system/` | `apple-kb-monitor-suspend.service`, `apple-kb-monitor-resume.service` (+ `sleep.target.wants`, `suspend/hibernate/hybrid-sleep/suspend-then-hibernate.target.wants`) |
 | `/etc/apple-kb-monitor/hid-suspend.conf`, `/etc/modprobe.d/hid_apple.conf` | `enabled = false` (SUSPEND / EXIT_SUSPEND off by default); `fnmode=1` (both in `backup=`: your edits survive upgrades) |
@@ -81,6 +81,7 @@ Without the enabled unit, the daemon would still start on demand through D-Bus a
 | RSSI / TX power | `rssi-helper`, `cap_net_admin+ep`, `root:akm 0750` → membership of `akm` | `id -nG \| grep akm`; `getcap /usr/lib/apple-kb-monitor/rssi-helper` |
 | Fn mode, `hid_apple` parameters, `/etc/modprobe.d` | `pkexec akm-helper`, polkit `auth_admin` | `akmctl set fnmode N` opens the dialog |
 | Key mapping (udev hwdb) | `pkexec akm-keymap-helper` | `akmctl keymap apply` |
+| Corrections of the diagnostic: BlueZ `main.conf` (`FastConnectable`, `[Policy] Reconnect*`), `UPower.conf` (`NoPollBatteries`), udev rule keeping the adapter `8087:0026` out of USB autosuspend | `pkexec akm-doctor-fix`, polkit `doctor-fix`, `auth_admin`; closed list, previous file kept as `<name>.akm-bak` | `akmctl doctor --fix` (`--dry-run` shows the changes without a password; `--restart-services` also restarts bluetooth / upower; `--optional` adds the UPower one) |
 | Sleep / wake HID_CONTROL byte | system units as root; `pkexec akm-hid-control` for the manual test | `akmctl hid-control suspend --dry-run` |
 
 ### Recommended BlueZ / UPower settings (administrator, optional)

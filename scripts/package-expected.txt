@@ -30,6 +30,7 @@ usr/lib/systemd/user/timers.target.wants/apple-kb-monitor-selfcheck.timer
 usr/share/doc/apple-kb-monitor/TOUCHES.md
 usr/lib/apple-kb-monitor/akm-hid-control
 usr/lib/apple-kb-monitor/akm-hid-inspect
+usr/lib/apple-kb-monitor/akm-doctor-fix
 usr/lib/systemd/system/apple-kb-monitor-suspend.service
 usr/lib/systemd/system/apple-kb-monitor-resume.service
 usr/lib/systemd/system/sleep.target.wants/apple-kb-monitor-suspend.service
