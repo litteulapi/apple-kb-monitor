@@ -98,11 +98,40 @@ akmctl keys            # F1-F12 + Éjecter : code sans Fn / avec Fn, keysym, act
 akmctl keys --check    # + verdict [ok] (action KDE liée) / [app] (pour l'application) / [--] (rien)
 akmctl keys --all      # toutes les touches connues (modificateurs, flèches, Fn, ⌫, ↩…)
 akmctl keys --json     # pour les scripts (table + actions KDE)
+akmctl keys --live     # vue en direct des appuis : usage HID, code evdev, nom (§3.1)
 ```
 
 La table est calculée (modèle de `hid-apple.c` + paramètres sysfs + hwdb installé) ; l'action KDE
 est demandée à KGlobalAccel (`action(i)` de la touche Qt). Aucune frappe n'est lue, aucun nœud
-`event`/`hidraw` n'est ouvert. La fenêtre a la même table dans l'onglet **Touches**.
+`event`/`hidraw` n'est ouvert, sauf par `--live`. La fenêtre a la même table dans l'onglet **Touches**.
+
+### 3.1 `akmctl keys --live` : les appuis en direct (#113)
+
+```text
+$ akmctl keys --live
+Live key events, read-only, nothing is recorded. Leave: hold Escape 2 s, or Ctrl-C.
+  apple  /dev/input/event5
+source  HID usage   evdev  name                     state    key
+apple   0007:0064   86     KEY_102ND                down     NonUS
+apple   0007:0064   86     KEY_102ND                up       NonUS
+```
+
+(Forme des lignes ; les valeurs de cet exemple ne sont pas une mesure.) Une ligne par appui,
+répétition et relâchement : l'usage HID que le noyau annonce (`MSC_SCAN`,
+page:usage), le code evdev après hwdb et `hid_apple`, son nom `KEY_*`, et la touche de la table du
+§1 quand l'usage y figure. Contrairement à la table, c'est une **mesure** : ce que le clavier et le
+noyau émettent vraiment.
+
+- **Lecture seule.** Le nœud evdev du clavier Apple est ouvert en lecture, jamais saisi
+  (`EVIOCGRAB`), rien n'est envoyé au clavier, aucun `hidraw` n'est ouvert.
+- **Rien n'est enregistré.** Les lignes vont au terminal, nulle part ailleurs (pas de fichier, pas
+  de journal). Ne pas lancer la vue en tapant un mot de passe : il s'afficherait touche par touche.
+- **Sortie** : Échap tenue 2 s, ou Ctrl-C. Un appui court sur Échap est une touche comme une autre.
+- **Droits** : lire `/dev/input/event*` demande le groupe `input`. Sans lui, la commande le dit et
+  ne lit rien ; elle ne passe par aucun assistant privilégié.
+- **keyd** : si keyd tient le clavier (`EVIOCGRAB`), le noyau ne remet les évènements du nœud
+  Apple qu'à keyd. La vue lit alors aussi le clavier virtuel de keyd : lignes `keyd`, avec le code
+  evdev que keyd émet et sans usage HID. Pour voir les usages HID, arrêter keyd le temps du test.
 
 ## 4. Pièges connus
 

@@ -20,6 +20,7 @@ mod info;
 mod kde;
 mod keymapcmd;
 mod keys;
+mod keyslive;
 mod ledcmd;
 mod migrate;
 mod passive;
@@ -90,7 +91,10 @@ fn run(cmd: Command) -> u8 {
                 }
             }
         }
-        Command::Keys { check, all, json } => keymapcmd::cmd_keys(check, all, json),
+        Command::Keys { live: true, .. } => keyslive::command(),
+        Command::Keys {
+            check, all, json, ..
+        } => keymapcmd::cmd_keys(check, all, json),
         Command::Keymap { cmd } => keymapcmd::run(cmd),
         Command::Rename {
             device_name: Some(dn),

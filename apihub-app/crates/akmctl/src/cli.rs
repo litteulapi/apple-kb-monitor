@@ -216,7 +216,8 @@ pub enum Command {
     },
     /// Effective table of the special keys (F1-F12, Eject; --all: every known
     /// key): physical key -> evdev code (after hwdb and hid_apple, per fnmode)
-    /// -> keysym -> KDE global shortcut. Never reads a key press
+    /// -> keysym -> KDE global shortcut. Never reads a key press, except
+    /// with --live
     Keys {
         /// Verdict per key ([ok] = a KDE shortcut is bound) and what to test
         #[arg(long)]
@@ -227,6 +228,12 @@ pub enum Command {
         /// Machine-readable JSON (with the KDE actions)
         #[arg(long)]
         json: bool,
+        /// Live view of the key events of the Apple keyboard instead of the
+        /// table: HID usage, evdev code, name, one line per press and
+        /// release. Reads the evdev node (read-only, group "input"), records
+        /// nothing. Leave with Escape held 2 s, or Ctrl-C
+        #[arg(long, conflicts_with_all = ["check", "all", "json"])]
+        live: bool,
     },
     /// Manual key mapping without keyd ($XDG_CONFIG_HOME/apple-kb-monitor/keymap.toml
     /// -> udev hwdb, installed with administrator authentication)
@@ -635,7 +642,32 @@ mod tests {
     #[test]
     fn keys_and_keymap_parse() {
         let p = |a: &[&str]| Cli::try_parse_from([&["akmctl"], a].concat());
-        assert!(matches!(p(&["keys", "--check"]).unwrap().command, Command::Keys { check: true, all: false, json: false }));
+        assert!(matches!(
+            p(&["keys", "--check"]).unwrap().command,
+            Command::Keys {
+                check: true,
+                all: false,
+                json: false,
+                live: false
+            }
+        ));
+        assert!(matches!(
+            p(&["keys", "--live"]).unwrap().command,
+            Command::Keys {
+                live: true,
+                check: false,
+                all: false,
+                json: false
+            }
+        ));
+        for bad in [
+            &["keys", "--live", "--json"][..],
+            &["keys", "--live", "--check"],
+            &["keys", "--live", "--all"],
+            &["keys", "--live", "/dev/input/event3"],
+        ] {
+            assert!(p(bad).is_err(), "{bad:?}");
+        }
         match p(&["keymap", "set", "f6", "KEY_F13"]).unwrap().command {
             Command::Keymap { cmd: KeymapCmd::Set { key, code, profile } } => assert_eq!((key, code, profile), (0x7003f, 183, None)),
             c => panic!("{c:?}"),
