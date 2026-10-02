@@ -12,12 +12,11 @@ mod keys_tab;
 mod portal;
 mod rename;
 mod source;
-mod tray;
 mod view;
 mod widgets;
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use crate::i18n::{tr, trf};
 use view::{Level, Palette};
 use widgets::{key, kv_grid, signal_bars, tile, value};
@@ -46,9 +45,8 @@ struct ApiHubApp {
     tab: Tab,
     style_initialized: bool,
     diag: diag_tab::DiagTab,
-    quit_flag: Arc<AtomicBool>,
-    // Set by a second launch / D-Bus Activate / tray: bring the window to front
-    tray_show_window: Arc<AtomicBool>,
+    // Set by a second launch / D-Bus Activate: bring the window to front
+    raise: Arc<AtomicBool>,
     appearance: portal::Shared,
     applied: Option<portal::Appearance>,
     palette: Palette,
@@ -69,8 +67,7 @@ impl ApiHubApp {
     fn new(
         cc: &eframe::CreationContext<'_>,
         state: State,
-        tray_show_window: Arc<AtomicBool>,
-        quit_flag: Arc<AtomicBool>,
+        raise: Arc<AtomicBool>,
     ) -> Self {
         // Battery history: loaded off the UI thread (D-Bus + disk, #230).
         let history = history_view::Loader::new();
@@ -82,8 +79,7 @@ impl ApiHubApp {
             tab: Tab::Keyboard,
             style_initialized: false,
             diag: diag_tab::DiagTab::new(),
-            quit_flag,
-            tray_show_window,
+            raise,
             appearance: portal::spawn(cc.egui_ctx.clone()),
             applied: None,
             palette: Palette::new(cc.egui_ctx.style().visuals.dark_mode),
@@ -111,11 +107,6 @@ impl eframe::App for ApiHubApp {
 
 impl ApiHubApp {
     fn update_ui(&mut self, ctx: &egui::Context) {
-        // Tray "Quit" while the window is open: close it so main() can exit.
-        if self.quit_flag.load(Ordering::Relaxed) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-        }
-
         // 16px minimum text size — once only
         if !self.style_initialized {
             let mut style = (*ctx.style()).clone();
@@ -137,8 +128,8 @@ impl ApiHubApp {
             self.applied = Some(wanted);
         }
 
-        // Check if tray requested window show
-        if self.tray_show_window.swap(false, Ordering::Relaxed) {
+        // A second launch or Activate asked for the window
+        if self.raise.swap(false, Ordering::Relaxed) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
@@ -467,7 +458,7 @@ impl ApiHubApp {
 /// Open the window and block until it is closed. Returns false when it
 /// could not be opened (no display / GPU). Called **once** per process:
 /// winit does not support a second event loop run reliably (#226).
-fn open_window(state: &State, raise: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBool>, open: &Arc<AtomicBool>) -> bool {
+fn open_window(state: &State, raise: &Arc<AtomicBool>, open: &Arc<AtomicBool>) -> bool {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title(crate::i18n::tr("Apple Keyboard Monitor"))
@@ -484,10 +475,10 @@ fn open_window(state: &State, raise: &Arc<AtomicBool>, quit_flag: &Arc<AtomicBoo
         run_and_return: true,
         ..Default::default()
     };
-    let (st, sw, qf) = (state.clone(), raise.clone(), quit_flag.clone());
+    let (st, sw) = (state.clone(), raise.clone());
     raise.store(false, Ordering::Relaxed);
     open.store(true, Ordering::Relaxed);
-    let r = eframe::run_native(instance::APP_ID, options, Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, st, sw, qf)))));
+    let r = eframe::run_native(instance::APP_ID, options, Box::new(move |cc| Ok(Box::new(ApiHubApp::new(cc, st, sw)))));
     open.store(false, Ordering::Relaxed);
     if let Err(ref e) = r {
         eprintln!("[apihub] cannot open window: {}", e);
@@ -499,9 +490,8 @@ fn main() {
     // One window = one process (#226): `apihub-app` or D-Bus
     // `org.freedesktop.Application` Activate opens the window; a second launch
     // raises it and exits; closing the window ends the process, which frees
-    // the D-Bus name and any legacy tray icon. Nothing ever reopens a window
-    // by itself. The tray belongs to the daemon; the legacy tray of this
-    // process only lives while the window is open, when the daemon has none.
+    // the D-Bus name. Nothing ever reopens a window by itself. The tray icon
+    // belongs to the daemon alone (#62): this process never registers one.
     let window_open = Arc::new(AtomicBool::new(false));
     let raise = Arc::new(AtomicBool::new(false));
     let activate = {
@@ -526,17 +516,9 @@ fn main() {
     };
 
     let state: State = Arc::new(Watch::new());
-    let quit_flag = Arc::new(AtomicBool::new(false));
     let src = source::spawn(state.clone());
 
-    if !instance::daemon_tray_present() {
-        eprintln!("[apihub] no daemon tray: legacy tray while the window is open");
-        // Clicks only raise the open window; nothing is queued for later (#226).
-        let (tx, _rx_dropped) = mpsc::channel();
-        tray::spawn(state.clone(), raise.clone(), quit_flag.clone(), tx);
-    }
-
-    let shown = open_window(&state, &raise, &quit_flag, &window_open);
+    let shown = open_window(&state, &raise, &window_open);
     eprintln!("[apihub] window closed: exiting");
     // Free the name first so that a new launch becomes the window at once.
     drop(conn);

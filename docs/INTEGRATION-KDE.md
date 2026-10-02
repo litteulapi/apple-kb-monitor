@@ -118,3 +118,22 @@ Pas d'autostart d'`apihub-app` : le démon `apple-kb-monitord` (unité utilisate
 `default.target`) porte l'icône, les alertes et les notifications ; la fenêtre est
 une application D-Bus activable (`DBusActivatable=true`) lancée à la demande par
 l'icône, le widget ou un bouton de notification.
+
+## 8. La fenêtre n'a plus d'icône à elle (#62)
+
+Jusqu'à 3.1.0, `apihub-app` enregistrait un tray « hérité » (StatusNotifierItem)
+quand le démon n'avait pas le sien au moment de l'ouverture. Or le démon retire son
+icône quand le widget la réclame (§2) : ouvrir la fenêtre faisait alors apparaître
+une seconde icône à côté du widget. Le tray hérité est supprimé
+(`apihub-app/src/tray.rs`, 503 lignes, et la sonde du StatusNotifierWatcher dans
+`instance.rs`) : l'icône appartient au démon seul.
+
+Ce qui change : démon absent, ou `APPLE_KB_MONITOR_TRAY=never`, la fenêtre ouverte
+n'ajoute plus d'icône ; elle se relève par un second lancement ou par `Activate`
+(inchangé). L'entrée « Quitter » de ce tray disparaît avec lui : fermer la fenêtre
+termine le processus (#226).
+
+Vérification : `grep -rn "StatusNotifier" apihub-app/src` ne renvoie rien ;
+`cargo test -p apihub-app` ; scénarios `open_close`, `desktop`, `desktop_slow` de
+`tests/e2e`. `main.rs` : 906 → 539 lignes (onglet Diag dans `diag_tab.rs`, tracé de
+l'historique dans `history_chart.rs`, briques egui dans `widgets.rs`).

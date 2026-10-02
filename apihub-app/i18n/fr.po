@@ -203,42 +203,6 @@ msgstr "{} h"
 msgid "now"
 msgstr "maintenant"
 
-msgid "Estimated charge"
-msgstr "Charge estimée"
-
-msgid "Keyboard indication"
-msgstr "Indication du clavier"
-
-msgid "{}: {}  ({})"
-msgstr "{} : {}  ({})"
-
-msgid "{}: {}"
-msgstr "{} : {}"
-
-msgid "{}  ·  estimate {}"
-msgstr "{}  ·  estimation {}"
-
-msgid "Signal: {}"
-msgstr "Signal : {}"
-
-msgid "ON"
-msgstr "ACTIVÉ"
-
-msgid "off"
-msgstr "désactivé"
-
-msgid "CapsLock: {}  NumLock: {}"
-msgstr "Verr. maj : {}  Verr. num : {}"
-
-msgid "Remaining: {}"
-msgstr "Restant : {}"
-
-msgid "Show Window"
-msgstr "Afficher la fenêtre"
-
-msgid "Quit"
-msgstr "Quitter"
-
 msgid "daemon unreadable: {}"
 msgstr "démon illisible : {}"
 

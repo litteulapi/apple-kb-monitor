@@ -1,9 +1,7 @@
-//! Single instance (`org.freedesktop.Application` on `com.agenceapi.AppleKbMonitor`)
-//! and detection of the tray provided by the daemon.
+//! Single instance (`org.freedesktop.Application` on `com.agenceapi.AppleKbMonitor`).
 
 use std::collections::HashMap;
 
-use apple_kb_monitord::service::BUS_NAME as DAEMON_NAME;
 use zbus::blocking::Connection;
 use zbus::fdo::RequestNameReply;
 use zbus::interface;
@@ -13,7 +11,6 @@ use zbus::zvariant::{OwnedValue, Value};
 /// Wayland app_id, D-Bus name and desktop-file id of the window.
 pub const APP_ID: &str = "com.agenceapi.AppleKbMonitor";
 pub const APP_PATH: &str = "/com/agenceapi/AppleKbMonitor";
-const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 
 struct Application {
     on_activate: Box<dyn Fn(Option<String>) + Send + Sync>,
@@ -143,27 +140,6 @@ fn activate_existing(conn: &Connection) -> Result<(), String> {
 
 const ACTIVATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 
-/// Bus name of a registered SNI item (`"<name>/<path>"`, or just a name).
-fn item_name(item: &str) -> &str {
-    item.split('/').next().unwrap_or("")
-}
-
-/// Is one of the registered SNI items served by process `daemon_pid`?
-/// The daemon publishes its item on a **second** connection (#196), so the
-/// owner's unique name never equals the daemon's: compare process ids.
-/// `pid_of` maps any bus name (unique or well-known) to its owner's pid.
-pub fn items_of_pid(items: &[String], daemon_pid: u32, pid_of: impl Fn(&str) -> Option<u32>) -> bool {
-    items.iter().any(|item| {
-        let name = item_name(item);
-        !name.is_empty() && pid_of(name) == Some(daemon_pid)
-    })
-}
-
-/// True when the daemon is on the bus AND has registered its own tray item
-/// with the StatusNotifierWatcher.
-/// Longest wait for the SNI watcher before opening the window (#233).
-pub const TRAY_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
-
 /// Run `f` on a worker thread and wait for it at most `timeout`; `default`
 /// when it does not answer in time (zbus 4.4 has no client-side call
 /// timeout: a peer that never replies blocks the caller for ever).
@@ -173,40 +149,6 @@ pub fn bounded<T: Send + 'static>(timeout: std::time::Duration, default: T, f: i
         return default;
     }
     rx.recv_timeout(timeout).unwrap_or(default)
-}
-
-/// True when the daemon's tray icon is registered; false when unknown,
-/// including a StatusNotifierWatcher that does not answer within
-/// [`TRAY_PROBE_TIMEOUT`] (a frozen plasmashell must not keep the window from
-/// opening, #233).
-pub fn daemon_tray_present() -> bool {
-    let r = bounded(TRAY_PROBE_TIMEOUT, None, || Some(daemon_tray_present_blocking()));
-    r.unwrap_or_else(|| {
-        eprintln!("[apihub] StatusNotifierWatcher did not answer within {} s", TRAY_PROBE_TIMEOUT.as_secs());
-        false
-    })
-}
-
-fn daemon_tray_present_blocking() -> bool {
-    let Ok(conn) = Connection::session() else { return false };
-    let Ok(dbus) = zbus::blocking::fdo::DBusProxy::new(&conn) else { return false };
-    let pid_of = |n: &str| -> Option<u32> {
-        let name = zbus::names::BusName::try_from(n).ok()?;
-        dbus.get_connection_unix_process_id(name).ok()
-    };
-    let Some(daemon) = pid_of(DAEMON_NAME) else { return false };
-    let Ok(reply) = conn.call_method(
-        Some(WATCHER),
-        "/StatusNotifierWatcher",
-        Some("org.freedesktop.DBus.Properties"),
-        "Get",
-        &(WATCHER, "RegisteredStatusNotifierItems"),
-    ) else {
-        return false;
-    };
-    let Ok(v) = reply.body().deserialize::<OwnedValue>() else { return false };
-    let Ok(items) = Vec::<String>::try_from(v) else { return false };
-    items_of_pid(&items, daemon, pid_of)
 }
 
 #[cfg(test)]
@@ -235,28 +177,6 @@ mod tests {
         assert_eq!(activation_token(&pd).as_deref(), Some("tok"));
         pd.insert("activation-token".into(), Value::from("").try_into().unwrap());
         assert_eq!(activation_token(&pd).as_deref(), Some("legacy"));
-    }
-
-    #[test]
-    fn detects_daemon_item_by_pid_on_a_second_connection() {
-        // Measured on the real bus: daemon name on :1.311, its SNI item on
-        // :1.312, same process 497861.
-        let items = vec![
-            "org.kde.StatusNotifierItem-4588-1/StatusNotifierItem".to_string(),
-            ":1.56/StatusNotifierItem".to_string(),
-            "org.kde.StatusNotifierItem-497861-1/StatusNotifierItem".to_string(),
-        ];
-        let pid_of = |n: &str| match n {
-            "org.kde.StatusNotifierItem-4588-1" => Some(4588),
-            ":1.56" => Some(1200),
-            "org.kde.StatusNotifierItem-497861-1" => Some(497_861),
-            _ => None,
-        };
-        assert!(items_of_pid(&items, 497_861, pid_of));
-        assert!(items_of_pid(&items, 1200, pid_of));
-        assert!(!items_of_pid(&items, 42, pid_of));
-        assert!(!items_of_pid(&[], 497_861, pid_of));
-        assert!(!items_of_pid(&["/StatusNotifierItem".to_string()], 0, |_| Some(0)));
     }
 
     #[test]
