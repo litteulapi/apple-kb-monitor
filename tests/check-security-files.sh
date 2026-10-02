@@ -26,6 +26,23 @@ if grep -E "<allow_[a-z]+>auth_admin_keep<" "$top/polkit/com.agenceapi.AppleKbMo
   fail "polkit action must not use auth_admin_keep"
 fi
 
+# #248: the read-only MTU probe (`akm-hid-control inspect`) asks no password in
+# the active local session; the HID_CONTROL bytes keep asking for an
+# administrator. One action each, told apart by `exec.argv1 = inspect`.
+policy="$top/polkit/com.agenceapi.AppleKbMonitor.policy"
+action() { awk -v id="$1" '$0 ~ "<action id=\"" id "\">" {p=1} p {print} p && /<\/action>/ {exit}' "$policy"; }
+insp=$(action com.agenceapi.AppleKbMonitor.hid-inspect)
+ctl=$(action com.agenceapi.AppleKbMonitor.hid-control)
+[ -n "$insp" ] && [ -n "$ctl" ] || fail "polkit actions hid-inspect / hid-control missing"
+echo "$insp" | grep -q '<annotate key="org.freedesktop.policykit.exec.argv1">inspect</annotate>' \
+  || fail "hid-inspect must be bound to argv1 = inspect"
+echo "$insp" | grep -q '<allow_active>yes</allow_active>' || fail "hid-inspect must be allow_active = yes"
+echo "$insp" | grep -q '<allow_any>no</allow_any>' || fail "hid-inspect must stay refused outside the active local session"
+echo "$insp" | grep -q '<allow_inactive>no</allow_inactive>' || fail "hid-inspect must stay refused for inactive sessions"
+echo "$ctl" | grep -q '<allow_active>auth_admin</allow_active>' || fail "hid-control must stay auth_admin"
+if echo "$ctl" | grep -q 'exec.argv1'; then fail "hid-control must not be bound to an argv1"; fi
+if echo "$ctl" | grep -q '>yes<'; then fail "hid-control must never be allowed without authentication"; fi
+
 # #209: rssi-helper restricted to group akm, capability applied last.
 grep -q "sysusers.d/apple-kb-monitor.conf" "$top/PKGBUILD" || fail "PKGBUILD does not ship the akm group"
 grep -qx "g akm - -" "$top/sysusers/apple-kb-monitor.conf" || fail "sysusers entry"
