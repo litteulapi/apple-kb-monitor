@@ -61,6 +61,9 @@ pub struct DevInfo {
     pub name: String,
     pub connected: bool,
     pub paired: bool,
+    /// Battery percentage BlueZ (`Battery1`) or UPower already holds for it;
+    /// never asked from the keyboard (#94).
+    pub battery: Option<u8>,
 }
 
 /// Messages to the keeper.
@@ -72,6 +75,8 @@ pub enum KMsg {
     BluezGone,
     Connected(String, bool),
     Paired(String, bool),
+    /// `org.bluez.Battery1.Percentage` of a device object changed (#94).
+    Battery(String, u8),
     /// BlueZ removed the device object (Plasma "Forget", `bluetoothctl
     /// remove`): `ObjectManager.InterfacesRemoved` carrying `Device1` (#252).
     Removed(String),
@@ -137,6 +142,10 @@ pub struct LinkStatus {
     pub updated: u64,
     /// Disconnection counts and signal of the last 7 days (#105).
     pub quality: Option<akm_core::linkstats::LinkQuality>,
+    /// BlueZ says the keyboard is connected (#94).
+    pub connected: bool,
+    /// Battery percentage known to BlueZ / UPower, if any (#94).
+    pub battery: Option<u8>,
 }
 
 impl LinkStatus {
@@ -152,6 +161,8 @@ impl LinkStatus {
             "last_reason": self.last_reason,
             "updated": self.updated,
             "quality": self.quality,
+            "connected": self.connected,
+            "battery": self.battery,
         })
     }
 }
@@ -245,6 +256,7 @@ struct Dev {
     path: String,
     name: String,
     connected: bool,
+    battery: Option<u8>,
     rec: Recovery,
     /// `Paired=false` seen at this instant: the bond loss is declared once
     /// the grace delay passes without an `InterfacesRemoved` (#252).
@@ -362,6 +374,9 @@ impl<B: LinkBus> Keeper<B> {
                 Some(d) => {
                     d.path = info.path.clone();
                     d.name = info.name.clone();
+                    if info.battery.is_some() {
+                        d.battery = info.battery;
+                    }
                     d.unpair_at = None;
                     if info.connected && !d.connected {
                         d.rec.on_connected(now);
@@ -386,6 +401,7 @@ impl<B: LinkBus> Keeper<B> {
                             path: info.path.clone(),
                             name: info.name.clone(),
                             connected: info.connected,
+                            battery: info.battery,
                             rec,
                             unpair_at: None,
                         },
@@ -438,6 +454,11 @@ impl<B: LinkBus> Keeper<B> {
                 None if c => self.resync(now), // a keyboard paired meanwhile
                 None => {}
             },
+            KMsg::Battery(path, pct) => {
+                if let Some(d) = self.mac_of(&path).and_then(|m| self.devs.get_mut(&m)) {
+                    d.battery = Some(pct.min(100));
+                }
+            }
             KMsg::Paired(path, p) => match (self.mac_of(&path), p) {
                 (Some(mac), false) => {
                     if let Some(d) = self.devs.get_mut(&mac) {
@@ -674,6 +695,8 @@ impl<B: LinkBus> Keeper<B> {
                     .stats
                     .as_ref()
                     .and_then(|s| s.quality(mac, self.unix(now))),
+                connected: d.connected,
+                battery: d.battery,
             })
             .collect()
     }
@@ -722,6 +745,14 @@ pub fn enumerate(calls: &Connection) -> zbus::Result<Vec<DevInfo>> {
         if !keyboard {
             continue;
         }
+        // What BlueZ already holds (our own provider, or a GATT battery
+        // service): read with the device, nothing is asked from the keyboard.
+        let battery = ifaces
+            .iter()
+            .find(|(k, _)| k.as_str() == "org.bluez.Battery1")
+            .and_then(|(_, b)| b.get("Percentage"))
+            .and_then(|v| u8::try_from(v).ok())
+            .map(|p| p.min(100));
         out.push(DevInfo {
             path: path.to_string(),
             name: prop_str(d, "Alias")
@@ -731,6 +762,7 @@ pub fn enumerate(calls: &Connection) -> zbus::Result<Vec<DevInfo>> {
             connected: prop_bool(d, "Connected").unwrap_or(false),
             paired: prop_bool(d, "Paired").unwrap_or(false)
                 || prop_bool(d, "Bonded").unwrap_or(false),
+            battery,
         });
     }
     Ok(out)
@@ -868,7 +900,18 @@ impl LinkBus for SystemBus {
     fn enumerate(&mut self) -> Option<Vec<DevInfo>> {
         let r = self.calls().map(enumerate);
         match r {
-            Some(Ok(l)) => Some(l),
+            Some(Ok(mut l)) => {
+                // Keyboards without a BlueZ battery: what UPower has cached.
+                if l.iter().any(|d| d.battery.is_none()) {
+                    if let Some(conn) = self.calls.as_ref() {
+                        let cached = upower_batteries(conn);
+                        for d in l.iter_mut().filter(|d| d.battery.is_none()) {
+                            d.battery = cached.get(&d.mac).copied();
+                        }
+                    }
+                }
+                Some(l)
+            }
             Some(Err(e)) => {
                 tracing::debug!("link: enumeration failed: {e}");
                 self.calls = None;
@@ -877,6 +920,77 @@ impl LinkBus for SystemBus {
             None => None,
         }
     }
+}
+
+/// Battery percentages UPower holds in its cache for keyboards, by address
+/// (upper case). Read-only properties on the system bus: UPower is not asked
+/// to refresh and the keyboard is not asked anything (#94). Empty on error.
+pub fn upower_batteries(sys: &Connection) -> HashMap<String, u8> {
+    let mut out = HashMap::new();
+    let paths: Vec<zbus::zvariant::OwnedObjectPath> = match sys
+        .call_method(
+            Some("org.freedesktop.UPower"),
+            "/org/freedesktop/UPower",
+            Some("org.freedesktop.UPower"),
+            "EnumerateDevices",
+            &(),
+        )
+        .and_then(|r| r.body().deserialize())
+    {
+        Ok(p) => p,
+        Err(_) => return out,
+    };
+    for p in paths {
+        if !akm_core::model::is_keyboard_upower_path(p.as_str()) {
+            continue;
+        }
+        let props: Props = match sys
+            .call_method(
+                Some("org.freedesktop.UPower"),
+                p.as_str(),
+                Some("org.freedesktop.DBus.Properties"),
+                "GetAll",
+                &("org.freedesktop.UPower.Device",),
+            )
+            .and_then(|r| r.body().deserialize())
+        {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let mac = prop_str(&props, "Serial")
+            .map(|s| s.to_ascii_uppercase())
+            .filter(|s| crate::devices::device_path(s).is_some())
+            .or_else(|| mac_in(&prop_str(&props, "NativePath").unwrap_or_default()));
+        let pct = props
+            .get("Percentage")
+            .and_then(|v| f64::try_from(v).ok())
+            .filter(|p| p.is_finite() && (0.0..=100.0).contains(p));
+        if let (Some(mac), Some(pct)) = (mac, pct) {
+            out.insert(mac, pct.round() as u8);
+        }
+    }
+    out
+}
+
+/// The first `XX:XX:XX:XX:XX:XX` (or `XX_XX_...`) found in `s`, upper case
+/// with colons.
+pub fn mac_in(s: &str) -> Option<String> {
+    let b = s.as_bytes();
+    (0..b.len().saturating_sub(16)).find_map(|i| {
+        let w = &b[i..i + 17];
+        let ok = w.iter().enumerate().all(|(j, c)| {
+            if j % 3 == 2 {
+                *c == b':' || *c == b'_'
+            } else {
+                c.is_ascii_hexdigit()
+            }
+        });
+        ok.then(|| {
+            String::from_utf8_lossy(w)
+                .replace('_', ":")
+                .to_ascii_uppercase()
+        })
+    })
 }
 
 /// The BlueZ method that removes a pairing (`org.bluez.Adapter1`).
@@ -926,7 +1040,11 @@ pub(crate) fn user_forget(mac: &str) -> bool {
 
 pub fn add_rules(conn: &Connection) -> zbus::Result<()> {
     let dbus = DBusProxy::new(conn)?;
-    for iface in ["org.bluez.Device1", "org.bluez.Adapter1"] {
+    for iface in [
+        "org.bluez.Device1",
+        "org.bluez.Adapter1",
+        "org.bluez.Battery1",
+    ] {
         dbus.add_match_rule(
             MatchRule::builder()
                 .msg_type(zbus::message::Type::Signal)
@@ -1065,6 +1183,10 @@ pub fn listen_on(conn: Connection, calls: Connection, tx: &Sender<KMsg>) -> zbus
                     if let Some(p) = prop_bool(&changed, "Paired") {
                         v.push(KMsg::Paired(path.clone(), p));
                     }
+                } else if i == "org.bluez.Battery1" {
+                    if let Some(p) = changed.get("Percentage").and_then(|v| u8::try_from(v).ok()) {
+                        v.push(KMsg::Battery(path.clone(), p));
+                    }
                 } else if i == "org.bluez.Adapter1" {
                     if let Some(p) = prop_bool(&changed, "Powered") {
                         v.push(KMsg::Adapter(p));
@@ -1094,7 +1216,7 @@ pub struct KeeperHandle {
 
 /// Start the keeper (listener + logind + decision threads).
 pub fn spawn(mailbox: Arc<Mailbox>, notify: bool) -> KeeperHandle {
-    spawn_with(mailbox, notify, None, true)
+    spawn_with(mailbox, notify, None, true, None)
 }
 
 /// [`spawn`] recording the disconnections in `stats` (#105); `alert`: raise
@@ -1104,10 +1226,12 @@ pub fn spawn_with(
     notify: bool,
     stats: Option<Arc<crate::linkq::Store>>,
     alert: bool,
+    shared: Option<SharedStatus>,
 ) -> KeeperHandle {
     let (tx, rx) = mpsc::channel::<KMsg>();
     install_control(tx.clone());
-    let shared: SharedStatus = Arc::new(Mutex::new(Vec::new()));
+    // Given by the caller when the actor reads it too (roster, #94).
+    let shared: SharedStatus = shared.unwrap_or_default();
     let ltx = tx.clone();
     let _ = std::thread::Builder::new()
         .name("kb-link-listen".into())
@@ -1339,7 +1463,101 @@ mod tests {
             name: "Clavier de alice #1".into(),
             connected,
             paired: true,
+            battery: None,
         }
+    }
+
+    const MAC2: &str = "AA:BB:CC:DD:EE:F2";
+    const PATH2: &str = "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_F2";
+
+    fn kb2(connected: bool, battery: Option<u8>) -> DevInfo {
+        DevInfo {
+            path: PATH2.into(),
+            mac: MAC2.into(),
+            name: "Clavier du salon".into(),
+            connected,
+            paired: true,
+            battery,
+        }
+    }
+
+    /// #94 / #119: two keyboards are followed side by side; one leaving
+    /// changes nothing for the other.
+    #[test]
+    fn two_keyboards_are_followed_and_one_leaving_does_not_affect_the_other() {
+        let t0 = Instant::now();
+        let mut k = keeper(true, t0);
+        let mut first = kb(true);
+        first.battery = Some(80);
+        k.bus().world = vec![first.clone(), kb2(true, Some(12))];
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        let st = k.status(t0);
+        assert_eq!(st.len(), 2);
+        let of = |st: &[LinkStatus], mac: &str| st.iter().find(|s| s.mac == mac).unwrap().clone();
+        assert_eq!(
+            (of(&st, MAC).connected, of(&st, MAC).battery),
+            (true, Some(80))
+        );
+        assert_eq!(
+            (of(&st, MAC2).connected, of(&st, MAC2).battery),
+            (true, Some(12))
+        );
+        assert_eq!(of(&st, MAC2).name, "Clavier du salon");
+        // BlueZ pushes a new percentage for the second one only.
+        k.handle(KMsg::Battery(PATH2.into(), 11), t0);
+        assert_eq!(of(&k.status(t0), MAC2).battery, Some(11));
+        assert_eq!(of(&k.status(t0), MAC).battery, Some(80));
+        // The second keyboard loses its link: the first is untouched.
+        let t = t0 + Duration::from_secs(60);
+        k.bus().world = vec![first.clone(), kb2(false, Some(11))];
+        k.handle(
+            KMsg::Disconnected(PATH2.into(), DisconnectReason::Timeout),
+            t,
+        );
+        k.handle(KMsg::Connected(PATH2.into(), false), t);
+        let st = k.status(t);
+        assert_eq!(
+            (of(&st, MAC2).connected, of(&st, MAC2).health.as_str()),
+            (false, "dormant")
+        );
+        assert_eq!(
+            (of(&st, MAC).connected, of(&st, MAC).health.as_str()),
+            (true, "connected")
+        );
+        // Only the lost one is paged.
+        let mut t2 = t;
+        for _ in 0..120 {
+            t2 += Duration::from_secs(1);
+            k.bus().now = t2;
+            k.tick(t2);
+        }
+        assert!(!k.bus().connects.is_empty());
+        assert_eq!(of(&k.status(t2), MAC).attempts, 0);
+        assert!(of(&k.status(t2), MAC2).attempts >= 1);
+        // It comes back, then the FIRST is removed: the second stays.
+        k.bus().world = vec![first, kb2(true, Some(11))];
+        k.handle(KMsg::Connected(PATH2.into(), true), t2);
+        k.bus().world = vec![kb2(true, Some(11))];
+        k.handle(KMsg::Removed(PATH.into()), t2);
+        let st = k.status(t2);
+        assert_eq!(st.len(), 1);
+        assert_eq!((st[0].mac.as_str(), st[0].connected), (MAC2, true));
+        let j = st[0].to_json();
+        assert_eq!(
+            (j["connected"].as_bool(), j["battery"].as_u64()),
+            (Some(true), Some(11))
+        );
+        // The address is found in what UPower calls the device.
+        assert_eq!(
+            mac_in("/org/bluez/hci0/dev_AA_BB_CC_DD_EE_F2").as_deref(),
+            Some(MAC2)
+        );
+        assert_eq!(
+            mac_in("hid-aa:bb:cc:dd:ee:f1-battery").as_deref(),
+            Some(MAC)
+        );
+        assert_eq!(mac_in("keyboard_dev_xx"), None);
     }
 
     fn keeper(connected: bool, t0: Instant) -> Keeper<Fake> {

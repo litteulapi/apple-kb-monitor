@@ -501,6 +501,22 @@ fn sync_devices(
             tracing::warn!("cannot export device {mac}: {e}");
         }
     }
+    // The other keyboards of the roster get their object too (#94, #119).
+    for d in snap.devices.iter().filter(|d| !d.primary) {
+        let known = shared
+            .devices
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .any(|m| m.eq_ignore_ascii_case(&d.mac));
+        if !known {
+            prev.entry(d.mac.to_ascii_uppercase())
+                .or_insert_with(|| DevProps::for_mac(&Snapshot::default(), &d.mac, ("", "")));
+        }
+        if let Err(e) = devices::ensure_device(conn, shared, &d.mac, "", &d.name) {
+            tracing::warn!("cannot export device {}: {e}", d.mac);
+        }
+    }
     let macs = shared
         .devices
         .lock()

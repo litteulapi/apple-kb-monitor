@@ -26,6 +26,7 @@
 //! * [`usage`]       active minutes per day, nothing else stored (#109)
 //! * [`link`]        connection / reconnection notification logic (#84)
 //! * [`linkstats`]   disconnection counts, 7 days of relative signal, unstable link (#105)
+//! * [`roster`]      every known keyboard side by side, the weakest one (#94, #119)
 //! * [`config`]      `config.toml` (small TOML subset, no dependency)
 //! * [`hid_params`]  `hid_apple` parameters: read + whitelist
 //! * [`keymap`]      special keys: kernel Fn table, effective table, manual
@@ -85,6 +86,7 @@ pub mod recovery;
 pub mod registry;
 pub mod reminder;
 pub mod report;
+pub mod roster;
 pub mod rssi;
 pub mod signal;
 pub mod snapshot;

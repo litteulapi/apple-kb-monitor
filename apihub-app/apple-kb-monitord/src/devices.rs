@@ -227,6 +227,14 @@ impl DevProps {
             base.mac = mac.to_ascii_uppercase();
             base.model = last_model.to_string();
             base.name = last_name.to_string();
+            // Another keyboard of the roster (#94): what BlueZ knows of it.
+            if let Some(d) = s.devices.iter().find(|d| d.mac.eq_ignore_ascii_case(mac)) {
+                base.connected = d.connected;
+                base.battery = d.battery.map_or(-1, |p| p.round().clamp(0.0, 100.0) as i32);
+                if !d.name.is_empty() {
+                    base.name = d.name.clone();
+                }
+            }
             return Self {
                 base,
                 rate_pct_per_day: 0.0,

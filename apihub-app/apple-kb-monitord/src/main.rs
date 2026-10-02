@@ -263,6 +263,9 @@ fn run(mut opts: actor::Options, bus_name: Option<String>) -> ExitCode {
     );
     opts.link_stats = Some(link_stats.clone());
     let link_alert = opts.notify_link_unstable;
+    // Every paired keyboard as BlueZ sees it: the roster of the actor (#94).
+    let roster = apple_kb_monitord::repair::SharedStatus::default();
+    opts.roster = Some(roster.clone());
     let handle = actor::spawn(watch, mailbox, opts);
     // Link keeper: reconnection, system sleep, health, reconciliation (#144, #145, #165).
     let link = apple_kb_monitord::repair::spawn_with(
@@ -270,6 +273,7 @@ fn run(mut opts: actor::Options, bus_name: Option<String>) -> ExitCode {
         link_notify,
         Some(link_stats),
         link_alert,
+        Some(roster),
     );
     if let Some(c) = conn.as_ref() {
         if let Err(e) = apple_kb_monitord::repair::export(c, link) {

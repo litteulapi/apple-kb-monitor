@@ -132,6 +132,9 @@ pub struct Options {
     pub notify_link_unstable: bool,
     /// Link statistics shared with the link keeper (set by `main`, #105).
     pub link_stats: Option<Arc<crate::linkq::Store>>,
+    /// The paired keyboards as the link keeper sees them (BlueZ), for the
+    /// roster of the published state (set by `main`, #94).
+    pub roster: Option<crate::repair::SharedStatus>,
     /// Count the active minutes per day (`[usage] active_time`, #109).
     pub usage_active_time: bool,
     /// The counter, when the statistics are on (set by `main`).
@@ -174,6 +177,7 @@ impl Default for Options {
             },
             notify_link_unstable: true,
             link_stats: None,
+            roster: None,
             usage_active_time: false,
             usage: None,
             chemistry: Chemistry::default(),
@@ -938,6 +942,44 @@ impl Actor {
         self.rssi.record(&mac, r, Instant::now());
     }
 
+    /// Every known keyboard (#94): the one read here first, with its own
+    /// figures, then the others as BlueZ describes them.
+    fn devices(&self) -> Vec<akm_core::roster::DeviceSummary> {
+        use akm_core::roster::DeviceSummary;
+        let primary = self.kb.as_ref().and_then(|k| {
+            let mac = k.device.mac.clone()?;
+            let name = [k.device.alias.as_deref(), k.device.name.as_deref()]
+                .into_iter()
+                .flatten()
+                .find(|n| !n.is_empty())
+                .unwrap_or(mac.as_str())
+                .to_string();
+            Some(DeviceSummary {
+                mac,
+                name,
+                connected: self.linked,
+                battery: k.battery_pct(),
+                primary: true,
+            })
+        });
+        let others = self
+            .opts
+            .roster
+            .as_ref()
+            .map(|r| r.lock().unwrap_or_else(|e| e.into_inner()).clone())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| DeviceSummary {
+                mac: s.mac,
+                name: s.name,
+                connected: s.connected,
+                battery: s.battery.map(f64::from),
+                primary: false,
+            })
+            .collect();
+        akm_core::roster::merge(primary, others)
+    }
+
     /// Link quality of the keyboard followed, at publication time (#105).
     fn link_quality(&self) -> Option<akm_core::linkstats::LinkQuality> {
         let mac = self.kb.as_ref()?.device.mac.as_deref()?;
@@ -1015,6 +1057,7 @@ impl Actor {
             batteries_installed_at: self.installed_at,
             battery_advice: self.advice.clone(),
             link_quality: self.link_quality(),
+            devices: self.devices(),
             usage: self.opts.usage.as_ref().map(|u| u.summary()),
             ..Default::default()
         }
@@ -1525,6 +1568,68 @@ mod tests {
         assert!(a.integrate(Some(other), None, None, true));
         assert_eq!(a.kb.as_ref().unwrap().battery_pct(), None);
         assert!(!a.kb.as_ref().unwrap().battery.kept);
+    }
+
+    /// #94 / #119: the published state lists every keyboard, the one read
+    /// here first; the second one leaving does not change the first.
+    #[test]
+    fn snapshot_lists_two_keyboards_and_one_leaving_does_not_affect_the_other() {
+        use crate::repair::LinkStatus;
+        const M2: &str = "AA:BB:CC:DD:EE:F2";
+        let status = |mac: &str, name: &str, connected: bool, battery: Option<u8>| LinkStatus {
+            mac: mac.into(),
+            name: name.into(),
+            health: if connected { "connected" } else { "dormant" }.into(),
+            since: 0,
+            attempts: 0,
+            failures: 0,
+            last_error: String::new(),
+            last_reason: String::new(),
+            updated: 0,
+            quality: None,
+            connected,
+            battery,
+        };
+        let roster = crate::repair::SharedStatus::default();
+        let mut a = quiet_actor();
+        a.opts.roster = Some(roster.clone());
+        assert!(a.snapshot().devices.is_empty(), "nothing known");
+        a.kb = Some(report(80.0, None));
+        a.linked = true;
+        *roster.lock().unwrap() = vec![
+            status("AA:BB:CC:DD:EE:F1", "Bureau (BlueZ)", true, Some(79)),
+            status(M2, "Clavier du salon", true, Some(12)),
+        ];
+        let s = a.snapshot();
+        assert_eq!(s.devices.len(), 2, "the primary is not listed twice");
+        assert!(s.devices[0].primary && s.devices[0].battery == Some(80.0));
+        assert_eq!(
+            (s.devices[1].mac.as_str(), s.devices[1].battery),
+            (M2, Some(12.0))
+        );
+        assert_eq!(akm_core::roster::weakest(&s.devices).unwrap().mac, M2);
+        // Root fields still describe the keyboard read here (API 1 clients).
+        assert_eq!(s.battery_pct(), Some(80.0));
+        // The second one disconnects: the first is unchanged.
+        roster.lock().unwrap()[1] = status(M2, "Clavier du salon", false, Some(12));
+        let s = a.snapshot();
+        assert_eq!(
+            (s.devices[0].connected, s.devices[0].battery),
+            (true, Some(80.0))
+        );
+        assert!(!s.devices[1].connected);
+        assert_eq!(
+            akm_core::roster::weakest(&s.devices).unwrap().mac,
+            "AA:BB:CC:DD:EE:F1"
+        );
+        // The first one leaves: the second, reconnected, is still there.
+        roster.lock().unwrap()[1] = status(M2, "Clavier du salon", true, Some(12));
+        a.disconnected();
+        let s = a.snapshot();
+        assert!(!s.devices[0].connected && s.devices[1].connected);
+        assert_eq!(akm_core::roster::weakest(&s.devices).unwrap().mac, M2);
+        let json = serde_json::to_value(&s).unwrap();
+        assert_eq!(json["devices"][1]["name"], "Clavier du salon");
     }
 
     /// #105: the published state carries the link quality of the keyboard

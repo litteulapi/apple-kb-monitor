@@ -131,14 +131,32 @@ pub fn bucket(pct: f64, prev: Option<u8>) -> u8 {
 }
 
 pub fn icon_state(snap: &Snapshot, charging: bool, prev_bucket: Option<u8>) -> IconState {
-    if !snap.connected {
-        return if snap.keyboard.is_some() {
+    icon_state_for(
+        snap.connected,
+        snap.keyboard.is_some(),
+        snap.battery_pct(),
+        charging,
+        prev_bucket,
+    )
+}
+
+/// [`icon_state`] from the facts themselves: with several keyboards they are
+/// those of the weakest connected one (#94).
+pub fn icon_state_for(
+    connected: bool,
+    known: bool,
+    pct: Option<f64>,
+    charging: bool,
+    prev_bucket: Option<u8>,
+) -> IconState {
+    if !connected {
+        return if known {
             IconState::Disconnected
         } else {
             IconState::Missing
         };
     }
-    match snap.battery_pct() {
+    match pct {
         None => IconState::Missing,
         Some(p) if p <= CRITICAL_PCT && !charging => IconState::Caution,
         Some(p) => IconState::Level {
@@ -265,13 +283,44 @@ pub mod id {
     pub const RECONNECT: i32 = 23;
     pub const DISCONNECT: i32 = 24;
     pub const FORGET: i32 = 25;
+    /// Several keyboards (#94): a separator and one line per keyboard.
+    pub const SEP_KB: i32 = 99;
+    pub const KB_FIRST: i32 = 100;
     pub const SEP2: i32 = 20;
     pub const QUIT: i32 = 21;
     #[cfg(test)]
-    pub const ALL: [i32; 24] = [
-        HEADER, BATTERY, ESTIMATE, CONNECTION, SIGNAL, AUTONOMY, ADVICE, CAPS, SEP1, OPEN, REFRESH,
-        COPY, BLUETOOTH, RENAME, REPAIR, RECONNECT, DISCONNECT, FORGET, SEP_FN, FN_MODE, FN_MEDIA,
-        FN_FKEYS, SEP2, QUIT,
+    pub const ALL: [i32; 31] = [
+        HEADER,
+        BATTERY,
+        ESTIMATE,
+        CONNECTION,
+        SIGNAL,
+        AUTONOMY,
+        ADVICE,
+        CAPS,
+        SEP1,
+        OPEN,
+        REFRESH,
+        COPY,
+        BLUETOOTH,
+        RENAME,
+        REPAIR,
+        RECONNECT,
+        DISCONNECT,
+        FORGET,
+        SEP_KB,
+        KB_FIRST,
+        KB_FIRST + 1,
+        KB_FIRST + 2,
+        KB_FIRST + 3,
+        KB_FIRST + 4,
+        KB_FIRST + 5,
+        SEP_FN,
+        FN_MODE,
+        FN_MEDIA,
+        FN_FKEYS,
+        SEP2,
+        QUIT,
     ];
 }
 
@@ -459,7 +508,18 @@ impl View {
         lang: Lang,
         fn_mode: Option<i32>,
     ) -> Self {
-        let icon = icon_state(snap, charging, prev_bucket);
+        // Several keyboards (#94): the icon, the status and the title are
+        // those of the weakest connected one; everything else describes the
+        // keyboard the daemon reads.
+        let several = snap.devices.len() >= 2;
+        let weakest = several
+            .then(|| akm_core::roster::weakest(&snap.devices))
+            .flatten();
+        let other = weakest.filter(|w| !w.primary);
+        let icon = match other {
+            Some(w) => icon_state_for(true, true, w.battery, false, prev_bucket),
+            None => icon_state(snap, charging, prev_bucket),
+        };
         let pct = snap.battery_pct();
         let model_full = snap
             .model()
@@ -471,9 +531,35 @@ impl View {
         let name = snap.display_name().map(str::to_string);
         let title_name = name.clone().unwrap_or_else(|| model.clone());
 
-        let status = match (snap.connected, pct) {
-            (true, Some(p)) if p <= CRITICAL_PCT && !charging => Status::NeedsAttention,
+        let status = match (snap.connected, pct, other.and_then(|w| w.battery)) {
+            (_, _, Some(p)) if p <= CRITICAL_PCT => Status::NeedsAttention,
+            (true, Some(p), _) if p <= CRITICAL_PCT && !charging => Status::NeedsAttention,
             _ => Status::Active,
+        };
+        // One line per keyboard: name, level, link.
+        let kb_lines: Vec<String> = if several {
+            snap.devices
+                .iter()
+                .map(|d| {
+                    let level = d.battery.map_or_else(
+                        || lang.t("niveau inconnu", "level unknown").to_string(),
+                        |p| lang.pct(p),
+                    );
+                    let link = if d.connected {
+                        lang.t("connecté", "connected")
+                    } else {
+                        lang.t("hors ligne", "offline")
+                    };
+                    let mark = if weakest.is_some_and(|w| w.mac == d.mac) {
+                        lang.t(" · le plus faible", " · weakest")
+                    } else {
+                        ""
+                    };
+                    format!("{} \u{2014} {level} · {link}{mark}", d.name)
+                })
+                .collect()
+        } else {
+            Vec::new()
         };
 
         let battery_line = pct.map(|p| {
@@ -553,6 +639,13 @@ impl View {
 
         // Tooltip
         let tooltip_title = match (snap.connected, pct, snap.keyboard.is_some()) {
+            _ if other.is_some() => {
+                let w = other.expect("checked");
+                match w.battery {
+                    Some(p) => format!("{} \u{2014} {}", w.name, lang.pct(p)),
+                    None => w.name.clone(),
+                }
+            }
             (true, Some(p), _) => format!("{title_name} \u{2014} {}", lang.pct(p)),
             (true, None, _) => title_name.clone(),
             (false, _, true) => {
@@ -590,6 +683,7 @@ impl View {
             }
         }
         tooltip_lines.extend(advice.clone());
+        tooltip_lines.extend(kb_lines.iter().cloned());
 
         // Menu
         let disposition = match pct {
@@ -701,6 +795,24 @@ impl View {
                 snap.mac().is_some(),
             ),
         ];
+        // The keyboards, one line each, when there are several (#94).
+        menu.push(if several {
+            sep(id::SEP_KB)
+        } else {
+            hidden(id::SEP_KB)
+        });
+        for i in 0..akm_core::roster::MAX_DEVICES {
+            let item = id::KB_FIRST + i as i32;
+            menu.push(match kb_lines.get(i) {
+                Some(l) => {
+                    let mut e = info(item, l.clone(), None);
+                    e.props
+                        .push(("icon-name", Prop::Str("input-keyboard-symbolic".into())));
+                    e
+                }
+                None => hidden(item),
+            });
+        }
         menu.extend(fn_entries(lang, fn_mode, snap.mac().is_some()));
         menu.extend([
             sep(id::SEP2),
@@ -774,6 +886,110 @@ pub fn clipboard_text(snap: &Snapshot, charging: bool, lang: Lang, now: u64) -> 
 mod tests {
     use super::*;
     use akm_core::KbReport;
+
+    /// #94 / #119: with two keyboards the tray shows the weakest connected
+    /// one and lists both; one leaving does not change the other's line.
+    #[test]
+    fn two_keyboards_the_tray_shows_the_weakest_and_lists_both() {
+        use akm_core::roster::DeviceSummary;
+        let dev = |mac: &str, name: &str, connected: bool, battery: Option<f64>, primary: bool| {
+            DeviceSummary {
+                mac: mac.into(),
+                name: name.into(),
+                connected,
+                battery,
+                primary,
+            }
+        };
+        let mut k = KbReport::default();
+        k.battery.percentage_fine = Some(80.0);
+        k.device.mac = Some("AA:BB:CC:DD:EE:F1".into());
+        k.device.alias = Some("Bureau".into());
+        let mut s = Snapshot {
+            connected: true,
+            keyboard: Some(k),
+            ..Default::default()
+        };
+        // One keyboard: no list, nothing changes.
+        s.devices = vec![dev("AA:BB:CC:DD:EE:F1", "Bureau", true, Some(80.0), true)];
+        let one = View::build(&s, false, None, Lang::Fr);
+        assert!(!one.entry(id::SEP_KB).unwrap().visible());
+        assert!(!one.entry(id::KB_FIRST).unwrap().visible());
+        assert_eq!(
+            one.icon,
+            IconState::Level {
+                bucket: 80,
+                charging: false
+            }
+        );
+        // Two: the second is at 8 %.
+        s.devices
+            .push(dev("AA:BB:CC:DD:EE:F2", "Salon", true, Some(8.0), false));
+        let v = View::build(&s, false, None, Lang::Fr);
+        assert_eq!(
+            v.icon,
+            IconState::Caution,
+            "the icon is the weakest keyboard"
+        );
+        assert_eq!(v.status, Status::NeedsAttention);
+        assert_eq!(v.tooltip_title, "Salon \u{2014} 8\u{a0}%");
+        let label = |v: &View, i: i32| match v.entry(i).unwrap().get("label") {
+            Some(Prop::Str(l)) => l.clone(),
+            _ => String::new(),
+        };
+        assert!(v.entry(id::SEP_KB).unwrap().visible());
+        assert_eq!(
+            label(&v, id::KB_FIRST),
+            "Bureau \u{2014} 80\u{a0}% · connecté"
+        );
+        assert_eq!(
+            label(&v, id::KB_FIRST + 1),
+            "Salon \u{2014} 8\u{a0}% · connecté · le plus faible"
+        );
+        assert!(!v.entry(id::KB_FIRST + 2).unwrap().visible());
+        assert!(v.tooltip_lines.iter().any(|l| l.starts_with("Salon")));
+        // The battery line of the menu still describes the keyboard read here.
+        assert!(label(&v, id::BATTERY).contains("80"));
+        // The weak one disconnects: the icon is the first again, whose line
+        // did not change; the other is listed offline.
+        s.devices[1].connected = false;
+        let v2 = View::build(&s, false, None, Lang::Fr);
+        assert_eq!(
+            v2.icon,
+            IconState::Level {
+                bucket: 80,
+                charging: false
+            }
+        );
+        assert_eq!(v2.status, Status::Active);
+        assert_eq!(
+            label(&v2, id::KB_FIRST),
+            "Bureau \u{2014} 80\u{a0}% · connecté · le plus faible"
+        );
+        assert_eq!(
+            label(&v2, id::KB_FIRST + 1),
+            "Salon \u{2014} 8\u{a0}% · hors ligne"
+        );
+        assert!(v2.tooltip_title.starts_with("Bureau"));
+        // The first one leaves, the second is back: the icon follows it.
+        s.connected = false;
+        s.devices[0].connected = false;
+        s.devices[1].connected = true;
+        let v3 = View::build(&s, false, None, Lang::En);
+        assert_eq!(v3.icon, IconState::Caution);
+        assert_eq!(label(&v3, id::KB_FIRST), "Bureau \u{2014} 80% · offline");
+        assert_eq!(
+            label(&v3, id::KB_FIRST + 1),
+            "Salon \u{2014} 8% · connected · weakest"
+        );
+        // Unknown level: said, never invented.
+        s.devices[1].battery = None;
+        let v4 = View::build(&s, false, None, Lang::En);
+        assert_eq!(
+            label(&v4, id::KB_FIRST + 1),
+            "Salon \u{2014} level unknown · connected"
+        );
+    }
 
     /// #104: Reconnect / Disconnect / Forget follow the state of the link.
     #[test]

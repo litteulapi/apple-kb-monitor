@@ -43,6 +43,9 @@ pub struct Snapshot {
     /// "Batteries changed too often": the last two sets lasted less than 30
     /// days each (#108); None = nothing to say.
     pub battery_advice: Option<crate::advice::ShortLife>,
+    /// Every keyboard known (paired with this computer), the one read by
+    /// the daemon first (#94, #119). The fields above describe that one.
+    pub devices: Vec<crate::roster::DeviceSummary>,
     /// Disconnection counts, 7 days of relative signal and the "unstable
     /// link" state of the keyboard followed (#105); None = nothing recorded.
     pub link_quality: Option<crate::linkstats::LinkQuality>,
@@ -68,6 +71,7 @@ impl Default for Snapshot {
             forecast: None,
             batteries_installed_at: None,
             battery_advice: None,
+            devices: Vec::new(),
             link_quality: None,
             usage: None,
         }
