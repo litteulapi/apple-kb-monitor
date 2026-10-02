@@ -99,7 +99,11 @@ fn inner() {
         device_path(A).unwrap().to_string(),
         device_path(B).unwrap().to_string(),
     );
-    assert_eq!(devices(&c), [pa.clone()], "one keyboard at first");
+    assert_eq!(
+        devices(&c),
+        std::slice::from_ref(&pa),
+        "one keyboard at first"
+    );
 
     // Listen to the second keyboard's object before it exists.
     let sub = Connection::session().unwrap();
