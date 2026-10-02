@@ -1,7 +1,9 @@
 mod diag;
+mod diag_tab;
 mod fnmode_diag;
 mod framestats;
 mod heartbeat;
+mod history_chart;
 mod i18n;
 mod history_view;
 mod instance;
@@ -12,13 +14,13 @@ mod rename;
 mod source;
 mod tray;
 mod view;
+mod widgets;
 
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use crate::i18n::{tr, trf};
 use view::{Level, Palette};
-use std::thread;
+use widgets::{key, kv_grid, signal_bars, tile, value};
 
 use akm_core::{Snapshot, Watch};
 use eframe::egui;
@@ -39,19 +41,11 @@ enum Tab {
     Diag,
 }
 
-#[derive(Clone)]
-struct DiagResult {
-    label: String,
-    ok: bool,
-    detail: String,
-}
-
 struct ApiHubApp {
     state: State,
     tab: Tab,
     style_initialized: bool,
-    diag_results: Arc<Mutex<Vec<DiagResult>>>,
-    diag_running: Arc<AtomicBool>,
+    diag: diag_tab::DiagTab,
     quit_flag: Arc<AtomicBool>,
     // Set by a second launch / D-Bus Activate / tray: bring the window to front
     tray_show_window: Arc<AtomicBool>,
@@ -87,8 +81,7 @@ impl ApiHubApp {
             state,
             tab: Tab::Keyboard,
             style_initialized: false,
-            diag_results: Arc::new(Mutex::new(Vec::new())),
-            diag_running: Arc::new(AtomicBool::new(false)),
+            diag: diag_tab::DiagTab::new(),
             quit_flag,
             tray_show_window,
             appearance: portal::spawn(cc.egui_ctx.clone()),
@@ -169,7 +162,7 @@ impl ApiHubApp {
             match self.tab {
                 Tab::Keyboard => self.tab_keyboard(ui, &snap),
                 Tab::Keys => keys_tab::show(ui),
-                Tab::Diag => self.tab_diag(ui),
+                Tab::Diag => self.diag.show(ui, &self.palette),
             }
         });
     }
@@ -223,7 +216,7 @@ impl ApiHubApp {
             ui.add_space(8.0);
             self.tile_row(ui, wide, |me, ui| me.device_tile(ui, snap, kb), |me, ui| me.firmware_tile(ui, kb));
             ui.add_space(8.0);
-            self.draw_battery_history(ui);
+            history_chart::show(ui, &self.history, &self.palette);
         });
     }
 
@@ -467,334 +460,6 @@ impl ApiHubApp {
             }
         });
     }
-
-    /// Battery + voltage history chart (last 24 h). Pure drawing: the data
-    /// is loaded by a worker thread and laid out by `view::chart_model`, so a
-    /// frame never waits on D-Bus or the disk and never lays out an
-    /// unbounded string (#230).
-    fn draw_battery_history(&mut self, ui: &mut egui::Ui) {
-        let data = self.history.data();
-        tile(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(tr("Battery History (24 h)")).strong().size(18.0));
-                let refresh = ui.add_enabled(!data.loading, egui::Button::new(egui::RichText::new(tr("Refresh")).size(14.0)));
-                if refresh.clicked() {
-                    let ctx = ui.ctx().clone();
-                    self.history.request(move || ctx.request_repaint());
-                }
-                if data.loading {
-                    ui.spinner();
-                }
-            });
-            if let Some(note) = &data.note {
-                ui.add(egui::Label::new(egui::RichText::new(note.as_str()).weak().size(14.0)).wrap());
-            }
-
-            let model = match view::chart_model(&data.battery, &data.voltage, unix_now() as f64) {
-                Ok(m) => m,
-                Err(msg) => {
-                    let msg = if data.loading && data.battery.is_empty() { tr("Loading history...") } else { msg.as_str() };
-                    ui.label(egui::RichText::new(msg).weak().size(16.0));
-                    return;
-                }
-            };
-            ui.label(egui::RichText::new(model.summary.as_str()).weak().size(14.0));
-            ui.add_space(4.0);
-
-            let (response, painter) = ui.allocate_painter(egui::Vec2::new(ui.available_width(), 170.0), egui::Sense::hover());
-            let rect = response.rect;
-            let vis = ui.visuals().clone();
-            painter.rect_filled(rect, 4.0, vis.extreme_bg_color);
-            // Room on the left for the % labels, on top for the legend,
-            // at the bottom for the time ticks.
-            let plot_rect = egui::Rect::from_min_max(
-                egui::Pos2::new(rect.min.x + 36.0, rect.min.y + 22.0),
-                egui::Pos2::new(rect.max.x - 8.0, rect.max.y - 20.0),
-            );
-            if plot_rect.width() < 10.0 || plot_rect.height() < 10.0 {
-                return;
-            }
-            let painter = painter.with_clip_rect(rect);
-            let (t_min, t_range) = (model.t_min, (model.t_max - model.t_min).max(1.0));
-            let x_of = |ts: f64| plot_rect.min.x + ((ts - t_min) / t_range).clamp(0.0, 1.0) as f32 * plot_rect.width();
-            let y_of = |frac: f64| plot_rect.max.y - (frac.clamp(0.0, 1.0) as f32) * plot_rect.height();
-            let grid = egui::Stroke::new(0.5, vis.widgets.noninteractive.bg_stroke.color);
-            let small = egui::FontId::proportional(10.0);
-
-            for level in [0.0, 25.0, 50.0, 75.0, 100.0] {
-                let y = y_of(level / 100.0);
-                painter.line_segment([egui::Pos2::new(plot_rect.min.x, y), egui::Pos2::new(plot_rect.max.x, y)], grid);
-                painter.text(egui::Pos2::new(plot_rect.min.x - 4.0, y), egui::Align2::RIGHT_CENTER, format!("{level:.0}%"), small.clone(), vis.weak_text_color());
-            }
-            for (t, label) in &model.x_ticks {
-                let x = x_of(*t);
-                painter.line_segment([egui::Pos2::new(x, plot_rect.min.y), egui::Pos2::new(x, plot_rect.max.y)], grid);
-                let align = if x > plot_rect.max.x - 30.0 {
-                    egui::Align2::RIGHT_TOP
-                } else if x < plot_rect.min.x + 30.0 {
-                    egui::Align2::LEFT_TOP
-                } else {
-                    egui::Align2::CENTER_TOP
-                };
-                painter.text(egui::Pos2::new(x, plot_rect.max.y + 4.0), align, label, small.clone(), vis.weak_text_color());
-            }
-
-            let batt_color = self.palette.good;
-            let line: Vec<egui::Pos2> = model.batt.iter().map(|&(t, p)| egui::Pos2::new(x_of(t), y_of(p / 100.0))).collect();
-            painter.add(egui::Shape::line(line, egui::Stroke::new(2.0, batt_color)));
-
-            let volt_color = self.palette.info;
-            if let Some((v_lo, v_hi)) = model.volt_axis {
-                let line: Vec<egui::Pos2> = model.volt.iter().map(|&(t, v)| egui::Pos2::new(x_of(t), y_of((v - v_lo) / (v_hi - v_lo)))).collect();
-                painter.add(egui::Shape::line(line, egui::Stroke::new(1.5, volt_color)));
-            }
-
-            // Legend: swatch then its (bounded) text, laid out right to left.
-            let colors = [batt_color, volt_color];
-            let mut x = rect.max.x - 8.0;
-            for (text, color) in model.legend.iter().zip(colors).rev() {
-                let galley = painter.layout_no_wrap(text.clone(), egui::FontId::proportional(11.0), vis.weak_text_color());
-                x -= galley.size().x;
-                let y = rect.min.y + 5.0;
-                painter.galley(egui::Pos2::new(x, y), galley, vis.weak_text_color());
-                x -= 12.0;
-                painter.rect_filled(egui::Rect::from_min_size(egui::Pos2::new(x, y + 2.0), egui::Vec2::splat(8.0)), 1.0, color);
-                x -= 14.0;
-            }
-        });
-    }
-
-    fn run_diagnostics(&mut self) {
-        // Guard against concurrent runs
-        if self.diag_running.swap(true, Ordering::Relaxed) {
-            return;
-        }
-        if let Ok(mut r) = self.diag_results.lock() {
-            r.clear();
-        }
-
-        let results = self.diag_results.clone();
-        let running = self.diag_running.clone();
-
-        /// Clears the "running" flag even if the diagnostics thread panics.
-        struct RunningGuard(Arc<AtomicBool>);
-        impl Drop for RunningGuard {
-            fn drop(&mut self) {
-                self.0.store(false, Ordering::Relaxed);
-            }
-        }
-
-        thread::spawn(move || {
-            let _guard = RunningGuard(running);
-            let mut out: Vec<DiagResult> = Vec::new();
-
-            let checks: Vec<(&str, Vec<String>, &str)> = vec![
-                ("apple-kb-monitord", vec!["--version".into()], tr("Monitor daemon binary")),
-                ("bluetoothctl", vec!["--version".into()], tr("BlueZ CLI")),
-            ];
-
-            for (bin, args, desc) in &checks {
-                let result = diag::run_bounded(Command::new(bin).args(args.iter().map(|s| s.as_str())), diag::COMMAND_TIMEOUT);
-                match result {
-                    Ok(o) if o.status.success() => {
-                        let stdout = String::from_utf8_lossy(&o.stdout);
-                        let first = stdout.lines().next().unwrap_or("OK").trim();
-                        out.push(DiagResult {
-                            label: desc.to_string(), ok: true,
-                            detail: format!("{}: {}", bin, if first.is_empty() { "OK" } else { first }),
-                        });
-                    }
-                    Ok(o) => {
-                        let err = String::from_utf8_lossy(&o.stderr);
-                        if err.contains("Usage") || err.contains("usage") {
-                            out.push(DiagResult {
-                                label: desc.to_string(), ok: true,
-                                detail: trf("{}: installed", &[bin]),
-                            });
-                        } else {
-                            out.push(DiagResult {
-                                label: desc.to_string(), ok: false,
-                                detail: trf("{}: exit {}", &[bin, &o.status.code().unwrap_or(-1)]),
-                            });
-                        }
-                    }
-                    Err(diag::RunError::Timeout) => {
-                        out.push(DiagResult {
-                            label: desc.to_string(), ok: false,
-                            detail: trf("{}: no answer within {} s (killed)", &[bin, &diag::COMMAND_TIMEOUT.as_secs()]),
-                        });
-                    }
-                    Err(diag::RunError::Spawn) => {
-                        out.push(DiagResult {
-                            label: desc.to_string(), ok: false,
-                            detail: trf("{}: NOT FOUND", &[bin]),
-                        });
-                    }
-                }
-            }
-
-            // Daemon: owner of the keyboard, reached over the session bus
-            let active = diag::run_bounded(Command::new("systemctl").args(["--user", "is-active", "apple-kb-monitord.service"]), diag::COMMAND_TIMEOUT)
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-            out.push(DiagResult {
-                label: "apple-kb-monitord.service".into(), ok: active,
-                detail: if active { tr("active (running)").into() } else { tr("inactive / not found").into() },
-            });
-            let on_bus = instance::bounded(diag::COMMAND_TIMEOUT, false, || {
-                zbus::blocking::Connection::session()
-                    .map(|c| apple_kb_monitord::client::daemon_present(&c))
-                    .unwrap_or(false)
-            });
-            out.push(DiagResult {
-                label: "D-Bus com.agenceapi.AppleKbMonitor1".into(), ok: on_bus,
-                detail: if on_bus { tr("daemon reachable (this window is a client)").into() }
-                        else { tr("daemon absent: this app reads the keyboard itself").into() },
-            });
-
-            // Apple keyboard hidraw node: present AND readable by this user
-            // (udev rule uses TAG+="uaccess", no group membership needed).
-            let (hid_ok, hid_detail) = match keyboard::find_apple_hidraw() {
-                None => (false, tr("no Apple hidraw device found (keyboard off or not paired?)").to_string()),
-                Some(path) => match std::fs::File::open(&path) {
-                    Ok(_) => (true, trf("{}: readable", &[&path])),
-                    Err(e) => (false, trf("{}: {} — check the udev uaccess rule", &[&path, &e])),
-                },
-            };
-            out.push(DiagResult { label: tr("hidraw readable").into(), ok: hid_ok, detail: hid_detail });
-
-            // Key mapping (#247): udev hwdb written by `akmctl keymap apply`;
-            // none = kernel mapping (the default). keyd is optional (#246).
-            let hwdb = akm_core::keymap::HWDB_PATH;
-            let (km_ok, mut km_detail) = match akm_core::keymap::read_installed(std::path::Path::new(hwdb)) {
-                Ok(r) if r.is_empty() => (true, tr("kernel mapping, no hwdb installed (optional: akmctl keymap; check: akmctl keys --check)").to_string()),
-                Ok(r) => (true, trf("{}: {} model(s) remapped (akmctl keys --check)", &[&hwdb, &r.len()])),
-                Err(e) => (false, trf("{} - reinstall: akmctl keymap apply, or remove: akmctl keymap reset", &[&e])),
-            };
-            let keyd_active = diag::run_bounded(Command::new("systemctl").args(["is-active", "--quiet", "keyd.service"]), diag::COMMAND_TIMEOUT)
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-            if keyd_active && std::path::Path::new("/etc/keyd/apple-keyboard.conf").exists() {
-                km_detail = trf("{} · keyd also active with /etc/keyd/apple-keyboard.conf (optional, see KEYD.md)", &[&km_detail]);
-            }
-            out.push(DiagResult { label: tr("Key mapping").into(), ok: km_ok, detail: km_detail });
-
-            // udev rules
-            let udev_ok = std::path::Path::new("/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules").exists();
-            out.push(DiagResult {
-                label: tr("udev rules").into(), ok: udev_ok,
-                detail: if udev_ok { tr("70-apple-kb-hidraw.rules installed").into() } else { tr("NOT FOUND").into() },
-            });
-
-            // hid_apple fnmode: applied value (sysfs) vs configured (modprobe.d)
-            let (fn_ok, fn_detail) = fnmode_diag::diagnose();
-            out.push(DiagResult { label: tr("hid_apple fnmode").into(), ok: fn_ok, detail: fn_detail });
-
-            // rssi-helper caps
-            let rssi_ok = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper").exists();
-            out.push(DiagResult {
-                label: tr("RSSI helper").into(), ok: rssi_ok,
-                detail: if rssi_ok { tr("rssi-helper installed (needs CAP_NET_ADMIN)").into() } else { tr("NOT FOUND").into() },
-            });
-
-            // Store results (the guard clears the running flag on drop)
-            if let Ok(mut r) = results.lock() {
-                *r = out;
-            }
-        });
-    }
-
-    fn tab_diag(&mut self, ui: &mut egui::Ui) {
-        let is_running = self.diag_running.load(std::sync::atomic::Ordering::Relaxed);
-
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(tr("System Diagnostics")).strong().size(18.0));
-            if is_running {
-                ui.label(egui::RichText::new(tr("Running...")).size(16.0).color(self.palette.warn));
-            } else if ui.button(egui::RichText::new(tr("Run Full Check")).size(16.0).strong()).clicked() {
-                self.run_diagnostics();
-            }
-        });
-        ui.separator();
-
-        let results = self.diag_results.lock().map(|r| r.clone()).unwrap_or_default();
-
-        if results.is_empty() {
-            if is_running {
-                ui.label(egui::RichText::new(tr("Diagnostics in progress...")).weak().size(16.0));
-            } else {
-                ui.label(egui::RichText::new(tr("Press 'Run Full Check' to scan all components.")).weak().size(16.0));
-            }
-            return;
-        }
-
-        let total = results.len();
-        let ok_count = results.iter().filter(|r| r.ok).count();
-        let fail_count = total - ok_count;
-
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(trf("{}/{} passed", &[&ok_count, &total])).strong().size(18.0)
-                .color(if fail_count == 0 { self.palette.good } else { self.palette.warn }));
-            if fail_count > 0 {
-                ui.label(egui::RichText::new(trf("  {} issues", &[&fail_count])).size(16.0)
-                    .color(self.palette.bad));
-            }
-        });
-
-        ui.add_space(8.0);
-
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            egui::Grid::new("diag").num_columns(3).spacing([8.0, 6.0]).show(ui, |ui| {
-                for r in &results {
-                    let (icon, c) = if r.ok { (tr("OK"), self.palette.good) } else { (tr("FAIL"), self.palette.bad) };
-                    ui.label(egui::RichText::new(icon).size(16.0).strong().color(c));
-                    ui.label(egui::RichText::new(&r.label).strong().size(16.0));
-                    // Long details wrap instead of running off the window (#195).
-                    ui.add(egui::Label::new(egui::RichText::new(&r.detail).weak().size(16.0)).wrap());
-                    ui.end_row();
-                }
-            });
-        });
-    }
-}
-
-/// A framed tile that fills the width it is given (equal columns, #195).
-fn tile(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
-    egui::Frame::group(ui.style()).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        add(ui);
-    });
-}
-
-/// Two-column key/value table whose values never widen the tile.
-fn kv_grid(ui: &mut egui::Ui, id: &str, rows: impl FnOnce(&mut egui::Ui)) {
-    egui::Grid::new(id).num_columns(2).spacing([16.0, 8.0]).show(ui, rows);
-}
-
-fn key(ui: &mut egui::Ui, k: &str) {
-    ui.label(egui::RichText::new(k).weak().size(16.0));
-}
-
-/// A value cell: truncated with "…" when too long, full text on hover (#195).
-fn value(ui: &mut egui::Ui, t: egui::RichText) {
-    let full = t.text().to_string();
-    let r = ui.add(egui::Label::new(t).truncate());
-    if full.chars().count() > 20 {
-        r.on_hover_text(full);
-    }
-}
-
-/// Four signal bars drawn with the painter (the block glyphs are missing
-/// from egui's fonts, #198).
-fn signal_bars(ui: &mut egui::Ui, lit: u8, color: egui::Color32) {
-    let (rect, _) = ui.allocate_exact_size(egui::Vec2::new(26.0, 16.0), egui::Sense::hover());
-    let off = ui.visuals().widgets.noninteractive.bg_stroke.color;
-    for i in 0..4u8 {
-        let h = 4.0 + 3.5 * f32::from(i);
-        let x = rect.min.x + f32::from(i) * 6.5;
-        let r = egui::Rect::from_min_max(egui::Pos2::new(x, rect.max.y - h), egui::Pos2::new(x + 4.5, rect.max.y));
-        ui.painter().rect_filled(r, 1.0, if i < lit { color } else { off });
-    }
 }
 
 // ── Entrypoint ──────────────────────────────────────────────────────────────
@@ -888,19 +553,5 @@ mod tests {
         let t = Snapshot::default().tooltip_text();
         assert!(t.contains("n/a"));
         assert!(!t.contains("0%"));
-    }
-
-    #[test]
-    fn diag_results_survive_a_panicking_writer() {
-        let r: Arc<Mutex<Vec<DiagResult>>> = Arc::new(Mutex::new(Vec::new()));
-        let r2 = r.clone();
-        let _ = thread::spawn(move || {
-            let _g = r2.lock().unwrap();
-            panic!("boom");
-        })
-        .join();
-        assert!(r.lock().is_err());
-        r.clear_poison();
-        assert!(r.lock().is_ok());
     }
 }
