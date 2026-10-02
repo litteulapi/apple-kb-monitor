@@ -92,6 +92,10 @@ Every read of the A1314's battery costs radio traffic, and UPower alone sends tw
 
 On the classic Bluetooth link (BR/EDR) the RSSI is **not in dBm**: it is the gap in dB to the controller's *Golden Receive Power Range* (Core Spec Vol 4 Part E §7.5.4); **0 = inside the ideal range**, negative = below, positive = above. The UI shows words first: "Signal: excellent (0)" for 0 or more, "good" for −1 to −5, "weak" below −5, with the raw value and no unit. JSON: `rssi_rel_db`, `rssi_quality`, `rssi_kind` (`bredr-golden-range`); `rssi_dbm` is kept as a **deprecated mirror** of `rssi_rel_db`. The D-Bus property `Rssi` (127 = unknown) carries the same relative value. `Signal: n/a` means the helper could not run: membership of the group `akm` is required.
 
+### History: bounded size and bounded answers (#96)
+
+`history.jsonl` keeps 90 days of samples and never stays above 5 MiB: over that size the daemon drops the oldest ordinary samples until the file is back under 4 MiB, in one atomic rewrite, after a copy `history.jsonl.prev`. Lines carrying a battery replacement are kept whatever their age. At one sample per 5 minutes the 90 days weigh about 3 MiB: the bound only bites on a file that grew abnormally. D-Bus `History(t since)` returns at most 2000 points: beyond, the daemon thins the series (first point, last point, every battery replacement, evenly spaced samples); `HistoryMax(t since, u max)` lets the client choose the bound (0 = 2000, at most 20000). `akmctl history` reads the file itself and is not thinned.
+
 ## Other files
 
 | File | Owner | Content |

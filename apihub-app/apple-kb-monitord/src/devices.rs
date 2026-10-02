@@ -14,7 +14,8 @@
 //! * `FnMode` i, `SwapOptCmd` i, `IsoLayout` i (`hid_apple`, global to the
 //!   module; -100 when not loaded)
 //!
-//! Methods: `Refresh()`, `History(t since) -> s`, `BatterySets() -> s`,
+//! Methods: `Refresh()`, `History(t since) -> s` (at most 2000 points),
+//! `HistoryMax(t since, u max) -> s`, `BatterySets() -> s`,
 //! `SetAlias(s) -> s` (BlueZ alias, validated; "" = reset),
 //! `SetFnMode(i)` (caller uid checked, validated, then delegated to the
 //! privileged helper through polkit; `NotSupported` without it, `LimitsExceeded`
@@ -32,6 +33,8 @@ use std::task::{Poll, Waker};
 use akm_core::batteries;
 use akm_core::hid_params::Param;
 use akm_core::history::{Clock, History, SystemClock};
+#[allow(unused_imports)] // named by the documentation
+use akm_core::history_limits::DEFAULT_MAX_POINTS;
 use akm_core::{Snapshot, Watch};
 use zbus::interface;
 use zbus::object_server::SignalContext;
@@ -165,11 +168,21 @@ impl Shared {
         })
     }
 
+    /// `History(since)`: at most [`DEFAULT_MAX_POINTS`] points (#96).
     pub fn history_json(&self, since: u64) -> zbus::fdo::Result<String> {
+        self.history_json_max(since, 0)
+    }
+
+    /// Entries with `ts >= since`, thinned by the daemon to at most `max`
+    /// points (0 = [`DEFAULT_MAX_POINTS`], never above
+    /// [`akm_core::history_limits::MAX_POINTS_LIMIT`]): the first, the last,
+    /// every battery replacement and evenly spaced samples (#96).
+    pub fn history_json_max(&self, since: u64, max: u32) -> zbus::fdo::Result<String> {
+        let max = usize::try_from(max).unwrap_or(usize::MAX);
         let entries = self
             .history
             .as_ref()
-            .map(|h| h.read_since(since))
+            .map(|h| h.read_since_bounded(since, max))
             .unwrap_or_default();
         serde_json::to_string(&entries).map_err(|e| zbus::fdo::Error::Failed(e.to_string()))
     }
@@ -367,6 +380,11 @@ impl Device {
 
     fn history(&self, since: u64) -> zbus::fdo::Result<String> {
         self.shared.history_json(since)
+    }
+
+    /// [`Self::history`] with the number of points chosen by the client.
+    fn history_max(&self, since: u64, max: u32) -> zbus::fdo::Result<String> {
+        self.shared.history_json_max(since, max)
     }
 
     /// Battery sets (JSON array of `akm_core::batteries::BatterySet`).

@@ -29,7 +29,8 @@
 //! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `RereadName() -> (bs)` (forget
 //! `0x51`-`0x54` and read these four again, now or at the end of a 30 s floor: deferred,
 //! never dropped; `false` while disconnected; writes nothing to the keyboard, #248), `SetAlias(s mac, s name) -> s`
-//! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (JSON array of
+//! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (at most 2000 points, thinned
+//! by the daemon beyond; `HistoryMax(t since, u max) -> s` chooses the bound, #96; JSON array of
 //! `{ts,pct,voltage?,event?,schema?,mv_0x46?,mv_0x49?,voltage_valid?}`, `voltage_valid=false` = legacy value, #180); since API 2 `GetDevices() -> ao`,
 //! `BatterySets() -> s`, `NotifyShutdown() -> (b, s)` (the one write macOS does: `WillShutdown`, #191),
 //! `ExpectDisconnect() -> b` (mute the next disconnection notification for 15 s while `akmctl repair`
@@ -268,9 +269,17 @@ impl Monitor {
         self.shared.rename(mac, name, caller).await
     }
 
-    /// History entries with `ts >= since`, as a JSON array.
+    /// History entries with `ts >= since`, as a JSON array of at most 2000
+    /// points: beyond, the daemon thins the series (first, last, every
+    /// battery replacement, evenly spaced samples; #96).
     fn history(&self, since: u64) -> zbus::fdo::Result<String> {
         self.shared.history_json(since)
+    }
+
+    /// [`Self::history`] thinned to at most `max` points (0 = 2000, never
+    /// above 20000).
+    fn history_max(&self, since: u64, max: u32) -> zbus::fdo::Result<String> {
+        self.shared.history_json_max(since, max)
     }
 
     /// Object paths of the known keyboards (API 2).

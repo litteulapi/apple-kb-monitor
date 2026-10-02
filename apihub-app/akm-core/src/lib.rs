@@ -11,6 +11,8 @@
 //! * [`hidraw`]      the real `/dev/hidrawN` source + wake monitor
 //! * [`power`]       kernel `power_supply` battery (source of truth for the %)
 //! * [`history`]     JSONL history, injectable clock, rotation, estimate
+//! * [`history_limits`] size bound of the history file (5 MiB) and point bound of
+//!   what a client reads (#96)
 //! * [`machine`]     pure connection/scheduling state machine
 //! * [`rssi`]        RSSI helper runner + freshness tracker
 //! * [`led`]         keyboard LED state (sysfs) and control
@@ -58,6 +60,7 @@ pub mod keymap;
 pub mod keytable;
 pub mod hidraw;
 pub mod history;
+pub mod history_limits;
 pub mod led;
 pub mod link;
 pub mod machine;

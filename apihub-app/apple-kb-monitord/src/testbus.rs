@@ -104,6 +104,38 @@ pub fn rerun() -> Option<(PrivateBus, Command)> {
     Some((bus, cmd))
 }
 
+/// Run the test `name` of the running binary again, alone, on a private bus,
+/// with `inner_env=1` and `envs` in its environment; panics unless that run
+/// passed. Returns false when `dbus-daemon` is not installed (test skipped).
+pub fn rerun_test(name: &str, inner_env: &str, envs: &[(&str, &str)]) -> bool {
+    let Some((_bus, mut cmd)) = rerun() else {
+        eprintln!("SKIP: dbus-daemon not installed");
+        return false;
+    };
+    let out = cmd
+        .args(["--exact", name, "--nocapture", "--test-threads=1"])
+        .env(inner_env, "1")
+        .envs(envs.iter().copied())
+        .output()
+        .expect("run on the private bus");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let tail: String = text
+        .chars()
+        .rev()
+        .take(4000)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+    assert!(out.status.success(), "inner run failed:\n{tail}");
+    assert!(text.contains("1 passed"), "inner test did not run:\n{tail}");
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

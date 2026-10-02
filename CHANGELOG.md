@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Issues: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues. One version source: `[workspace.package] version` in `apihub-app/Cargo.toml` = `pkgver` in `PKGBUILD` / `.SRCINFO` = the first entry below (checked by CI, #10).
 
+## [Unreleased]
+
+### Daemon
+- History file bounded to 5 MiB (oldest ordinary samples dropped down to 4 MiB, battery replacements kept, `.prev` copy); D-Bus `History(since)` thinned by the daemon to 2000 points and new `HistoryMax(since, max)` on the root and keyboard objects (#96).
+
+### Tests
+- Every D-Bus test of the daemon runs on a private `dbus-daemon` whose configuration has no service directory (`apple_kb_monitord::testbus`), session and system bus alike: a test can no longer activate the installed daemon nor reach the real BlueZ.
+
 ## [3.1.0] - 2026-10-01
 
 Package `apple-kb-monitor` 3.1.0-15 (`main` @ `8cb044e`). This single entry replaces the two former "[3.1.0]" entries: the 2026-04-02 pre-release described a display / monitor scope that was removed with #59 and now lives in the private repository `lg-ddc-control` (this repository keeps the tag `archive/avec-ecran`); the "Unreleased" one accumulated the work below. Package revisions: -2 scope reduction, -4 daemon + `akmctl` + polkit helper, -6 single language, -7 group `akm`, -8 window fixes, -9 self-check, -10 keyd optional + Apple parity + key mapping, -11 KDE module + notifications + sleep/wake + forget + name + Apple model + French, -12 units enabled by the package, -13 config sections of other programs, -14 user unit without `IPAddressDeny`, -15 doctor journal window.

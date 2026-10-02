@@ -680,6 +680,15 @@ impl Actor {
                     Err(e) => tracing::warn!("history rotation failed: {e}"),
                 }
             }
+            // Size bound (5 MiB, #96): a `stat` per pass, a rewrite only over it.
+            match h.enforce_size() {
+                Ok(0) => {}
+                Ok(n) => tracing::warn!(
+                    "history over {} bytes: {n} oldest entries removed",
+                    akm_core::history_limits::MAX_BYTES
+                ),
+                Err(e) => tracing::warn!("history size rotation failed: {e}"),
+            }
         }
 
         if let (true, Some(mac)) = (self.opts.bluez_provider, k.device.mac.clone()) {
