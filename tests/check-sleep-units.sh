@@ -21,4 +21,8 @@ for u in apple-kb-monitor-suspend.service apple-kb-monitor-resume.service; do
   done
   grep -q 'CAP_DAC_READ_SEARCH' "$f" || fail "$u: CAP_DAC_READ_SEARCH needed to read the user's 0700 runtime directory"
 done
-echo "sleep units: breaker state readable from the sandbox"
+# SUSPEND left the keyboard dead on the real hardware (2026-10-02): the shipped
+# configuration must keep the feature off.
+grep -qx 'enabled = false' "$top/systemd/hid-suspend.conf" \
+  || fail "systemd/hid-suspend.conf must ship 'enabled = false' (SUSPEND measured harmful on 2026-10-02)"
+echo "sleep units: breaker state readable from the sandbox, SUSPEND off by default"
