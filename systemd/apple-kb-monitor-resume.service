@@ -23,7 +23,11 @@ User=root
 CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
 NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=yes
+# read-only, not "yes": "yes" hides /run/user, where the daemon publishes its
+# circuit-breaker state ($XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state). The
+# helper then saw "NoState" and sent even with the breaker open (measured
+# 2026-10-02 in this very sandbox; with read-only it reads "Closed").
+ProtectHome=read-only
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectProc=default
