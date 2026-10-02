@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Quiet hours `[notifications] quiet_hours = "22:00-07:00"`: inside the range a non-critical notification is journalled and held (one per replacement slot), then shown when the range ends; critical ones always pass; what waits survives a restart (`deferred-notifications.json`) (#91).
 - Notification button "Remind me tomorrow" on `BatteryLow`, `BatteryEstimate`, `BatteryReminder` and `FirmwareUpdate`: the same notification is shown again 24 hours later, also after a daemon restart; new batteries cancel a pending battery reminder (#110).
 - Battery health advice "batteries changed too often" after two consecutive sets of less than 30 days: `battery_advice` in `GetState`, a line in the tray menu and tooltip, one `BatteryAdvice` notification when the second set is replaced (`[notifications] battery_advice`) (#108).
+- Usage statistics without key logging, off by default (`[usage] active_time`): active minutes per day counted from the mere arrival of input reports (`akm_core::activity::note()` takes no argument), `usage` in `GetState` (7 days), one counter per day kept 90 days in `usage.json` (#109).
 
 ### Tests
 - Every D-Bus test of the daemon runs on a private `dbus-daemon` whose configuration has no service directory (`apple_kb_monitord::testbus`), session and system bus alike: a test can no longer activate the installed daemon nor reach the real BlueZ.

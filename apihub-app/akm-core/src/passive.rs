@@ -15,7 +15,8 @@
 //!
 //! **No keylogging**: every other report (`0x01` key presses, `0x4C`, `0xFE`,
 //! anything unknown) is dropped by [`decode`] after reading its first byte;
-//! only its *arrival* is noted (timestamp, [`crate::read_policy::note_input`]).
+//! only its *arrival* is noted (timestamp, [`crate::read_policy::note_input`];
+//! a call without argument, [`crate::activity::note`], for the usage statistics).
 //! Of the decoded reports only state and counters are kept, never a key code.
 //!
 //! The listener shares the cross-process lock of the safe read policy
@@ -316,6 +317,7 @@ pub fn listen_fd(
                 return Exit::Hangup;
             }
             crate::read_policy::note_input(); // timestamp only
+            crate::activity::note(); // "something arrived": no data (#109)
             if let Some(ev) = decode(&buf[..n as usize]) {
                 match ev {
                     // Before anything else: the link drops right after.

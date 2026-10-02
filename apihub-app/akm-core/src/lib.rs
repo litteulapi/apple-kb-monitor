@@ -22,6 +22,8 @@
 //! * [`forecast`]    autonomy forecast in days from the history (#83)
 //! * [`batteries`]   battery replacement detection, per-set lifetime (#85)
 //! * [`advice`]      "batteries changed too often": two sets under 30 days (#108)
+//! * [`activity`]    "the keyboard sent something": a call without any data (#109)
+//! * [`usage`]       active minutes per day, nothing else stored (#109)
 //! * [`link`]        connection / reconnection notification logic (#84)
 //! * [`config`]      `config.toml` (small TOML subset, no dependency)
 //! * [`hid_params`]  `hid_apple` parameters: read + whitelist
@@ -45,6 +47,7 @@
 //!   `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` for the other emitters
 //!   (`akm-hid-control`, `akmctl`; #244, #251)
 
+pub mod activity;
 pub mod advice;
 pub mod alerts;
 pub mod alias;
@@ -83,6 +86,7 @@ pub mod report;
 pub mod rssi;
 pub mod signal;
 pub mod snapshot;
+pub mod usage;
 
 pub use report::KbReport;
 pub use snapshot::{Snapshot, Watch};

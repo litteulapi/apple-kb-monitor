@@ -125,6 +125,10 @@ pub struct Options {
     /// Hours during which non-critical notifications are held
     /// (`[notifications] quiet_hours`, #91).
     pub quiet_hours: akm_core::quiet::QuietHours,
+    /// Count the active minutes per day (`[usage] active_time`, #109).
+    pub usage_active_time: bool,
+    /// The counter, when the statistics are on (set by `main`).
+    pub usage: Option<Arc<crate::usage::Tracker>>,
     /// Declared battery chemistry (`[battery] chemistry`, #178).
     pub chemistry: Chemistry,
     /// Publish the "Apple display" percentage (`[display] apple_percent`, #213).
@@ -157,6 +161,8 @@ impl Default for Options {
             defer_to_powerdevil: true,
             powerdevil: Arc::new(crate::powerdevil::SystemProbe::default()),
             quiet_hours: akm_core::quiet::QuietHours::none(),
+            usage_active_time: false,
+            usage: None,
             chemistry: Chemistry::default(),
             apple_percent: true,
             will_shutdown: true,
@@ -178,6 +184,7 @@ impl Options {
         self.notify_battery_advice = c.notify_battery_advice;
         self.defer_to_powerdevil = c.defer_to_powerdevil;
         self.quiet_hours = c.quiet_hours.clone();
+        self.usage_active_time = c.usage_active_time;
         self.chemistry = c.chemistry;
         self.apple_percent = c.apple_percent;
         self.will_shutdown = c.will_shutdown;
@@ -978,6 +985,7 @@ impl Actor {
             forecast: self.forecast.clone(),
             batteries_installed_at: self.installed_at,
             battery_advice: self.advice.clone(),
+            usage: self.opts.usage.as_ref().map(|u| u.summary()),
             ..Default::default()
         }
     }

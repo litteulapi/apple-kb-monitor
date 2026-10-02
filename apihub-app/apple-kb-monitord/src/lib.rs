@@ -18,6 +18,7 @@
 //! * [`shutdown`] `WillShutdown` (Feature `0x40`) at shutdown, as macOS does (#191)
 //! * [`settings`] `hid_apple` write path through the privileged helper
 //! * [`powerdevil`] KDE PowerDevil low-battery overlap (#254)
+//! * [`usage`]   active minutes per day, without any key logging (#109)
 //! * [`alias`]   keyboard name on this computer (BlueZ `Alias`, #141)
 //! * [`testbus`] test support: a private bus that can activate nothing
 //!
@@ -42,4 +43,5 @@ pub mod shutdown;
 pub mod sleep;
 #[doc(hidden)]
 pub mod testbus;
+pub mod usage;
 pub mod watcher;

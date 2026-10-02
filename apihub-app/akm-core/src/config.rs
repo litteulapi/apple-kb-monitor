@@ -17,6 +17,9 @@
 //! battery_advice = true     # "batteries changed too often" after two sets under 30 days (#108)
 //! quiet_hours = "22:00-07:00" # non-critical notifications held until the range ends; "" = none (#91)
 //!
+//! [usage]
+//! active_time = false        # count the minutes per day the keyboard is used; no key is ever recorded (#109)
+//!
 //! [display]
 //! apple_percent = true       # also show the percentage "as macOS shows it" (#213)
 //!
@@ -64,6 +67,9 @@ pub struct Config {
     /// shown when they end (`"22:00-07:00"`, several separated by commas;
     /// #91). Default: none.
     pub quiet_hours: QuietHours,
+    /// Count the active minutes per day from the mere presence of input
+    /// reports (`[usage] active_time`, #109). Default **off**.
+    pub usage_active_time: bool,
     /// Declared chemistry of the batteries (#178), default alkaline.
     pub chemistry: Chemistry,
     /// Show the percentage as macOS displays it, labelled "Apple display"
@@ -93,6 +99,7 @@ impl Default for Config {
             notify_battery_advice: true,
             defer_to_powerdevil: true,
             quiet_hours: QuietHours::none(),
+            usage_active_time: false,
             chemistry: Chemistry::default(),
             apple_percent: true,
             will_shutdown: true,
@@ -220,6 +227,7 @@ impl Reader {
                 }
                 None => false,
             },
+            ("usage", "active_time") => flag(&mut self.cfg.usage_active_time),
             ("display", "apple_percent") => flag(&mut self.cfg.apple_percent),
             ("apple", "will_shutdown") => flag(&mut self.cfg.will_shutdown),
             ("apple", "disconnect_on_breaker") => flag(&mut self.cfg.disconnect_on_breaker),
@@ -463,6 +471,18 @@ mod tests {
             c.notify_battery_advice,
             "a mistyped value keeps the default"
         );
+    }
+
+    #[test]
+    fn usage_statistics_are_off_by_default() {
+        // #109
+        assert!(!Config::default().usage_active_time);
+        assert!(!parse("[usage]\n").0.usage_active_time);
+        let (c, w) = parse("[usage]\nactive_time = true\n");
+        assert!(w.is_empty() && c.usage_active_time);
+        let (c, w) = parse("[usage]\nactive_time = 1\nkeys = true\n");
+        assert_eq!(w.len(), 2, "mistyped value, and no other key exists: {w:?}");
+        assert!(!c.usage_active_time);
     }
 
     #[test]

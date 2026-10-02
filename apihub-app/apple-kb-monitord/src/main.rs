@@ -175,7 +175,7 @@ fn main() -> ExitCode {
     run(opts, args.bus_name)
 }
 
-fn run(opts: actor::Options, bus_name: Option<String>) -> ExitCode {
+fn run(mut opts: actor::Options, bus_name: Option<String>) -> ExitCode {
     // SAFETY: the handler only stores into an atomic.
     unsafe {
         libc::signal(libc::SIGTERM, on_signal as *const () as libc::sighandler_t);
@@ -222,6 +222,17 @@ fn run(opts: actor::Options, bus_name: Option<String>) -> ExitCode {
         opts.history
             .then(akm_core::deferred::DeferredStore::default_path),
     );
+    // Usage statistics (#109), off unless `[usage] active_time = true`: a
+    // counter of active minutes fed by "an input report arrived", no data.
+    if opts.usage_active_time {
+        let tracker = apple_kb_monitord::usage::Tracker::new(
+            opts.history.then(akm_core::usage::UsageStats::default_path),
+        );
+        apple_kb_monitord::usage::subscribe(&tracker);
+        tracing::info!("usage statistics on: active minutes per day (no key is recorded)");
+        opts.usage = Some(tracker);
+    }
+    let usage = opts.usage.clone();
     tray::spawn(watch.clone(), mailbox.clone(), conn.clone());
     // What macOS tells the keyboard at shutdown (Feature 0x40, once), #191.
     apple_kb_monitord::shutdown::install(opts.will_shutdown, watch.clone());
@@ -246,6 +257,9 @@ fn run(opts: actor::Options, bus_name: Option<String>) -> ExitCode {
     }
     tracing::info!("stopping");
     handle.stop();
+    if let Some(u) = usage {
+        u.flush();
+    }
     drop(conn);
     ExitCode::SUCCESS
 }

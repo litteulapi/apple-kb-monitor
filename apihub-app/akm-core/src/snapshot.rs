@@ -43,6 +43,9 @@ pub struct Snapshot {
     /// "Batteries changed too often": the last two sets lasted less than 30
     /// days each (#108); None = nothing to say.
     pub battery_advice: Option<crate::advice::ShortLife>,
+    /// Active minutes per day, from the mere presence of input reports
+    /// (#109); None = statistics disabled (the default).
+    pub usage: Option<crate::usage::UsageSummary>,
 }
 
 impl Default for Snapshot {
@@ -62,6 +65,7 @@ impl Default for Snapshot {
             forecast: None,
             batteries_installed_at: None,
             battery_advice: None,
+            usage: None,
         }
     }
 }
