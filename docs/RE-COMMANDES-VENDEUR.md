@@ -1,5 +1,7 @@
 # RE — Commandes vendeur, registres en écriture seule et rapports cachés (A1314 ISO / BCM2042)
 
+* Corrigé le 2026-10-02 (issue #193) : §1.1 et §1.4, `0x55` n'est pas un « registre de configuration vendeur » mais `LongDeviceName` (source : `RE-PILOTE-MACOS.md` §3).
+
 Recherche **documentaire uniquement**, **sans aucun accès au clavier** (il a décroché trois fois sous
 des rafales de lecture — voir #175). Objet : identifier, à partir de sources publiques, ce que sont
 les 11 identifiants Feature refusés en lecture, les rapports d'entrée non déclarés `0x04`/`0x05`/`0x30`,
@@ -37,6 +39,10 @@ prédominante** : SET_REPORT accepté, GET_REPORT non [source publique : Bluetoo
 USB HID 1.11 §7.2.1, un rapport peut être déclaré avec accès asymétrique].
 
 ### 1.1 `0x55` et `0x50` — famille « registre vendeur de configuration » (preuve externe forte)
+
+> **Corrigé (#193)** : sur l'A1314, `0x55` n'est **pas** un registre de configuration vendeur. C'est **`LongDeviceName`**
+> (Feature, 64 o, écriture seule), et `0x50` est `DeviceNameChange` **[plist]** (`RE-PILOTE-MACOS.md` §3). Le descripteur du
+> Magic Keyboard cité ci-dessous ne vaut que pour ce produit ; la déduction et la spéculation de cette section sont caduques.
 
 Le **descripteur HID du Magic Keyboard BT** (`05AC:029C`, dump public, xloc, 2024-02-01) déclare un
 **rapport Feature vendeur `Report ID 0x55`** :
@@ -77,9 +83,10 @@ Le **descripteur HID du Magic Keyboard BT** (`05AC:029C`, dump public, xloc, 202
 
 Les 11 IDs sont, de façon cohérente avec le comportement Apple/Broadcom public, des **registres de
 configuration/commande en écriture** regroupés par famille autour des registres lisibles correspondants.
-Le seul dont la fonction est quasi-certaine par source externe est **`0x55` = registre Feature vendeur
-de configuration (64 o, volatile)** [source publique Magic Keyboard + déduction]. Les autres :
-famille connue [déduction], fonction précise inconnue [spéculation]. **Aucun ne doit être écrit** tant
+**Corrigé (#193)** : six des onze sont nommés par la personnalité Apple du PID 598 **[plist]** (`RE-PILOTE-MACOS.md` §3) :
+`0x40` `WillShutdown`, `0x41` `RecantConnection`, `0x44` `FullFactoryDefault`, `0x45` `FactoryDefault`, `0x50`
+`DeviceNameChange` et `0x55` **`LongDeviceName`** (64 o), qui n'est donc pas un « registre Feature vendeur de configuration ».
+Seuls `0xD0 0xD4 0xD5 0xFA 0xFB` n'ont aucun nom dans les personnalités Apple. **Aucun ne doit être écrit** tant
 que #175 n'est pas résolu (voir table §5).
 
 ---

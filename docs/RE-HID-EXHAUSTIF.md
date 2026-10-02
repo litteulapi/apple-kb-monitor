@@ -1,5 +1,7 @@
 # Rétro-ingénierie HID exhaustive — A1314 ISO (BCM2042)
 
+* Corrigé le 2026-10-02 (issue #193) : noms Apple reportés aux §0.3, §2.1, §2.2, §4, §5 et plan d'écriture du §6 reclassé (`0x44`/`0x45` interdits, `0x41` élevé, `0x40` faible, sens de W6), d'après `RE-PILOTE-MACOS.md` §3, §7, §8.
+
 Date : 2026-10-01. Clavier : A1314 ISO « Clavier de alice #1 », `AA:BB:CC:DD:EE:F1`, `0005:05AC:0256`,
 bcdDevice `0x0050`, `/dev/hidraw7`, BlueZ 5.87, noyau 7.1.13. Suite de `HARDWARE-RAPPORTS-HID.md`
 (carte des 27 rapports Feature) et de `AUDIT-DECODAGE-HID.md`.
@@ -81,7 +83,7 @@ Dernière requête de cette sonde : **12:11:28.493** (Input `0xFF`, tampon 256, 
 | **`0xFE`** (Feature) | dernière requête avant les 2 coupures instrumentées ; aucune valeur utile (vide ou `00 04`) |
 | **`0x4C`** (Feature) | adresse de l'hôte + 12 octets secrets ; aucune fonction n'a besoin des 12 octets (#123, #133, #140 : adresse seule, lue au plus une fois par connexion) |
 | **GET Input `0x01`** | renvoie les **touches enfoncées au moment de la requête** **[mesuré]** (1 touche vue dans 6 lectures sur 10) : fuite de frappe |
-| Les 11 IDs « sans GET » (`0x40, 0x41, 0x44, 0x45, 0x50, 0x55, 0xD0, 0xD4, 0xD5, 0xFA, 0xFB`) | le micrologiciel les connaît mais refuse le GET : ce sont des commandes ou des registres en écriture seule, de sens inconnu |
+| Les 11 IDs « sans GET » (`0x40, 0x41, 0x44, 0x45, 0x50, 0x55, 0xD0, 0xD4, 0xD5, 0xFA, 0xFB`) | le micrologiciel les connaît mais refuse le GET : ce sont des commandes ou des registres en écriture seule. Six sont nommés par Apple (`0x40` `WillShutdown`, `0x41` `RecantConnection`, `0x44` `FullFactoryDefault`, `0x45` `FactoryDefault`, `0x50` `DeviceNameChange`, `0x55` `LongDeviceName`, RE-PILOTE-MACOS §3) ; `0xD0 0xD4 0xD5 0xFA 0xFB` ne figurent dans aucune personnalité Apple |
 | Les IDs refusés (218 en Feature, 251 en Input) | aucune donnée ; ce sont des requêtes radio inutiles |
 | Copies et constantes (`0x60`, `0xEB`, `0x5B`, `0x5C`, `0x5D`, `0xD1`, `0xD8`, `0xF4`, `0xF5`, `0xF6`, `0xF7`, `0x4A`, `0x4B`, `0x09`) | constantes sur toute la journée ; aucune information en régime établi. Une lecture à la connexion au plus, si une fonction en a besoin |
 | Toute lecture multi-taille et tout balayage | la taille n'atteint pas le clavier (§0.2) ; un balayage ne sert qu'à la rétro-ingénierie |
@@ -123,8 +125,11 @@ par un seul lecteur. `0x5A`, `0x4F` et `0x51-0x54` au plus une fois par connexio
 * **[mesuré]** Un ID inconnu reçoit `0x02`. Les 11 IDs ci-dessus reçoivent `0x03` : le micrologiciel a une entrée pour eux mais
   refuse le GET **[source : sens des codes, Bluetooth HID Profile 1.1.1 §7.4.1]**. Ils sont regroupés autour des familles connues :
   `0x40-0x45` près de `0x46-0x4C`, `0x50`/`0x55` autour du nom `0x51-0x54`, `0xD0`/`0xD4`/`0xD5` près de `0xD1`/`0xD8`,
-  `0xFA`/`0xFB` près de `0xF4-0xFF`. **[hypothèse]** Ce sont des registres en écriture seule ou des commandes ; `0x50` et `0x55`
-  pourraient servir à écrire et valider le nom.
+  `0xFA`/`0xFB` près de `0xF4-0xFF`. Ce sont des registres en écriture seule ou des commandes. **[plist]** (corrigé, #193) Six d'entre eux sont nommés par la
+  personnalité Apple du PID 598, tous Feature en écriture seule : `0x40` = `WillShutdown`, `0x41` = `RecantConnection`,
+  `0x44` = `FullFactoryDefault`, `0x45` = `FactoryDefault`, `0x50` = `DeviceNameChange`, `0x55` = `LongDeviceName` (64 o)
+  (`RE-PILOTE-MACOS.md` §3). Apple déclare aussi `0x43` = `UserMode` (1-3), **absent** de notre micrologiciel : il reçoit
+  `0x02` (ERR_INVALID_REPORT_ID). `0xD0 0xD4 0xD5 0xFA 0xFB` ne sont nommés par aucune personnalité Apple.
 * **[mesuré]** La taille de la réponse ne dépend pas du tampon : le clavier rend toujours sa longueur naturelle
   (2, 3, 4, 9 ou 20 octets), le noyau tronque, et les préfixes sont cohérents. **Aucun rapport ne répond « seulement avec la bonne
   taille »**, ce qui s'explique par le fait que la taille n'est jamais transmise (§0.2).
@@ -152,19 +157,20 @@ par un seul lecteur. `0x5A`, `0x4F` et `0x51-0x54` au plus une fois par connexio
 | ID | Réponse | Déclaré dans le descripteur ? | Lecture |
 |---|---|---|---|
 | `0x01` | 9 octets : état clavier de démarrage **en direct** | oui (Input/Output) | touches enfoncées pendant la requête **[mesuré]**, masquées dans les fixtures |
-| `0x04` | `04 00` | **non** | inconnu |
-| `0x05` | `05 02` | **non** | inconnu ; **[hypothèse]** état ou mode (2 = ?) |
+| `0x04` | `04 00` | **non** | inconnu, y compris de macOS |
+| `0x05` | `05 02` | **non** | inconnu, y compris de macOS ; **[hypothèse]** état ou mode (2 = ?) |
 | `0x11` | `11 00` | oui (Éjection + Fn vendeur) | 0 = aucune touche **[mesuré]** |
-| `0x30` | `30 00` | **non** | inconnu |
-| `0x12`, `0x13`, **`0x47`** | HANDSHAKE `0x02` | **oui** (Input) | refusés |
+| `0x30` | `30 00` | **non** | **`BatteryState`** (nom Apple) : 0 normal, 1 bas, 2-3 critique ; `30 00` = normal **[plist + désassemblage]** RE-PILOTE-MACOS §3, §6 |
+| `0x12`, `0x13`, **`0x47`** | HANDSHAKE `0x02` | **oui** (Input) | refusés au GET. En interruption, le bit 1 de `0x13` signifie « sous tension » (0 → `KeyboardOff`) **[désassemblage]** RE-PILOTE-MACOS §7 |
 
 * **[mesuré]** `0x47` est déclaré Input, mais le clavier **refuse le GET Input `0x47`** et ne le sert qu'en Feature.
   C'est exactement ce que corrige le quirk `HID_BATTERY_QUIRK_FEATURE` de `hid-input.c` pour le 0x0256 **[source]**.
   Le noyau lit `0x47` avec un tampon de `max(len, 4)` octets **[source]**
   ([hid-input.c](https://github.com/torvalds/linux/blob/master/drivers/hid/hid-input.c), `hidinput_query_battery_capacity`).
 * **[mesuré]** Tous les refus Input sont `0x02` : il n'y a pas d'équivalent Input aux 11 IDs `0x03` du Feature.
-* `0x04`, `0x05` et `0x30` sont des rapports Input non déclarés qui répondent au GET. **[hypothèse]** Ce sont des tampons
-  d'entrée internes que le micrologiciel n'émet pas en interruption. Le démon pourrait les surveiller **passivement** (lecture
+* `0x04`, `0x05` et `0x30` sont des rapports Input non déclarés qui répondent au GET. `0x30` (`BatteryState`) est **aussi poussé
+  en interruption** par le clavier (`A1 30 xx`) **[désassemblage]** (`RE-PILOTE-MACOS.md` §6). Pour `0x04` et `0x05`,
+  **[hypothèse]** ce sont des tampons d'entrée internes que le micrologiciel n'émet pas en interruption. Le démon pourrait les surveiller **passivement** (lecture
   de `/dev/hidraw`, rapport d'interruption) sans aucun GET. Seuls des horodatages et des IDs ont été mesurés à ce jour.
 
 ### 2.3 Output (GET_REPORT type 2)
@@ -207,7 +213,10 @@ Ce tableau ne liste que les ajouts et corrections ; pour le reste, voir `HARDWAR
 
 | Rapport | Octet(s) | Sens | Preuve |
 |---|---|---|---|
-| Feature `0x40, 0x41, 0x44, 0x45, 0x50, 0x55, 0xD0, 0xD4, 0xD5, 0xFA, 0xFB` | — | ID connu du micrologiciel, GET non pris en charge | [mesuré] ERR_UNSUPPORTED_REQUEST ; sens [hypothèse] |
+| Feature `0x40, 0x41, 0x44, 0x45, 0x50, 0x55` | — | ID connu du micrologiciel, GET non pris en charge ; noms Apple : `WillShutdown`, `RecantConnection`, `FullFactoryDefault`, `FactoryDefault`, `DeviceNameChange`, `LongDeviceName` (64 o), tous en écriture seule | [mesuré] ERR_UNSUPPORTED_REQUEST ; noms [plist] RE-PILOTE-MACOS §3 |
+| Feature `0xD0, 0xD4, 0xD5, 0xFA, 0xFB` | — | ID connu du micrologiciel, GET non pris en charge ; aucun nom dans les personnalités Apple | [mesuré] ERR_UNSUPPORTED_REQUEST ; sens inconnu |
+| Feature `0x43` | — | `UserMode` (1-3) déclaré par Apple, **absent** de notre micrologiciel | [plist] + [mesuré] ERR_INVALID_REPORT_ID |
+| Feature `0x09` | 1 | drapeau du **délai Verr. Maj du micrologiciel** : `01` = délai désactivé (notre valeur) ; macOS écrit `01` sur les claviers 2007 (`turnOffCapsLockDelay`, `setCapsLockDelay`) et applique 75 ms côté hôte | valeur [mesuré] ; sens [désassemblage] RE-PILOTE-MACOS §8 ; sens de `00` [déduction] |
 | Feature `0xFE` | 1-8 | normalement nuls ; `00 04` une fois (03:57) | [mesuré] valeur vivante ; sens [hypothèse] boîte de réponse ; **dangereux** |
 | Feature `0xF4` | 1-2 (BE) | 1740 = tension minimale en mV (la fiche BM2042 donne VBAT ≥ 1,7 V) | valeur [mesuré], borne [source], lien [hypothèse renforcée] |
 | Feature `0x47` | 1 | % ; **ne suit pas** tronc(interp(`0x49`)) | [mesuré] (#179) |
@@ -218,13 +227,15 @@ Ce tableau ne liste que les ajouts et corrections ; pour le reste, voir `HARDWAR
 | Input `0x04` | 1 | `0x00` | [mesuré], sens inconnu |
 | Input `0x05` | 1 | `0x02` | [mesuré], sens inconnu |
 | Input `0x11` | 1 | Éjection/Fn, 0 au repos | [mesuré] + descripteur |
-| Input `0x30` | 1 | `0x00` | [mesuré], sens inconnu |
+| Input `0x30` | 1 | `0x00` = `BatteryState` normal (1 bas, 2-3 critique) ; aussi poussé en interruption | [mesuré] ; sens [plist + désassemblage] RE-PILOTE-MACOS §3, §6 |
+| Input `0x13` | 1, bit 1 | « sous tension » : 0 → `KeyboardOff` | [désassemblage] RE-PILOTE-MACOS §7 |
 
 ## 5. Inconnues restantes
 
 1. La cause des coupures. Est-ce `0xFE`, et dans quel état ? Les tests 2 à 4 du §0.2 doivent trancher, en lien avec #175 et #177.
-2. Le sens de `0x09`, `0x4A` (18), `0x4B` (`00 08`), `0xD1`/`0xD8`, `0xF6`/`0xF7` (4), `0xF5` (900 ; voir #173 pour l'hypothèse
-   de la veille), des 12 octets de `0x4C`, des Input `0x04`/`0x05`/`0x30`, et le rôle des 11 IDs refusés au GET.
+2. Le sens de `0x4A` en lecture (18), `0x4B` (`00 08`), `0xD1`/`0xD8`, `0xF6`/`0xF7` (4), `0xF5` (900 ; voir #173 pour l'hypothèse
+   de la veille), des 12 octets de `0x4C`, des Input `0x04`/`0x05`, et le rôle de `0xD0 0xD4 0xD5 0xFA 0xFB`.
+   Élucidés depuis par les pilotes Apple (#193) : `0x09`, l'Input `0x30` et six des onze IDs refusés au GET (§2.1, §4).
 3. La fonction % = f(mV) (#179).
 4. Output : non mesuré.
 5. La reconnexion : aucune lecture de comparaison avant/après n'a pu être faite.
@@ -258,9 +269,9 @@ En cas d'arrêt : retour arrière immédiat, puis fin définitive du palier.
 | **W3** identité, configuration | SET_FEATURE `0xF5` = `f5 03 84`, puis `0xF4`, `0xF6`, `0xF7` | savoir si les constantes sont modifiables (préalable à W5) | moyen : paramètres d'alimentation ou de radio ; écriture en NVRAM possible | réécrire la valeur lue |
 | **W4** identité, étalonnage | SET_FEATURE `0x5A` = valeur lue ; vérifier ensuite `0x60` et `0xEB`. Ne jamais écrire les copies directement | savoir si les 3 copies se resynchronisent (journal ou miroir) | moyen : un % faux si la table est corrompue | réécrire la valeur lue dans les 3 IDs |
 | **W5** valeur modifiée, réversible | renommer : `0x51-0x54` = nouveau nom ASCII ≤ 32 o, padding NUL. Puis `0xF5` 900 → 1200, en mesurant le délai de veille de façon passive (#173) | fonction « renommer » sans ré-appairage ; réglage du délai de veille | moyen : nom illisible ou veille trop longue (autonomie) | réécrire l'ancien nom ou 900 |
-| **W6** valeur modifiée, état | `0x09` : 01 → 00, avec observation des LED, du % et de la veille | sens de `FF01:0x0B` | moyen à élevé : mode inconnu | réécrire 01 ; à défaut, remise sous tension |
-| **W7** — **déconseillé** | toute écriture vers les 11 IDs « sans GET » (`0x40` … `0xFB`) | les identifier | **élevé** : commandes inconnues, possiblement réinitialisation, désappairage ou mise à jour du micrologiciel | aucun garanti |
-| **Interdit** | `0x4C` (appairage) ; `0xFE` ; `0x46`, `0x47`, `0x49`, `0xFF`, `0xEA` (mesures) ; Output `0x01` (LED, hors du champ de la RE) | — | perte de l'appairage, blocage, aucun gain | — |
+| **W6** valeur modifiée, état | `0x09` : 01 → 00 = **réactiver le délai Verr. Maj interne** du micrologiciel (sens Apple, RE-PILOTE-MACOS §8 ; l'effet de `00` reste une déduction), avec observation de la touche Verr. Maj | confirmer le sens de `00` | faible, réversible | réécrire 01 ; à défaut, remise sous tension |
+| **W7** — **déconseillé** (reclassé, #193) | écriture vers les IDs « sans GET », un par un : `0x40` `WillShutdown` · `0x41` `RecantConnection` · `0x50` `DeviceNameChange` et `0x55` `LongDeviceName` · `0xD0 0xD4 0xD5 0xFA 0xFB` (sans nom Apple) | observer l'effet des commandes nommées | `0x40` : **faible** (macOS l'envoie à chaque arrêt, F39 #191) · `0x41` : **élevé** (coupe la liaison) · `0x50`/`0x55` : moyen (mémoire non volatile, #192) · `0xD0 0xD4 0xD5 0xFA 0xFB` : **élevé**, inconnus | aucun garanti |
+| **Interdit** | `0x44` `FullFactoryDefault` et `0x45` `FactoryDefault` (remise à zéro, sortis de W7 par #193) ; `0x4C` (appairage) ; `0xFE` ; `0x46`, `0x47`, `0x49`, `0xFF`, `0xEA` (mesures) ; Output `0x01` (LED, hors du champ de la RE) | — | perte de l'appairage, blocage, aucun gain | — |
 
 ## 7. Reproduire (après accord, clavier stable)
 

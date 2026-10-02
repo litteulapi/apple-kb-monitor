@@ -1,6 +1,6 @@
 # Documentation index
 
-One line per document of `docs/`. Language in brackets. **Living** documents are kept in step with the code (`main` @ `8cb044e`, 3.1.0-15); **evidence** documents are dated and never rewritten (reverse engineering, audits, measurements) — their claims are checked against the registry by `scripts/qa_checks.py claims` ([CONTRE-AUDIT.md](CONTRE-AUDIT.md) is the registry itself).
+One line per document of `docs/`. Language in brackets. **Living** documents are kept in step with the code (`main` @ `8cb044e`, 3.1.0-15); **evidence** documents are dated (reverse engineering, audits, measurements): their measurements and method are never rewritten, but a claim refuted by a later study is corrected in place, and each corrected document opens with one line per correction, "Corrigé le YYYY-MM-DD (issue #N) : …" — their claims are checked against the registry by `scripts/qa_checks.py claims` ([CONTRE-AUDIT.md](CONTRE-AUDIT.md) is the registry itself).
 
 ## User guides (living)
 
