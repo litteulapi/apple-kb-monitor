@@ -184,7 +184,12 @@ fn inner() {
     assert_eq!(actions.recv_timeout(WAIT).unwrap().0, Action::Repair);
 
     // 7. Reminder: "Ignore this reminder" is offered and silences the reminder.
-    notify::battery_reminder(9.0);
+    let low = akm_core::reminder::BatteryReminder {
+        level: akm_core::reminder::ReminderLevel::Low,
+        mv: 2500,
+        threshold_mv: 2506,
+    };
+    assert!(notify::battery_reminder(&low, Some(9.0)));
     let rem = calls.recv_timeout(WAIT).unwrap();
     assert_eq!(rem.hints["x-kde-eventId"], "BatteryReminder");
     assert!(rem.actions.contains(&"Ignorer ce rappel".to_string()));

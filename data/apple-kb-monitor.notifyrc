@@ -107,8 +107,8 @@ Action=Popup
 [Event/BatteryReminder]
 Name=Reminder: change the batteries
 Name[fr]=Rappel : changez les piles
-Comment=Reminder while the batteries have not been replaced (button: Ignore this reminder)
-Comment[fr]=Rappel tant que les piles n'ont pas été changées (bouton : Ignorer ce rappel)
+Comment=The battery voltage went under the keyboard's own Low or Critical threshold (button: Ignore this reminder)
+Comment[fr]=La tension des piles est passée sous le seuil Bas ou Critique du clavier (bouton : Ignorer ce rappel)
 Icon=battery-caution
 Action=Popup
 

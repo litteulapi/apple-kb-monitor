@@ -33,6 +33,8 @@
 //! * [`alias`]       validation of the user-chosen keyboard name (#141)
 //! * [`devname`]     name stored IN the keyboard (0x51-0x55): validation, frames,
 //!   backup, guarded write behind three locks (#248)
+//! * [`reminder`]    when "change the batteries" (keyboard thresholds 0x60) and
+//!   "firmware update" notices are due, once per crossing
 //! * [`breaker_state`] the daemon's circuit breaker published in
 //!   `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` for the other emitters
 //!   (`akm-hid-control`, `akmctl`; #244, #251)
@@ -66,6 +68,7 @@ pub mod power;
 pub mod read_policy;
 pub mod recovery;
 pub mod registry;
+pub mod reminder;
 pub mod report;
 pub mod rssi;
 pub mod signal;

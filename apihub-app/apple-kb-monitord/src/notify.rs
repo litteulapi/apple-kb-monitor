@@ -23,6 +23,7 @@ use akm_core::alerts::{Crossing, Urgency};
 use akm_core::batteries::Replacement;
 use akm_core::chemistry::AlertBasis;
 use akm_core::link::{self, LinkEvent};
+use akm_core::reminder::{BatteryReminder, ReminderLevel};
 use zbus::zvariant::Value;
 
 /// Longest wait for one `Notify` call before it is abandoned.
@@ -581,26 +582,55 @@ pub fn battery_replaced(r: &Replacement) {
     deliver(replaced_notification(r, Lang::detect()));
 }
 
-/// "Change the batteries" reminder, with an "Ignore this reminder" button.
-pub fn reminder_notification(pct: f64, lang: Lang) -> Notification {
-    let body = match lang {
-        Lang::En => format!("Batteries at {:.0}% \u{2014} they have not been replaced yet", pct),
-        Lang::Fr => format!(
-            "Piles \u{e0} {} \u{2014} elles n'ont pas encore \u{e9}t\u{e9} chang\u{e9}es",
-            pct_s(lang, pct)
+/// "Change the batteries" reminder, with an "Ignore this reminder" button:
+/// the smoothed voltage went under one of the keyboard's own thresholds
+/// (`0x60`: Low 2506 / Critical 2404 mV on an A1314), shown with the
+/// percentage the tray displays (the keyboard's indication).
+pub fn reminder_notification(r: &BatteryReminder, pct: Option<f64>, lang: Lang) -> Notification {
+    let critical = r.level == ReminderLevel::Critical;
+    let (mv, t) = (r.mv, r.threshold_mv);
+    let pct = pct.filter(|p| p.is_finite());
+    let body = match (lang, critical) {
+        (Lang::En, _) => format!(
+            "Voltage {mv}\u{202f}mV, under the keyboard's {} threshold ({t}\u{202f}mV){} \u{2014} {}",
+            if critical { "Critical" } else { "Low" },
+            pct.map_or(String::new(), |p| format!("; keyboard indication {p:.0}%")),
+            if critical { "change the batteries now" } else { "plan to change the batteries" },
+        ),
+        (Lang::Fr, _) => format!(
+            "Tension {mv}\u{202f}mV, sous le seuil {} du clavier ({t}\u{202f}mV){} \u{2014} {}",
+            if critical { "Critique" } else { "Bas" },
+            pct.map_or(String::new(), |p| format!(" ; indication du clavier {}", pct_s(lang, p))),
+            if critical {
+                "changez les piles maintenant"
+            } else {
+                "pr\u{e9}voyez de changer les piles"
+            },
         ),
     };
-    Notification::new(
-        Event::BatteryReminder,
-        lang,
+    let summary = if critical {
+        lang.t(
+            "Apple Keyboard \u{2014} change the batteries now",
+            "Clavier Apple \u{2014} changez les piles maintenant",
+        )
+    } else {
         lang.t(
             "Apple Keyboard \u{2014} time to change the batteries",
             "Clavier Apple \u{2014} pensez \u{e0} changer les piles",
         )
-        .into(),
+    };
+    let (icon, urgency) = if critical {
+        ("battery-empty", Urgency::Critical)
+    } else {
+        ("battery-caution", Urgency::Normal)
+    };
+    Notification::new(
+        Event::BatteryReminder,
+        lang,
+        summary.into(),
         body,
-        "battery-caution",
-        Urgency::Normal,
+        icon,
+        urgency,
     )
 }
 
@@ -665,12 +695,20 @@ pub fn keyboard_removed(name: &str) {
     deliver(removed_notification(name, Lang::detect()));
 }
 
-/// Send the reminder unless the user ignored it (until new batteries).
-pub fn battery_reminder(pct: f64) {
-    if REMINDER_IGNORED.load(Ordering::SeqCst) {
-        return;
+/// Send the reminder unless the user ignored it (until new batteries). The
+/// Critical one is always sent: "Ignore this reminder" silences the Low one.
+/// Returns whether it was sent.
+pub fn battery_reminder(r: &BatteryReminder, pct: Option<f64>) -> bool {
+    if reminder_suppressed(r.level) {
+        return false;
     }
-    deliver(reminder_notification(pct, Lang::detect()));
+    deliver(reminder_notification(r, pct, Lang::detect()));
+    true
+}
+
+/// "Ignore this reminder" applies to the Low reminder only.
+pub fn reminder_suppressed(level: ReminderLevel) -> bool {
+    level == ReminderLevel::Low && REMINDER_IGNORED.load(Ordering::SeqCst)
 }
 
 /// A newer firmware than the keyboard's is known.
@@ -1050,6 +1088,57 @@ mod tests {
         Crossing { threshold, pct, urgency }
     }
 
+    fn rem_low() -> BatteryReminder {
+        BatteryReminder {
+            level: ReminderLevel::Low,
+            mv: 2500,
+            threshold_mv: 2506,
+        }
+    }
+
+    fn rem_crit() -> BatteryReminder {
+        BatteryReminder {
+            level: ReminderLevel::Critical,
+            mv: 2400,
+            threshold_mv: 2404,
+        }
+    }
+
+    #[test]
+    fn reminder_states_the_keyboard_threshold_and_the_displayed_percentage() {
+        let n = reminder_notification(&rem_low(), Some(35.4), Lang::Fr);
+        assert_eq!(n.event, Event::BatteryReminder);
+        assert_eq!(n.urgency, Urgency::Normal);
+        assert!(
+            n.body.contains("2500\u{202f}mV")
+                && n.body.contains("seuil Bas du clavier (2506\u{202f}mV)"),
+            "{}",
+            n.body
+        );
+        assert!(
+            n.body.contains("indication du clavier 35\u{202f}%"),
+            "{}",
+            n.body
+        );
+        let c = reminder_notification(&rem_crit(), None, Lang::En);
+        assert_eq!(
+            (c.urgency, c.icon.as_str()),
+            (Urgency::Critical, "battery-empty")
+        );
+        assert!(
+            c.body.contains("Critical threshold (2404\u{202f}mV)") && !c.body.contains('%'),
+            "{}",
+            c.body
+        );
+        assert!(c.summary.contains("now"));
+        // "Ignore this reminder" silences the Low reminder, never the Critical one.
+        REMINDER_IGNORED.store(true, Ordering::SeqCst);
+        assert!(reminder_suppressed(ReminderLevel::Low));
+        assert!(!reminder_suppressed(ReminderLevel::Critical));
+        REMINDER_IGNORED.store(false, Ordering::SeqCst);
+        assert!(!reminder_suppressed(ReminderLevel::Low));
+    }
+
     #[test]
     fn crossing_and_replacement_texts() {
         let c = crossing(30, 29.6, Urgency::Normal);
@@ -1092,12 +1181,34 @@ mod tests {
             LinkEvent::Reconnected { mac: "m".into(), pct: Some(80.0) },
         ];
         let mut pairs: Vec<(Notification, Notification)> = vec![
-            (crossing_notification(&c, AlertBasis::Estimate, Lang::En), crossing_notification(&c, AlertBasis::Estimate, Lang::Fr)),
-            (crossing_notification(&cc, AlertBasis::Firmware, Lang::En), crossing_notification(&cc, AlertBasis::Firmware, Lang::Fr)),
-            (reminder_notification(9.0, Lang::En), reminder_notification(9.0, Lang::Fr)),
-            (estimate_notification(12.0, 10, Lang::En), estimate_notification(12.0, 10, Lang::Fr)),
-            (removed_notification("Kb", Lang::En), removed_notification("Kb", Lang::Fr)),
-            (firmware_notification("0x0050", "0x0060", Lang::En), firmware_notification("0x0050", "0x0060", Lang::Fr)),
+            (
+                crossing_notification(&c, AlertBasis::Estimate, Lang::En),
+                crossing_notification(&c, AlertBasis::Estimate, Lang::Fr),
+            ),
+            (
+                crossing_notification(&cc, AlertBasis::Firmware, Lang::En),
+                crossing_notification(&cc, AlertBasis::Firmware, Lang::Fr),
+            ),
+            (
+                reminder_notification(&rem_low(), Some(9.0), Lang::En),
+                reminder_notification(&rem_low(), Some(9.0), Lang::Fr),
+            ),
+            (
+                reminder_notification(&rem_crit(), Some(4.0), Lang::En),
+                reminder_notification(&rem_crit(), Some(4.0), Lang::Fr),
+            ),
+            (
+                estimate_notification(12.0, 10, Lang::En),
+                estimate_notification(12.0, 10, Lang::Fr),
+            ),
+            (
+                removed_notification("Kb", Lang::En),
+                removed_notification("Kb", Lang::Fr),
+            ),
+            (
+                firmware_notification("0x0050", "0x0060", Lang::En),
+                firmware_notification("0x0050", "0x0060", Lang::Fr),
+            ),
         ];
         for s in [B::Low, B::Critical] {
             pairs.push((battery_state_notification(s, Lang::En).unwrap(), battery_state_notification(s, Lang::Fr).unwrap()));
@@ -1162,8 +1273,20 @@ mod tests {
         let rec = link_notification(&LinkEvent::Reconnected { mac: "m".into(), pct: None }, Lang::En);
         assert_eq!(rec.event, Event::KeyboardReconnected);
         assert_eq!(rec.event.category(), "device.added");
-        assert_eq!(rec.event.slot(), dis.event.slot(), "reconnection replaces the disconnection");
-        assert_eq!(reminder_notification(10.0, Lang::En).timeout_ms(), 15_000);
+        assert_eq!(
+            rec.event.slot(),
+            dis.event.slot(),
+            "reconnection replaces the disconnection"
+        );
+        assert_eq!(
+            reminder_notification(&rem_low(), Some(10.0), Lang::En).timeout_ms(),
+            15_000
+        );
+        assert_eq!(
+            reminder_notification(&rem_crit(), None, Lang::En).timeout_ms(),
+            0,
+            "critical: persistent"
+        );
     }
 
     #[test]
@@ -1173,7 +1296,7 @@ mod tests {
         let l = list(rep);
         let keys: Vec<&str> = l.iter().step_by(2).map(|s| s.as_str()).collect();
         assert_eq!(keys, ["default", "repair", "open"]);
-        let rem = list(reminder_notification(9.0, Lang::Fr));
+        let rem = list(reminder_notification(&rem_low(), Some(9.0), Lang::Fr));
         assert_eq!(rem[1], "Ouvrir");
         assert!(rem.contains(&"ignore".to_string()) && rem.contains(&"Ignorer ce rappel".to_string()));
         assert!(generic_notification("s", "b", "dialog-error", Urgency::Critical, false)

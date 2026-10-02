@@ -22,6 +22,7 @@ use akm_core::history::{
 };
 use akm_core::link::LinkTracker;
 use akm_core::machine::{Action, Event, Machine, RSSI_MAX_AGE};
+use akm_core::reminder::NoticeMemory;
 use akm_core::rssi::{self, RssiTracker};
 use akm_core::{discover, hidraw, led, power, KbReport, Snapshot, Watch};
 
@@ -192,6 +193,12 @@ struct Actor {
     /// The single "estimate" reminder was sent for this set of batteries
     /// (PowerDevil covers the keyboard, #254).
     estimate_reminded: bool,
+    /// "Change the batteries" / "firmware update" notices already shown,
+    /// once per crossing (docs/NOTIFICATIONS.md).
+    notices: NoticeMemory,
+    /// Where `notices` is kept across restarts (single writer: only when
+    /// the history is written too).
+    notices_path: Option<std::path::PathBuf>,
 }
 
 impl Actor {
@@ -214,7 +221,13 @@ impl Actor {
             }
         }
         let past = history.as_ref().map(History::read).unwrap_or_default();
+        let notices_path = opts.history.then(NoticeMemory::default_path);
         Self {
+            notices: notices_path
+                .as_deref()
+                .map(NoticeMemory::load)
+                .unwrap_or_default(),
+            notices_path,
             alerts: AlertState::new(opts.alerts.clone()),
             detector: Detector::primed(&past),
             link: LinkTracker::new(),
@@ -570,6 +583,83 @@ impl Actor {
                 }
             }
         }
+        if self.opts.notify {
+            for n in self.due_notices(notify::Lang::detect()) {
+                // "Ignore this reminder" silences the Low reminder only.
+                if n.event == notify::Event::BatteryReminder
+                    && n.urgency != Urgency::Critical
+                    && notify::reminder_suppressed(akm_core::reminder::ReminderLevel::Low)
+                {
+                    tracing::info!(
+                        "battery reminder not shown: ignored by the user until new batteries"
+                    );
+                    continue;
+                }
+                notify::deliver(n);
+            }
+        } else {
+            let _ = self.due_notices(notify::Lang::En);
+        }
+    }
+
+    /// The "change the batteries" and "firmware update" notices due after
+    /// this reading, each once per crossing (re-armed when the voltage climbs
+    /// back, new batteries, or the firmware is up to date again). The memory
+    /// is updated (and saved) even when notifications are off, so turning
+    /// them on later does not replay old crossings.
+    fn due_notices(&mut self, lang: notify::Lang) -> Vec<notify::Notification> {
+        let mut out = Vec::new();
+        let Some(k) = self.kb.as_ref().filter(|_| self.linked) else {
+            return out;
+        };
+        let Some(mac) = k.device.mac.clone() else {
+            return out;
+        };
+        let mut changed = false;
+        // Battery: the keyboard's own thresholds (0x60 = 0x5A) against the
+        // smoothed voltage 0x49, as macOS compares them.
+        let mv = k.battery.voltage_filtered_mv.or(k.battery.voltage_mv);
+        if let (Some(t), Some(mv), true) = (k.battery.thresholds, mv, self.opts.alerts_enabled) {
+            let pct = k.battery_pct();
+            let (due, ch) = self.notices.battery(&mac, mv, &t);
+            changed |= ch;
+            if let Some(r) = due {
+                tracing::warn!(
+                    "battery reminder: {mv} mV under the keyboard's {:?} threshold ({} mV), indication {:?} %",
+                    r.level,
+                    r.threshold_mv,
+                    pct.map(f64::round)
+                );
+                out.push(notify::reminder_notification(&r, pct, lang));
+            }
+        }
+        // Firmware: the embedded table says a newer public version exists.
+        let fw = &k.firmware;
+        let latest = (fw.status == "update_available")
+            .then(|| fw.latest_known.clone())
+            .flatten();
+        let (due, ch) = self
+            .notices
+            .firmware(&mac, latest.as_deref(), fw.status == "up_to_date");
+        changed |= ch;
+        if due {
+            let current = fw.version.clone().unwrap_or_else(|| "?".into());
+            let latest = latest.unwrap_or_default();
+            tracing::info!("firmware update known: {current} -> {latest}");
+            out.push(notify::firmware_notification(&current, &latest, lang));
+        }
+        if changed {
+            self.save_notices();
+        }
+        out
+    }
+
+    fn save_notices(&self) {
+        if let Some(p) = self.notices_path.as_deref() {
+            if let Err(e) = self.notices.save(p) {
+                tracing::warn!("cannot save {}: {e}", p.display());
+            }
+        }
     }
 
     /// New batteries: re-arm the alerts, notify, publish.
@@ -583,6 +673,9 @@ impl Actor {
         );
         self.alerts.rearm_all();
         self.estimate_reminded = false;
+        if mac.is_some_and(|m| self.notices.rearm_battery(m)) {
+            self.save_notices();
+        }
         akm_core::alerts::dedupe().reset();
         self.installed_at = Some(r.ts);
         if self.opts.notify && self.opts.notify_battery_replaced {
@@ -997,6 +1090,91 @@ mod tests {
         n.installed_at = Some(unix_now() - 3600);
         let b = n.snapshot().keyboard.unwrap().battery;
         assert!(b.new_batteries && b.charge_estimate.is_none());
+    }
+
+    /// The "change the batteries" reminder follows the keyboard's own
+    /// thresholds (0x60: Low 2506 / Critical 2404 mV), once per crossing; the
+    /// firmware notice once per known version (docs/NOTIFICATIONS.md).
+    #[test]
+    fn reminder_and_firmware_notices_are_triggered_once_per_crossing() {
+        let mut a = quiet_actor();
+        a.linked = true;
+        let t = akm_core::registry::Thresholds {
+            full_mv: 2954,
+            low_mv: 2506,
+            critical_mv: 2404,
+            empty_mv: 2054,
+        };
+        let step = |a: &mut Actor, fw_pct: f64, mv: u32, fw: &str| {
+            let mut k = report_mv(fw_pct, mv);
+            k.battery.thresholds = Some(t);
+            k.firmware.version = Some("0x0040".into());
+            k.firmware.status = fw.into();
+            k.firmware.latest_known = Some("0x0050".into());
+            a.kb = Some(k);
+            a.due_notices(notify::Lang::Fr)
+                .into_iter()
+                .map(|n| (n.event, n.urgency, n.body))
+                .collect::<Vec<_>>()
+        };
+        let n = step(&mut a, 90.0, 2775, "update_available");
+        assert_eq!(n.len(), 1, "{n:?}");
+        assert_eq!(n[0].0, notify::Event::FirmwareUpdate);
+        assert!(n[0].2.contains("0x0040") && n[0].2.contains("0x0050"));
+        assert!(
+            step(&mut a, 88.0, 2770, "update_available").is_empty(),
+            "firmware: once"
+        );
+        let n = step(&mut a, 75.0, 2506, "update_available");
+        assert_eq!(n.len(), 1);
+        assert_eq!(
+            (n[0].0, n[0].1),
+            (notify::Event::BatteryReminder, Urgency::Normal)
+        );
+        assert!(
+            n[0].2.contains("seuil Bas du clavier (2506\u{202f}mV)")
+                && n[0].2.contains("75\u{202f}%"),
+            "{}",
+            n[0].2
+        );
+        assert!(
+            step(&mut a, 74.0, 2503, "update_available").is_empty(),
+            "Low: once"
+        );
+        let n = step(&mut a, 50.0, 2404, "update_available");
+        assert_eq!(
+            (n[0].0, n[0].1),
+            (notify::Event::BatteryReminder, Urgency::Critical)
+        );
+        assert!(
+            step(&mut a, 49.0, 2390, "update_available").is_empty(),
+            "Critical: once"
+        );
+        // New batteries re-arm the reminder; the firmware, up to date, re-arms too.
+        a.on_replaced(
+            Some("AA:BB:CC:DD:EE:F1"),
+            akm_core::batteries::Replacement {
+                ts: 1,
+                pct_before: Some(49.0),
+                pct_after: 99.0,
+                voltage_before: None,
+                voltage_after: None,
+            },
+        );
+        assert!(step(&mut a, 99.0, 2950, "up_to_date").is_empty());
+        assert_eq!(
+            step(&mut a, 70.0, 2500, "update_available").len(),
+            2,
+            "both armed again"
+        );
+        // Unknown thresholds (kernel-only reading): no voltage reminder.
+        let mut b = quiet_actor();
+        b.linked = true;
+        b.kb = Some(report_mv(10.0, 2200));
+        assert!(b.due_notices(notify::Lang::En).is_empty());
+        // Disconnected: nothing.
+        b.linked = false;
+        assert!(b.due_notices(notify::Lang::En).is_empty());
     }
 
     #[test]

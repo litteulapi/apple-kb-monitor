@@ -32,8 +32,8 @@ installé). Les réglages de l'utilisateur sont écrits par Plasma dans
 | `RepairNeeded` | ré-appairage nécessaire | critique, persistante | Réparer…, Ouvrir | `repair` |
 | `KeyboardRemoved` | clavier supprimé du poste depuis l'extérieur (Oublier de Plasma, `bluetoothctl remove`) (#252) | normale, 12 s | Réparer…, Ouvrir | `repair` |
 | `BatteryEstimate` | l'unique rappel « estimation selon vos piles » quand PowerDevil alerte déjà (#254) | normale, 12 s | Ouvrir | `battery` |
-| `FirmwareUpdate` | firmware plus récent connu | normale | Ouvrir | `firmware` |
-| `BatteryReminder` | rappel « changez les piles » | normale, 15 s | Ouvrir, Ignorer ce rappel | `battery` |
+| `FirmwareUpdate` | firmware plus récent connu (table embarquée) : une fois par version, mémorisé | normale | Ouvrir | `firmware` |
+| `BatteryReminder` | « changez les piles » : tension lissée `0x49` sous le seuil Bas puis Critique **du clavier** (`0x60` = `0x5A`, 2506 / 2404 mV sur A1314), avec l'indication du clavier en % | Bas : normale, 15 s ; Critique : critique, persistante | Ouvrir, Ignorer ce rappel | `battery` |
 | `BatteryReplaced` | piles neuves détectées | normale | Ouvrir | `battery` |
 | `Error` | échec d'une opération | critique | aucun | `error` |
 
@@ -44,9 +44,15 @@ installé). Les réglages de l'utilisateur sont écrits par Plasma dans
   emplacement et le renvoie dans `replaces_id` : une alerte de piles ne s'empile
   pas, la reconnexion remplace la déconnexion. Une notification fermée par
   l'utilisateur (`NotificationClosed`) est oubliée.
-* `firmware_update` et `battery_reminder` sont prêts (`notify.rs`) mais aucun
-  déclencheur du démon ne les appelle encore : l'événement existe dans Plasma
-  (réglable), l'émission reste à brancher.
+* Déclenchement de `BatteryReminder` et `FirmwareUpdate` (`akm-core::reminder`,
+  appelé par l'acteur après chaque lecture) : **une fois par franchissement**.
+  Un niveau de piles n'est réarmé que si la tension remonte de 50 mV au-dessus
+  de son seuil (bruit de l'ADC ignoré), ou par des piles neuves ; le firmware
+  est réannoncé pour une version plus récente, ou après être redevenu à jour.
+  L'état est gardé dans `$XDG_STATE_HOME/apple-kb-monitor/notices.json` (écrit
+  seulement quand l'historique l'est) : un redémarrage du démon ne répète pas
+  un rappel déjà vu. Sans seuils lus (lecture noyau seule), pas de rappel de
+  tension. `[alerts] enabled = false` coupe aussi le rappel de piles.
 
 ## Boutons
 
@@ -54,7 +60,7 @@ installé). Les réglages de l'utilisateur sont écrits par Plasma dans
 |---|---|
 | Ouvrir | `org.freedesktop.Application.Activate` sur `com.agenceapi.AppleKbMonitor` (activation D-Bus, instance unique, jeton d'activation Wayland fourni par Plasma via `ActivationToken` s'il existe), sinon `apihub-app` |
 | Réparer… | `akmctl repair` dans un terminal (`konsole --hold -e`, puis les autres terminaux connus) |
-| Ignorer ce rappel | coupe `BatteryReminder` jusqu'à la détection de piles neuves |
+| Ignorer ce rappel | coupe le rappel du seuil Bas jusqu'à la détection de piles neuves ; le rappel Critique reste émis |
 
 Le signal `ActionInvoked` est écouté par un fil dédié (`kb-notify-actions`), sur sa
 propre connexion : ni l'acquisition ni l'envoi n'attendent. Chaque action tourne
