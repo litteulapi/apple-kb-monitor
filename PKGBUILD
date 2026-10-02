@@ -149,6 +149,10 @@ package() {
     install -Dm644 "$startdir/docs/TOUCHES.md"                        "$pkgdir/usr/share/doc/apple-kb-monitor/TOUCHES.md"
     install -Dm644 "$startdir/modprobe/hid_apple.conf"                    "$pkgdir/etc/modprobe.d/hid_apple.conf"
 
+    # ── Font of the window: VT323 (SIL Open Font License 1.1), embedded in
+    # apihub-app; its licence is shipped with the package (docs/DA-PIPBOY.md).
+    install -Dm644 "$startdir/apihub-app/assets/fonts/OFL.txt"         "$pkgdir/usr/share/licenses/apple-kb-monitor/OFL.txt"
+
     # ── Icons ───────────────────────────────────────────────────────────
     install -Dm644 "$startdir/icons/apihub-scarab.svg"                 "$pkgdir/usr/share/icons/hicolor/scalable/apps/apihub-scarab.svg"
     # dynamic tray icons (battery level steps, charging, disconnected, ...)
