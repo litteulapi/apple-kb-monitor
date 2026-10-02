@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Name: alias on this computer only (BlueZ Alias via the daemon's SetAlias).
-// Nothing here writes into the keyboard: the two buttons of the second group
-// only open a terminal on `akmctl rename --device-name=… --check` or
-// `--write-device-name` (#248), where akmctl shows the plan, makes the backup
-// and demands the typed consent and the name again before its single write.
+// Name: the alias on this computer (BlueZ Alias via the daemon's SetAlias),
+// and the name stored inside the keyboard (#248). For the latter the page asks
+// one confirmation, then runs `akmctl rename --device-name=<name> --yes`
+// through the bridge (QProcess, argument list, never a shell, bounded delay)
+// and shows akmctl's verdict here; "Check" runs the same command with
+// `--check` (whole pre-flight, nothing written).
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -19,6 +20,8 @@ ColumnLayout {
     readonly property var dev: store.state && store.state.keyboard && store.state.keyboard.device ? store.state.keyboard.device : ({})
     readonly property string mac: dev.mac ? String(dev.mac) : ""
     property bool busy: false
+    // A device-name command (check or write) is running.
+    property bool deviceBusy: false
 
     spacing: Kirigami.Units.smallSpacing
 
@@ -47,20 +50,48 @@ ColumnLayout {
         return "'" + String(t).replace(/'/g, "'\\''") + "'";
     }
 
-    // Open a terminal on akmctl (C++: QProcess with an argument list, never a
-    // shell; the name is one literal argument). The module writes nothing.
-    function openTerminal(checkOnly) {
-        const err = root.store.bridge.openDeviceNameTerminal(deviceNameField.text, checkOnly);
-        if (err) {
-            result.type = Kirigami.MessageType.Error;
-            result.text = i18n("Terminal not opened: %1", err);
-        } else {
-            result.type = Kirigami.MessageType.Information;
-            result.text = checkOnly
-                ? i18n("A terminal was opened: akmctl runs the whole pre-flight there (one administrator authentication to read the Bluetooth channel size) and writes nothing.")
-                : i18n("A terminal was opened: nothing is written until you type ECRIRE and the name again there.");
-        }
-        result.visible = true;
+    // Run akmctl on the name stored in the keyboard (C++: QProcess with an
+    // argument list, never a shell; the name is one literal argument) and show
+    // its verdict in the page. Exit codes of akmctl: 0 done, 11 pre-flight
+    // refused, 13 written but not read back, 14 read back different.
+    function runDeviceName(checkOnly) {
+        const name = deviceNameField.text;
+        root.deviceBusy = true;
+        deviceResult.visible = false;
+        root.store.deviceName(name, checkOnly, function (code, out, err, timedOut) {
+            root.deviceBusy = false;
+            const detail = (String(out || "").trim() || String(err || "").trim());
+            if (timedOut) {
+                deviceResult.type = Kirigami.MessageType.Error;
+                deviceResult.text = i18n("No answer in time. Nothing more is attempted; look at the stored name above in a moment.");
+            } else if (code === 0 && checkOnly) {
+                deviceResult.type = Kirigami.MessageType.Positive;
+                deviceResult.text = i18n("Check passed: “%1” can be written. Nothing was written.", name);
+            } else if (code === 0) {
+                deviceResult.type = Kirigami.MessageType.Positive;
+                deviceResult.text = i18n("“%1” is now stored in the keyboard: written, then read back identical. This computer may show the old name until a later connection.", name);
+            } else if (code === 13) {
+                deviceResult.type = Kirigami.MessageType.Warning;
+                deviceResult.text = i18n("The name was written, but it could not be read back. Look at the stored name above in a moment.\n%1", detail);
+            } else if (code === 14) {
+                deviceResult.type = Kirigami.MessageType.Error;
+                deviceResult.text = i18n("The name was written, but the keyboard reads back another one.\n%1", detail);
+            } else {
+                deviceResult.type = Kirigami.MessageType.Error;
+                deviceResult.text = checkOnly ? i18n("Check failed, nothing was written.\n%1", detail) : i18n("Not written.\n%1", detail);
+            }
+            deviceResult.visible = true;
+            if (!checkOnly) root.store.fetchState();
+        });
+    }
+
+    Kirigami.PromptDialog {
+        id: confirmDialog
+        property string name: ""
+        title: i18nc("@title:window", "Write the name into the keyboard")
+        subtitle: i18n("Write “%1” into the keyboard's memory?", name)
+        standardButtons: Kirigami.Dialog.Ok | Kirigami.Dialog.Cancel
+        onAccepted: root.runDeviceName(false)
     }
 
     Kirigami.InlineMessage {
@@ -163,24 +194,34 @@ ColumnLayout {
             placeholderText: i18n("1 to 32 ASCII characters")
             validator: RegularExpressionValidator { regularExpression: root.deviceNameRe }
             Accessible.name: i18n("Name to write into the keyboard")
-            Accessible.description: i18n("1 to 32 printable ASCII characters, no leading or trailing space, no backslash; the write itself happens in a terminal")
+            Accessible.description: i18n("1 to 32 printable ASCII characters, no leading or trailing space, no backslash")
+            enabled: !root.deviceBusy
         }
         RowLayout {
             QQC2.Button {
                 id: checkBtn
                 text: i18n("Check (nothing written)")
                 icon.name: "dialog-ok-apply"
-                enabled: root.validDeviceName(deviceNameField.text)
-                Accessible.description: i18n("Opens a terminal on akmctl rename --device-name --check: whole pre-flight, backup and plan, nothing written")
-                onClicked: root.openTerminal(true)
+                enabled: !root.deviceBusy && root.validDeviceName(deviceNameField.text)
+                Accessible.description: i18n("Runs every check that precedes the write and saves the current name; nothing is written")
+                onClicked: root.runDeviceName(true)
             }
             QQC2.Button {
                 id: writeBtn
                 text: i18n("Write the name into the keyboard…")
                 icon.name: "document-edit-sign"
-                enabled: root.validDeviceName(deviceNameField.text)
-                Accessible.description: i18n("Opens a terminal on akmctl rename --device-name --write-device-name: the write happens there, only after you type ECRIRE and the name again")
-                onClicked: root.openTerminal(false)
+                enabled: !root.deviceBusy && root.validDeviceName(deviceNameField.text)
+                Accessible.description: i18n("Asks for a confirmation, then writes the name into the keyboard and reads it back")
+                onClicked: {
+                    confirmDialog.name = deviceNameField.text;
+                    confirmDialog.open();
+                }
+            }
+            QQC2.BusyIndicator {
+                visible: root.deviceBusy
+                running: visible
+                implicitHeight: writeBtn.implicitHeight
+                implicitWidth: implicitHeight
             }
         }
         QQC2.Label {
@@ -190,17 +231,17 @@ ColumnLayout {
             font: Kirigami.Theme.smallFont
             text: deviceNameField.text.length > 0 && !root.validDeviceName(deviceNameField.text)
                 ? i18n("Refused: 1 to 32 printable ASCII characters, no leading or trailing space, no backslash.")
-                : i18n("This module writes nothing into the keyboard. Both buttons only open a terminal where akmctl shows the exact bytes, saves the current name, runs the pre-flight (one administrator authentication to read the Bluetooth channel size), then asks you to type ECRIRE and the name again before its single write.")
+                : i18n("Every computer and phone sees this name. The current name is saved first, the keyboard is checked, the name is written once and read back at once. Not measured: whether the name survives a battery change.")
         }
     }
 
     Kirigami.InlineMessage {
+        id: deviceResult
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
-        visible: true
-        type: Kirigami.MessageType.Warning
-        text: i18n("Writing into the keyboard's firmware carries two risks that are not measured: how the firmware answers the write (U5), and whether the name survives a battery change (U3). Have a second working keyboard at hand. The terminal saves the current name first and shows the exact rollback command; the keyboard must be switched off and on afterwards so the name is read back. Details: docs/RENOMMER-CLAVIER.md §5.3 and §6.")
+        visible: false
+        showCloseButton: true
     }
 
     Kirigami.Heading {
@@ -215,10 +256,10 @@ ColumnLayout {
         model: [
             { title: i18n("Name stored in the keyboard, preview (shows the bytes, writes nothing, no authentication):"),
               cmd: "akmctl rename --device-name " + root.shellQuote(root.deviceName()) + " --dry-run" },
-            { title: i18n("Whole pre-flight, backup and plan (one administrator authentication, writes nothing):"),
+            { title: i18n("Every check and the backup of the current name (writes nothing):"),
               cmd: "akmctl rename --device-name " + root.shellQuote(root.deviceName()) + " --check" },
-            { title: i18n("The write itself (pre-flight, backup, ECRIRE typed, name typed again, one frame, then switch the keyboard off and on; issue #248):"),
-              cmd: "akmctl rename --device-name " + root.shellQuote(root.deviceName()) + " --write-device-name" },
+            { title: i18n("The write itself (checks, backup, one confirmation, one write, read back; issue #248):"),
+              cmd: "akmctl rename --device-name " + root.shellQuote(root.deviceName()) },
             { title: i18n("Forget the keyboard cleanly, as macOS does, then pair it again (only after typing the confirmation word, issue #217):"),
               cmd: "akmctl repair --force" }
         ]

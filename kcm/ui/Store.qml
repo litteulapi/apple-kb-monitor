@@ -70,6 +70,15 @@ QtObject {
         _runs[id] = cb;
     }
 
+    // Name stored inside the keyboard (#248): `akmctl rename
+    // --device-name=<name> --yes` (or `--check`), built and bounded (90 s) by
+    // the bridge; cb(exitCode, stdout, stderr, timedOut).
+    function deviceName(name, checkOnly, cb) {
+        if (!bridge) { cb(-1, "", "no bridge", false); return; }
+        const id = bridge.runDeviceName(name, checkOnly);
+        _runs[id] = cb;
+    }
+
     readonly property Connections _c: Connections {
         target: store.bridge
         function onCallFinished(id, ok, value, error) {

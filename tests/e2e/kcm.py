@@ -48,7 +48,7 @@ ROOT = "/com/agenceapi/AppleKbMonitor1"
 MAC = "04:DB:56:00:E2:E0"  # anonymised, as fakes.py
 # Calls a passive look at the module must never make.
 WRITES = {"SetAlias", "Refresh", "SetKey", "SetPreset", "UseProfile", "Apply", "Reset", "Reconnect",
-          "SetFnMode", "NotifyShutdown"}
+          "SetFnMode", "NotifyShutdown", "RereadName"}
 
 
 class Fail(Exception):
@@ -62,6 +62,7 @@ DAEMON_XML = """
  <interface name="com.agenceapi.AppleKbMonitor1">
   <method name="GetState"><arg type="s" direction="out"/></method>
   <method name="Refresh"/>
+  <method name="RereadName"/>
   <method name="SetAlias"><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="out"/></method>
   <method name="GetDevices"><arg type="ao" direction="out"/></method>
   <signal name="StateChanged"><arg type="t"/><arg type="s"/></signal>

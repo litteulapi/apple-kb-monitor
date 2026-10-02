@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "bridge.h"
-#include "terminal.h"
+#include "devicename.h"
 
 #include <QClipboard>
 #include <QDBusArgument>
@@ -32,6 +32,7 @@ constexpr int kMinTimeout = 100;
 constexpr int kMaxTimeout = 180000; // polkit dialogs can stay open a while
 constexpr qint64 kMaxOutput = 1 << 20; // per stream
 constexpr qint64 kMaxConfig = 256 * 1024;
+constexpr int kDeviceNameTimeout = 90000; // pre-flight, write, 4 spaced reads
 
 int clampTimeout(int ms)
 {
@@ -445,28 +446,18 @@ void AkmBridge::copyText(const QString &text)
     }
 }
 
-QString AkmBridge::openDeviceNameTerminal(const QString &name, bool checkOnly)
+int AkmBridge::runDeviceName(const QString &name, bool checkOnly)
 {
-    const QStringList args = AkmTerminal::akmctlArgs(name, checkOnly);
+    const QStringList args = AkmDeviceName::akmctlArgs(name, checkOnly);
     if (args.isEmpty()) {
-        return QStringLiteral("name refused: 1 to 32 printable ASCII characters, no leading or trailing space, no backslash");
+        const int id = nextId();
+        QTimer::singleShot(0, this, [this, id] {
+            Q_EMIT runFinished(id, -1, QString(),
+                               QStringLiteral("name refused: 1 to 32 printable ASCII characters, no leading or trailing space, no backslash"), false);
+        });
+        return id;
     }
-    const QString akmctl = QStandardPaths::findExecutable(QStringLiteral("akmctl"));
-    if (akmctl.isEmpty()) {
-        return QStringLiteral("akmctl not found in PATH");
-    }
-    const QString terminal = AkmTerminal::findTerminal(qEnvironmentVariable("AKM_KCM_TERMINAL"));
-    if (terminal.isEmpty()) {
-        return QStringLiteral("no terminal emulator found (konsole, xterm or x-terminal-emulator)");
-    }
-    const AkmTerminal::Launch l = AkmTerminal::launchFor(terminal, akmctl, args);
-    if (l.program.isEmpty()) {
-        return QStringLiteral("refused");
-    }
-    if (!QProcess::startDetached(l.program, l.args)) {
-        return QStringLiteral("%1 could not be started").arg(l.program);
-    }
-    return {};
+    return run(QStringLiteral("akmctl"), args, kDeviceNameTimeout);
 }
 
 void AkmBridge::onStateChanged(qulonglong revision, const QString &)

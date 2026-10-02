@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: kcm_applekeyboard\n"
 "Report-Msgid-Bugs-To: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-"
 "monitor/issues\n"
-"POT-Creation-Date: 2026-10-01 23:14+0200\n"
+"POT-Creation-Date: 2026-10-02 04:04+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -642,209 +642,228 @@ msgstr ""
 msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
 msgstr ""
 
-#: ui/NamePage.qml:42
+#: ui/NamePage.qml:45
 msgctxt "placeholder in a command"
 msgid "NAME"
 msgstr ""
 
-#: ui/NamePage.qml:56
-msgid "Terminal not opened: %1"
-msgstr ""
-
-#: ui/NamePage.qml:60
+#: ui/NamePage.qml:66
 msgid ""
-"A terminal was opened: akmctl runs the whole pre-flight there (one "
-"administrator authentication to read the Bluetooth channel size) and writes "
-"nothing."
+"No answer in time. Nothing more is attempted; look at the stored name above "
+"in a moment."
 msgstr ""
 
-#: ui/NamePage.qml:61
+#: ui/NamePage.qml:69
+msgid "Check passed: “%1” can be written. Nothing was written."
+msgstr ""
+
+#: ui/NamePage.qml:72
 msgid ""
-"A terminal was opened: nothing is written until you type ECRIRE and the name "
-"again there."
+"“%1” is now stored in the keyboard: written, then read back identical. This "
+"computer may show the old name until a later connection."
 msgstr ""
 
-#: ui/NamePage.qml:79
+#: ui/NamePage.qml:75
+msgid ""
+"The name was written, but it could not be read back. Look at the stored name "
+"above in a moment.\n"
+"%1"
+msgstr ""
+
+#: ui/NamePage.qml:78
+msgid ""
+"The name was written, but the keyboard reads back another one.\n"
+"%1"
+msgstr ""
+
+#: ui/NamePage.qml:81
+msgid ""
+"Check failed, nothing was written.\n"
+"%1"
+msgstr ""
+
+#: ui/NamePage.qml:81
+msgid ""
+"Not written.\n"
+"%1"
+msgstr ""
+
+#: ui/NamePage.qml:91
+msgctxt "@title:window"
+msgid "Write the name into the keyboard"
+msgstr ""
+
+#: ui/NamePage.qml:92
+msgid "Write “%1” into the keyboard's memory?"
+msgstr ""
+
+#: ui/NamePage.qml:110
 msgctxt "@title:group"
 msgid "Name on this computer"
 msgstr ""
 
-#: ui/NamePage.qml:82
+#: ui/NamePage.qml:113
 msgid "Shown as:"
 msgstr ""
 
-#: ui/NamePage.qml:88
+#: ui/NamePage.qml:119
 msgid "Keyboard's own name:"
 msgstr ""
 
-#: ui/NamePage.qml:96
+#: ui/NamePage.qml:127
 msgid "New name:"
 msgstr ""
 
-#: ui/NamePage.qml:100
+#: ui/NamePage.qml:131
 msgid "e.g. Office keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:102
+#: ui/NamePage.qml:133
 msgid "New name of the keyboard on this computer"
 msgstr ""
 
-#: ui/NamePage.qml:108
+#: ui/NamePage.qml:139
 msgid "Rename"
 msgstr ""
 
-#: ui/NamePage.qml:116
+#: ui/NamePage.qml:147
 msgid "Renamed to “%1” on this computer."
 msgstr ""
 
-#: ui/NamePage.qml:116
+#: ui/NamePage.qml:147
 msgid "no answer in time"
 msgstr ""
 
-#: ui/NamePage.qml:116 ui/NamePage.qml:131
+#: ui/NamePage.qml:147 ui/NamePage.qml:162
 msgid "Not renamed: %1"
 msgstr ""
 
-#: ui/NamePage.qml:123
+#: ui/NamePage.qml:154
 msgid "Use the keyboard's own name"
 msgstr ""
 
-#: ui/NamePage.qml:131
+#: ui/NamePage.qml:162
 msgid "The keyboard's own name is used again."
 msgstr ""
 
-#: ui/NamePage.qml:142
+#: ui/NamePage.qml:173
 msgid "Renaming needs the keyboard service."
 msgstr ""
 
-#: ui/NamePage.qml:143
+#: ui/NamePage.qml:174
 msgid "No keyboard is known yet."
 msgstr ""
 
-#: ui/NamePage.qml:144
+#: ui/NamePage.qml:175
 msgid ""
 "Only this computer sees this name (Bluetooth alias); the keyboard itself is "
 "not changed."
 msgstr ""
 
-#: ui/NamePage.qml:149
+#: ui/NamePage.qml:180
 msgctxt "@title:group"
 msgid "Name stored inside the keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:152
+#: ui/NamePage.qml:183
 msgid "Stored now:"
 msgstr ""
 
-#: ui/NamePage.qml:153
+#: ui/NamePage.qml:184
 msgid "not read yet (the service reads it once per connection)"
 msgstr ""
 
-#: ui/NamePage.qml:159
+#: ui/NamePage.qml:190
 msgid "Name to write:"
 msgstr ""
 
-#: ui/NamePage.qml:163
+#: ui/NamePage.qml:194
 msgid "1 to 32 ASCII characters"
 msgstr ""
 
-#: ui/NamePage.qml:165
+#: ui/NamePage.qml:196
 msgid "Name to write into the keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:166
+#: ui/NamePage.qml:197
 msgid ""
 "1 to 32 printable ASCII characters, no leading or trailing space, no "
-"backslash; the write itself happens in a terminal"
+"backslash"
 msgstr ""
 
-#: ui/NamePage.qml:171
+#: ui/NamePage.qml:203
 msgid "Check (nothing written)"
 msgstr ""
 
-#: ui/NamePage.qml:174
+#: ui/NamePage.qml:206
 msgid ""
-"Opens a terminal on akmctl rename --device-name --check: whole pre-flight, "
-"backup and plan, nothing written"
+"Runs every check that precedes the write and saves the current name; nothing "
+"is written"
 msgstr ""
 
-#: ui/NamePage.qml:179
+#: ui/NamePage.qml:211
 msgid "Write the name into the keyboard…"
 msgstr ""
 
-#: ui/NamePage.qml:182
+#: ui/NamePage.qml:214
 msgid ""
-"Opens a terminal on akmctl rename --device-name --write-device-name: the "
-"write happens there, only after you type ECRIRE and the name again"
+"Asks for a confirmation, then writes the name into the keyboard and reads it "
+"back"
 msgstr ""
 
-#: ui/NamePage.qml:192
+#: ui/NamePage.qml:233
 msgid ""
 "Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
 "no backslash."
 msgstr ""
 
-#: ui/NamePage.qml:193
+#: ui/NamePage.qml:234
 msgid ""
-"This module writes nothing into the keyboard. Both buttons only open a "
-"terminal where akmctl shows the exact bytes, saves the current name, runs "
-"the pre-flight (one administrator authentication to read the Bluetooth "
-"channel size), then asks you to type ECRIRE and the name again before its "
-"single write."
+"Every computer and phone sees this name. The current name is saved first, "
+"the keyboard is checked, the name is written once and read back at once. Not "
+"measured: whether the name survives a battery change."
 msgstr ""
 
-#: ui/NamePage.qml:203
-msgid ""
-"Writing into the keyboard's firmware carries two risks that are not "
-"measured: how the firmware answers the write (U5), and whether the name "
-"survives a battery change (U3). Have a second working keyboard at hand. The "
-"terminal saves the current name first and shows the exact rollback command; "
-"the keyboard must be switched off and on afterwards so the name is read "
-"back. Details: docs/RENOMMER-CLAVIER.md §5.3 and §6."
-msgstr ""
-
-#: ui/NamePage.qml:211
+#: ui/NamePage.qml:252
 msgctxt "@title:group"
 msgid "Same operations, to copy into a terminal"
 msgstr ""
 
-#: ui/NamePage.qml:216
+#: ui/NamePage.qml:257
 msgid ""
 "Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
 "authentication):"
 msgstr ""
 
-#: ui/NamePage.qml:218
-msgid ""
-"Whole pre-flight, backup and plan (one administrator authentication, writes "
-"nothing):"
+#: ui/NamePage.qml:259
+msgid "Every check and the backup of the current name (writes nothing):"
 msgstr ""
 
-#: ui/NamePage.qml:220
+#: ui/NamePage.qml:261
 msgid ""
-"The write itself (pre-flight, backup, ECRIRE typed, name typed again, one "
-"frame, then switch the keyboard off and on; issue #248):"
+"The write itself (checks, backup, one confirmation, one write, read back; "
+"issue #248):"
 msgstr ""
 
-#: ui/NamePage.qml:222
+#: ui/NamePage.qml:263
 msgid ""
 "Forget the keyboard cleanly, as macOS does, then pair it again (only after "
 "typing the confirmation word, issue #217):"
 msgstr ""
 
-#: ui/NamePage.qml:243
+#: ui/NamePage.qml:284
 msgid "Command: %1"
 msgstr ""
 
-#: ui/NamePage.qml:246
+#: ui/NamePage.qml:287
 msgid "Copy"
 msgstr ""
 
-#: ui/NamePage.qml:248
+#: ui/NamePage.qml:289
 msgid "Copy the command"
 msgstr ""
 
-#: ui/NamePage.qml:252
+#: ui/NamePage.qml:293
 msgid "Command copied."
 msgstr ""
 
