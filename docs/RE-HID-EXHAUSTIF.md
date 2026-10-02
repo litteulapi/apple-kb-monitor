@@ -1,6 +1,7 @@
 # Rétro-ingénierie HID exhaustive — A1314 ISO (BCM2042)
 
 * Corrigé le 2026-10-02 (issue #193) : noms Apple reportés aux §0.3, §2.1, §2.2, §4, §5 et plan d'écriture du §6 reclassé (`0x44`/`0x45` interdits, `0x41` élevé, `0x40` faible, sens de W6), d'après `RE-PILOTE-MACOS.md` §3, §7, §8.
+* Corrigé le 2026-10-02 (issue #194) : §3 et §5, l'hypothèse « `MVLT` = tension lue par macOS pour calculer le % » est réfutée pour l'A1314 ; macOS recopie `0x47`, borné à 100 (source : `RE-PILOTE-MACOS.md` §6, `RE-PILOTES-ANCIENS.md` §4).
 
 Date : 2026-10-01. Clavier : A1314 ISO « Clavier de alice #1 », `AA:BB:CC:DD:EE:F1`, `0005:05AC:0256`,
 bcdDevice `0x0050`, `/dev/hidraw7`, BlueZ 5.87, noyau 7.1.13. Suite de `HARDWARE-RAPPORTS-HID.md`
@@ -204,7 +205,7 @@ de risque particulier, mais elle n'est pas prioritaire : à reprendre seulement 
 | Noyau `hid-apple.c` | 0x0256 : `APPLE_NUMLOCK_EMULATION \| APPLE_HAS_FN \| APPLE_ISO_TILDE_QUIRK`, aucune correction de descripteur, aucun rapport vendeur (`0xB0`/`0xBF` = rétroéclairage, d'autres modèles) | [source] |
 | Bluetooth HID Profile 1.1.1 §7.4 | codes HANDSHAKE, bit Size de GET_REPORT | [source] |
 | Fiche du module BM2042 (tiers, à base de BCM2042) ([PDF](https://pop.fsck.pl/hardware/toshiba-n554/SPEC-BM2042-V1.0.pdf)) | VBAT de **1,7 à 3,6 V**, sniff de 10 ms à 1,28 s, veille profonde réveillée par interruption | [source] ; **appuie l'hypothèse `0xF4` = 1740 mV = tension minimale de fonctionnement** |
-| macOS IOKit `AppleBluetoothHIDKeyboard` ([managingosx, 2014](https://managingosx.wordpress.com/2014/04/23/reporting-on-bluetooth-mousekeyboard-battery-status/)) | propriétés `BatteryPercent`, `BatteryLow`, `BatteryPanic` et un bloc binaire `"Battery" = <"MVLT…` | [source, revérifiée] ; l'hypothèse « macOS calcule le % depuis des mV » est **réfutée** pour le pilote 2026 (RE-PILOTE-MACOS §6 : `0x47` recopié) ; l'origine du bloc `MVLT` de 2014 reste **inconnue** |
+| macOS IOKit `AppleBluetoothHIDKeyboard` ([managingosx, 2014](https://managingosx.wordpress.com/2014/04/23/reporting-on-bluetooth-mousekeyboard-battery-status/)) | propriétés `BatteryPercent`, `BatteryLow`, `BatteryPanic` et un bloc binaire `"Battery" = <"MVLT…` | [source, revérifiée] ; l'hypothèse « `MVLT` = macOS lirait une tension en mV, comme `0x46`, pour en tirer le % » est **réfutée pour l'A1314** : `updateBatteryLevel` du pilote macOS 26.5 fait un GET Feature `0x47` (2 octets, vérifie `buf[0] == 0x47`), borne l'octet 1 à 100 et le publie tel quel (`BatteryPercent`), sans aucun calcul à partir d'une tension ; aucun autre rapport batterie n'est lu, à part l'Input `0x30` (RE-PILOTE-MACOS §6). Le bloc `Battery`/`MVLT` de 2014 ne vient pas de ce pilote : il se lit `MV{LT}` = `MeasuredVoltages.Latched`, la tension de `0x49` (et non `0x46`) que publiait le pilote de Lion 10.7.5, sans en tirer le % (RE-PILOTES-ANCIENS §4) |
 | Projets publics | le seul résultat qui documente ces IDs est **ce projet lui-même** (miroir GitHub `litteulapi/apple-kb-monitor`, source circulaire, non retenue). Aucune autre carte des registres BCM2042 n'a été trouvée | — |
 
 ## 4. Classement octet par octet
@@ -236,7 +237,8 @@ Ce tableau ne liste que les ajouts et corrections ; pour le reste, voir `HARDWAR
 2. Le sens de `0x4A` en lecture (18), `0x4B` (`00 08`), `0xD1`/`0xD8`, `0xF6`/`0xF7` (4), `0xF5` (900 ; voir #173 pour l'hypothèse
    de la veille), des 12 octets de `0x4C`, des Input `0x04`/`0x05`, et le rôle de `0xD0 0xD4 0xD5 0xFA 0xFB`.
    Élucidés depuis par les pilotes Apple (#193) : `0x09`, l'Input `0x30` et six des onze IDs refusés au GET (§2.1, §4).
-3. La fonction % = f(mV) (#179).
+3. La fonction % = f(mV) (#179). Elle est **entièrement interne au micrologiciel** : aucun pilote Apple ne la calcule
+   (RE-PILOTE-MACOS §6), elle ne peut donc venir que de la mesure.
 4. Output : non mesuré.
 5. La reconnexion : aucune lecture de comparaison avant/après n'a pu être faite.
 

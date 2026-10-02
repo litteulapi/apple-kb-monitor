@@ -1,6 +1,7 @@
 # Rapports HID Feature du clavier Apple A1314 (BCM2042) — carte de rétro-ingénierie
 
 * Corrigé le 2026-10-02 (issue #193) : noms Apple des rapports reportés aux §2, §2.1 (nouveau) et §6 : `0x09`, `0x13`, `0x30`, `0x40`, `0x41`, `0x43`, `0x44`, `0x45`, `0x50`, `0x55` (source : `RE-PILOTE-MACOS.md` §3, §7, §8).
+* Corrigé le 2026-10-02 (issue #194) : §4, la fonction % = f(mV) est interne au micrologiciel ; macOS recopie `0x47` sans conversion (source : `RE-PILOTE-MACOS.md` §6).
 
 Appareil étudié : Apple Wireless Keyboard A1314 ISO « Clavier de alice #1 », `AA:BB:CC:DD:EE:F1`,
 `0005:05AC:0256`, bcdDevice `0x0050`, pilote noyau `apple`, `/dev/hidraw7`.
@@ -151,6 +152,12 @@ produits, sont absents de ce clavier (`RE-MACOS-SILICON.md` §3.3).
   dont le firmware tire le pourcentage, `0x46`/`0xFF` la mesure instantanée.
 * `0xEA` (98) ≠ `0x47` (99) : **[hypothèse]** second estimateur (autre filtre ou autre arrondi) ;
   l'ancienne interprétation « pourcentage avant arrondi » est incompatible avec 98 < 99.
+* **Corrigé (#194)** : la fonction % = f(mV) est **entièrement interne au micrologiciel**. macOS ne convertit rien : son pilote
+  noyau lit `0x47`, le borne à 100 et le publie tel quel **[désassemblage]** (`RE-PILOTE-MACOS.md` §6), 60 s après la connexion
+  puis toutes les 4 h (1 h après un échec). L'écart de #179 (l'interpolation de `0x49` donne 99,5, le clavier rend 98 ;
+  `RE-HID-EXHAUSTIF.md` §2.1) est donc aussi ce que publierait un Mac : la propriété `BatteryPercent` et les Réglages, qui
+  lisent le % brut. Seule l'icône de batterie héritée d'IOBluetoothUI passe par une courbe d'affichage côté hôte (54 à 100
+  bruts → 100 %), qui ne part pas d'une tension (`RE-MACOS-SILICON.md` §3.2, `RE-GHIDRA-IOBLUETOOTH.md` §2.2).
 * `0xF4` = 1740, `0xF5` = 900 (dupliqués dans `0x5B`), constants **[mesuré]**. Hypothèses concurrentes :
   (a) 1740 mV = tension de coupure (0,87 V/élément, en dessous du dernier seuil 2054) ;
   (b) 900 = délai d'inactivité en secondes (15 min) avant veille — testé au §5 ;

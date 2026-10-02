@@ -1,6 +1,7 @@
 # RE — Commandes vendeur, registres en écriture seule et rapports cachés (A1314 ISO / BCM2042)
 
 * Corrigé le 2026-10-02 (issue #193) : §1.1 et §1.4, `0x55` n'est pas un « registre de configuration vendeur » mais `LongDeviceName` (source : `RE-PILOTE-MACOS.md` §3).
+* Corrigé le 2026-10-02 (issue #194) : §6 point 4, `MVLT` n'est pas une tension lue par macOS 26.5 pour calculer le % (source : `RE-PILOTE-MACOS.md` §6, `RE-PILOTES-ANCIENS.md` §4).
 
 Recherche **documentaire uniquement**, **sans aucun accès au clavier** (il a décroché trois fois sous
 des rafales de lecture — voir #175). Objet : identifier, à partir de sources publiques, ce que sont
@@ -313,8 +314,10 @@ chaînes, méthodes Objective-C, `Parameters.plist`) :
    macOS/IOKit émet réellement — y compris vers les registres `0x55`/`0x5x`. **Aucune publique trouvée**
    pour le A1314 à ce jour ; à solliciter plutôt que de tester en écriture.
 4. **Journaux IOKit / ioreg** [sans risque] : `AppleBluetoothHIDKeyboard` expose `BatteryPercent`,
-   `BatteryLow`, `BatteryPanic` et un blob `"Battery" = <"MVLT…` (managingosx, 2014). **[spéculation]**
-   `MVLT` = étiquette « millivolts » → macOS lit bien une tension en mV, cohérent avec notre `0x46`.
+   `BatteryLow`, `BatteryPanic` et un blob `"Battery" = <"MVLT…` (managingosx, 2014). **Corrigé (#194)** :
+   `MVLT` se lit `MV{LT}` = `MeasuredVoltages.Latched`, la tension de `0x49` (et non `0x46`) que publiait le pilote de Lion
+   10.7.5 (`RE-PILOTES-ANCIENS.md` §4). macOS 26.5 ne lit plus aucune tension, et aucune version n'a tiré le % d'une tension :
+   le pilote recopie `0x47`, borné à 100 (`RE-PILOTE-MACOS.md` §6).
 5. **Analyse statique de binaires publics** [sans risque, non destructif] : comme au §4.3 sur `bfu`
    (chaînes, méthodes ObjC, plist) — jamais l'exécuter contre le clavier.
 6. **Interdits** : tout SET_REPORT, tout GET `0xFE`, tout balayage actif, toute exécution de `bfu`/
