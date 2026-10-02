@@ -1355,6 +1355,7 @@ mod tests {
             "lib.rs",
             "main.rs",
             "bin/akm-hid-control.rs",
+            "bin/akm-hid-inspect.rs",
             "bin/akm-keymap-helper.rs",
         ] {
             let s = std::fs::read_to_string(

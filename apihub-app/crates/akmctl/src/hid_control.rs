@@ -14,6 +14,11 @@ use crate::cli::{EXIT_ERROR, EXIT_OK, EXIT_USAGE};
 /// Absolute paths: never resolved through `$PATH` (the helper runs as root).
 const PKEXEC: &str = "/usr/bin/pkexec";
 pub const HID_CONTROL_HELPER: &str = "/usr/lib/apple-kb-monitor/akm-hid-control";
+/// The read-only inspection, an executable of its own: its polkit action
+/// (`hid-inspect`, no password in the active local session) is bound to this
+/// path and to nothing else, so pkexec's choice does not depend on the order
+/// polkitd enumerates the actions in.
+pub const HID_INSPECT_HELPER: &str = "/usr/lib/apple-kb-monitor/akm-hid-inspect";
 
 /// The two operations; nothing else can be asked from the command line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -58,13 +63,14 @@ pub fn helper_args(
     Ok(a)
 }
 
-/// Arguments of the read-only `inspect` verb (lock 2 of #248).
+/// Arguments of the read-only inspection (`akm-hid-inspect`, lock 2 of
+/// #248): the keyboard and nothing else (no verb).
 pub fn inspect_args(mac: &str) -> Result<Vec<String>, String> {
-    Ok(vec!["inspect".into(), "--mac".into(), check_mac(mac)?])
+    Ok(vec!["--mac".into(), check_mac(mac)?])
 }
 
 /// The negotiated **outgoing** L2CAP MTU of the HIDP control channel to `mac`,
-/// from the lines `akm-hid-control inspect` prints (`describe_socket`): the
+/// from the lines `akm-hid-inspect` prints (`describe_socket`): the
 /// line of a socket whose peer PSM is `0x0011`, `state connected`, `mtu out N`.
 /// `Err` explains why it is unknown (older helper without `mtu`, no socket,
 /// several sockets, unreadable value): unknown = the write is refused.
@@ -76,7 +82,7 @@ pub fn parse_control_mtu(text: &str, mac: &str) -> Result<u16, String> {
         .collect();
     if lines.is_empty() {
         return Err(format!(
-            "no L2CAP control socket (PSM 0x0011) to {mac} reported by akm-hid-control inspect"
+            "no L2CAP control socket (PSM 0x0011) to {mac} reported by akm-hid-inspect"
         ));
     }
     let connected: Vec<&str> = lines
@@ -91,22 +97,22 @@ pub fn parse_control_mtu(text: &str, mac: &str) -> Result<u16, String> {
     };
     let Some(rest) = line.split("mtu out ").nth(1) else {
         return Err(
-            "akm-hid-control inspect did not report the MTU: the installed helper is older than this akmctl, reinstall the package".into(),
+            "akm-hid-inspect did not report the MTU: the installed helper is older than this akmctl, reinstall the package".into(),
         );
     };
     let v = rest.split_whitespace().next().unwrap_or("");
     v.parse::<u16>()
-        .map_err(|_| format!("unreadable outgoing MTU {v:?} in akm-hid-control inspect output"))
+        .map_err(|_| format!("unreadable outgoing MTU {v:?} in akm-hid-inspect output"))
 }
 
 /// Read the outgoing MTU of the control channel to `mac` on the live socket
-/// (`pkexec akm-hid-control inspect --mac MAC`: no password in the active
+/// (`pkexec akm-hid-inspect --mac MAC`: no password in the active
 /// local session, read-only `getsockopt`, nothing sent). The combined output is returned
 /// with the value so the caller can journal it.
 pub fn inspect_control_mtu(mac: &str) -> Result<(u16, String), String> {
     let args = inspect_args(mac)?;
     let out = Proc::new(PKEXEC)
-        .arg(HID_CONTROL_HELPER)
+        .arg(HID_INSPECT_HELPER)
         .args(&args)
         .output()
         .map_err(|e| format!("cannot run pkexec: {e}"))?;
@@ -120,11 +126,11 @@ pub fn inspect_control_mtu(mac: &str) -> Result<(u16, String), String> {
         Some(126) => return Err("authentication dismissed or not authorized (pkexec 126)".into()),
         Some(127) => {
             return Err(format!(
-                "authentication failed or {HID_CONTROL_HELPER} not found (pkexec 127)"
+                "authentication failed or {HID_INSPECT_HELPER} not found (pkexec 127)"
             ))
         }
-        Some(c) => return Err(format!("{HID_CONTROL_HELPER} inspect refused or failed (exit {c}): {}", text.trim())),
-        None => return Err(format!("{HID_CONTROL_HELPER} killed by a signal")),
+        Some(c) => return Err(format!("{HID_INSPECT_HELPER} refused or failed (exit {c}): {}", text.trim())),
+        None => return Err(format!("{HID_INSPECT_HELPER} killed by a signal")),
     }
     parse_control_mtu(&text, mac).map(|m| (m, text))
 }
@@ -197,8 +203,13 @@ mod tests {
         }
         assert_eq!(
             inspect_args("aa:bb:cc:dd:ee:f1").unwrap(),
-            ["inspect", "--mac", "AA:BB:CC:DD:EE:F1"]
+            ["--mac", "AA:BB:CC:DD:EE:F1"],
+            "no verb: akm-hid-inspect only inspects"
         );
+        // m1 of the final review: the password-less action is bound to an
+        // executable of its own, never to the one that can send a byte.
+        assert_ne!(HID_INSPECT_HELPER, HID_CONTROL_HELPER);
+        assert!(HID_INSPECT_HELPER.ends_with("/akm-hid-inspect"));
     }
 
     const KB: &str = "AA:BB:CC:DD:EE:F1";

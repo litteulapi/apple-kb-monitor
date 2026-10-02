@@ -11,7 +11,7 @@
 //! show the new name in the same connection). The flow of
 //! [`akm_core::devname::run`]: name validated → pre-flight (connected,
 //! battery, breaker, last read complete, `doctor` green, control-channel MTU
-//! ≥ 66 read by the single `pkexec akm-hid-control inspect`, no password in
+//! ≥ 66 read by the single `pkexec akm-hid-inspect`, no password in
 //! the active local session) → backup 0600 of the current name → ONE
 //! confirmation (`[o/N]` / `[y/N]`; `--yes` skips it and works without a
 //! terminal) → the hidraw door (under the HID lock) → ONE write → immediate
@@ -148,7 +148,7 @@ pub trait Io {
 pub trait World {
     fn snapshot(&mut self) -> Result<Snapshot, (u8, String)>;
     fn doctor_green(&mut self, mac: Option<&str>) -> bool;
-    /// `pkexec akm-hid-control inspect --mac MAC`: the outgoing MTU of the
+    /// `pkexec akm-hid-inspect --mac MAC`: the outgoing MTU of the
     /// control channel and the helper's text (read-only, nothing sent).
     fn probe_control_mtu(&mut self, mac: &str) -> Result<(u16, String), String>;
     /// Open the hidraw node under the HID lock (writes nothing by itself).
@@ -388,7 +388,7 @@ fn fail_text(f: &PreflightFail, lang: Lang) -> String {
             "`akmctl doctor` n'est pas vert (liaison, appairage, configuration)".into()
         }
         PreflightFail::ControlMtuUnknown => format!(
-            "MTU sortante du canal de contrôle L2CAP inconnue : elle doit être lue (akm-hid-control inspect, lecture seule) et valoir >= {} avant d'envoyer une trame de 66 octets",
+            "MTU sortante du canal de contrôle L2CAP inconnue : elle doit être lue (akm-hid-inspect, lecture seule) et valoir >= {} avant d'envoyer une trame de 66 octets",
             devname::MIN_CONTROL_MTU
         ),
         PreflightFail::ControlMtuTooSmall(m) => format!(
@@ -697,7 +697,7 @@ impl Flow<'_> {
                 return None;
             };
             self.verbose(&format!(
-                "[devname] reading the outgoing MTU of the L2CAP control channel to {mac} (pkexec akm-hid-control inspect --mac {mac}: read-only, nothing sent)"
+                "[devname] reading the outgoing MTU of the L2CAP control channel to {mac} (pkexec akm-hid-inspect --mac {mac}: read-only, nothing sent)"
             ));
             self.probes += 1;
             let r = match self.world.probe_control_mtu(&mac) {

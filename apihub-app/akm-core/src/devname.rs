@@ -109,7 +109,7 @@ pub const RESOLVED_BY_DISASSEMBLY: &[&str] = &[
     "U1 content of the 64 bytes: UTF-8 name (trailing characters dropped until <= 64 bytes), 0x00 padding (calloc), no length prefix, no explicit terminator (a 64-byte name has no NUL) [désassemblage 0x4d3fe-0x4d444]",
     "U2 order: ONE SET Feature 0x55 of 65 bytes, then an HCI Remote Name Request; no GET before or after, no 0x50, no 0x51-0x54, no 0x44, no 0x41; empty or > 64 UTF-16 units refused before any frame (kIOReturnBadArgument) [désassemblage 0x4d3d3-0x4d4c8]",
     "U7 0x50 DeviceNameChange validates the 4-fragment path only (PIDs without LongDeviceName); never sent to this keyboard [désassemblage 0x4d525-0x4d6cb]",
-    "U6 (Apple side) one frame of 66 bytes when the control channel's outgoing MTU >= 66, else DATC fragments; Linux side: the MTU is READ at pre-flight (akm-hid-control inspect, getsockopt L2CAP_OPTIONS, read-only) and the write is refused below 66 or when unknown",
+    "U6 (Apple side) one frame of 66 bytes when the control channel's outgoing MTU >= 66, else DATC fragments; Linux side: the MTU is READ at pre-flight (akm-hid-inspect, getsockopt L2CAP_OPTIONS, read-only) and the write is refused below 66 or when unknown",
 ];
 
 /// Settled by measurement on the real keyboard (firmware `0x0050`), 02/10/2026.
@@ -126,7 +126,7 @@ pub const UNKNOWNS: &[&str] = &[
 /// Experiments: done, or that would lift the remaining unknown.
 pub const VALIDATION_EXPERIMENTS: &[&str] = &[
     "E1 DONE (U1, U2, U7, U6 Apple side): docs/RE-NOM-PROPRE-E1.md, fixture tests/fixtures/devname/lion_setdevicename_frames.json",
-    "E2 (U6 Linux side) is a pre-flight: `akm-hid-control inspect --mac <MAC>` reads the negotiated L2CAP MTU of the control channel (read-only) and the write is refused below 66",
+    "E2 (U6 Linux side) is a pre-flight: `akm-hid-inspect --mac <MAC>` reads the negotiated L2CAP MTU of the control channel (read-only) and the write is refused below 66",
     "E5 DONE [mesuré le 02/10/2026] (U4, U5): real write on firmware 0x0050, accepted, read back identical in the same connection",
     "E3 (U3) compare the cached 0x51-0x54, HID_NAME and BlueZ Name before and after a battery change (daemon cache, no new read)",
 ];
@@ -694,7 +694,7 @@ impl PreflightFail {
                 "`akmctl doctor` is not green (link health, pairing, configuration)".into()
             }
             Self::ControlMtuUnknown => format!(
-                "outgoing MTU of the L2CAP control channel unknown: it must be read (akm-hid-control inspect, read-only) and be >= {MIN_CONTROL_MTU} before a 66-byte frame is sent"
+                "outgoing MTU of the L2CAP control channel unknown: it must be read (akm-hid-inspect, read-only) and be >= {MIN_CONTROL_MTU} before a 66-byte frame is sent"
             ),
             Self::ControlMtuTooSmall(m) => format!(
                 "outgoing MTU of the L2CAP control channel is {m}, below {MIN_CONTROL_MTU}: a 66-byte frame cannot be sent in one piece (Linux hidp does not fragment; the HID session would be terminated)"
