@@ -1,6 +1,7 @@
 # Rétro-ingénierie du pilote macOS — ce que macOS envoie à l'A1314 (BCM2042)
 
 * Corrigé le 2026-10-02 (issue #218) : §5.1, §6, §7, §8 et §9 : « MVLT réfutée » ne vaut que pour 26.5 (Lion publiait `MV{LT}` = `0x49`) ; bit 3 = notification SCO (`0x4A`) et sniff ; `0x44` = oubli de tous les hôtes (source : `RE-PILOTES-ANCIENS.md` §4, §5, §9).
+* Corrigé le 2026-10-02 (issue #229) : §9 n° 6, la notification SCO `0x4A` n'est pas « de Lion » : elle existe depuis Bluetooth 1.5 (2004) (source : `RE-SYSTEMES-ANCIENS.md` §4.3).
 
 Analyse **statique, en lecture seule**, des pilotes Apple installés sur le Mac du gérant (non reproductible depuis le poste Linux : aucun binaire ni extrait commité ; les faits [plist]/[désassemblage] n'ont pas pu être recontrôlés au contre-audit) (Neo01, Mac17,5, macOS 26.5 build 25F71).
 Elle sert l'interopérabilité avec **son** clavier Apple Wireless Keyboard A1314 ISO (VID `0x05AC`, PID `0x0256` = 598).
@@ -211,7 +212,9 @@ Les registres que nous balayons (`0xFE` notamment) ne sont jamais sollicités pa
 4. Seuils du micrologiciel pour `BatteryState` 1 et 2.
 5. Kernelcache arm64e réellement exécuté sur le Mac : non examiné ; analyse faite sur les KC x86_64 de la même version (25F71).
 6. Effet du bit 3 de `bluetoothd` (paramètres de sniff des anciens claviers Apple). **Résolu (#218)** : bit 3 = appareils
-   notifiés du lien SCO (`0x4A`), avec sniff ajusté (`RE-PILOTES-ANCIENS.md` §5).
+   notifiés du lien SCO (`0x4A`), avec sniff ajusté (`RE-PILOTES-ANCIENS.md` §5). Cette notification n'est pas propre à Lion :
+   elle existe depuis Bluetooth 1.5 (février 2004), valeurs 1 à 4 inchangées jusqu'à 10.7.5, et elle est absente de 10.2.8
+   (#229, `RE-SYSTEMES-ANCIENS.md` §4.3).
 
 ## 10. Reproduire (lecture seule)
 

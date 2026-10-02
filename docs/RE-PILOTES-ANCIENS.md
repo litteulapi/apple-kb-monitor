@@ -1,5 +1,7 @@
 # RE — Pilotes et updaters Apple de l'époque (2009-2012) pour l'A1314 (BCM2042, firmware 0x0050)
 
+* Corrigé le 2026-10-02 (issue #229) : §1 (le Combo 10.6.8 est exploitable), §3 (apparition par version), §4 (courbe d'affichage), §5 et §7 (`0x4A` depuis Bluetooth 1.5, douze logiciels examinés), §6.2 (protocole `bfu` complété) ; source : `RE-SYSTEMES-ANCIENS.md`.
+
 Analyse **statique, en lecture seule**, de logiciels Apple **publiquement distribués** par les serveurs
 d'Apple, à des fins d'interopérabilité avec le clavier du gérant (A1314 ISO, `05AC:0256` = 598,
 bcdDevice `0x0050`). Complète `RE-PILOTE-MACOS.md` (macOS 26.5), qui n'envoie presque rien de spécifique.
@@ -29,6 +31,9 @@ catalogue, la somme SHA-1 de la table des matières xar et les sommes de chaque 
 (toutes vérifiées), plus la présence d'une signature RSA du paquet (chaîne de 3 certificats Apple).
 Le Combo 10.6.8 (`041-98179`) a été écarté : il est découpé en 13 parties et la partie contenant les
 répertoires des kexts Bluetooth/HID ne contient que des liens de signature, pas les binaires.
+**Corrigé (#229)** : le Combo 10.6.8 n'est pas inutilisable. Les kexts réels (IOBluetoothFamily et IOBluetoothHIDDriver
+2.4.5f3, AppleBluetoothHIDKeyboard 141.5) sont dans le sous-paquet `SUBaseSystemCombo10.6.8.pkg` (produits `041-98121` et
+`041-98179`) ; seul le binaire d'`IOBluetooth.framework` manque. Leur analyse figure dans `RE-SYSTEMES-ANCIENS.md`.
 
 Outils (sans sudo) : lecteur xar en Python (vérification TOC + sommes), `gzip`/`cpio`, `7z` (DMG),
 `llvm-objdump`/`llvm-nm`/`llvm-lipo`, capstone 5 (désassemblage i386/x86_64).
@@ -69,6 +74,11 @@ Personnalité `AppleBluetoothHIDKeyboard` 160.7, « Wireless Keyboard 2009 B ISO
 La personnalité de 2009 (Bluetooth 2.1.10, PID 570) a la même carte **sans** `BatteryVoltage` ni
 `CalibratedBatteryThresholds3` ; celle de 2007 (PID 557) n'a pas non plus `LongDeviceName` **[plist]**.
 
+**Apparition par version (ajout #229, `RE-SYSTEMES-ANCIENS.md` §2)** : `0x55` (`LongDeviceName`) arrive avec Bluetooth 2.1.10
+(personnalités 2009) et figure dans 10.6.8 ; `0x49` et `0x60` n'existent que dans 10.7 ; `0xD7` (`SuperMode`, souris et
+trackpads) arrive avec 10.6 ; les autres noms (`0x30`, `0x40`, `0x41`, `0x43`, `0x44`, `0x45`, `0x47`, `0x50`-`0x54`) sont
+présents dès 10.2.8 **[plist]**.
+
 ## 4. Batterie à l'époque de Lion : ce que lisait le pilote
 
 `AppleBluetoothHIDKeyboard` 160.7 (10.7.5) **surcharge** `updateBatteryLevel` **[désassemblage]** :
@@ -108,7 +118,8 @@ Abréviations **[chaîne + désassemblage]** : `MV` MeasuredVoltages, `LT` Latch
 * **Pourcentage affiché par l'interface (IOBluetooth.framework 10.7.5)** : `-[AppleBluetoothHIDDevice batteryPercent]` lit la
   propriété `BatteryPercent` puis, pour les PID `0x0239-0x023B` et `0x0255-0x0257`, **remappe** la valeur brute `r` :
   `r ≥ 54` → 100 ; `21 ≤ r ≤ 53` → `21 + (r − 21) × 2,4375` ; sinon `r` (constantes 54 / 21 / 53 / 2,4375)
-  **[désassemblage]**. Même courbe que celle relevée dans macOS 26.5 (#213) : elle existe **depuis Lion**. Le pilote
+  **[désassemblage]**. Même courbe que celle relevée dans macOS 26.5 (#213) : elle existe **depuis Lion**. Confirmé (#229) : 10.5.8
+  affichait encore la valeur brute en linéaire, `r / 100` (`RE-SYSTEMES-ANCIENS.md` §4.2). Le pilote
   noyau, lui, publie toujours `0x47` brut.
 * **Cadence et sûreté** : Lion lisait `0x47`, `0x49` et `0x60` à **chaque** relevé batterie (60 s après connexion,
   puis toutes les 4 h) **[désassemblage]**. Ces trois lectures font donc partie du trafic de production d'Apple
@@ -141,6 +152,10 @@ est actif. C'est la réponse à l'inconnue n° 6 de `RE-PILOTE-MACOS.md` §9.
 Valeurs de `0x4A` définies par `AppleBluetoothHIDDevice` **[désassemblage]** : `1` SCODevicePaired, `2` SCODeviceUnpaired,
 `3` SCOLinkActive, `4` SCOLinkInactive (seules 3 et 4 sont envoyées par `blued`). Notre lecture `4a 12` (= 18) **[mesuré]**
 n'est pas une de ces valeurs : le GET renvoie un état interne dont le codage reste inconnu.
+
+**Corrigé (#229)** : cette notification n'est pas propre à Lion. `0x4A` est écrit par `AppleBluetoothHIDDevice` depuis
+**Bluetooth 1.5 (février 2004)**, avec les mêmes valeurs (1 appairé, 2 désappairé, 3 lien actif, 4 inactif) jusqu'à 10.7.5 ;
+il est absent de 10.2.8 (`RE-SYSTEMES-ANCIENS.md` §4.3).
 
 Commandes acceptées par le pilote noyau depuis l'espace utilisateur (propriétés IORegistry) **[chaîne + désassemblage]** :
 `WillShutdown`, `UpdateBatteryLevel`, `ForceBatteryPercent`/`DontForceBatteryPercent`, `BatteryUpdateInterval`,
@@ -192,6 +207,7 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
 | **Canal** | **L2CAP, PSM `0xF30D`** (PSM dynamique vendeur), **pas** les PSM HID `0x11`/`0x13` (ré-autorisés en fin de mise à jour) | [désassemblage] `IOBluetoothDeviceOpenL2CAPChannelSync(…, 0xF30D, …)` |
 | Trame de commande | octets bruts `[commande][longueur][paramètres]`, **sans en-tête HIDP**, accusé attendu sous 10 s | [désassemblage] `sendCommand:withAck:param:pLength:` |
 | Séquence | `D1` (1 o) → acquit `D2` ; `D4` → `D5` ; `D6` (1 o) → `D7` ; puis enregistrements bruts, avec `DA` (1 o) → `DB` pour l'acquit des blocs (attente 20 s) ; `D3` = abandon (acquit `D3`) ; tout acquit inattendu → reprise | [désassemblage] `ackReceived:` (table de sauts sur `0xD2-0xDC`) |
+| Compléments (#229) | `D6 <banque>` (sélection de banque) → `D7` ; trame d'enregistrement `D8 <longueur−2> <type> <adresse 16 bits> <données> <somme>` → `D9` ; `DC` = refus (accepté en réponse à `D1` ou `D6`). Protocole identique dans le `bfu` de 2007 (`WLKBFU/1`, PID `0x22C-0x22E`, cible `0x141`) | [décompilé] `RE-SYSTEMES-ANCIENS.md` §5 |
 | Fin | `##100##` sur la sortie standard (progression `##%03d##`), retour des PSM `0x11`/`0x13` | [chaîne + désassemblage] |
 
 **Conséquences [déduction]**
@@ -199,7 +215,7 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
 * Le canal de mise à jour du A1314 est un **canal L2CAP vendeur séparé**, ouvert par l'hôte vers le PSM `0xF30D`
   — **pas** une suite de SET_REPORT HID. Cela **corrige** `RE-COMMANDES-VENDEUR.md` §4.3, qui présentait les registres
   HID write-only comme « candidats naturels » du canal de flash.
-* Les opcodes du protocole occupent la plage **`0xD1-0xDB`**. Nos IDs Feature HID `0xD0`, `0xD4`, `0xD5` (refus GET `0x03`)
+* Les opcodes du protocole occupent la plage **`0xD1-0xDB`** (jusqu'à `0xDC` avec le refus, #229). Nos IDs Feature HID `0xD0`, `0xD4`, `0xD5` (refus GET `0x03`)
   et `0xD1`, `0xD8` (lisibles, 0) tombent dans la **même plage** : le micrologiciel range vraisemblablement ses fonctions
   de maintenance sous un même préfixe `0xDx`. **Aucune** preuve que les IDs HID `0xDx` déclenchent ces commandes ;
   la coïncidence suffit à les classer **« ne jamais écrire »**.
@@ -222,7 +238,7 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
 | `0x46` | Feature | tension instantanée mV (LE) | [mesuré] ; jamais lue par Apple | lecture | ≤ 1/5 min (#177) |
 | `0x47` | Feature | `BatteryPercent` (calculé par le firmware) | toutes époques | lecture | en production |
 | `0x49` | Feature | **`BatteryVoltage`** = tension `Latched` mV (LE) | [plist + désassemblage 10.7] | lecture | rythme Apple : 1/4 h (#139, nouvelle issue) |
-| `0x4A` | Feature | état / notification de **lien SCO** : écrit `03`/`04` par `blued` (Lion) ; GET = `0x12` (codage inconnu) | [désassemblage] | faible (Apple l'écrivait en production) | issue « coexistence casque », accord requis |
+| `0x4A` | Feature | état / notification de **lien SCO** : écrit `03`/`04` par `blued` (Lion ; l'écriture existe depuis Bluetooth 1.5, 2004, #229) ; GET = `0x12` (codage inconnu) | [désassemblage] | faible (Apple l'écrivait en production) | issue « coexistence casque », accord requis |
 | `0x4B` | Feature | inconnu (`00 08`) | — | — | lecture rare |
 | `0x4C` | Feature | adresse de l'hôte appairé + 12 o | [mesuré] | lecture sensible | #140 |
 | `0x4E` | Feature | `connectionCounts` (10 o) des produits `0x0310` | [désassemblage] | — | absent chez nous |
@@ -238,14 +254,15 @@ donc pas décrit. Le nom (`config`) et la présence de deux chemins `updateFW` /
 | `0xD1`, `0xD8` | Feature | inconnus (0) ; même plage `0xDx` | [mesuré] | lecture rare | — |
 | `0xEA` | Feature | second estimateur de % (hypothèse) ; jamais lu par Apple | [mesuré] | lecture | remplacer par `0x47` (#177) |
 | `0xF4`-`0xF7` | Feature | constantes (`0xF5` = 900 : délai de veille ?) ; jamais lus par Apple | [mesuré] | lecture rare | #173 |
-| `0xFA`, `0xFB` | Feature WO | **inconnus de tout logiciel Apple examiné** (2009, 10.7, 26.5, `bfu`) | — | **inconnu** | **ne jamais écrire** |
+| `0xFA`, `0xFB` | Feature WO | **inconnus de tout logiciel Apple examiné** (10.2.8 à 10.7.5, 26.5, `bfu` 2007 et 2009) | — | **inconnu** | **ne jamais écrire** |
 | `0xFE` | Feature | fige le firmware à la lecture | [mesuré] #175 | **lecture dangereuse** | exclu |
 | `0xFF` | Feature | tension (BE) + `01` | [mesuré] | lecture | — |
 | `0x04`, `0x05` | In (non déclarés) | inconnus d'Apple ; hypothèses WICED SLEEP / FUNC_LOCK | [source tierce] | nul (lecture passive) | — |
 
 Les inconnues **définitivement sans réponse logicielle publique** sont donc `0xD0 0xD4 0xD5 0xFA 0xFB` (écriture),
-`0x4B 0xD1 0xD8 0xF6 0xF7` (lecture) et les Input `0x04`/`0x05` : **aucun** des quatre logiciels Apple examinés ne les
-mentionne. Seul un dump de la mémoire externe (#184/#185) peut encore les éclairer.
+`0x4B 0xD1 0xD8 0xF6 0xF7` (lecture) et les Input `0x04`/`0x05` : **aucun** des **douze** logiciels Apple examinés (systèmes 10.2.8 à 10.7.5, updaters 2007 et 2009, macOS 26.5 ; corrigé #229,
+`RE-SYSTEMES-ANCIENS.md`) ne les mentionne comme rapports HID. Seule exception trouvée ensuite : `0xD5`, cité par un outil de
+test radio de CoreBluetooth 26.5 (`RE-GHIDRA-IOBLUETOOTH.md` §4). Seul un dump de la mémoire externe (#184/#185) peut encore les éclairer.
 
 ## 8. Fonctions Apple réellement supportées par l'A1314 B (`0x0256`, fw `0x0050`)
 

@@ -3,6 +3,7 @@
 * Corrigé le 2026-10-02 (issue #193) : §1.1 et §1.4, `0x55` n'est pas un « registre de configuration vendeur » mais `LongDeviceName` (source : `RE-PILOTE-MACOS.md` §3).
 * Corrigé le 2026-10-02 (issue #194) : §6 point 4, `MVLT` n'est pas une tension lue par macOS 26.5 pour calculer le % (source : `RE-PILOTE-MACOS.md` §6, `RE-PILOTES-ANCIENS.md` §4).
 * Corrigé le 2026-10-02 (issue #218) : §1.3, §4.3, §5 et §7 : `bfu` ne passe pas par HIDP (PSM L2CAP vendeur `0xF30D`) et vise `0x0239-0x023B`, pas notre `0x0256` ; `0x44` = oubli de tous les hôtes ; `0xFA`/`0xFB` « délai de veille » = spéculation sans trace (source : `RE-PILOTES-ANCIENS.md` §2, §5, §6, §7).
+* Corrigé le 2026-10-02 (issue #229) : §1.3, `0xFA`/`0xFB` et les ID `0xDx` sont absents des systèmes Apple de 10.2.8 à 10.7.5 ; `0xD1-0xDC` ne sont que des opcodes de l'updater sur le PSM `0xF30D` (source : `RE-SYSTEMES-ANCIENS.md` §4-5).
 
 Recherche **documentaire uniquement**, **sans aucun accès au clavier** (il a décroché trois fois sous
 des rafales de lecture — voir #175). Objet : identifier, à partir de sources publiques, ce que sont
@@ -82,6 +83,10 @@ Le **descripteur HID du Magic Keyboard BT** (`05AC:029C`, dump public, xloc, 202
   ou `0xFB` pourraient être la **porte d'écriture du délai de veille** — **[spéculation]**, à ne pas écrire.
   **Corrigé (#218)** : cette spéculation n'a aucune trace dans les logiciels Apple examinés (pilotes de 2009, 10.7.5, 26.5,
   `bfu`) ; `0xFA`/`0xFB` sont à classer « inconnus » (`RE-PILOTES-ANCIENS.md` §7).
+  **Complément (#229)** : `0xFA`, `0xFB` et les ID `0xDx` sont absents, comme rapports HID, de tous les systèmes Apple de
+  10.2.8 à 10.7.5 et des pilotes noyau de 26.5. Seul l'updater utilise `0xD1-0xDC`, comme opcodes sur le PSM L2CAP `0xF30D`,
+  pas comme ID HID (`RE-SYSTEMES-ANCIENS.md` §4-5). Seule exception connue : `0xD5`, cité par un outil de test radio de
+  CoreBluetooth 26.5 (`RE-GHIDRA-IOBLUETOOTH.md` §4).
 
 ### 1.4 Verdict §1
 
