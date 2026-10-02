@@ -102,14 +102,18 @@ pub fn show(
             let used = ui.cursor().top() - top;
             ui.add_space((body.y - used - ACTIONS_HEIGHT).clamp(theme::GAP, ACTIONS_DROP_MAX));
         } else {
-            // Narrow: the figures first, the drawing after them; the name of
-            // the keyboard stays in the status bar.
+            // Narrow: the figures, then the actions, all on the first
+            // screen at 420 x 700; the drawing comes last, reached by
+            // scrolling (arrows, page keys, wheel). The name of the keyboard
+            // stays in the status bar.
             battery_panel(ui, th, &kb, theme::HERO_NARROW, 0.0);
             ui.add_space(theme::GAP);
             cells(ui, th, snap, &kb, now, 2);
             ui.add_space(theme::GAP);
-            keyboard_panel(ui, th, snap, &kb, 0.0, FIGURE_MAX_HEIGHT, false);
+            request = actions(ui, th, snap, link, fnmode);
             ui.add_space(theme::GAP);
+            keyboard_panel(ui, th, snap, &kb, 0.0, FIGURE_MAX_HEIGHT, false);
+            return;
         }
         request = actions(ui, th, snap, link, fnmode);
     });

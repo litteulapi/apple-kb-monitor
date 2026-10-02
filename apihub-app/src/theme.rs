@@ -190,17 +190,26 @@ pub fn install(ctx: &egui::Context) {
 /// Text as the terminal font can show it. Neither VT323 nor egui's
 /// fallback fonts have the narrow no-break space of the French typography
 /// or the arrows: the first becomes a no-break space, `→` becomes `>` and
-/// `↔` becomes `<>`.
+/// `↔` becomes `<>`. The tilde of VT323 is a small raised mark that reads
+/// as a stray letter: before a number ("~41 days") it becomes `≈`.
 pub fn glyphs(s: &str) -> Cow<'_, str> {
-    if s.contains(['\u{202f}', '\u{2192}', '\u{2194}']) {
-        Cow::Owned(
-            s.replace('\u{202f}', "\u{a0}")
-                .replace('\u{2192}', ">")
-                .replace('\u{2194}', "<>"),
-        )
-    } else {
-        Cow::Borrowed(s)
+    if !s.contains(['\u{202f}', '\u{2192}', '\u{2194}', '~']) {
+        return Cow::Borrowed(s);
     }
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s.chars().peekable();
+    while let Some(c) = rest.next() {
+        match c {
+            '\u{202f}' => out.push('\u{a0}'),
+            '\u{2192}' => out.push('>'),
+            '\u{2194}' => out.push_str("<>"),
+            '~' if rest.peek().is_some_and(|n| n.is_ascii_digit() || *n == ' ') => {
+                out.push('\u{2248}')
+            }
+            c => out.push(c),
+        }
+    }
+    Cow::Owned(out)
 }
 
 /// Upper-case label text (titles, keys of the key/value rows, buttons).
@@ -382,10 +391,10 @@ impl Theme {
         }
         p.add(mesh);
         // Vignette: the four edges fade into the CRT background.
-        let depth = 56.0_f32
+        let depth = 40.0_f32
             .min(screen.width() / 3.0)
             .min(screen.height() / 3.0);
-        let (dark, clear) = (fade(BG, 0.62), fade(BG, 0.0));
+        let (dark, clear) = (fade(BG, 0.42), fade(BG, 0.0));
         let inner = screen.shrink(depth);
         let mut v = egui::Mesh::default();
         for (a, b, c, d) in [
@@ -901,6 +910,13 @@ mod tests {
         assert_eq!(glyphs("2,91\u{202f}V"), "2,91\u{a0}V");
         assert_eq!(glyphs("→ application"), "> application");
         assert_eq!(glyphs("Linux PC (Cmd↔Alt)"), "Linux PC (Cmd<>Alt)");
+        assert_eq!(glyphs("~41 jours"), "\u{2248}41 jours");
+        assert_eq!(glyphs("~ 3 h"), "\u{2248} 3 h");
+        assert_eq!(
+            glyphs("~/.config/x"),
+            "~/.config/x",
+            "a path keeps its tilde"
+        );
         assert!(matches!(glyphs("plain"), Cow::Borrowed(_)));
         assert_eq!(caps("état des piles"), "ÉTAT DES PILES");
         assert_eq!(caps("il y a 2\u{202f}h"), "IL Y A 2\u{a0}H");
