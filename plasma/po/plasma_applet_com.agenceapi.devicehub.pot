@@ -190,3 +190,63 @@ msgstr ""
 
 msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
 msgstr ""
+
+msgid "7 days"
+msgstr ""
+
+msgid "Administrator authentication is asked by the monitor"
+msgstr ""
+
+msgid "Battery level over the last 7 days"
+msgstr ""
+
+msgid "F-keys disabled"
+msgstr ""
+
+msgid "F1–F12 first"
+msgstr ""
+
+msgid "Fn key has no effect"
+msgstr ""
+
+msgid "Fn mode not changed: %1"
+msgstr ""
+
+msgid "Function keys:"
+msgstr ""
+
+msgid "Switch to F1–F12 first"
+msgstr ""
+
+msgid "Switch to media keys first"
+msgstr ""
+
+msgid "media keys first"
+msgstr ""
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr ""
+
+msgid "New reading requested."
+msgstr ""
+
+msgid "Reading not requested: %1"
+msgstr ""
+
+msgid "Reconnection not requested: %1"
+msgstr ""
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+
+msgid "asleep"
+msgstr ""
+
+msgid "connected"
+msgstr ""
+
+msgid "refused by the monitor"
+msgstr ""
+
+msgid "unreachable"
+msgstr ""

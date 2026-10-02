@@ -187,3 +187,63 @@ msgstr "Clavier Apple"
 
 msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
 msgstr "Plein %1 / Bas %2 / Critique %3 / Vide %4 mV"
+
+msgid "7 days"
+msgstr "7 jours"
+
+msgid "Administrator authentication is asked by the monitor"
+msgstr "Le moniteur demande l'authentification administrateur"
+
+msgid "Battery level over the last 7 days"
+msgstr "Niveau des piles sur les 7 derniers jours"
+
+msgid "F-keys disabled"
+msgstr "F1–F12 désactivées"
+
+msgid "F1–F12 first"
+msgstr "F1–F12 d'abord"
+
+msgid "Fn key has no effect"
+msgstr "touche Fn sans effet"
+
+msgid "Fn mode not changed: %1"
+msgstr "Mode Fn inchangé : %1"
+
+msgid "Function keys:"
+msgstr "Touches de fonction :"
+
+msgid "Switch to F1–F12 first"
+msgstr "Passer à F1–F12 d'abord"
+
+msgid "Switch to media keys first"
+msgstr "Passer aux touches multimédia d'abord"
+
+msgid "media keys first"
+msgstr "touches multimédia d'abord"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1 (tentatives : %2, échecs : %3)"
+
+msgid "New reading requested."
+msgstr "Nouvelle lecture demandée."
+
+msgid "Reading not requested: %1"
+msgstr "Lecture non demandée : %1"
+
+msgid "Reconnection not requested: %1"
+msgstr "Reconnexion non demandée : %1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr "Reconnexion demandée. Appuyez sur une touche du clavier s'il est en veille."
+
+msgid "asleep"
+msgstr "en veille"
+
+msgid "connected"
+msgstr "connecté"
+
+msgid "refused by the monitor"
+msgstr "refusée par le moniteur"
+
+msgid "unreachable"
+msgstr "injoignable"

@@ -3,7 +3,9 @@
 # window, no real keyboard, no real service. Proves (#149, #150):
 #  - StateChanged is received natively and GetState is read (`percentage`);
 #  - the window opens through org.freedesktop.Application.Activate;
-#  - the widget spawns NO subprocess (no orphans: dbus-monitor/timeout/sh).
+#  - the widget spawns NO subprocess (no orphans: dbus-monitor/timeout/sh);
+#  - History(since), Device.FnMode / SetFnMode, Link.Status / Reconnect and
+#    Refresh are called on the daemon as declared (#97, #120).
 # Needs: qml6, python3-dbus + gi, dbus-run-session.
 set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -18,6 +20,9 @@ python3 "$here/check_i18n.py" >/dev/null || { python3 "$here/check_i18n.py" >&2;
 # Pure logic of the signal quality (#174), no bus needed.
 QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 qml6 "$here/tst_signal.qml" 2>&1 | grep -q "PASS signal" \
   || { echo "FAIL: tst_signal.qml" >&2; exit 1; }
+# History series and Fn mode toggle of the widget (#97, #120), no bus needed.
+QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 qml6 "$here/tst_history.qml" 2>&1 | grep -q "PASS history" \
+  || { QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 qml6 "$here/tst_history.qml" 2>&1 | tail -5 >&2; echo "FAIL: tst_history.qml" >&2; exit 1; }
 exec dbus-run-session -- sh -eu -c '
   here="$1"
   out=$(mktemp)
@@ -32,5 +37,5 @@ exec dbus-run-session -- sh -eu -c '
   grep -q PASS "$out.log" && grep -E "RESULT|PASS" "$out.log" || cat "$out.log"
   echo "children of the widget process: $kids ; stray dbus-monitor: $stray ; Activate calls: $(grep -c activate "$out")"
   cat "$out.err" | tail -5; rm -f "$out.log" "$out.err"
-  [ "$kids" -eq 0 ] && [ "$stray" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q "^activate 0" "$out" && grep -q "^alias AA:BB Mon clavier" "$out" && grep -q "^claim 42" "$out" && grep -q "^release 42" "$out"
+  [ "$kids" -eq 0 ] && [ "$stray" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q "^activate 0" "$out" && grep -q "^alias AA:BB Mon clavier" "$out" && grep -q "^claim 42" "$out" && grep -q "^release 42" "$out" && grep -q "^fnmode 2" "$out" && [ "$(grep -c "^fnmode" "$out")" -eq 1 ] && grep -q "^refresh" "$out" && grep -q "^reconnect" "$out" && grep -Eq "^history 6048[0-9][0-9]$" "$out"
 ' sh "$here"

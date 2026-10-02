@@ -199,3 +199,29 @@ Le service vit dans `apihub-app`, pas dans le démon : rien à brancher côté d
 Tests : `krunner::tests` (correspondances, service réel `org.kde.krunner1` sur bus
 privé avec faux démon, signature `a(sssida{sv})`, fichiers `.desktop` / `.service` /
 PKGBUILD). Non testé ici : l'affichage dans KRunner d'une session Plasma.
+
+## 11. Widget : sparkline 7 jours et bouton de mode Fn (#97)
+
+Le popup du widget `com.agenceapi.devicehub` affiche, sous la jauge :
+
+* une **sparkline des 7 derniers jours** (pourcentage, échelle 0–100 %), tracée par
+  `LineChart.qml` (un `Canvas`, aucune bibliothèque de graphiques) à partir de
+  `History(since)` du démon. `History.js` écarte les points invalides (hors 0–100 %,
+  tension non mesurée, date future) et réduit chaque série à 120 points pour la
+  sparkline (240 pour la page Historique, §12) en gardant les extrêmes ;
+* une ligne **Touches de fonction** : le mode lu sur l'objet du clavier
+  (`Device.FnMode`) et un bouton « Passer à F1–F12 d'abord » / « Passer aux touches
+  multimédia d'abord » qui appelle `Device.SetFnMode`. Le démon vérifie l'appelant
+  et ouvre l'authentification polkit ; le widget n'écrit rien lui-même. La ligne est
+  masquée quand `hid_apple` n'est pas chargé (mode inconnu).
+
+Ces lectures ne sont faites qu'à l'ouverture du popup (`onExpandedChanged`) : fermé,
+le widget ne fait que suivre `StateChanged`, comme avant. Démon absent : le popup
+affiche « Moniteur arrêté » et rien d'autre.
+
+Tests (`plasma/tests/run-widget-tests.sh`) : `tst_history.qml` (259 200 points sur
+90 jours bornés à 240, extrêmes conservés, points invalides écartés, bascule Fn,
+chemin d'objet refusé pour une adresse invalide) et `tst_link.qml` contre le faux
+démon (`History`, `FnMode` lu, `SetFnMode(2)` appelé une seule fois, relu). Non
+testé ici : le rendu dans plasmashell (`plasmoidviewer` ouvrirait une fenêtre sur
+le bureau).

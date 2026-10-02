@@ -102,6 +102,31 @@ PlasmaExtras.Representation {
                 wrapMode: Text.Wrap
             }
 
+            // Sparkline of the last 7 days (#97), scale 0 to 100 %.
+            RowLayout {
+                Layout.fillWidth: true
+                visible: root.sparkPct.length >= 2
+                spacing: Kirigami.Units.smallSpacing
+                PlasmaComponents3.Label {
+                    text: i18n("7 days")
+                    textFormat: Text.PlainText
+                    font: Kirigami.Theme.smallFont
+                    opacity: 0.7
+                }
+                LineChart {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 1.5
+                    primary: root.sparkPct
+                    tMin: root.sparkFrom
+                    tMax: root.sparkTo
+                    primaryMin: 0
+                    primaryMax: 100
+                    primaryColor: full.levelColor
+                    Accessible.role: Accessible.Graphic
+                    Accessible.name: i18n("Battery level over the last 7 days")
+                }
+            }
+
             Kirigami.FormLayout {
                 Layout.fillWidth: true
                 twinFormLayouts: []
@@ -147,6 +172,35 @@ PlasmaExtras.Representation {
                     visible: root.remaining !== ""
                     text: root.remaining
                     textFormat: Text.PlainText
+                }
+                // Fn mode (#97): state + one button; the daemon asks for the
+                // administrator authentication.
+                RowLayout {
+                    Kirigami.FormData.label: i18n("Function keys:")
+                    visible: root.fnModeText !== ""
+                    Layout.fillWidth: true
+                    PlasmaComponents3.Label {
+                        Layout.fillWidth: true
+                        text: root.fnModeText
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                    }
+                    PlasmaComponents3.Button {
+                        icon.name: "input-keyboard"
+                        text: root.fnToggleText
+                        enabled: !root.fnBusy
+                        Accessible.description: i18n("Administrator authentication is asked by the monitor")
+                        onClicked: root.toggleFnMode()
+                    }
+                }
+                PlasmaComponents3.Label {
+                    Kirigami.FormData.label: ""
+                    visible: root.fnError !== ""
+                    text: i18n("Fn mode not changed: %1", root.fnError)
+                    textFormat: Text.PlainText
+                    color: Kirigami.Theme.negativeTextColor
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
                 }
                 RowLayout {
                     Kirigami.FormData.label: i18n("Name:")

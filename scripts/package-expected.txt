@@ -45,3 +45,6 @@ usr/share/locale/fr/LC_MESSAGES/plasma_applet_com.agenceapi.devicehub.mo
 usr/share/kglobalaccel/com.agenceapi.AppleKbMonitor.shortcuts.desktop
 usr/share/krunner/dbusplugins/plasma-runner-applekeyboard.desktop
 usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.Runner.service
+usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/History.js
+usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/FnMode.js
+usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/LineChart.qml

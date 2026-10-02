@@ -1,5 +1,6 @@
 import QtQuick
 import org.kde.plasma.workspace.dbus as DBus
+import "FnMode.js" as Fn
 
 // D-Bus link to the daemon apple-kb-monitord, in-process only (#150): the
 // StateChanged signal is received through a native SignalWatcher and the
@@ -30,6 +31,10 @@ Item {
     property string trayPath: "/com/agenceapi/AppleKbMonitor1/Tray"
     property string trayIface: "com.agenceapi.AppleKbMonitor1.Tray"
     property string claimId: ""
+    // Keyboard objects (FnMode, SetFnMode) and link object (Status, Reconnect).
+    property string deviceIface: "com.agenceapi.AppleKbMonitor1.Device"
+    property string linkPath: "/com/agenceapi/AppleKbMonitor1/Link"
+    property string linkIface: "com.agenceapi.AppleKbMonitor1.Link"
 
     readonly property bool registered: watcher.registered
 
@@ -39,6 +44,18 @@ Item {
     signal windowActivated()
     signal aliasSet(string name)
     signal aliasFailed(string message)
+    // History(since) reply; `tag` is given back unchanged (which chart asked).
+    signal historyReceived(string tag, string json)
+    signal historyFailed(string tag, string message)
+    // Device.FnMode of a keyboard, and the outcome of Device.SetFnMode.
+    signal fnModeReceived(int mode)
+    signal fnModeSet(int mode)
+    signal fnModeFailed(string message)
+    // DaemonVersion property, Link.Status() JSON, outcome of Refresh/Reconnect.
+    signal versionReceived(string version)
+    signal linkStatusReceived(string json)
+    signal refreshDone(bool ok, string message)
+    signal reconnectDone(bool ok, string message)
 
     function fetch() {
         if (!watcher.registered) return;
@@ -77,6 +94,120 @@ Item {
             member: "ReleaseTrayFor",
             arguments: [new DBus.string(link.claimId)]
         }, function () {}, function () {});
+    }
+
+    function errorText(error) {
+        return error && error.error ? String(error.error.message) : String(error);
+    }
+
+    // Battery history since `since` (Unix seconds): JSON array of readings.
+    function fetchHistory(since, tag) {
+        if (!watcher.registered) return;
+        DBus.SessionBus.asyncCall({
+            service: link.busName,
+            path: link.objectPath,
+            iface: link.busName,
+            member: "History",
+            arguments: [new DBus.uint64(Math.max(0, Math.floor(since)))]
+        }, function (reply) {
+            link.historyReceived(tag, String(reply.value));
+        }, function (error) {
+            link.historyFailed(tag, link.errorText(error));
+        });
+    }
+
+    // hid_apple.fnmode as the daemon reads it (property of the keyboard object).
+    function fetchFnMode(mac) {
+        var path = Fn.devicePath(link.objectPath, mac);
+        if (!watcher.registered || path === "") return;
+        DBus.SessionBus.asyncCall({
+            service: link.busName,
+            path: path,
+            iface: "org.freedesktop.DBus.Properties",
+            member: "Get",
+            arguments: [new DBus.string(link.deviceIface), new DBus.string("FnMode")]
+        }, function (reply) {
+            link.fnModeReceived(Number(reply.value));
+        }, function (error) {
+            link.fnModeFailed(link.errorText(error));
+        });
+    }
+
+    // Change the Fn mode through the daemon, which checks the caller and opens
+    // the polkit authentication (same path as the tray menu and the module).
+    function setFnMode(mac, mode) {
+        var path = Fn.devicePath(link.objectPath, mac);
+        if (!watcher.registered || path === "") return;
+        DBus.SessionBus.asyncCall({
+            service: link.busName,
+            path: path,
+            iface: link.deviceIface,
+            member: "SetFnMode",
+            arguments: [new DBus.int32(mode)]
+        }, function () {
+            link.fnModeSet(mode);
+        }, function (error) {
+            link.fnModeFailed(link.errorText(error));
+        });
+    }
+
+    function fetchVersion() {
+        if (!watcher.registered) return;
+        DBus.SessionBus.asyncCall({
+            service: link.busName,
+            path: link.objectPath,
+            iface: "org.freedesktop.DBus.Properties",
+            member: "Get",
+            arguments: [new DBus.string(link.busName), new DBus.string("DaemonVersion")]
+        }, function (reply) {
+            link.versionReceived(String(reply.value));
+        }, function () {});
+    }
+
+    // State of the Bluetooth link kept by the daemon (JSON array, one per keyboard).
+    function fetchLinkStatus() {
+        if (!watcher.registered) return;
+        DBus.SessionBus.asyncCall({
+            service: link.busName,
+            path: link.linkPath,
+            iface: link.linkIface,
+            member: "Status",
+            arguments: []
+        }, function (reply) {
+            link.linkStatusReceived(String(reply.value));
+        }, function () {});
+    }
+
+    // Ask the daemon for a new reading / to page the keyboard now. Both are
+    // rate-limited by the daemon; nothing is done here.
+    function refresh() {
+        if (!watcher.registered) return;
+        DBus.SessionBus.asyncCall({
+            service: link.busName,
+            path: link.objectPath,
+            iface: link.busName,
+            member: "Refresh",
+            arguments: []
+        }, function () {
+            link.refreshDone(true, "");
+        }, function (error) {
+            link.refreshDone(false, link.errorText(error));
+        });
+    }
+
+    function reconnect() {
+        if (!watcher.registered) return;
+        DBus.SessionBus.asyncCall({
+            service: link.busName,
+            path: link.linkPath,
+            iface: link.linkIface,
+            member: "Reconnect",
+            arguments: []
+        }, function (reply) {
+            link.reconnectDone(!!reply.value, "");
+        }, function (error) {
+            link.reconnectDone(false, link.errorText(error));
+        });
     }
 
     onRegisteredChanged: if (registered) claimTray()

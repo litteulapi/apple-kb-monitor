@@ -4,6 +4,8 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.kirigami as Kirigami
 import "Signal.js" as Sig
+import "History.js" as Hist
+import "FnMode.js" as Fn
 
 // Event-driven view of the daemon apple-kb-monitord (session bus,
 // com.agenceapi.AppleKbMonitor1). No subprocess and no fast timer: DaemonLink
@@ -58,6 +60,56 @@ PlasmoidItem {
     property string remaining: ""
     property string lastError: ""
     property string windowHint: ""
+    // The last full read missed a report (GetState: keyboard.incomplete).
+    property bool readIncomplete: false
+
+    // ── Sparkline of the last 7 days (#97): [t, %] points, bounded ──
+    property var sparkPct: []
+    property real sparkFrom: 0
+    property real sparkTo: 1
+
+    // ── History page (#120): 7, 30 or 90 days ──
+    property int historyDays: 7
+    property var historyPct: []
+    property var historyVolt: []
+    property int historyCount: 0
+    property int historySpanDays: 0
+    property real historyFrom: 0
+    property real historyTo: 1
+    property real historyPctMin: 0
+    property real historyPctMax: 100
+    property real historyVoltMin: 0
+    property real historyVoltMax: 1
+    property bool historyLoading: false
+    property string historyError: ""
+
+    // ── Fn mode (#97): hid_apple.fnmode from the daemon, -1 = unknown ──
+    property int fnMode: -1
+    property bool fnBusy: false
+    property string fnError: ""
+    readonly property string fnModeText: {
+        var k = Fn.kind(fnMode);
+        return k === "media" ? i18n("media keys first")
+            : k === "fkeys" ? i18n("F1–F12 first")
+            : k === "off" ? i18n("Fn key has no effect")
+            : k === "nofkeys" ? i18n("F-keys disabled") : "";
+    }
+    // What the button does: the mode it switches to.
+    readonly property string fnToggleText: Fn.next(fnMode) === 2
+        ? i18n("Switch to F1–F12 first") : i18n("Switch to media keys first")
+
+    // ── Diagnostic page (#120) ──
+    property string daemonVersion: ""
+    property string linkHealth: ""
+    property int linkAttempts: 0
+    property int linkFailures: 0
+    property string linkError: ""
+    property string diagHint: ""
+    readonly property string linkText: linkHealth === "" ? "" : i18n("%1 (attempts: %2, failures: %3)",
+        linkHealth === "connected" ? i18n("connected")
+            : linkHealth === "dormant" ? i18n("asleep")
+            : linkHealth === "unreachable" ? i18n("unreachable") : linkHealth,
+        linkAttempts, linkFailures)
 
     readonly property bool hasBattery: connected && batteryPercent >= 0
     readonly property bool hasRssi: connected && !isNaN(rssi)
@@ -113,6 +165,7 @@ PlasmoidItem {
         objectPath: root.objectPath
         onRegisteredChanged: {
             if (registered) root.fetchData(); else root.clear();
+            if (registered && root.expanded) root.fetchDetails();
         }
         onStateReceived: function (json) {
             try {
@@ -136,7 +189,47 @@ PlasmoidItem {
         onWindowFailed: function (message) {
             root.windowHint = i18n("Could not open the ApiHub window.");
         }
+        onHistoryReceived: function (tag, json) {
+            root.applyHistory(tag, json);
+        }
+        onHistoryFailed: function (tag, message) {
+            if (tag !== "page") return;
+            root.historyLoading = false;
+            root.historyError = message;
+        }
+        onFnModeReceived: function (mode) {
+            root.fnMode = mode;
+        }
+        onFnModeSet: function (mode) {
+            root.fnBusy = false;
+            root.fnMode = mode;
+        }
+        onFnModeFailed: function (message) {
+            // A failed read only hides the row; a failed change is said.
+            if (root.fnBusy) root.fnError = message;
+            root.fnBusy = false;
+        }
+        onVersionReceived: function (version) {
+            root.daemonVersion = version;
+        }
+        onLinkStatusReceived: function (json) {
+            root.applyLinkStatus(json);
+        }
+        onRefreshDone: function (ok, message) {
+            root.diagHint = ok ? i18n("New reading requested.")
+                               : i18n("Reading not requested: %1", message);
+        }
+        onReconnectDone: function (ok, message) {
+            root.diagHint = ok
+                ? i18n("Reconnection requested. Press a key on the keyboard if it is asleep.")
+                : i18n("Reconnection not requested: %1", message !== "" ? message : i18n("refused by the monitor"));
+            link.fetchLinkStatus();
+        }
     }
+
+    // The popup opens: read what only it shows (history, Fn mode, link).
+    // Nothing of this is polled while it is closed.
+    onExpandedChanged: if (expanded) root.fetchDetails()
 
     Component.onCompleted: {
         // Take over the notification area: the daemon withdraws its own icon
@@ -195,6 +288,90 @@ PlasmoidItem {
         root.batteryType = batteryTypeOf(root.voltage);
         root.remaining = d.remaining_display || "";
         root.lastError = d.last_error || "";
+        root.readIncomplete = !!(kb && kb.incomplete);
+        // Popup opened before the first state: the address is known only now.
+        if (root.expanded && root.fnMode < 0 && root.kbMac !== "" && !root.fnBusy) link.fetchFnMode(root.kbMac);
+    }
+
+    // History, Fn mode, daemon version and link state: on demand only.
+    function fetchDetails() {
+        if (!link.registered) return;
+        link.fetchHistory(Date.now() / 1000 - 7 * 86400, "spark");
+        if (root.kbMac !== "") link.fetchFnMode(root.kbMac);
+        link.fetchVersion();
+        link.fetchLinkStatus();
+    }
+
+    function applyHistory(tag, json) {
+        var now = Date.now() / 1000;
+        if (tag === "spark") {
+            var s = Hist.parse(json, now - 7 * 86400, now, 120);
+            root.sparkFrom = s.tMin;
+            root.sparkTo = s.tMax;
+            root.sparkPct = s.count >= 2 ? s.pct : [];
+            return;
+        }
+        var h = Hist.parse(json, now - root.historyDays * 86400, now, Hist.POINTS_MAX);
+        root.historyLoading = false;
+        root.historyError = "";
+        root.historyCount = h.count;
+        root.historySpanDays = Hist.spanDays(h);
+        root.historyFrom = h.tMin;
+        root.historyTo = h.tMax;
+        root.historyPctMin = isNaN(h.pctMin) ? 0 : h.pctMin;
+        root.historyPctMax = isNaN(h.pctMax) ? 100 : h.pctMax;
+        root.historyVoltMin = isNaN(h.voltMin) ? 0 : h.voltMin;
+        root.historyVoltMax = isNaN(h.voltMax) ? 1 : h.voltMax;
+        root.historyPct = h.pct;
+        root.historyVolt = h.volt;
+    }
+
+    // History page: load `days` (7, 30 or 90) from the daemon.
+    function showHistory(days) {
+        root.historyDays = days;
+        if (!link.registered) return;
+        root.historyLoading = true;
+        root.historyError = "";
+        link.fetchHistory(Date.now() / 1000 - days * 86400, "page");
+    }
+
+    function applyLinkStatus(json) {
+        var mine = null;
+        try {
+            var all = JSON.parse(json);
+            for (var i = 0; i < all.length; i++) {
+                if (root.kbMac === "" || String(all[i].mac).toUpperCase() === root.kbMac.toUpperCase()) {
+                    mine = all[i];
+                    break;
+                }
+            }
+        } catch (e) {
+            mine = null;
+        }
+        root.linkHealth = mine ? String(mine.health || "") : "";
+        root.linkAttempts = mine ? Number(mine.attempts || 0) : 0;
+        root.linkFailures = mine ? Number(mine.failures || 0) : 0;
+        root.linkError = mine ? String(mine.last_error || "") : "";
+    }
+
+    // Fn mode button: media keys first <-> F1–F12 first. The daemon asks for
+    // the administrator authentication (polkit); nothing is written here.
+    function toggleFnMode() {
+        var next = Fn.next(root.fnMode);
+        if (next < 0 || root.kbMac === "" || root.fnBusy) return;
+        root.fnError = "";
+        root.fnBusy = true;
+        link.setFnMode(root.kbMac, next);
+    }
+
+    function requestRefresh() {
+        root.diagHint = "";
+        link.refresh();
+    }
+
+    function requestReconnect() {
+        root.diagHint = "";
+        link.reconnect();
     }
 
     // Rename on this computer (BlueZ alias, nothing is written into the
@@ -216,6 +393,17 @@ PlasmoidItem {
         root.applePct = -1;
         root.newBatteries = false;
         root.remaining = "";
+        root.readIncomplete = false;
+        root.sparkPct = [];
+        root.historyPct = [];
+        root.historyVolt = [];
+        root.historyCount = 0;
+        root.historyLoading = false;
+        root.fnMode = -1;
+        root.fnBusy = false;
+        root.linkHealth = "";
+        root.daemonVersion = "";
+        root.diagHint = "";
     }
 
     function fetchData() {
