@@ -35,9 +35,12 @@ while [ $# -gt 0 ]; do
 done
 
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
-out="$top/scripts/out/$stamp"
+# AKM_CI_OUT moves the reports (and the package build copy) off the repository,
+# e.g. onto a data partition; default: scripts/out in the repository.
+out_root=${AKM_CI_OUT:-$top/scripts/out}
+out="$out_root/$stamp"
 mkdir -p "$out/logs"
-ln -sfn "$stamp" "$top/scripts/out/latest"
+ln -sfn "$stamp" "$out_root/latest"
 : > "$out/steps.tsv"
 test_timeout=${AKM_CI_TEST_TIMEOUT:-900}
 commit=$(git rev-parse --short HEAD 2>/dev/null || echo "?")
