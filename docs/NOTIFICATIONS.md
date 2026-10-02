@@ -77,10 +77,30 @@ Français si `LC_ALL`, `LC_MESSAGES` ou `LANG` (le premier non vide) commence pa
 
 ## Configuration
 
-`config.toml` inchangé : `[alerts] enabled`, `[notifications] connection` /
-`battery_replaced` et `--no-notify` coupent l'émission côté démon, comme avant.
-Le reste (popup, son, historique, ne pas déranger) se règle dans Plasma, par
-événement.
+`[alerts] enabled`, `[notifications] connection` / `battery_replaced` et
+`--no-notify` coupent l'émission côté démon. Le reste (popup, son, historique,
+ne pas déranger) se règle dans Plasma, par événement.
+
+### Plages horaires « ne pas déranger » (#91)
+
+`[notifications] quiet_hours = "22:00-07:00"` (heure locale ; plusieurs plages
+séparées par des virgules ; une plage peut traverser minuit ; `""` = aucune,
+valeur par défaut). Dans une plage :
+
+* une notification **non critique** n'est pas envoyée : elle est journalisée
+  (`notification held until 07:00 (quiet hours 22:00-07:00): [BatteryLow] …`)
+  et gardée, une par emplacement de remplacement (la dernière), puis émise à la
+  fin de la plage (`quiet hours over: showing […]`) ;
+* une notification **critique** (piles critiques, ré-appairage nécessaire,
+  erreur) part toujours tout de suite.
+
+Ce qui attend est gardé dans
+`$XDG_STATE_HOME/apple-kb-monitor/deferred-notifications.json` (32 entrées au
+plus) : un redémarrage du démon ne perd rien. Le mode « Ne pas déranger » de
+Plasma reste appliqué par Plasma lui-même (`ShowPopupsInDndMode` pour les
+événements critiques du notifyrc) : les deux se cumulent. Logique :
+`akm-core::quiet` (plages), `akm-core::deferred` (file d'attente),
+`apple-kb-monitord::notify_policy` (décision, horloge injectable).
 
 ## Tester
 
@@ -89,7 +109,7 @@ Le reste (popup, son, historique, ne pas déranger) se règle dans Plasma, par
 ls /usr/share/knotifications6/apple-kb-monitor.notifyrc
 
 # Tests automatiques (bus privé + faux serveur, rien n'arrive au bureau)
-cargo test -p apple-kb-monitord --test notify_kde --test notify_mute
+cargo test -p apple-kb-monitord --test notify_kde --test notify_mute --test notify_quiet_remind
 ```
 
 Sur le bureau : Paramètres système → Notifications → « Moniteur de clavier

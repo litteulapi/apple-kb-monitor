@@ -8,6 +8,7 @@
 //! * [`service`] session interface `com.agenceapi.AppleKbMonitor1`
 //! * [`client`]  D-Bus client + direct one-shot read (daemon absent)
 //! * [`notify`]  desktop notifications (zbus, no notify-rust)
+//! * [`notify_policy`] quiet hours and "Remind me tomorrow" (#91, #110)
 //! * [`devices`] D-Bus API v2: one object per keyboard (#93)
 //! * [`diagnose`] D-Bus `Diagnose()`: the checks of the Diag tab, as JSON (#120)
 //! * [`events`]  in-process event hub (alerts, replacements, link changes)
@@ -31,6 +32,7 @@ pub mod diagnose;
 pub mod events;
 pub mod keymap;
 pub mod notify;
+pub mod notify_policy;
 pub mod passive;
 pub mod powerdevil;
 pub mod repair;

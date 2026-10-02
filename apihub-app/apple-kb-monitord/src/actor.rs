@@ -120,6 +120,9 @@ pub struct Options {
     /// Does PowerDevil raise its own low-battery notification for this
     /// keyboard? Replaceable in tests.
     pub powerdevil: Arc<dyn crate::powerdevil::Probe>,
+    /// Hours during which non-critical notifications are held
+    /// (`[notifications] quiet_hours`, #91).
+    pub quiet_hours: akm_core::quiet::QuietHours,
     /// Declared battery chemistry (`[battery] chemistry`, #178).
     pub chemistry: Chemistry,
     /// Publish the "Apple display" percentage (`[display] apple_percent`, #213).
@@ -150,6 +153,7 @@ impl Default for Options {
             notify_battery_replaced: true,
             defer_to_powerdevil: true,
             powerdevil: Arc::new(crate::powerdevil::SystemProbe::default()),
+            quiet_hours: akm_core::quiet::QuietHours::none(),
             chemistry: Chemistry::default(),
             apple_percent: true,
             will_shutdown: true,
@@ -169,6 +173,7 @@ impl Options {
         self.notify_connection = c.notify_connection;
         self.notify_battery_replaced = c.notify_battery_replaced;
         self.defer_to_powerdevil = c.defer_to_powerdevil;
+        self.quiet_hours = c.quiet_hours.clone();
         self.chemistry = c.chemistry;
         self.apple_percent = c.apple_percent;
         self.will_shutdown = c.will_shutdown;
@@ -1223,6 +1228,11 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             }
         }
         watch.publish(actor.snapshot());
+        // Notifications whose time has come: end of the quiet hours (#91),
+        // "Remind me tomorrow" (#110). Not while the system goes to sleep.
+        if actor.opts.notify && !paused {
+            notify::tick();
+        }
         // The breaker, published for akm-hid-control (root) and akmctl: Apple's
         // R3 applies to every emitter, HID_CONTROL and the forget included
         // (#244, #251). Written on a change or as a heartbeat only.

@@ -1032,9 +1032,9 @@ mod tests {
             return;
         }
         let Some((_bus, mut cmd)) = apple_kb_monitord::testbus::rerun() else {
-        eprintln!("SKIP: dbus-daemon not installed");
-        return;
-    };
+            eprintln!("SKIP: dbus-daemon not installed");
+            return;
+        };
         let out = cmd
             .args(["--exact", "tray::tests::widget_claim_and_configuration_withdraw_and_restore_the_icon", "--nocapture"])
             .env("AKM_TRAY_CLAIM_INNER", "1")

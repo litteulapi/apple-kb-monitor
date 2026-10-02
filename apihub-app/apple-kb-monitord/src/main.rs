@@ -215,6 +215,13 @@ fn run(opts: actor::Options, bus_name: Option<String>) -> ExitCode {
         opts.alerts_enabled.then(|| opts.alerts.thresholds().to_vec()),
         opts.notify_connection
     );
+    // Quiet hours and what waits to be shown again (#91, #110). Kept on disk
+    // only when this instance writes its state (same rule as the history).
+    apple_kb_monitord::notify_policy::configure(
+        opts.quiet_hours.clone(),
+        opts.history
+            .then(akm_core::deferred::DeferredStore::default_path),
+    );
     tray::spawn(watch.clone(), mailbox.clone(), conn.clone());
     // What macOS tells the keyboard at shutdown (Feature 0x40, once), #191.
     apple_kb_monitord::shutdown::install(opts.will_shutdown, watch.clone());

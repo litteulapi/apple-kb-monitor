@@ -232,10 +232,17 @@ impl Event {
     pub fn category(self) -> &'static str {
         match self {
             Event::KeyboardReconnected => "device.added",
-            Event::KeyboardDisconnected | Event::KeyboardOff | Event::KeyboardRemoved => "device.removed",
+            Event::KeyboardDisconnected | Event::KeyboardOff | Event::KeyboardRemoved => {
+                "device.removed"
+            }
             Event::KeyboardUnreachable | Event::RepairNeeded | Event::Error => "device.error",
             _ => "device",
         }
+    }
+
+    /// The event whose `x-kde-eventId` is `id`.
+    pub fn from_id(id: &str) -> Option<Event> {
+        Event::ALL.into_iter().find(|e| e.id() == id)
     }
 
     /// Buttons of the event (the body click, `default`, always does the
@@ -259,6 +266,8 @@ pub enum Action {
     Repair,
     /// Stop the battery reminder.
     Ignore,
+    /// Show this notification again in 24 hours (#110).
+    RemindTomorrow,
 }
 
 impl Action {
@@ -268,6 +277,7 @@ impl Action {
             Action::Open => "open",
             Action::Repair => "repair",
             Action::Ignore => "ignore",
+            Action::RemindTomorrow => "remind",
         }
     }
 
@@ -276,6 +286,7 @@ impl Action {
             Action::Open => lang.t("Open", "Ouvrir"),
             Action::Repair => lang.t("Repair\u{2026}", "R\u{e9}parer\u{2026}"),
             Action::Ignore => lang.t("Ignore this reminder", "Ignorer ce rappel"),
+            Action::RemindTomorrow => lang.t("Remind me tomorrow", "Me rappeler demain"),
         }
     }
 
@@ -285,6 +296,7 @@ impl Action {
             "default" | "open" => Some(Action::Open),
             "repair" => Some(Action::Repair),
             "ignore" => Some(Action::Ignore),
+            "remind" => Some(Action::RemindTomorrow),
             _ => None,
         }
     }
@@ -340,6 +352,38 @@ impl Notification {
             transient: urgency == Urgency::Low,
             lang,
         }
+    }
+
+    /// What is kept of a notification shown later (quiet hours, "Remind me
+    /// tomorrow"): the texts as shown, nothing else.
+    pub fn to_stored(&self) -> akm_core::deferred::Stored {
+        akm_core::deferred::Stored {
+            event: self.event.id().to_string(),
+            summary: self.summary.clone(),
+            body: self.body.clone(),
+            icon: self.icon.clone(),
+            urgency: self.urgency.hint(),
+            transient: self.transient,
+            french: self.lang == Lang::Fr,
+        }
+    }
+
+    /// Back from [`Self::to_stored`] (the body is already escaped). `None`
+    /// for an event this version does not know.
+    pub fn from_stored(s: &akm_core::deferred::Stored) -> Option<Self> {
+        Some(Self {
+            event: Event::from_id(&s.event)?,
+            summary: s.summary.clone(),
+            body: s.body.clone(),
+            icon: s.icon.clone(),
+            urgency: match s.urgency {
+                0 => Urgency::Low,
+                2 => Urgency::Critical,
+                _ => Urgency::Normal,
+            },
+            transient: s.transient,
+            lang: if s.french { Lang::Fr } else { Lang::En },
+        })
     }
 
     /// `expire_timeout` in ms: critical = 0 (never expires, persistent),
@@ -573,12 +617,21 @@ pub fn replaced_text(r: &Replacement, lang: Lang) -> (String, String) {
 
 pub fn replaced_notification(r: &Replacement, lang: Lang) -> Notification {
     let (s, b) = replaced_text(r, lang);
-    Notification::new(Event::BatteryReplaced, lang, s, b, "battery-full", Urgency::Normal)
+    Notification::new(
+        Event::BatteryReplaced,
+        lang,
+        s,
+        b,
+        "battery-full",
+        Urgency::Normal,
+    )
 }
 
 pub fn battery_replaced(r: &Replacement) {
-    // New batteries end any snoozed reminder.
+    // New batteries end any snoozed reminder, and what waited to be shown
+    // again about the old ones ("Remind me tomorrow", quiet hours).
     REMINDER_IGNORED.store(false, Ordering::SeqCst);
+    crate::notify_policy::cancel_slot(Event::BatteryReplaced.slot());
     deliver(replaced_notification(r, Lang::detect()));
 }
 
@@ -778,20 +831,38 @@ pub fn send(summary: &str, body: &str, icon: &str) {
 /// Send with an urgency; `transient` notifications are not kept in the
 /// history of the notification server (connection changes).
 pub fn send_with(summary: &str, body: &str, icon: &str, urgency: Urgency, transient: bool) {
-    deliver(generic_notification(summary, body, icon, urgency, transient));
+    deliver(generic_notification(
+        summary, body, icon, urgency, transient,
+    ));
 }
 
-/// Queue a notification for the notification thread; never blocks.
+/// Queue a notification for the notification thread; never blocks. Inside
+/// the quiet hours a notification that is not critical is held instead
+/// (journalled, shown when they end: [`crate::notify_policy`], #91).
 pub fn deliver(n: Notification) {
+    let Some(n) = crate::notify_policy::admit(n) else {
+        return;
+    };
     notifier().submit(move || {
         deliver_blocking(&n);
     });
 }
 
+/// Show what is due now: notifications held by the quiet hours that just
+/// ended, and "Remind me tomorrow" reminders (#91, #110). Cheap when nothing
+/// waits; called by the acquisition loop at every pass.
+pub fn tick() {
+    for n in crate::notify_policy::take_due() {
+        deliver(n);
+    }
+}
+
 /// The blocking D-Bus call, for a generic notification (notification thread
 /// only).
 pub fn send_blocking(summary: &str, body: &str, icon: &str, urgency: Urgency, transient: bool) {
-    deliver_blocking(&generic_notification(summary, body, icon, urgency, transient));
+    deliver_blocking(&generic_notification(
+        summary, body, icon, urgency, transient,
+    ));
 }
 
 /// The blocking `Notify` call (notification thread only). Replaces the
@@ -801,6 +872,9 @@ pub fn deliver_blocking(n: &Notification) -> Option<u32> {
         listener::ensure_started();
     }
     let replaces = lock(registry()).replace_id(n.event.slot());
+    // The server may hand the click on a button back before its reply to
+    // `Notify` is recorded below: the listener waits for calls in flight.
+    IN_FLIGHT.fetch_add(1, Ordering::SeqCst);
     let res = (|| -> zbus::Result<u32> {
         let conn = zbus::blocking::Connection::session()?;
         let reply = conn.call_method(
@@ -821,15 +895,33 @@ pub fn deliver_blocking(n: &Notification) -> Option<u32> {
         )?;
         reply.body().deserialize()
     })();
-    match res {
+    let sent = match res {
         Ok(id) => {
-            lock(registry()).record(n.event.slot(), id, n.event);
+            let mut reg = lock(registry());
+            reg.record(n.event.slot(), id, n.event);
+            reg.remember(id, n);
             Some(id)
         }
         Err(e) => {
             tracing::warn!("notification not sent: {e}");
             None
         }
+    };
+    IN_FLIGHT.fetch_sub(1, Ordering::SeqCst);
+    sent
+}
+
+/// `Notify` calls sent and not recorded in the registry yet.
+static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+/// Longest wait of the button listener for such a call (a server that never
+/// answers must not freeze the buttons of the other notifications).
+const IN_FLIGHT_WAIT: Duration = Duration::from_millis(500);
+
+/// Wait until no `Notify` call is in flight, at most [`IN_FLIGHT_WAIT`].
+fn settle_in_flight() {
+    let end = std::time::Instant::now() + IN_FLIGHT_WAIT;
+    while IN_FLIGHT.load(Ordering::SeqCst) > 0 && std::time::Instant::now() < end {
+        thread::sleep(Duration::from_millis(5));
     }
 }
 
@@ -852,6 +944,8 @@ pub struct Registry {
     pending: HashMap<u32, Event>,
     order: VecDeque<u32>,
     tokens: HashMap<u32, String>,
+    /// What each pending notification shows ("Remind me tomorrow").
+    content: HashMap<u32, Notification>,
 }
 
 impl Registry {
@@ -881,8 +975,21 @@ impl Registry {
     pub fn forget(&mut self, id: u32) {
         self.pending.remove(&id);
         self.tokens.remove(&id);
+        self.content.remove(&id);
         self.order.retain(|i| *i != id);
         self.slots.retain(|_, v| *v != id);
+    }
+
+    /// Keep what the pending notification `id` shows.
+    pub fn remember(&mut self, id: u32, n: &Notification) {
+        if self.pending.contains_key(&id) {
+            self.content.insert(id, n.clone());
+        }
+    }
+
+    /// What the pending notification `id` shows.
+    pub fn content(&self, id: u32) -> Option<&Notification> {
+        self.content.get(&id)
     }
 
     pub fn set_token(&mut self, id: u32, token: String) {
@@ -925,8 +1032,17 @@ pub fn set_action_handler(h: impl Fn(Action, Option<String>) + Send + Sync + 'st
     *lock(handler_slot()) = Some(Arc::new(h));
 }
 
-fn run_action(action: Action, token: Option<String>) {
+fn run_action(action: Action, token: Option<String>, content: Option<Notification>) {
     let custom = lock(handler_slot()).clone();
+    // "Remind me tomorrow" is the daemon's own doing: no handler replaces it.
+    if action == Action::RemindTomorrow {
+        match content.as_ref() {
+            Some(n) => {
+                crate::notify_policy::remind(n);
+            }
+            None => tracing::warn!("notification: nothing kept to remind of"),
+        }
+    }
     if let Some(h) = custom {
         h(action, token);
         return;
@@ -936,8 +1052,10 @@ fn run_action(action: Action, token: Option<String>) {
         Action::Repair => crate::repair::launch_repair(),
         Action::Ignore => {
             REMINDER_IGNORED.store(true, Ordering::SeqCst);
+            crate::notify_policy::cancel_slot(Event::BatteryReminder.slot());
             tracing::info!("notification: battery reminder ignored");
         }
+        Action::RemindTomorrow => {}
     }
 }
 
@@ -1055,13 +1173,17 @@ mod listener {
             match member.as_str() {
                 "ActionInvoked" => {
                     if let Ok((id, key)) = msg.body().deserialize::<(u32, String)>() {
-                        let taken = lock(registry()).take_action(id, &key);
+                        settle_in_flight();
+                        let (content, taken) = {
+                            let mut reg = lock(registry());
+                            (reg.content(id).cloned(), reg.take_action(id, &key))
+                        };
                         if let Some((action, token)) = taken {
                             tracing::info!("notification {id}: action {}", action.key());
                             // Own thread: an action may take its time.
                             let _ = thread::Builder::new()
                                 .name("kb-notify-action".into())
-                                .spawn(move || run_action(action, token));
+                                .spawn(move || run_action(action, token, content));
                         }
                     }
                 }
@@ -1298,14 +1420,55 @@ mod tests {
         assert_eq!(keys, ["default", "repair", "open"]);
         let rem = list(reminder_notification(&rem_low(), Some(9.0), Lang::Fr));
         assert_eq!(rem[1], "Ouvrir");
-        assert!(rem.contains(&"ignore".to_string()) && rem.contains(&"Ignorer ce rappel".to_string()));
-        assert!(generic_notification("s", "b", "dialog-error", Urgency::Critical, false)
-            .action_list()
-            .is_empty());
+        assert!(
+            rem.contains(&"ignore".to_string()) && rem.contains(&"Ignorer ce rappel".to_string())
+        );
+        assert!(
+            generic_notification("s", "b", "dialog-error", Urgency::Critical, false)
+                .action_list()
+                .is_empty()
+        );
         assert_eq!(
-            list(crossing_notification(&crossing(30, 29.0, Urgency::Normal), AlertBasis::Estimate, Lang::En)),
+            list(crossing_notification(
+                &crossing(30, 29.0, Urgency::Normal),
+                AlertBasis::Estimate,
+                Lang::En
+            )),
             ["default", "Open", "open", "Open"]
         );
+    }
+
+    /// A notification put aside comes back identical (texts, buttons, hints).
+    #[test]
+    fn a_stored_notification_comes_back_identical() {
+        for n in [
+            crossing_notification(
+                &crossing(30, 29.0, Urgency::Normal),
+                AlertBasis::Estimate,
+                Lang::Fr,
+            ),
+            reminder_notification(&rem_crit(), Some(4.0), Lang::En),
+            link_notification(&LinkEvent::Disconnected { mac: "m".into() }, Lang::Fr),
+            removed_notification("Clavier <b>de</b> alice", Lang::Fr),
+        ] {
+            let back = Notification::from_stored(&n.to_stored()).unwrap();
+            assert_eq!(back, n, "body escaped once, not twice");
+        }
+        let mut s = low_stored();
+        s.event = "NoSuchEvent".into();
+        assert!(Notification::from_stored(&s).is_none());
+        for e in Event::ALL {
+            assert_eq!(Event::from_id(e.id()), Some(e));
+        }
+    }
+
+    fn low_stored() -> akm_core::deferred::Stored {
+        crossing_notification(
+            &crossing(30, 29.0, Urgency::Normal),
+            AlertBasis::Estimate,
+            Lang::En,
+        )
+        .to_stored()
     }
 
     #[test]

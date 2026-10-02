@@ -22,6 +22,7 @@ chemistry = "alkaline"     # "alkaline" | "nimh" | "lithium" | "unknown" (#178)
 connection = true          # "disconnected" / "reconnected (N %)" / "switched off", low urgency
 battery_replaced = true    # "new batteries detected"
 defer_to_powerdevil = true # KDE PowerDevil already warns about this keyboard: one distinct reminder only (#254)
+quiet_hours = ""           # e.g. "22:00-07:00": non-critical notifications held until the range ends (#91)
 
 [display]
 apple_percent = true       # also show the percentage "as macOS shows it", labelled "Apple display" (#213)
@@ -42,6 +43,7 @@ disconnect_on_breaker = true   # after 3 unanswered requests: ask BlueZ once to 
 | `[notifications]` | `connection` | bool | `true` | daemon | Link notifications (`KeyboardDisconnected`, `KeyboardReconnected`, `KeyboardOff`). |
 | `[notifications]` | `battery_replaced` | bool | `true` | daemon | `BatteryReplaced` when fresh cells are detected. |
 | `[notifications]` | `defer_to_powerdevil` | bool | `true` | daemon | When PowerDevil shows its own low-battery warning for this keyboard, the 30 / 15 / 5 % alerts shrink to one `BatteryEstimate` reminder ([INTEGRATION-KDE.md](INTEGRATION-KDE.md) §3). |
+| `[notifications]` | `quiet_hours` | string `"HH:MM-HH:MM"`, several separated by commas | `""` (none) | daemon | Local time. Inside a range a notification that is not critical is not sent: it is journalled (`notification held until 07:00 ...`) and shown when the range ends, one per replacement slot (the latest). A range may cross midnight. Critical notifications (critical batteries, re-pairing needed, errors) are always shown at once. What waits is kept in `deferred-notifications.json` and survives a restart. A malformed value is a warning and no quiet hours. |
 | `[display]` | `apple_percent` | bool | `true` | daemon (JSON), tray, window, widget, `akmctl status` | Secondary figure only; alerts and the estimate never use it. IOBluetooth remaps the raw `0x47` value: 54..100 → 100 %, 21..53 → 21 + (raw − 21) × 2.4375, below 21 unchanged. |
 | `[apple]` | `will_shutdown` | bool | `true` | daemon, `akmctl status` (`Shutdown:` line, JSON `will_shutdown`) | See "WillShutdown" below. |
 | `[apple]` | `disconnect_on_breaker` | bool | `true` | daemon | After the third consecutive silence of the keyboard, one `org.bluez.Device1.Disconnect` (never `RemoveDevice`), bounded to 5 s, never retried. |
@@ -116,6 +118,7 @@ Environment variables: `APPLE_KB_RSSI_HELPER` (development override of `/usr/lib
 | Path | Content |
 |---|---|
 | `~/.local/state/apple-kb-monitor/history.jsonl` | battery history (`ts`, `pct`, `schema`, plus `mv_0x46` / `mv_0x49` when the voltages were read); invalid points are not written; `akmctl history import FILE` merges an older file without duplicates |
+| `~/.local/state/apple-kb-monitor/deferred-notifications.json` | `0600`: notifications to be shown later (held by the quiet hours, or "Remind me tomorrow"): due time and the texts shown, at most 32 entries |
 | `~/.local/state/apple-kb-monitor/selfcheck.json` | last result of `akmctl selftest` |
 | `~/.local/state/apple-kb-monitor/devname-backup-<UTC>.json`, `forget-backup-<UTC>.json` | `0600`, never overwritten: name stored in the keyboard before a write; host-side pairing data (no link key) before a clean forget |
 | `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state`, `hid.lock`, `keymap.hwdb`, `ui-heartbeat.json` | volatile: published circuit breaker, cross-process HID lock, hwdb staged for the helper, window heartbeat read by the self-check |

@@ -37,6 +37,9 @@
 //!   backup, guarded write behind three locks (#248)
 //! * [`reminder`]    when "change the batteries" (keyboard thresholds 0x60) and
 //!   "firmware update" notices are due, once per crossing
+//! * [`quiet`]       quiet hours of the notifications (`[notifications] quiet_hours`, #91)
+//! * [`deferred`]    notifications shown later: held by the quiet hours, or
+//!   "Remind me tomorrow" (#110); persistent, bounded
 //! * [`breaker_state`] the daemon's circuit breaker published in
 //!   `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` for the other emitters
 //!   (`akm-hid-control`, `akmctl`; #244, #251)
@@ -50,6 +53,7 @@ pub mod calibration;
 pub mod chemistry;
 pub mod config;
 pub mod decode;
+pub mod deferred;
 pub mod devname;
 pub mod discover;
 pub mod firmware;
@@ -68,6 +72,7 @@ pub mod model;
 pub mod parity;
 pub mod passive;
 pub mod power;
+pub mod quiet;
 pub mod read_policy;
 pub mod recovery;
 pub mod registry;

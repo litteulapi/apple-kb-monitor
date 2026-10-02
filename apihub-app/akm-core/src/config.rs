@@ -14,6 +14,7 @@
 //! connection = true          # "disconnected" / "reconnected (N %)", low urgency
 //! battery_replaced = true    # "new batteries detected"
 //! defer_to_powerdevil = true # PowerDevil already warns about this keyboard: one distinct reminder only (#254)
+//! quiet_hours = "22:00-07:00" # non-critical notifications held until the range ends; "" = none (#91)
 //!
 //! [display]
 //! apple_percent = true       # also show the percentage "as macOS shows it" (#213)
@@ -41,6 +42,7 @@ use toml::Spanned;
 
 use crate::alerts::{AlertConfig, DEFAULT_HYSTERESIS};
 use crate::chemistry::Chemistry;
+use crate::quiet::QuietHours;
 
 const REL_PATH: &str = "apple-kb-monitor/config.toml";
 
@@ -54,6 +56,10 @@ pub struct Config {
     /// this keyboard, our percentage alerts shrink to one distinct reminder
     /// ("estimate from your batteries", #254). Default **on**.
     pub defer_to_powerdevil: bool,
+    /// Hours during which a notification that is not critical is held and
+    /// shown when they end (`"22:00-07:00"`, several separated by commas;
+    /// #91). Default: none.
+    pub quiet_hours: QuietHours,
     /// Declared chemistry of the batteries (#178), default alkaline.
     pub chemistry: Chemistry,
     /// Show the percentage as macOS displays it, labelled "Apple display"
@@ -81,6 +87,7 @@ impl Default for Config {
             notify_connection: true,
             notify_battery_replaced: true,
             defer_to_powerdevil: true,
+            quiet_hours: QuietHours::none(),
             chemistry: Chemistry::default(),
             apple_percent: true,
             will_shutdown: true,
@@ -215,6 +222,21 @@ impl Reader {
             ("notifications", "connection") => flag(&mut self.cfg.notify_connection),
             ("notifications", "battery_replaced") => flag(&mut self.cfg.notify_battery_replaced),
             ("notifications", "defer_to_powerdevil") => flag(&mut self.cfg.defer_to_powerdevil),
+            ("notifications", "quiet_hours") => match typed::<String>(v) {
+                Some(text) => {
+                    match QuietHours::parse(&text) {
+                        Ok(q) => self.cfg.quiet_hours = q,
+                        Err(e) => self.warn(
+                            line,
+                            format_args!(
+                                "quiet_hours must be \"HH:MM-HH:MM\" ({e}); no quiet hours"
+                            ),
+                        ),
+                    }
+                    true
+                }
+                None => false,
+            },
             _ => false,
         };
         if !known {
@@ -390,6 +412,37 @@ mod tests {
         let (c, w) = parse("[notifications]\ndefer_to_powerdevil = 3\n");
         assert_eq!(w.len(), 1);
         assert!(c.defer_to_powerdevil, "a mistyped value keeps the default");
+    }
+
+    #[test]
+    fn quiet_hours_are_off_by_default_and_read_as_a_range() {
+        // #91
+        assert!(Config::default().quiet_hours.is_empty());
+        assert!(parse("[notifications]\nconnection = true\n")
+            .0
+            .quiet_hours
+            .is_empty());
+        let (c, w) = parse("[notifications]\nquiet_hours = \"22:00-07:00\"\n");
+        assert!(w.is_empty(), "{w:?}");
+        assert!(c.quiet_hours.contains(23 * 60) && c.quiet_hours.contains(6 * 60));
+        assert!(!c.quiet_hours.contains(12 * 60));
+        let (c, w) = parse("[notifications]\nquiet_hours = \"12:00-13:00, 22:00-07:00\"\n");
+        assert!(w.is_empty() && c.quiet_hours.contains(12 * 60 + 30));
+        // Explicitly none.
+        let (c, w) = parse("[notifications]\nquiet_hours = \"\"\n");
+        assert!(w.is_empty() && c.quiet_hours.is_empty());
+        // A malformed range: one warning naming the format, no quiet hours
+        // (a notification is never held by a value nobody understood).
+        for bad in ["\"22h-7h\"", "\"25:00-07:00\"", "\"08:00-08:00\""] {
+            let (c, w) = parse(&format!("[notifications]\nquiet_hours = {bad}\n"));
+            assert_eq!(w.len(), 1, "{bad}: {w:?}");
+            assert!(w[0].contains("HH:MM-HH:MM"), "{w:?}");
+            assert!(c.quiet_hours.is_empty(), "{bad}");
+        }
+        // Not a string: mistyped.
+        let (c, w) = parse("[notifications]\nquiet_hours = 22\n");
+        assert_eq!(w.len(), 1);
+        assert!(w[0].contains("mistyped") && c.quiet_hours.is_empty());
     }
 
     #[test]
