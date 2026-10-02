@@ -460,3 +460,36 @@ msgstr "ÉCHEC"
 
 msgid "Apple Keyboard Monitor"
 msgstr "Moniteur de clavier Apple"
+
+msgid "media keys first"
+msgstr "touches multimédia d’abord"
+
+msgid "F1–F12 first"
+msgstr "F1–F12 d’abord"
+
+msgid "Fn key has no effect"
+msgstr "touche Fn sans effet"
+
+msgid "F-keys disabled"
+msgstr "F1–F12 désactivées"
+
+msgid "no keyboard known to the daemon"
+msgstr "aucun clavier connu du démon"
+
+msgid "unknown mode {}"
+msgstr "mode inconnu {}"
+
+msgid "daemon unreachable: {}"
+msgstr "démon injoignable : {}"
+
+msgid "Fn mode unknown ({}): is hid_apple loaded?"
+msgstr "mode Fn inconnu ({}) : hid_apple est-il chargé ?"
+
+msgid "Fn mode not changed: {}"
+msgstr "mode Fn inchangé : {}"
+
+msgid "no session bus: {}"
+msgstr "pas de bus de session : {}"
+
+msgid "Fn mode: {}"
+msgstr "Mode Fn : {}"

@@ -1,5 +1,6 @@
 mod diag;
 mod diag_tab;
+mod fn_toggle;
 mod fnmode_diag;
 mod framestats;
 mod heartbeat;
@@ -12,6 +13,8 @@ mod keys_tab;
 mod portal;
 mod rename;
 mod source;
+#[cfg(test)]
+mod testbus;
 mod view;
 mod widgets;
 
@@ -490,6 +493,11 @@ fn open_window(state: &State, raise: &Arc<AtomicBool>, open: &Arc<AtomicBool>) -
 }
 
 fn main() {
+    // Windowless mode, thin D-Bus client of the daemon: the command of the
+    // global shortcut (#99).
+    if std::env::args().nth(1).as_deref() == Some(fn_toggle::FLAG) {
+        std::process::exit(fn_toggle::run());
+    }
     // One window = one process (#226): `apihub-app` or D-Bus
     // `org.freedesktop.Application` Activate opens the window; a second launch
     // raises it and exits; closing the window ends the process, which frees

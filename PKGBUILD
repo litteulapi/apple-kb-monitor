@@ -162,6 +162,7 @@ package() {
     # application of System Settings > Notifications (popup, sound, history, DND).
     install -Dm644 "$startdir/data/apple-kb-monitor.notifyrc"                    "$pkgdir/usr/share/knotifications6/apple-kb-monitor.notifyrc"
     install -Dm644 "$startdir/dbus/com.agenceapi.AppleKbMonitor.service" "$pkgdir/usr/share/dbus-1/services/com.agenceapi.AppleKbMonitor.service"
+    install -Dm644 "$startdir/data/com.agenceapi.AppleKbMonitor.shortcuts.desktop" "$pkgdir/usr/share/kglobalaccel/com.agenceapi.AppleKbMonitor.shortcuts.desktop"
 
     # ── System Settings → Input Devices → Keyboard → Apple Keyboard (#250):
     #    lib/qt6/plugins/plasma/kcms/systemsettings/kcm_applekeyboard.so,

@@ -137,3 +137,31 @@ Vérification : `grep -rn "StatusNotifier" apihub-app/src` ne renvoie rien ;
 `cargo test -p apihub-app` ; scénarios `open_close`, `desktop`, `desktop_slow` de
 `tests/e2e`. `main.rs` : 906 → 539 lignes (onglet Diag dans `diag_tab.rs`, tracé de
 l'historique dans `history_chart.rs`, briques egui dans `widgets.rs`).
+
+## 9. Raccourci global : basculer les touches de fonction (#99)
+
+`data/com.agenceapi.AppleKbMonitor.shortcuts.desktop`, installé dans
+`/usr/share/kglobalaccel/`, déclare à `kglobalacceld` le composant « Clavier Apple »
+avec deux entrées, visibles dans Configuration du système › Raccourcis :
+
+| Entrée | Commande | Touche par défaut |
+|---|---|---|
+| Clavier Apple (ouvrir la fenêtre du moniteur) | `apihub-app` | aucune |
+| Basculer les touches de fonction (multimédia / F1–F12) | `apihub-app --toggle-fn` | aucune |
+
+`X-KDE-Shortcuts=` est vide dans les deux groupes : **rien n'est lié tant que
+l'utilisateur n'attribue pas une touche**. Le paquet ne modifie aucun raccourci
+existant.
+
+`apihub-app --toggle-fn` n'ouvre aucune fenêtre et ne lit ni sysfs ni le clavier :
+client D-Bus du démon, il appelle `GetDevices`, lit la propriété `Device.FnMode`,
+puis `Device.SetFnMode` (même chemin que le menu de l'icône et le module de
+réglages : le démon vérifie l'appelant et ouvre l'authentification polkit
+`com.agenceapi.AppleKbMonitor.set-fnmode`). Bascule : 2 → 1 ; 1 ou 3 → 2 ; 0 ou 4 →
+1 (défaut du noyau) ; mode inconnu (`hid_apple` non chargé) : rien n'est écrit,
+code de sortie 1.
+
+Tests : `fn_toggle::tests` (bus privé sans répertoire de services, faux démon ;
+contenu du fichier `.desktop` ; ligne du PKGBUILD). Non testé ici : la liaison
+réelle d'une touche dans une session Plasma (demande `kglobalacceld`) et l'OSD de
+#100.

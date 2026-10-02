@@ -1,0 +1,24 @@
+# Global shortcuts of the Apple keyboard monitor (#99), read by kglobalacceld
+# from /usr/share/kglobalaccel/. They appear in System Settings > Shortcuts
+# under "Apple Keyboard". No key is bound by default (X-KDE-Shortcuts is
+# empty): nothing happens until the user assigns one.
+[Desktop Entry]
+Type=Application
+Name=Apple Keyboard
+Name[fr]=Clavier Apple
+Comment=Open the Apple keyboard monitor window
+Comment[fr]=Ouvrir la fenêtre du moniteur de clavier Apple
+Icon=apihub-scarab
+Exec=apihub-app
+Actions=ToggleFnMode;
+StartupNotify=false
+NoDisplay=true
+X-KDE-GlobalShortcutType=Service
+X-KDE-Shortcuts=
+
+[Desktop Action ToggleFnMode]
+Name=Toggle the function keys (media keys / F1–F12)
+Name[fr]=Basculer les touches de fonction (multimédia / F1–F12)
+Icon=input-keyboard
+Exec=apihub-app --toggle-fn
+X-KDE-Shortcuts=
