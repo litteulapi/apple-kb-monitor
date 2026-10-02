@@ -91,6 +91,14 @@ Package `apple-kb-monitor` 3.1.0-15 (`main` @ `8cb044e`). This single entry repl
 ### Known open items
 - Hardware validation of 16 of the 17 models (#23); multi-keyboard UI (#119, #94); Magic Keyboard battery report `0x90` (#95); the effect on the keyboard of `WillShutdown`, `0x41` and the sleep / wake bytes is not observable; the name write (`0x55`) was never exercised on hardware (#248). Open milestones: v3.2 backlog, v4.0 keyboard differentiation.
 
+### Lot C: akmctl and packaging (#12, #60, #14, #68, #106, #113, #90)
+- `config.toml` is read by the `toml` and `serde` crates instead of the hand-written line reader (#12, #60): any valid TOML is understood; same keys, defaults, warnings and `line N`; a file that is not valid TOML is still read statement by statement, one bad line costs one warning. Three spellings TOML forbids (`05`, `4.`, `[40,,20]`) now give a warning and the default. The JavaScript reader of the System Settings module (`kcm/ui/Toml.js`) is unchanged.
+- PKGBUILD (#14): `cargo fetch --locked` in `prepare()`, `cargo build --locked`, the real sha256 of the one source instead of `SKIP`, `.SRCINFO` checked against `makepkg --printsrcinfo` by `tests/check-pkgbuild.sh`. Still built from `$startdir`: no `git+` source and no clean-chroot build until a source repository is published.
+- `/etc/modprobe.d/hid_apple.conf` stays in the package (#68): it is the file `akmctl set fnmode N --persist` rewrites; the reasons are written in the file and checked in the package.
+- `akmctl doctor --fix [--dry-run] [--restart-services] [--optional]` (#106): the corrections of BlueZ `main.conf`, `UPower.conf` and the adapter udev rule are applied by a new helper `akm-doctor-fix` with its own polkit action `doctor-fix` (`auth_admin`): closed list, no path or value in argument, no shell, idempotent, previous file kept as `<name>.akm-bak`. Without `--fix`, `akmctl doctor` is unchanged.
+- `akmctl keys --live` (#113): live view of the key events (HID usage, evdev code, name), read-only on the evdev node, nothing recorded, left with Escape held 2 s or Ctrl-C.
+- `docs/TOUCHES.md` §8 (#90): `evtest` procedure to prove that `<>` emits `KEY_102ND`, and a unit test of the `iso_layout` mapping. The measurement itself is still to be done on the keyboard.
+
 ## [3.0.0] - 2025-04-03
 
 Full Rust rewrite. The Python CLI daemon remains for backward compatibility but the primary interface is now `apihub-app`, a native egui desktop application.
