@@ -23,6 +23,7 @@ pub fn prop_value(p: &Prop) -> Option<OwnedValue> {
     match p {
         Prop::Str(s) => owned(Value::from(s.clone())),
         Prop::Bool(b) => owned(Value::from(*b)),
+        Prop::Int(i) => owned(Value::from(*i)),
     }
 }
 
@@ -157,6 +158,8 @@ impl Menu {
             id::BLUETOOTH => Action::Bluetooth,
             id::RENAME => Action::Rename,
             id::REPAIR => Action::Repair,
+            id::FN_MEDIA => Action::FnMode(super::view::FN_MEDIA_FIRST),
+            id::FN_FKEYS => Action::FnMode(super::view::FN_FKEYS_FIRST),
             id::QUIT => Action::Hide,
             _ => return,
         };

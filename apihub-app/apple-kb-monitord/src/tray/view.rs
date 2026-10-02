@@ -251,12 +251,18 @@ pub mod id {
     pub const RENAME: i32 = 15;
     /// Guided repair of the Bluetooth link (#147).
     pub const REPAIR: i32 = 16;
+    /// Fn mode of `hid_apple` (global to every Apple keyboard): separator,
+    /// current state, the two usual modes as radio items.
+    pub const SEP_FN: i32 = 17;
+    pub const FN_MODE: i32 = 18;
+    pub const FN_MEDIA: i32 = 19;
+    pub const FN_FKEYS: i32 = 22;
     pub const SEP2: i32 = 20;
     pub const QUIT: i32 = 21;
     #[cfg(test)]
-    pub const ALL: [i32; 16] = [
-        HEADER, BATTERY, ESTIMATE, CONNECTION, SIGNAL, AUTONOMY, CAPS, SEP1, OPEN, REFRESH, COPY, BLUETOOTH,
-        RENAME, REPAIR, SEP2, QUIT,
+    pub const ALL: [i32; 20] = [
+        HEADER, BATTERY, ESTIMATE, CONNECTION, SIGNAL, AUTONOMY, CAPS, SEP1, OPEN, REFRESH, COPY,
+        BLUETOOTH, RENAME, REPAIR, SEP_FN, FN_MODE, FN_MEDIA, FN_FKEYS, SEP2, QUIT,
     ];
 }
 
@@ -265,6 +271,8 @@ pub mod id {
 pub enum Prop {
     Str(String),
     Bool(bool),
+    /// `toggle-state` (1 = checked, 0 = not).
+    Int(i32),
 }
 
 /// One menu entry: id + dbusmenu properties (only non-default ones, as the
@@ -328,6 +336,90 @@ fn sep(id: i32) -> Entry {
     }
 }
 
+/// `hid_apple.fnmode` values the menu offers: media keys first (the kernel
+/// default; `3` = auto behaves like it on an Apple keyboard) and F1-F12 first.
+pub const FN_MEDIA_FIRST: u8 = 1;
+pub const FN_FKEYS_FIRST: u8 = 2;
+
+/// What the current Fn mode does, in words (`None` = unknown value).
+pub fn fn_mode_text(lang: Lang, mode: i32) -> Option<&'static str> {
+    Some(match mode {
+        1 => lang.t("touches multimédia d'abord", "media keys first"),
+        3 => lang.t(
+            "touches multimédia d'abord (auto)",
+            "media keys first (auto)",
+        ),
+        2 => lang.t("F1–F12 d'abord", "F1–F12 first"),
+        0 => lang.t("touche Fn sans effet", "Fn key has no effect"),
+        4 => lang.t("F1–F12 désactivées", "F-keys disabled"),
+        _ => return None,
+    })
+}
+
+/// The radio item that matches `mode`, if any.
+pub fn fn_mode_checked(mode: i32) -> Option<u8> {
+    match mode {
+        1 | 3 => Some(FN_MEDIA_FIRST),
+        2 => Some(FN_FKEYS_FIRST),
+        _ => None,
+    }
+}
+
+/// The Fn section: state line + two radio items. Hidden when `hid_apple` is
+/// not loaded (mode unknown); the radio items need a known keyboard (the
+/// change goes through its D-Bus object, `Device.SetFnMode`).
+fn fn_entries(lang: Lang, mode: Option<i32>, has_keyboard: bool) -> Vec<Entry> {
+    let Some(m) = mode.filter(|m| fn_mode_text(lang, *m).is_some()) else {
+        return vec![
+            hidden(id::SEP_FN),
+            hidden(id::FN_MODE),
+            hidden(id::FN_MEDIA),
+            hidden(id::FN_FKEYS),
+        ];
+    };
+    let state = fn_mode_text(lang, m).unwrap_or_default();
+    let global = lang.t(
+        "S'applique à tous les claviers Apple de ce poste (hid_apple) ; authentification demandée",
+        "Applies to every Apple keyboard of this computer (hid_apple); authentication required",
+    );
+    let line = info(
+        id::FN_MODE,
+        format!("{} {state}", lang.t("Mode Fn :", "Fn mode:")),
+        Some(global.to_string()),
+    );
+    let radio = |id: i32, value: u8, label: &str| {
+        let mut e = action(id, label, "input-keyboard-symbolic", has_keyboard);
+        e.props.retain(|(k, _)| *k != "icon-name");
+        e.props.push(("toggle-type", Prop::Str("radio".into())));
+        e.props.push((
+            "toggle-state",
+            Prop::Int(i32::from(fn_mode_checked(m) == Some(value))),
+        ));
+        e.props.push(("accessible-desc", Prop::Str(global.into())));
+        e
+    };
+    vec![
+        sep(id::SEP_FN),
+        line,
+        radio(
+            id::FN_MEDIA,
+            FN_MEDIA_FIRST,
+            lang.t(
+                "Touches _multimédia d'abord (Fn + F1 = F1)",
+                "_Media keys first (Fn + F1 = F1)",
+            ),
+        ),
+        radio(
+            id::FN_FKEYS,
+            FN_FKEYS_FIRST,
+            lang.t(
+                "Touches F1–F12 d'_abord (Fn + F1 = multimédia)",
+                "F1–F12 _first (Fn + F1 = media)",
+            ),
+        ),
+    ]
+}
+
 /// Everything the tray shows for one state (except the data age, which is
 /// computed when the host reads the tooltip, so that time passing does not
 /// count as a change).
@@ -343,7 +435,19 @@ pub struct View {
 }
 
 impl View {
+    /// [`View::build_with_fn`] without the Fn section (mode unknown).
     pub fn build(snap: &Snapshot, charging: bool, prev_bucket: Option<u8>, lang: Lang) -> Self {
+        Self::build_with_fn(snap, charging, prev_bucket, lang, None)
+    }
+
+    /// `fn_mode`: `hid_apple.fnmode` as read in sysfs (`None` = not loaded).
+    pub fn build_with_fn(
+        snap: &Snapshot,
+        charging: bool,
+        prev_bucket: Option<u8>,
+        lang: Lang,
+        fn_mode: Option<i32>,
+    ) -> Self {
         let icon = icon_state(snap, charging, prev_bucket);
         let pct = snap.battery_pct();
         let model_full = snap
@@ -494,7 +598,7 @@ impl View {
             }
             _ => hidden(id::BATTERY),
         };
-        let menu = vec![
+        let mut menu = vec![
             header,
             battery,
             if snap.connected {
@@ -551,6 +655,9 @@ impl View {
                 "network-wireless-disconnected-symbolic",
                 true,
             ),
+        ];
+        menu.extend(fn_entries(lang, fn_mode, snap.mac().is_some()));
+        menu.extend([
             sep(id::SEP2),
             action(
                 id::QUIT,
@@ -558,7 +665,7 @@ impl View {
                 "application-exit-symbolic",
                 true,
             ),
-        ];
+        ]);
 
         Self {
             icon,
@@ -617,6 +724,59 @@ pub fn clipboard_text(snap: &Snapshot, charging: bool, lang: Lang, now: u64) -> 
 mod tests {
     use super::*;
     use akm_core::KbReport;
+
+    /// "Mode Fn" entry: state read from sysfs, two radio items, hidden when
+    /// hid_apple is not loaded, disabled without a known keyboard.
+    #[test]
+    fn fn_mode_section_shows_the_state_and_checks_the_matching_item() {
+        let radio = |v: &View, id: i32| v.entry(id).and_then(|e| e.get("toggle-state").cloned());
+        let s = snap(Some(80.0), true, None);
+        let v = View::build_with_fn(&s, false, None, Lang::Fr, Some(2));
+        let line = v.entry(id::FN_MODE).unwrap();
+        assert!(line.visible());
+        assert_eq!(
+            line.get("label"),
+            Some(&Prop::Str("Mode Fn : F1–F12 d'abord".into()))
+        );
+        assert_eq!(radio(&v, id::FN_FKEYS), Some(Prop::Int(1)));
+        assert_eq!(radio(&v, id::FN_MEDIA), Some(Prop::Int(0)));
+        for id in [id::FN_MEDIA, id::FN_FKEYS] {
+            let e = v.entry(id).unwrap();
+            assert_eq!(e.get("toggle-type"), Some(&Prop::Str("radio".into())));
+            assert_eq!(e.get("enabled"), None, "enabled with a keyboard");
+            assert!(
+                matches!(e.get("accessible-desc"), Some(Prop::Str(d)) if d.contains("hid_apple"))
+            );
+        }
+        // 3 = auto: media keys first on an Apple keyboard.
+        let v = View::build_with_fn(&s, false, None, Lang::En, Some(3));
+        assert_eq!(radio(&v, id::FN_MEDIA), Some(Prop::Int(1)));
+        assert_eq!(
+            v.entry(id::FN_MODE).unwrap().get("label"),
+            Some(&Prop::Str("Fn mode: media keys first (auto)".into()))
+        );
+        // 0: neither item is checked, the line says it.
+        let v = View::build_with_fn(&s, false, None, Lang::En, Some(0));
+        assert_eq!(
+            (radio(&v, id::FN_MEDIA), radio(&v, id::FN_FKEYS)),
+            (Some(Prop::Int(0)), Some(Prop::Int(0)))
+        );
+        // hid_apple not loaded (or a value we do not know): no section at all.
+        for m in [None, Some(9)] {
+            let v = View::build_with_fn(&s, false, None, Lang::Fr, m);
+            for id in [id::SEP_FN, id::FN_MODE, id::FN_MEDIA, id::FN_FKEYS] {
+                assert!(!v.entry(id).unwrap().visible(), "{m:?} {id}");
+            }
+        }
+        // No keyboard known: the state is shown, the items are disabled.
+        let none = Snapshot::default();
+        let v = View::build_with_fn(&none, false, None, Lang::Fr, Some(1));
+        assert_eq!(
+            v.entry(id::FN_MEDIA).unwrap().get("enabled"),
+            Some(&Prop::Bool(false))
+        );
+        assert!(v.entry(id::FN_MODE).unwrap().visible());
+    }
 
     fn snap(pct: Option<f64>, connected: bool, rssi: Option<i32>) -> Snapshot {
         let mut k = KbReport::default();

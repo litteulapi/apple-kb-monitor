@@ -89,6 +89,27 @@ pub fn open_window(conn: &Connection, token: Option<String>) {
     }
 }
 
+/// Interface and method of the daemon's keyboard object that change the Fn
+/// mode (`devices.rs`: caller uid checked, value validated, polkit helper).
+pub const DEVICE_IFACE: &str = "com.agenceapi.AppleKbMonitor1.Device";
+pub const SET_FN_MODE: &str = "SetFnMode";
+
+/// Change `hid_apple.fnmode` through the daemon, the same path as the KDE
+/// module and `akmctl` use (`Device.SetFnMode`); the daemon opens the polkit
+/// authentication. Blocks until the user answered.
+pub fn set_fn_mode(conn: &Connection, mac: &str, mode: i32) -> zbus::Result<()> {
+    let path = apple_kb_monitord::devices::device_path(mac)
+        .ok_or_else(|| zbus::Error::Failure(format!("invalid keyboard address {mac:?}")))?;
+    conn.call_method(
+        Some(apple_kb_monitord::service::BUS_NAME),
+        path.as_str(),
+        Some(DEVICE_IFACE),
+        SET_FN_MODE,
+        &(mode,),
+    )?;
+    Ok(())
+}
+
 /// Bluetooth settings of the running desktop (first available).
 pub fn bluetooth_settings_command() -> Option<Vec<&'static str>> {
     const CANDIDATES: [&[&str]; 4] = [
@@ -341,6 +362,15 @@ mod tests {
         let svc = include_str!("../../../../dbus/com.agenceapi.AppleKbMonitor.service");
         assert!(svc.contains(&format!("Name={APP_NAME}\n")));
         assert_eq!(APP_PATH, format!("/{}", APP_NAME.replace('.', "/")));
+    }
+
+    /// The tray's Fn entry calls the method the daemon really exports.
+    #[test]
+    fn fn_mode_goes_through_the_daemon_device_method() {
+        let devices = include_str!("../devices.rs");
+        assert!(devices.contains(&format!("#[interface(name = \"{DEVICE_IFACE}\")]")));
+        assert!(devices.contains("async fn set_fn_mode("));
+        assert_eq!(SET_FN_MODE, "SetFnMode");
     }
 
     #[test]

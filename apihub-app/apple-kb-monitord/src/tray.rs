@@ -146,6 +146,8 @@ pub(crate) enum Action {
     Rename,
     /// `akmctl repair` in a terminal (#147).
     Repair,
+    /// Set `hid_apple.fnmode` through the daemon (`Device.SetFnMode`, polkit).
+    FnMode(u8),
     Hide,
 }
 
@@ -708,7 +710,9 @@ impl Tray {
             false
         };
         self.charging = charging;
-        let new = View::build(snap, charging, self.bucket, self.cfg.lang);
+        let fn_mode = akm_core::hid_params::Param::FnMode
+            .read_in(std::path::Path::new(akm_core::hid_params::SYSFS_DIR));
+        let new = View::build_with_fn(snap, charging, self.bucket, self.cfg.lang, fn_mode);
         if let IconState::Level { bucket, .. } = new.icon {
             self.bucket = Some(bucket);
         } else {
@@ -775,6 +779,31 @@ impl Tray {
                 let _ = std::thread::Builder::new()
                     .name("tray-repair".into())
                     .spawn(apple_kb_monitord::repair::launch_repair);
+            }
+            Action::FnMode(mode) => {
+                let snap = self.watch.get();
+                let Some(mac) = snap.mac().map(str::to_string) else {
+                    return;
+                };
+                let lang = self.cfg.lang;
+                let (tx, watch) = (self.tx.clone(), self.watch.clone());
+                let _ = std::thread::Builder::new()
+                    .name("tray-fnmode".into())
+                    .spawn(move || {
+                        tracing::info!("tray: Fn mode {mode} asked from the menu");
+                        let res = Connection::session()
+                            .and_then(|c| actions::set_fn_mode(&c, &mac, i32::from(mode)));
+                        if let Err(e) = res {
+                            tracing::warn!("tray: Fn mode not changed: {e}");
+                            apple_kb_monitord::notify::send(
+                                lang.t("Mode Fn non modifié", "Fn mode not changed"),
+                                &e.to_string(),
+                                "dialog-error",
+                            );
+                        }
+                        // Show the mode now in effect (read back from sysfs).
+                        let _ = tx.send(Event::Snapshot(Box::new(watch.get())));
+                    });
             }
             Action::Rename => {
                 let snap = self.watch.get();
