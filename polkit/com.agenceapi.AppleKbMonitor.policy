@@ -61,4 +61,24 @@
     </defaults>
     <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-hid-control</annotate>
   </action>
+
+  <!-- Read-only inspection: `akm-hid-control inspect` (first argument
+       `inspect`) only describes the L2CAP control channel of the keyboard
+       (getsockopt / getsockname / getpeername on a duplicated descriptor) and
+       sends nothing. pkexec prefers an action whose `exec.argv1` matches over
+       the generic one above, so SUSPEND / EXIT_SUSPEND keep asking for an
+       administrator. `akmctl rename` with its device-name option reads the outgoing MTU
+       this way before it writes the name: no password in the active local
+       session, refused elsewhere. -->
+  <action id="com.agenceapi.AppleKbMonitor.hid-inspect">
+    <description>Read the MTU of the HID control channel of Apple Bluetooth keyboards</description>
+    <message>Reading the MTU of the HID control channel of the Apple keyboard (read-only, nothing is sent)</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-hid-control</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">inspect</annotate>
+  </action>
 </policyconfig>

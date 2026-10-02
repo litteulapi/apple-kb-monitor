@@ -78,11 +78,15 @@ pub fn io_guard() -> IoGuard {
 
 fn set_sleeping() {
     SLEEPING.store(true, Ordering::SeqCst);
+    // The burst in progress stops before its next request: the one in flight
+    // (at most a gap and a slow answer) fits in IO_DRAIN.
+    akm_core::read_policy::hold(true);
 }
 
 fn set_resumed(now: Instant) {
     *RESUMED_AT.lock().unwrap_or_else(|e| e.into_inner()) = Some(now);
     SLEEPING.store(false, Ordering::SeqCst);
+    akm_core::read_policy::hold(false);
 }
 
 /// Wait until no hardware access is in flight, at most `max`.
@@ -98,7 +102,11 @@ fn drain_io(max: Duration) -> bool {
 }
 
 fn take_inhibitor(calls: &Connection) -> zbus::Result<OwnedFd> {
-    take_inhibitor_for(calls, "sleep", inhibitor_reason(Inhibit::Sleep, crate::notify::Lang::detect()))
+    take_inhibitor_for(
+        calls,
+        "sleep",
+        inhibitor_reason(Inhibit::Sleep, crate::notify::Lang::detect()),
+    )
 }
 
 /// Which delay lock a reason is worded for.
@@ -159,7 +167,11 @@ pub fn spawn(on_event: impl Fn(SleepEvent) + Send + 'static) {
 }
 
 fn take_shutdown_inhibitor(calls: &Connection) -> Option<OwnedFd> {
-    match take_inhibitor_for(calls, "shutdown", inhibitor_reason(Inhibit::Shutdown, crate::notify::Lang::detect())) {
+    match take_inhibitor_for(
+        calls,
+        "shutdown",
+        inhibitor_reason(Inhibit::Shutdown, crate::notify::Lang::detect()),
+    ) {
         Ok(fd) => Some(fd),
         Err(e) => {
             tracing::warn!("no shutdown inhibitor ({e}): WillShutdown may be cut short");

@@ -5,7 +5,8 @@
 use akm_core::decode::HidSource;
 use akm_core::read_policy::{
     build_report_safe, gate, is_allowed, last_input_age, lock_path, note_input, read_safe,
-    try_lock, Gate, SafeRead, SafeSource, ACTIVE_WINDOW, ALLOWED, TRIP_AFTER, BUDGET, LOCK_WAIT, MIN_GAP,
+    try_lock, Gate, SafeRead, SafeSource, ACTIVE_WINDOW, ALLOWED, BUDGET, LOCK_WAIT, MIN_GAP,
+    TRIP_AFTER,
 };
 use akm_core::registry;
 use akm_core::report::{KbReport, KbWake};
@@ -79,10 +80,23 @@ fn constants_are_the_documented_policy() {
     // (docs/RE-MACOS-SILICON.md) : jamais en dessous.
     assert_eq!(MIN_GAP, Duration::from_millis(1000));
     assert_eq!(TRIP_AFTER, 3);
+    // Mesuré le 02/10/2026 (strace du démon) : un clavier au repos répond en
+    // 1,0 s (mode sniff). Chaque requête = 1 s d'espacement + une réponse
+    // pouvant prendre SLOW_ANSWER ; l'ancien budget de 3 s supposait une
+    // réponse instantanée et rendait la lecture incomplète.
+    assert_eq!(
+        akm_core::read_policy::SLOW_ANSWER,
+        Duration::from_millis(1500)
+    );
     assert_eq!(
         BUDGET,
-        Duration::from_secs(3),
-        "4 routine requests 1 s apart (0x47, Input 0x30, 0x46, 0x49)"
+        (MIN_GAP + akm_core::read_policy::SLOW_ANSWER) * 4,
+        "4 routine requests (0x47, Input 0x30, 0x46, 0x49), each 1 s after a slow answer"
+    );
+    assert_eq!(
+        akm_core::read_policy::ONCE_BUDGET,
+        (MIN_GAP + akm_core::read_policy::SLOW_ANSWER) * 6,
+        "0x4F, 0x60 and the four name fragments in ONE burst"
     );
     assert_eq!(LOCK_WAIT, Duration::from_millis(500));
     // Le registre est la source de vérité : routine = 0x47/0x46/0x49 en
@@ -118,9 +132,15 @@ fn constants_are_the_documented_policy() {
 fn gate_boundaries() {
     assert_eq!(gate(None), Gate::Idle);
     assert_eq!(gate(Some(Duration::ZERO)), Gate::Allowed);
-    assert_eq!(gate(Some(ACTIVE_WINDOW - Duration::from_millis(1))), Gate::Allowed);
+    assert_eq!(
+        gate(Some(ACTIVE_WINDOW - Duration::from_millis(1))),
+        Gate::Allowed
+    );
     assert_eq!(gate(Some(ACTIVE_WINDOW)), Gate::Idle);
-    assert_eq!(gate(Some(ACTIVE_WINDOW + Duration::from_millis(1))), Gate::Idle);
+    assert_eq!(
+        gate(Some(ACTIVE_WINDOW + Duration::from_millis(1))),
+        Gate::Idle
+    );
     assert_eq!(gate(Some(Duration::from_secs(3600))), Gate::Idle);
 }
 
@@ -131,7 +151,10 @@ fn input_age_is_measured_from_the_last_note() {
     let a = last_input_age(Instant::now()).unwrap();
     assert!(a < Duration::from_secs(1));
     let b = last_input_age(Instant::now() + Duration::from_secs(30)).unwrap();
-    assert!(b >= Duration::from_secs(30) && b < Duration::from_secs(31), "{b:?}");
+    assert!(
+        b >= Duration::from_secs(30) && b < Duration::from_secs(31),
+        "{b:?}"
+    );
 }
 
 #[test]
@@ -148,7 +171,10 @@ fn lock_is_exclusive_in_process_and_released_on_drop() {
     let d = private_runtime_dir("excl");
     let first = try_lock(Duration::ZERO).expect("verrou libre");
     assert!(lock_path().is_file(), "le fichier de verrou est créé");
-    assert!(try_lock(Duration::ZERO).is_none(), "second lecteur du même processus refusé");
+    assert!(
+        try_lock(Duration::ZERO).is_none(),
+        "second lecteur du même processus refusé"
+    );
     drop(first);
     let again = try_lock(Duration::ZERO);
     assert!(again.is_some(), "verrou rendu après drop");
@@ -164,7 +190,10 @@ fn lock_waits_then_gives_up_on_a_foreign_flock() {
     // Le dossier du verrou doit être privé (0700, #208) sinon try_lock refuse.
     {
         use std::os::unix::fs::DirBuilderExt;
-        std::fs::DirBuilder::new().mode(0o700).create(d.join("apple-kb-monitor")).unwrap();
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(d.join("apple-kb-monitor"))
+            .unwrap();
     }
     let other = std::fs::OpenOptions::new()
         .create(true)
@@ -173,12 +202,21 @@ fn lock_waits_then_gives_up_on_a_foreign_flock() {
         .open(lock_path())
         .unwrap();
     // SAFETY: fd valide possédé par `other`.
-    assert_eq!(unsafe { libc::flock(other.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) }, 0);
+    assert_eq!(
+        unsafe { libc::flock(other.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+        0
+    );
     let t = Instant::now();
     assert!(try_lock(Duration::from_millis(300)).is_none());
     let e = t.elapsed();
-    assert!(e >= Duration::from_millis(290), "a abandonné trop tôt : {e:?}");
-    assert!(e < Duration::from_millis(900), "a attendu trop longtemps : {e:?}");
+    assert!(
+        e >= Duration::from_millis(290),
+        "a abandonné trop tôt : {e:?}"
+    );
+    assert!(
+        e < Duration::from_millis(900),
+        "a attendu trop longtemps : {e:?}"
+    );
     // Sans attente : refus immédiat.
     let t = Instant::now();
     assert!(try_lock(Duration::ZERO).is_none());
@@ -229,7 +267,10 @@ fn refused_ids_do_not_count_nor_delay() {
     let s = SafeSource::new(&src);
     let t = Instant::now();
     for id in [0u8, 0x45, 0x48, 0x4A, 0xEA, 0xFE] {
-        assert_eq!(s.feature(id).unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            s.feature(id).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
+        );
     }
     assert!(t.elapsed() < Duration::from_millis(40));
     assert_eq!(s.sent(), 0);
@@ -237,7 +278,11 @@ fn refused_ids_do_not_count_nor_delay() {
 }
 
 fn full() -> Vec<(u8, Vec<u8>)> {
-    vec![(0x47, vec![0x47, 80]), (0x46, vec![0x46, 0xA0, 0x0B]), (0x49, vec![0x49, 0x89, 0x0B])]
+    vec![
+        (0x47, vec![0x47, 80]),
+        (0x46, vec![0x46, 0xA0, 0x0B]),
+        (0x49, vec![0x49, 0x89, 0x0B]),
+    ]
 }
 
 #[test]
@@ -257,7 +302,14 @@ fn read_safe_stores_raw_hex_and_decodes() {
 #[test]
 fn read_safe_percentage_bounds_and_no_overwrite() {
     for (p, ok) in [(0u8, true), (100, true), (101, false), (255, false)] {
-        let src = Src::new(0, vec![(0x47, vec![0x47, p]), (0x46, vec![0x46, 0, 0]), (0x49, vec![0x49, 0, 0])]);
+        let src = Src::new(
+            0,
+            vec![
+                (0x47, vec![0x47, p]),
+                (0x46, vec![0x46, 0, 0]),
+                (0x49, vec![0x49, 0, 0]),
+            ],
+        );
         let mut r = KbReport::default();
         read_safe(&src, &mut r);
         assert_eq!(r.battery.percentage, ok.then_some(f64::from(p)), "pct {p}");
@@ -272,19 +324,45 @@ fn read_safe_percentage_bounds_and_no_overwrite() {
 
 #[test]
 fn read_safe_voltage_bounds() {
-    for (mv, ok) in [(1499u16, false), (1500, true), (2976, true), (3700, true), (3701, false), (0, false), (65535, false)] {
+    for (mv, ok) in [
+        (1499u16, false),
+        (1500, true),
+        (2976, true),
+        (3700, true),
+        (3701, false),
+        (0, false),
+        (65535, false),
+    ] {
         let le = mv.to_le_bytes();
-        let src = Src::new(0, vec![(0x47, vec![0x47, 50]), (0x46, vec![0x46, le[0], le[1]]), (0x49, vec![0x49, 0, 0])]);
+        let src = Src::new(
+            0,
+            vec![
+                (0x47, vec![0x47, 50]),
+                (0x46, vec![0x46, le[0], le[1]]),
+                (0x49, vec![0x49, 0, 0]),
+            ],
+        );
         let mut r = KbReport::default();
         read_safe(&src, &mut r);
-        assert_eq!(r.battery.voltage, ok.then(|| f64::from(mv) / 1000.0), "{mv} mV");
+        assert_eq!(
+            r.battery.voltage,
+            ok.then(|| f64::from(mv) / 1000.0),
+            "{mv} mV"
+        );
     }
 }
 
 #[test]
 fn read_safe_short_answers() {
     // 0x46 avec un seul octet utile : pas de tension, mais la lecture continue.
-    let src = Src::new(0, vec![(0x47, vec![0x47, 70]), (0x46, vec![0x46, 0xA0]), (0x49, vec![0x49, 1, 2])]);
+    let src = Src::new(
+        0,
+        vec![
+            (0x47, vec![0x47, 70]),
+            (0x46, vec![0x46, 0xA0]),
+            (0x49, vec![0x49, 1, 2]),
+        ],
+    );
     let mut r = KbReport::default();
     assert_eq!(read_safe(&src, &mut r), SafeRead::Complete);
     assert_eq!(r.battery.voltage, None);
@@ -329,22 +407,40 @@ fn read_safe_stops_at_first_failure_and_flags_incomplete() {
 
 #[test]
 fn read_safe_stops_when_the_budget_is_spent() {
-    // 1,1 s par requête : 0x47 part, l'Input 0x30 (t ~ 2,1 s après l'espacement)
-    // aussi, 0x46 (t ~ 3,2 s) non.
-    let src = Src::new(1100, full());
+    // 3 s par requête (réponse anormalement lente, juste sous l'expiration de
+    // 3,5 s) : 0x47 (fini à 3 s), l'Input 0x30 (parti à 4 s, fini à 7 s),
+    // 0x46 (parti à 8 s, fini à 11 s) ; 0x49 ne part pas, le budget de 10 s
+    // est dépensé.
+    let src = Src::new(3000, full());
     let mut r = KbReport::default();
     let t = Instant::now();
     assert_eq!(read_safe(&src, &mut r), SafeRead::Partial);
-    assert_eq!(src.ids(), vec![0x47, 0x30]);
+    assert_eq!(src.ids(), vec![0x47, 0x30, 0x46]);
     assert!(r.incomplete);
-    assert!(t.elapsed() < Duration::from_millis(3500));
+    assert!(t.elapsed() < Duration::from_millis(11_800));
+}
+
+/// Régression (02/10/2026) : 1,1 s par réponse est le cas NORMAL d'un clavier
+/// au repos ; la lecture de routine doit être complète (elle était coupée
+/// après l'Input 0x30, ce qui interdisait aussi la phase « une fois par
+/// connexion » : version du micrologiciel, seuils des piles, nom).
+#[test]
+fn read_safe_is_complete_when_every_answer_takes_one_second() {
+    let src = Src::new(1100, full());
+    let mut r = KbReport::default();
+    assert_eq!(read_safe(&src, &mut r), SafeRead::Complete);
+    assert_eq!(src.ids(), vec![0x47, 0x30, 0x46, 0x49]);
+    assert!(!r.incomplete);
 }
 
 #[test]
 fn build_report_safe_paths() {
     let _g = serial();
     let d = private_runtime_dir("build");
-    let wake = KbWake { last_age_s: Some(1.5), count: 7 };
+    let wake = KbWake {
+        last_age_s: Some(1.5),
+        count: 7,
+    };
 
     // Famille inconnue : jamais d'E/S, politique « Allowed » sans lecture.
     let src = Src::new(0, full());
@@ -381,7 +477,13 @@ fn build_report_safe_paths() {
 
     // BCM2042 inactif : rien n'est demandé.
     let src = Src::new(0, full());
-    let (_, o) = build_report_safe(BCM, None, &src, wake.clone(), Instant::now() + ACTIVE_WINDOW * 2);
+    let (_, o) = build_report_safe(
+        BCM,
+        None,
+        &src,
+        wake.clone(),
+        Instant::now() + ACTIVE_WINDOW * 2,
+    );
     assert_eq!(o, SafeRead::Skipped(Gate::Idle));
     assert!(src.ids().is_empty());
 
@@ -409,7 +511,10 @@ fn in_process_contention_honours_wait_and_survives_a_panicking_holder() {
         drop(first);
     });
     rx.recv().unwrap();
-    assert!(try_lock(Duration::from_millis(1500)).is_some(), "wait ignoré en contention locale");
+    assert!(
+        try_lock(Duration::from_millis(1500)).is_some(),
+        "wait ignoré en contention locale"
+    );
     h.join().unwrap();
     // Sans libération, l'attente est bornée.
     let held = try_lock(Duration::ZERO).unwrap();
@@ -424,6 +529,9 @@ fn in_process_contention_honours_wait_and_survives_a_panicking_holder() {
     })
     .join();
     assert!(r.is_err());
-    assert!(try_lock(Duration::ZERO).is_some(), "verrou empoisonné = lectures refusées à jamais");
+    assert!(
+        try_lock(Duration::ZERO).is_some(),
+        "verrou empoisonné = lectures refusées à jamais"
+    );
     std::fs::remove_dir_all(&d).ok();
 }

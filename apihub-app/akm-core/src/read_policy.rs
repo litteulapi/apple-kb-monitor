@@ -58,8 +58,27 @@ use crate::report::{KbReport, KbWake};
 /// The Feature Reports requested in routine: the `SafeRead` class of the
 /// register map, in the order they are requested.
 pub const ALLOWED: [u8; crate::registry::SAFE_READ_IDS.len()] = crate::registry::SAFE_READ_IDS;
-/// Time budget of the once-per-connection phase.
-pub const ONCE_BUDGET: Duration = Duration::from_secs(4);
+/// Longest answer that is still normal. An idle keyboard sits in sniff mode
+/// and answers a GET_REPORT at its next anchor: measured on an A1314
+/// (2026-10-02, `strace` of the daemon) `0x49`, `0x4F` and `0x60` each came
+/// back after 0.997-1.000 s, `0x47` and `0x46` after 8-39 ms.
+pub const SLOW_ANSWER: Duration = Duration::from_millis(1_500);
+/// One request and its wait: [`MIN_GAP`], then an answer that may take
+/// [`SLOW_ANSWER`].
+const fn slot_ms() -> u64 {
+    MIN_GAP.as_millis() as u64 + SLOW_ANSWER.as_millis() as u64
+}
+/// Time budget of the once-per-connection phase; no request starts after it.
+/// Every id of [`crate::registry::DAEMON_ONCE_IDS`] and
+/// [`crate::registry::DAEMON_DEFERRED_ONCE_IDS`] fits in ONE burst even when
+/// each answer is slow: with the former 4 s (written for a 250 ms gap and an
+/// instant answer) the name fragments were never all read (two per burst,
+/// bursts 4 h apart).
+pub const ONCE_BUDGET: Duration = Duration::from_millis(
+    (crate::registry::DAEMON_ONCE_IDS.len() + crate::registry::DAEMON_DEFERRED_ONCE_IDS.len())
+        as u64
+        * slot_ms(),
+);
 /// Reads happen only if a key was pressed this recently.
 pub const ACTIVE_WINDOW: Duration = Duration::from_secs(60);
 /// Minimum spacing between two requests (the model's table).
@@ -67,8 +86,15 @@ pub const MIN_GAP: Duration = crate::apple_model::APPLE.min_gap;
 /// Consecutive silences that open the circuit breaker (the model's table).
 pub const TRIP_AFTER: u32 = crate::apple_model::APPLE.trip_after;
 /// Time budget of one routine read; no request starts after it. Four
-/// requests 1 s apart (`0x47`, Input `0x30`, `0x46`, `0x49`: #251) need 3 s.
-pub const BUDGET: Duration = Duration::from_secs(3);
+/// requests (`0x47`, Input `0x30`, `0x46`, `0x49`: #251), each [`MIN_GAP`]
+/// after the answer of the previous one, which may take [`SLOW_ANSWER`]. The
+/// former 3 s assumed instant answers: one slow answer dropped `0x49` and,
+/// with it, the whole once-per-connection phase (firmware version, battery
+/// thresholds, name).
+pub const BUDGET: Duration = Duration::from_millis(
+    (crate::registry::SAFE_READ_IDS.len() + crate::registry::SAFE_READ_INPUT_IDS.len()) as u64
+        * slot_ms(),
+);
 /// Longest wait for the cross-process lock.
 pub const LOCK_WAIT: Duration = Duration::from_millis(500);
 
@@ -165,7 +191,9 @@ static LAST_HW: AtomicU64 = AtomicU64::new(0);
 /// A request was just sent to the keyboard (read or the `WillShutdown` write):
 /// the next one waits [`MIN_GAP`] after it.
 pub fn note_hw_access() {
-    let ms = Instant::now().saturating_duration_since(epoch()).as_millis() as u64;
+    let ms = Instant::now()
+        .saturating_duration_since(epoch())
+        .as_millis() as u64;
     LAST_HW.store(ms + 1, Ordering::Relaxed);
 }
 
@@ -227,12 +255,26 @@ pub fn gate_for(schedule: Option<bool>, age: Option<Duration>) -> Gate {
     }
 }
 
+/// No new request may start (the system is about to sleep): the request in
+/// flight finishes, the rest of the burst is left for the next one.
+static HOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Ask the running burst to stop before its next request (`true`), or lift
+/// that (`false`). Set by the daemon's sleep handler so that a burst never
+/// outlives the delay the system grants before sleeping.
+pub fn hold(on: bool) {
+    HOLD.store(on, Ordering::SeqCst);
+}
+
 static LAST_OUTCOME: Mutex<Option<SafeRead>> = Mutex::new(None);
 
 /// Outcome of the last [`build_report_safe`], taken once (daemon: was the
 /// battery read of the model a success?).
 pub fn take_last_outcome() -> Option<SafeRead> {
-    LAST_OUTCOME.lock().unwrap_or_else(|e| e.into_inner()).take()
+    LAST_OUTCOME
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
 }
 
 // ── circuit breaker (#214, #243, #251) ─────────────────────────────────────
@@ -356,7 +398,10 @@ fn ensure_private_dir(dir: &std::path::Path) -> io::Result<()> {
     if !md.file_type().is_dir() || md.uid() != me || md.mode() & 0o077 != 0 {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            format!("{} is not a private directory owned by uid {me}", dir.display()),
+            format!(
+                "{} is not a private directory owned by uid {me}",
+                dir.display()
+            ),
         ));
     }
     Ok(())
@@ -608,12 +653,23 @@ pub fn read_safe(src: &dyn HidSource, report: &mut KbReport) -> SafeRead {
 /// yet made in this connection. Every request goes through the same
 /// [`SafeSource`]: same spacing, same breaker, stop at the first failure.
 fn read_with(safe: SafeSource<'_>, report: &mut KbReport, with_once: bool) -> SafeRead {
+    read_with_hold(safe, report, with_once, &HOLD)
+}
+
+/// [`read_with`] with the "no new request" flag given by the caller.
+fn read_with_hold(
+    safe: SafeSource<'_>,
+    report: &mut KbReport,
+    with_once: bool,
+    hold: &std::sync::atomic::AtomicBool,
+) -> SafeRead {
     use crate::apple_model::Request;
+    let held = || hold.load(Ordering::SeqCst);
     let start = Instant::now();
     let mut complete = true;
     // Apple's order (R2): 0x47, then GET Input 0x30 once, then 0x46 / 0x49.
     for req in routine_reads() {
-        if safe.sent() > 0 && start.elapsed() >= BUDGET {
+        if held() || (safe.sent() > 0 && start.elapsed() >= BUDGET) {
             complete = false;
             break;
         }
@@ -671,7 +727,7 @@ fn read_with(safe: SafeSource<'_>, report: &mut KbReport, with_once: bool) -> Sa
             if safe.conn().requested(id) {
                 continue;
             }
-            if phase.elapsed() >= ONCE_BUDGET {
+            if held() || phase.elapsed() >= ONCE_BUDGET {
                 complete = false;
                 break;
             }
@@ -689,7 +745,7 @@ fn read_with(safe: SafeSource<'_>, report: &mut KbReport, with_once: bool) -> Sa
                 if safe.conn().requested(id) {
                     continue;
                 }
-                if phase.elapsed() >= ONCE_BUDGET {
+                if held() || phase.elapsed() >= ONCE_BUDGET {
                     break;
                 }
                 match safe.feature(id) {
@@ -774,7 +830,8 @@ pub fn build_report_safe(
     report.wake = wake;
     report.bluetooth.connected = true;
     if family_from_uevent(uevent) != Family::Bcm2042 {
-        *LAST_OUTCOME.lock().unwrap_or_else(|e| e.into_inner()) = Some(SafeRead::Skipped(Gate::Allowed));
+        *LAST_OUTCOME.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(SafeRead::Skipped(Gate::Allowed));
         return (report, SafeRead::Skipped(Gate::Allowed));
     }
     let outcome = match gate_for(schedule(), last_input_age(now)) {
@@ -789,7 +846,10 @@ pub fn build_report_safe(
     report.battery.percentage_fine = report.battery.percentage;
     report.breaker_open = tripped();
     // Values read once in this connection survive the following reads.
-    apply_cached(&mut report, crate::model::parse_hid_id(uevent).map(|(_, p)| p));
+    apply_cached(
+        &mut report,
+        crate::model::parse_hid_id(uevent).map(|(_, p)| p),
+    );
     (report, outcome)
 }
 
@@ -827,6 +887,112 @@ mod tests {
             .with(&[0xFE, 0, 0, 0, 0, 0, 0, 0, 0])
     }
 
+    /// A keyboard that answers every request after `delay`, like an idle
+    /// A1314 in sniff mode (measured 2026-10-02: 0.997-1.000 s).
+    struct Slow<'a> {
+        inner: &'a dyn HidSource,
+        delay: Duration,
+    }
+    impl HidSource for Slow<'_> {
+        fn feature(&self, id: u8) -> io::Result<Vec<u8>> {
+            std::thread::sleep(self.delay);
+            self.inner.feature(id)
+        }
+        fn input(&self, id: u8) -> io::Result<Vec<u8>> {
+            std::thread::sleep(self.delay);
+            self.inner.input(id)
+        }
+    }
+
+    /// Regression (2026-10-02): with answers of 1 s the budgets of 3 s and
+    /// 4 s dropped `0x49` (read flagged incomplete) and never read the four
+    /// name fragments in one connection. ONE burst now reads everything.
+    #[test]
+    fn a_keyboard_answering_in_one_second_is_read_whole_in_one_burst() {
+        let f = fixture()
+            .with(&[0x4F, 0x50, 0x00])
+            .with(&[0x60, 0x0b, 0x8a, 0x09, 0xca, 0x09, 0x64, 0x08, 0x06])
+            .with(b"\x51Clavier ")
+            .with(b"\x52de alice")
+            .with(b"\x53 #1\0\0\0\0\0")
+            .with(&[0x54, 0, 0, 0, 0, 0, 0, 0, 0]);
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(Vec::new()),
+        };
+        let slow = Slow {
+            inner: &spy,
+            delay: Duration::from_secs(1),
+        };
+        let breaker = Mutex::new(Breaker::new());
+        let conn = Mutex::new(ConnState::new());
+        let mut r = KbReport::default();
+        let out = read_with(SafeSource::with_parts(&slow, &breaker, &conn), &mut r, true);
+        assert_eq!(out, SafeRead::Complete);
+        assert!(!r.incomplete);
+        assert_eq!(
+            *spy.log.borrow(),
+            vec![0x47, 0x30, 0x46, 0x49, 0x4F, 0x60, 0x51, 0x52, 0x53, 0x54],
+            "the routine reads, then every once-per-connection id, in one burst"
+        );
+        apply_frames(&mut r, Some(0x0256), &conn.lock().unwrap());
+        assert_eq!(
+            r.device.name_on_keyboard.as_deref(),
+            Some("Clavier de alice #1")
+        );
+        assert_eq!(r.firmware.version.as_deref(), Some("0x0050"));
+        assert!(r.battery.thresholds.is_some());
+        assert_eq!(
+            breaker.lock().unwrap().counter(),
+            0,
+            "a slow answer is an answer"
+        );
+    }
+
+    /// The budgets follow the number of requests and the measured latency.
+    #[test]
+    fn the_budgets_cover_slow_answers_for_every_request() {
+        let slot = MIN_GAP + SLOW_ANSWER;
+        assert!(SLOW_ANSWER >= Duration::from_secs(1), "measured: 1.0 s");
+        assert!(SLOW_ANSWER < crate::apple_model::APPLE.report_timeout);
+        assert_eq!(BUDGET, slot * routine_reads().len() as u32);
+        let once = crate::registry::DAEMON_ONCE_IDS.len()
+            + crate::registry::DAEMON_DEFERRED_ONCE_IDS.len();
+        assert_eq!(ONCE_BUDGET, slot * once as u32);
+    }
+
+    /// Asked to hold (system about to sleep): no request starts; lifted, the
+    /// burst runs.
+    #[test]
+    fn a_held_burst_sends_nothing() {
+        let f = fixture();
+        let spy = Spy {
+            inner: &f,
+            log: RefCell::new(Vec::new()),
+        };
+        let breaker = Mutex::new(Breaker::new());
+        let conn = Mutex::new(ConnState::new());
+        let hold = std::sync::atomic::AtomicBool::new(true);
+        let mut r = KbReport::default();
+        let out = read_with_hold(
+            SafeSource::with_parts(&spy, &breaker, &conn),
+            &mut r,
+            true,
+            &hold,
+        );
+        assert_eq!(out, SafeRead::Partial);
+        assert!(spy.log.borrow().is_empty());
+        hold.store(false, Ordering::SeqCst);
+        let out = read_with_hold(
+            SafeSource::with_parts(&spy, &breaker, &conn),
+            &mut r,
+            false,
+            &hold,
+        );
+        assert_eq!(out, SafeRead::Complete);
+        assert_eq!(*spy.log.borrow(), vec![0x47, 0x30, 0x46, 0x49]);
+    }
+
     #[test]
     fn only_the_allow_list_reaches_the_device() {
         let f = fixture();
@@ -855,7 +1021,12 @@ mod tests {
     #[test]
     fn no_forbidden_class_is_reachable_through_the_policy() {
         use crate::registry::{classify_feature, Safety};
-        let full = Fixture::from_hex_dump(&(0..=255u32).map(|i| format!("{i:02x} 00 00 00 00 00 00 00 00\n")).collect::<String>()).unwrap();
+        let full = Fixture::from_hex_dump(
+            &(0..=255u32)
+                .map(|i| format!("{i:02x} 00 00 00 00 00 00 00 00\n"))
+                .collect::<String>(),
+        )
+        .unwrap();
         let spy = Spy {
             inner: &full,
             log: RefCell::new(Vec::new()),
@@ -866,14 +1037,28 @@ mod tests {
             let safe = SafeSource::with_parts(&spy, &breaker, &conn);
             let class = classify_feature(id);
             let r = safe.feature(id);
-            if matches!(class, Safety::NeverRead | Safety::NeverWrite | Safety::Unknown | Safety::ManualOnly | Safety::PassiveInput) {
-                assert_eq!(r.unwrap_err().kind(), io::ErrorKind::PermissionDenied, "{id:#04x} {class:?}");
+            if matches!(
+                class,
+                Safety::NeverRead
+                    | Safety::NeverWrite
+                    | Safety::Unknown
+                    | Safety::ManualOnly
+                    | Safety::PassiveInput
+            ) {
+                assert_eq!(
+                    r.unwrap_err().kind(),
+                    io::ErrorKind::PermissionDenied,
+                    "{id:#04x} {class:?}"
+                );
             }
         }
         let sent = spy.log.borrow().clone();
         for id in sent {
             assert!(
-                matches!(classify_feature(id), Safety::SafeRead | Safety::OncePerConnection),
+                matches!(
+                    classify_feature(id),
+                    Safety::SafeRead | Safety::OncePerConnection
+                ),
                 "{id:#04x} reached the device"
             );
         }
@@ -897,9 +1082,14 @@ mod tests {
         assert_eq!(spy.log.borrow().len(), 1);
         // a second SafeSource (next read burst) shares the connection state
         let safe2 = SafeSource::with_parts(&spy, &breaker, &conn);
-        assert_eq!(safe2.feature(0x4F).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        assert_eq!(
+            safe2.feature(0x4F).unwrap_err().kind(),
+            io::ErrorKind::WouldBlock
+        );
         conn.lock().unwrap().reset(); // new connection
-        assert!(SafeSource::with_parts(&spy, &breaker, &conn).feature(0x4F).is_ok());
+        assert!(SafeSource::with_parts(&spy, &breaker, &conn)
+            .feature(0x4F)
+            .is_ok());
         assert_eq!(spy.log.borrow().len(), 2);
     }
 
@@ -959,7 +1149,10 @@ mod tests {
         );
         assert_eq!(r.firmware.version.as_deref(), Some("0x0050"));
         assert_eq!(r.firmware.status, "up_to_date");
-        assert_eq!(r.battery.thresholds.unwrap().as_array(), [2954, 2506, 2404, 2054]);
+        assert_eq!(
+            r.battery.thresholds.unwrap().as_array(),
+            [2954, 2506, 2404, 2054]
+        );
         assert_eq!(r.battery.threshold_level.as_deref(), Some("ok"));
         assert_eq!(r.raw.get("0x4f").map(String::as_str), Some("5000"));
         // second burst: routine reads only, once-ids are not requested again
@@ -1108,7 +1301,10 @@ mod tests {
         // fresh: created 0700
         let d = base.join("ok");
         ensure_private_dir(&d).unwrap();
-        assert_eq!(std::fs::metadata(&d).unwrap().permissions().mode() & 0o777, 0o700);
+        assert_eq!(
+            std::fs::metadata(&d).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
         ensure_private_dir(&d).unwrap();
         // group/other access: refused
         std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -1422,19 +1618,28 @@ mod tests {
         // processControlData: "Report does not equal the report we asked for".
         let br = Mutex::new(Breaker::new());
         for i in 0..TRIP_AFTER {
-            let e = SafeSource::with_breaker(&OtherId, &br).feature(0x47).unwrap_err();
+            let e = SafeSource::with_breaker(&OtherId, &br)
+                .feature(0x47)
+                .unwrap_err();
             assert_eq!(e.kind(), io::ErrorKind::TimedOut);
             assert_eq!(br.lock().unwrap().counter(), i + 1);
         }
         let mut b = br.lock().unwrap();
         assert!(b.is_open());
-        assert!(b.take_disconnect_request(), "3rd silence: one disconnection request");
+        assert!(
+            b.take_disconnect_request(),
+            "3rd silence: one disconnection request"
+        );
         assert!(!b.take_disconnect_request());
     }
 
     #[test]
     fn the_schedule_of_the_model_overrides_the_activity_gate() {
-        assert_eq!(gate_for(Some(true), None), Gate::Allowed, "due: read even if idle");
+        assert_eq!(
+            gate_for(Some(true), None),
+            Gate::Allowed,
+            "due: read even if idle"
+        );
         assert_eq!(gate_for(Some(false), Some(Duration::ZERO)), Gate::NotDue);
         assert_eq!(gate_for(None, None), Gate::Idle);
         assert_eq!(gate_for(None, Some(Duration::ZERO)), Gate::Allowed);
