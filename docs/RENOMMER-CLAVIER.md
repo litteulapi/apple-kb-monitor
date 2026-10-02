@@ -49,9 +49,9 @@ Sauvegarde du nom actuel : ~/.local/state/apple-kb-monitor/devname-backup-<horod
 
 Sans terminal et sans `--yes`, la commande refuse **avant** tout pré-vol, tout `pkexec` et toute sauvegarde (code 10) et dit d'ajouter `--yes`. `--write-device-name` (ancienne option) reste accepté et ne fait rien. La clé `[apple] allow_device_name_write` de `config.toml` est obsolète : lue, ignorée.
 
-Codes de sortie : **0** écrit et relu identique (ou `--check` vert) · 1 erreur · 2 démon absent · **10** pas de confirmation possible · **11** pré-vol refusé · **12** annulé (réponse autre que oui ; rien d'écrit) · **13** écrit mais relecture impossible (vérifier plus tard avec `--show`) · **14** relu différent (la commande de retour arrière est affichée) · 64 usage.
+Codes de sortie : **0** écrit et relu identique (ou `--check` vert) · 1 erreur · 2 démon absent · **10** pas de confirmation possible · **11** pré-vol refusé · **12** annulé (réponse autre que oui ; rien d'écrit) · **13** écrit mais relecture impossible (vérifier plus tard avec `--show`) · **14** relu différent (la commande de retour arrière est affichée) · **15** écriture incertaine (l'écriture a échoué en cours de route, sans nouvel essai : une trame a pu partir, vérifier avec `--show`) · 64 usage.
 
-Aucun mot de passe n'est demandé dans la session locale active : la lecture de la MTU passe par l'action polkit `com.agenceapi.AppleKbMonitor.hid-inspect` (`pkexec akm-hid-control inspect`, lecture seule, `allow_active = yes`).
+Aucun mot de passe n'est demandé dans la session locale active : la lecture de la MTU passe par l'action polkit `com.agenceapi.AppleKbMonitor.hid-inspect` (`pkexec akm-hid-inspect`, lecture seule, `allow_active = yes`). `akm-hid-inspect` est un exécutable à part, sans verbe, qui ne peut rien envoyer : son action polkit est liée à son chemin et à rien d'autre, tandis que `akm-hid-control` (SUSPEND / EXIT_SUSPEND) reste en `auth_admin`.
 
 ### Module des Paramètres système
 
@@ -82,14 +82,14 @@ Référence : `tests/fixtures/devname/lion_setdevicename_frames.json` ; `devname
 Arrêt au premier échec, **jamais de réessai**.
 
 1. **Nom validé** (`devname::validate`) : ASCII imprimable (`0x20`-`0x7E`), 1 à 32 caractères, rien n'est rogné, pas d'espace en tête ni en fin, pas de `\` (échappement du fichier `info` de BlueZ). 32 = ce que `0x51-0x54` peuvent relire.
-2. **Pré-vol** : clavier connecté ; piles ≥ 20 % (ou état « normal ») ; disjoncteur fermé ; dernière lecture complète ; `akmctl doctor` vert ; MTU sortante du canal de contrôle L2CAP ≥ 66, lue par l'unique `pkexec akm-hid-control inspect --mac <MAC>` (`getsockopt`, lecture seule). Linux `hidp` ne fragmente pas : une trame trop longue couperait la session HID.
+2. **Pré-vol** : clavier connecté ; piles ≥ 20 % (ou état « normal ») ; disjoncteur fermé ; dernière lecture complète ; `akmctl doctor` vert ; MTU sortante du canal de contrôle L2CAP ≥ 66, lue par l'unique `pkexec akm-hid-inspect --mac <MAC>` (`getsockopt`, lecture seule). Linux `hidp` ne fragmente pas : une trame trop longue couperait la session HID.
 3. **Sauvegarde** du nom actuel, avant toute écriture : `~/.local/state/apple-kb-monitor/devname-backup-<AAAAMMJJTHHMMSSZ>.json`, fichier neuf, **0600** (dossier 0700).
 4. **Confirmation unique** `[o/N]` (ou `--yes`).
-5. Connexion revérifiée ; ouverture du nœud hidraw sous le verrou HID partagé avec le démon (`hidraw::WriteDoor`).
+5. Connexion revérifiée ; ouverture du nœud hidraw sous le verrou HID partagé avec le démon (`hidraw::WriteDoor`). L'adresse du nœud ouvert doit être celle du pré-vol et de la sauvegarde (`--mac`, sinon le clavier suivi par le démon) : avec deux claviers Apple connectés, si c'est le nœud de l'autre qui s'ouvre, rien n'est écrit.
 6. **Une** écriture par `WriteSession` et le registre : opération nommée `DeviceName`, id `0x55`, exactement 64 octets de données, une fois par session ; porte matérielle de 65 octets.
 7. Attente de l'espacement (1 s), puis **relecture immédiate** de `0x51-0x54` par la même porte (`WriteDoor::read_name`), à travers `read_policy::SafeSource` : registre, 1 s entre deux demandes, disjoncteur, arrêt au premier échec ; chaque trame doit faire l'id + 8 octets.
-8. **Comparaison** aux 32 premiers octets écrits, verdict (codes 0, 13, 14).
-9. Le démon est prévenu (D-Bus `RereadName`) : il oublie ses fragments `0x51-0x54` et les relit (au plus une fois toutes les 30 s).
+8. **Comparaison** aux 32 premiers octets écrits, verdict (codes 0, 13, 14 ; 15 si l'écriture elle-même a échoué après l'ouverture du nœud).
+9. Le démon est prévenu (D-Bus `RereadName`, qui répond `(accepté, texte)`) : il oublie aussitôt ses fragments `0x51-0x54` (il n'affiche jamais un nom qu'il sait périmé) et relit ces quatre rapports seuls, jamais la lecture de routine : tout de suite, ou, si une relecture a eu lieu il y a moins de 30 s, à la fin de ces 30 s (demande différée, jamais jetée). L'instant du dernier accès au clavier est partagé entre `akmctl` et le démon (`hid.last` à côté de `hid.lock`) : l'écart de 1 s vaut aussi entre la relecture d'`akmctl` et celle du démon.
 
 Protections inchangées : registre (`0x55` écrivable par `DeviceName` seulement), `WriteSession`, politique de lecture et budgets, disjoncteur (celui du démon décide), MTU ≥ 66, sauvegarde avant écriture, jamais de réessai. Aucune méthode D-Bus n'écrit dans le clavier.
 
@@ -99,7 +99,7 @@ Protections inchangées : registre (`0x55` écrivable par `DeviceName` seulement
 akmctl rename --device-name --restore ~/.local/state/apple-kb-monitor/devname-backup-<horodatage>.json --yes
 ```
 
-La commande exacte est affichée quand le nom relu diffère (code 14). Elle vérifie la sauvegarde (4 × 8 octets, ASCII puis NUL, cohérente avec le nom) et suit le même déroulé, sans nouvelle sauvegarde. Sans `--yes`, elle pose la même question `[o/N]`. Aucun retour arrière n'est automatique.
+La commande exacte est affichée quand le nom relu diffère (code 14). Elle vérifie la sauvegarde (4 × 8 octets, un nom non vide puis NUL, cohérente avec le nom lisible) et réécrit ces octets tels quels : la sauvegarde garde les 32 octets bruts même s'ils ne sont pas ASCII (macOS écrit en UTF-8, « Clavier de Cécile »), seul un nom saisi doit être ASCII. Elle et suit le même déroulé, sans nouvelle sauvegarde. Sans `--yes`, elle pose la même question `[o/N]`. Aucun retour arrière n'est automatique.
 
 ## 6. Ce qui reste à savoir
 

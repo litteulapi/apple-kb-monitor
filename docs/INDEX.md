@@ -23,7 +23,7 @@ One line per document of `docs/`. Language in brackets. **Living** documents are
 
 | Document | One line |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) [EN] | Components (daemon, clients, four privileged helpers, KCM, widget), `akm-core` decision modules, daemon loop, data flow, privilege model, installed and repository layout |
+| [ARCHITECTURE.md](ARCHITECTURE.md) [EN] | Components (daemon, clients, five privileged helpers, KCM, widget), `akm-core` decision modules, daemon loop, data flow, privilege model, installed and repository layout |
 | [TESTING.md](TESTING.md) [EN] | `scripts/ci-local.sh` (18 steps), Rust tests and invariants, e2e under Xvfb + bubblewrap, `akmctl selftest`, pre-push hook, CI jobs, fixtures, read-only hardware checks |
 | [QA-AUTOMATIQUE.md](QA-AUTOMATIQUE.md) [FR] | Rationale and contract of the automatic QA (#241): pipeline, e2e, self-check controls and heartbeat, git guard, CI, defects caught |
 | [PARITE-APPLE.md](PARITE-APPLE.md) [EN] | Parity with Apple: what is sent to the keyboard and nothing more; rules R1-R8 of the model with sources and tests; what is deliberately not implemented; the write doors |

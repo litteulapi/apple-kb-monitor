@@ -75,6 +75,15 @@ Package `apple-kb-monitor` 3.1.0-15 (`main` @ `8cb044e`). This single entry repl
 ### Fixed
 - keyboard: HID fd leak, wake-monitor busy loop after disconnect, unvalidated calibration, PID substring match, NUL in device name, CapsLock LED (#52, #53, #79); `power_supply` path without `-NN` suffix, null percentage without sysfs fallback (#70, #71); RSSI reply matched to its request, 127 rejected, strict MAC (#56, #31, #77); BlueZ `PropertiesChanged`, re-registration, log flood (#57, #72, #81); alerts re-armed, no 100 % / 0 V points, tray SNI retries, UTF-8 safe slicing (#28-#32, #35, #36, #38, #74); invalid history points rejected (#39); no 0 % exported to BlueZ on a failed read (#78).
 - Daemon: no warning for the config sections of another program sharing `config.toml` (3.1.0-13).
+- Final review of 3.1.0-19, fixed in 3.1.0-20 (#264, #248):
+  - a battery level kept from an earlier read (keyboard silent, read not due) is marked `battery.kept` and is no longer recorded as a new measure: no history sample, `last_update` unchanged; "keyboard silent" is said only when a read was really sent and failed;
+  - after a wake, the battery read waits for the first key press and then goes out at once (the cycle is not consumed and retried 1 h later); without the passive listener nothing is held;
+  - `RereadName` reads `0x51`-`0x54` alone (never the routine reports, `Refresh`'s 5 min floor is not bypassed), a request inside the 30 s floor is deferred instead of dropped, the method answers `(accepted, text)`, and the instant of the last hardware access is shared between `akmctl` and the daemon (`hid.last` next to `hid.lock`) so that the 1 s spacing holds across processes;
+  - a keyboard whose current name is not ASCII (macOS writes UTF-8) can be renamed: the backup keeps the 32 raw bytes and the restore writes them back as they are; only a typed name must be ASCII;
+  - with two Apple keyboards connected, the write is refused when the hidraw node opened is not the keyboard of the pre-flight and of the backup;
+  - HID_CONTROL SUSPEND / EXIT_SUSPEND are off in the code too: `hid-suspend.conf` absent or without the `enabled` key means disabled; the upgrade warns when an edited file still says `enabled = true`;
+  - polkit: the read-only MTU probe is its own executable `akm-hid-inspect`, so the password-less action `hid-inspect` is bound to its path alone (two actions on one path told apart by `argv1` depended on polkitd's enumeration order);
+  - `akmctl rename --device-name`: exit code 15 "write uncertain" when the write failed on its way (a frame may have been sent), shown as such by the KCM instead of "Not written"; the command to copy from the KCM is `--device-name='<name>'` (a name starting with a dash was read as an option).
 
 ### Documentation
 - README, INSTALL, CONFIGURATION, FEATURES, TROUBLESHOOTING, ARCHITECTURE, TESTING rewritten for 3.1.0-15, `docs/INDEX.md` added, Gitea wiki updated (#13, #255). Reverse-engineering and audit documents (`docs/RE-*.md`, `HARDWARE-*.md`, `AUDIT-*.md`, `CONTRE-AUDIT.md`, `VERIF-BATTERIE.md`) are dated evidence and are not rewritten.
