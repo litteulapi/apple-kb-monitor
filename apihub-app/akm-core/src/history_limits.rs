@@ -202,7 +202,7 @@ mod tests {
     #[test]
     fn the_limits_are_the_documented_ones() {
         assert_eq!(MAX_BYTES, 5 * 1024 * 1024);
-        assert!(TRIM_TO_BYTES < MAX_BYTES);
+        const { assert!(TRIM_TO_BYTES < MAX_BYTES) };
         // 90 days at one sample per 5 minutes fit under the bound.
         let line = line_len(&series(1)[0]).unwrap();
         assert!(90 * 288 * line < MAX_BYTES, "{line} bytes a line");
@@ -252,7 +252,7 @@ mod tests {
         assert!(!t.0.join("h.jsonl.prev").exists());
         // Over it: the oldest samples go, the file ends under the target.
         let removed = h.enforce_size_with(size - 1, size / 2).unwrap();
-        assert!(removed >= 990 && removed <= 1_010, "{removed}");
+        assert!((990..=1_010).contains(&removed), "{removed}");
         assert!(
             h.size_bytes() <= size / 2,
             "{} > {}",
