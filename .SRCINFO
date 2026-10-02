@@ -1,7 +1,7 @@
 pkgbase = apple-kb-monitor
 	pkgdesc = Telemetry and key mapping for Apple Bluetooth keyboards (BCM2042/BCM20733): battery, voltage, RSSI, BlueZ battery provider, KDE integration
 	pkgver = 3.1.0
-	pkgrel = 21
+	pkgrel = 22
 	url = https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor
 	install = apple-kb-monitor.install
 	arch = x86_64
