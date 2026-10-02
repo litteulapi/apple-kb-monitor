@@ -5,17 +5,11 @@
 [advisories]
 version = 2
 ignore = [
-    # quick-xml 0.30.0 (eframe -> egui-winit -> accesskit_winit -> accesskit_unix
-    # -> atspi -> zbus-lockstep -> zbus_xml) and 0.39.2 (wayland-scanner, a
-    # proc-macro: build time only). DoS by crafted XML. The XML parsed is the
-    # D-Bus introspection of the accessibility bus, written by the local
-    # session, never by a remote party. Fix = quick-xml >= 0.41, i.e. an eframe
-    # upgrade (0.29 -> 0.36 changes the egui API of the window, apihub-app/src,
-    # tracked separately).
-    { id = "RUSTSEC-2026-0194", reason = "quick-xml DoS: local accessibility-bus XML only; fixed by the eframe upgrade" },
-    { id = "RUSTSEC-2026-0195", reason = "quick-xml namespace allocation: same path, same reason" },
+    # quick-xml 0.30 / 0.39 (RUSTSEC-2026-0194 / 0195) and webbrowser 1.2.0
+    # (RUSTSEC-2026-0257) are gone since eframe 0.32 and wayland-scanner
+    # 0.31.11 (#224): nothing to ignore for them any more.
     # paste, ttf-parser: unmaintained, compile-time macro / font parsing of the
-    # bundled egui fonts; no fix available short of the eframe upgrade.
+    # bundled egui fonts; still pulled by eframe 0.32.
     { id = "RUSTSEC-2024-0436", reason = "paste unmaintained: proc-macro at build time (egui)" },
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser unmaintained: parses only the fonts bundled with egui" },
     # rand 0.8.5 through zbus 4: unsound only with a custom global logger that

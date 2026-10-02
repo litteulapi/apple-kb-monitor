@@ -18,7 +18,7 @@ description = "Apple Bluetooth keyboard monitor — tray + GUI"
 [dependencies]
 akm-core = { path = "akm-core" }
 apple-kb-monitord = { path = "apple-kb-monitord" }
-eframe = "0.29"
+eframe = "0.32"
 libc = "0.2"
 serde_json = "1"
 zbus = "4"

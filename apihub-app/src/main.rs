@@ -188,11 +188,11 @@ fn apply_appearance(ctx: &egui::Context, a: &portal::Appearance) {
         visuals.selection.stroke.color = if visuals.dark_mode { egui::Color32::WHITE } else { egui::Color32::BLACK };
         visuals.hyperlink_color = accent;
     }
-    visuals.window_rounding = egui::Rounding::same(8.0);
-    visuals.widgets.noninteractive.rounding = egui::Rounding::same(4.0);
-    visuals.widgets.inactive.rounding = egui::Rounding::same(4.0);
-    visuals.widgets.hovered.rounding = egui::Rounding::same(4.0);
-    visuals.widgets.active.rounding = egui::Rounding::same(4.0);
+    visuals.window_corner_radius = egui::CornerRadius::same(8);
+    visuals.widgets.noninteractive.corner_radius = egui::CornerRadius::same(4);
+    visuals.widgets.inactive.corner_radius = egui::CornerRadius::same(4);
+    visuals.widgets.hovered.corner_radius = egui::CornerRadius::same(4);
+    visuals.widgets.active.corner_radius = egui::CornerRadius::same(4);
     ctx.set_visuals(visuals);
 }
 

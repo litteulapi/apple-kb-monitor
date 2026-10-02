@@ -10,3 +10,4 @@ __pycache__/
 rssi-helper
 src/99-apple-kb-hidraw.rules
 scripts/out/
+apihub-app/target-*/
