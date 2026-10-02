@@ -233,6 +233,17 @@ fn run(mut opts: actor::Options, bus_name: Option<String>) -> ExitCode {
         opts.usage = Some(tracker);
     }
     let usage = opts.usage.clone();
+    // Plasma OSD at a change of Fn mode and at a Caps Lock press (#100, #101).
+    if conn.is_some() {
+        apple_kb_monitord::osd::spawn(
+            apple_kb_monitord::osd::Osd::new(
+                Arc::new(apple_kb_monitord::osd::PlasmaOsd::default()),
+                apple_kb_monitord::notify::Lang::detect(),
+                opts.osd,
+            ),
+            watch.clone(),
+        );
+    }
     tray::spawn(watch.clone(), mailbox.clone(), conn.clone());
     // What macOS tells the keyboard at shutdown (Feature 0x40, once), #191.
     apple_kb_monitord::shutdown::install(opts.will_shutdown, watch.clone());

@@ -721,12 +721,13 @@ impl Tray {
         }
         let icon_name = new.icon.name(self.icon_set);
 
-        let (icon_changed, status_changed, tip_changed, menu_diff, rev) = {
+        let (icon_changed, overlay_changed, status_changed, tip_changed, menu_diff, rev) = {
             let mut sh = lock(&self.shared);
             let old = std::mem::replace(&mut sh.view, new);
             let icon_changed = sh.icon_name != icon_name;
             sh.icon_name = icon_name;
             sh.has_keyboard = snap.keyboard.is_some();
+            let overlay_changed = old.overlay_icon != sh.view.overlay_icon;
             let status_changed = old.status != sh.view.status;
             let tip_changed = old.tooltip_title != sh.view.tooltip_title
                 || old.tooltip_lines != sh.view.tooltip_lines
@@ -736,12 +737,20 @@ impl Tray {
             if !matches!(d, menu::MenuDiff::Same) {
                 sh.menu_rev = sh.menu_rev.wrapping_add(1).max(1);
             }
-            (icon_changed, status_changed, tip_changed, d, sh.menu_rev)
+            (
+                icon_changed,
+                overlay_changed,
+                status_changed,
+                tip_changed,
+                d,
+                sh.menu_rev,
+            )
         };
         let status = lock(&self.shared).view.status.as_str();
         if let Err(e) = emit(
             conn,
             icon_changed,
+            overlay_changed,
             status_changed.then_some(status),
             tip_changed,
             menu_diff,
@@ -843,6 +852,7 @@ impl Tray {
 fn emit(
     conn: &Connection,
     icon: bool,
+    overlay: bool,
     status: Option<&str>,
     tooltip: bool,
     menu_diff: menu::MenuDiff,
@@ -855,6 +865,9 @@ fn emit(
     zbus::block_on(async {
         if icon {
             sni::Item::new_icon(&ictx).await?;
+        }
+        if overlay {
+            sni::Item::new_overlay_icon(&ictx).await?;
         }
         if let Some(s) = status {
             sni::Item::new_status(&ictx, s).await?;

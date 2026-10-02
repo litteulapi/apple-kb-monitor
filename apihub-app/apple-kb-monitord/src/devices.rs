@@ -417,6 +417,8 @@ impl Device {
         tracing::info!(uid, mode, sender = ?hdr.sender(), "SetFnMode requested");
         self.set(Param::FnMode, mode).await?;
         let _ = self.fn_mode_changed(&ctxt).await;
+        // The new mode on screen (Plasma OSD, #100).
+        crate::osd::poke();
         Ok(())
     }
 

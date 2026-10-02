@@ -25,6 +25,10 @@ battery_advice = true      # "batteries changed too often" after two sets in a r
 defer_to_powerdevil = true # KDE PowerDevil already warns about this keyboard: one distinct reminder only (#254)
 quiet_hours = ""           # e.g. "22:00-07:00": non-critical notifications held until the range ends (#91)
 
+[osd]
+fn_mode = true             # Plasma OSD when hid_apple's Fn mode (or iso_layout) changes (#100)
+caps_lock = true           # Plasma OSD "Caps Lock on / off" when the key is pressed (#101)
+
 [usage]
 active_time = false        # true: count the minutes per day the keyboard is used; no key is ever recorded (#109)
 
@@ -49,6 +53,8 @@ disconnect_on_breaker = true   # after 3 unanswered requests: ask BlueZ once to 
 | `[notifications]` | `battery_advice` | bool | `true` | daemon | `BatteryAdvice`, once, when the second set of batteries in a row is replaced within 30 days. The advice itself stays in `GetState` (`battery_advice: {days, since}`) and in the tray menu until the set in use has lasted 30 days. A set whose beginning is unknown (the history starts with it) is never counted. |
 | `[notifications]` | `defer_to_powerdevil` | bool | `true` | daemon | When PowerDevil shows its own low-battery warning for this keyboard, the 30 / 15 / 5 % alerts shrink to one `BatteryEstimate` reminder ([INTEGRATION-KDE.md](INTEGRATION-KDE.md) §3). |
 | `[notifications]` | `quiet_hours` | string `"HH:MM-HH:MM"`, several separated by commas | `""` (none) | daemon | Local time. Inside a range a notification that is not critical is not sent: it is journalled (`notification held until 07:00 ...`) and shown when the range ends, one per replacement slot (the latest). A range may cross midnight. Critical notifications (critical batteries, re-pairing needed, errors) are always shown at once. What waits is kept in `deferred-notifications.json` and survives a restart. A malformed value is a warning and no quiet hours. |
+| `[osd]` | `fn_mode` | bool | `true` | daemon | On-screen display of Plasma (`org.kde.osdService.showText` on `org.kde.plasmashell`) with the new state when `hid_apple.fnmode` or `iso_layout` changes, whoever changed it. The first value seen after a start only records the state. Without Plasma nothing is shown. |
+| `[osd]` | `caps_lock` | bool | `true` | daemon | OSD "Caps Lock on / off" when the keyboard's Caps Lock LED changes right after the keyboard sent something (no key is looked at). Independent of it, the tray icon carries a badge (`OverlayIconName = input-caps-on`) while Caps Lock is on. |
 | `[usage]` | `active_time` | bool | `false` | daemon | Usage statistics **without key logging**: a minute counts as active when at least one input report arrived during it (the passive listener only says "something arrived", with no data). Stored: one counter per local day, 90 days (`usage.json`). Published in `GetState` as `usage: {today_active_minutes, days: [{day, active_minutes, active_hours}]}` (last 7 days); absent while off. |
 | `[display]` | `apple_percent` | bool | `true` | daemon (JSON), tray, window, widget, `akmctl status` | Secondary figure only; alerts and the estimate never use it. IOBluetooth remaps the raw `0x47` value: 54..100 → 100 %, 21..53 → 21 + (raw − 21) × 2.4375, below 21 unchanged. |
 | `[apple]` | `will_shutdown` | bool | `true` | daemon, `akmctl status` (`Shutdown:` line, JSON `will_shutdown`) | See "WillShutdown" below. |

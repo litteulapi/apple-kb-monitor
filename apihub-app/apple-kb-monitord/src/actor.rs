@@ -125,6 +125,9 @@ pub struct Options {
     /// Hours during which non-critical notifications are held
     /// (`[notifications] quiet_hours`, #91).
     pub quiet_hours: akm_core::quiet::QuietHours,
+    /// Plasma OSD at a change of Fn mode / at a Caps Lock press
+    /// (`[osd] fn_mode`, `[osd] caps_lock`; #100, #101).
+    pub osd: crate::osd::Enabled,
     /// Count the active minutes per day (`[usage] active_time`, #109).
     pub usage_active_time: bool,
     /// The counter, when the statistics are on (set by `main`).
@@ -161,6 +164,10 @@ impl Default for Options {
             defer_to_powerdevil: true,
             powerdevil: Arc::new(crate::powerdevil::SystemProbe::default()),
             quiet_hours: akm_core::quiet::QuietHours::none(),
+            osd: crate::osd::Enabled {
+                fn_mode: true,
+                caps_lock: true,
+            },
             usage_active_time: false,
             usage: None,
             chemistry: Chemistry::default(),
@@ -185,6 +192,10 @@ impl Options {
         self.defer_to_powerdevil = c.defer_to_powerdevil;
         self.quiet_hours = c.quiet_hours.clone();
         self.usage_active_time = c.usage_active_time;
+        self.osd = crate::osd::Enabled {
+            fn_mode: c.osd_fn_mode,
+            caps_lock: c.osd_caps_lock,
+        };
         self.chemistry = c.chemistry;
         self.apple_percent = c.apple_percent;
         self.will_shutdown = c.will_shutdown;

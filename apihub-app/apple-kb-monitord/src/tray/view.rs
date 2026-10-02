@@ -6,6 +6,8 @@ use akm_core::Snapshot;
 /// Below or at this level the icon turns to "caution" and the item asks for
 /// attention.
 pub const CRITICAL_PCT: f64 = 10.0;
+/// Overlay icon on the tray icon while Caps Lock is on (#101).
+pub const CAPS_BADGE: &str = "input-caps-on";
 /// Below or at this level menu entries get the `warning` disposition.
 pub const LOW_PCT: f64 = 20.0;
 /// Hysteresis around bucket edges (percentage points).
@@ -434,6 +436,8 @@ pub struct View {
     pub tooltip_lines: Vec<String>,
     pub last_update: u64,
     pub menu: Vec<Entry>,
+    /// SNI overlay icon: the Caps Lock badge (#101), `""` = none.
+    pub overlay_icon: &'static str,
 }
 
 impl View {
@@ -690,6 +694,11 @@ impl View {
             tooltip_lines,
             last_update: snap.last_update,
             menu,
+            overlay_icon: if snap.connected && snap.caps_lock {
+                CAPS_BADGE
+            } else {
+                ""
+            },
         }
     }
 
@@ -740,6 +749,25 @@ pub fn clipboard_text(snap: &Snapshot, charging: bool, lang: Lang, now: u64) -> 
 mod tests {
     use super::*;
     use akm_core::KbReport;
+
+    /// #101: Caps Lock on = a badge on the icon, gone when off or offline.
+    #[test]
+    fn caps_lock_puts_a_badge_on_the_icon() {
+        let mut k = KbReport::default();
+        k.battery.percentage_fine = Some(90.0);
+        let mut s = Snapshot {
+            connected: true,
+            keyboard: Some(k),
+            ..Default::default()
+        };
+        assert_eq!(View::build(&s, false, None, Lang::Fr).overlay_icon, "");
+        s.caps_lock = true;
+        let v = View::build(&s, false, None, Lang::Fr);
+        assert_eq!(v.overlay_icon, "input-caps-on");
+        assert!(v.entry(id::CAPS).unwrap().visible());
+        s.connected = false;
+        assert_eq!(View::build(&s, false, None, Lang::Fr).overlay_icon, "");
+    }
 
     /// #108: the advice is one line of the menu and of the tooltip, hidden
     /// when there is nothing to say.

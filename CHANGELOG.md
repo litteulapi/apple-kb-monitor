@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Notification button "Remind me tomorrow" on `BatteryLow`, `BatteryEstimate`, `BatteryReminder` and `FirmwareUpdate`: the same notification is shown again 24 hours later, also after a daemon restart; new batteries cancel a pending battery reminder (#110).
 - Battery health advice "batteries changed too often" after two consecutive sets of less than 30 days: `battery_advice` in `GetState`, a line in the tray menu and tooltip, one `BatteryAdvice` notification when the second set is replaced (`[notifications] battery_advice`) (#108).
 - Usage statistics without key logging, off by default (`[usage] active_time`): active minutes per day counted from the mere arrival of input reports (`akm_core::activity::note()` takes no argument), `usage` in `GetState` (7 days), one counter per day kept 90 days in `usage.json` (#109).
+- Plasma OSD (`org.kde.osdService`) when the Fn mode or the layout of `hid_apple` changes (`[osd] fn_mode`) and when Caps Lock is pressed (`[osd] caps_lock`); Caps Lock badge on the tray icon (`OverlayIconName`) (#100, #101).
 
 ### Tests
 - Every D-Bus test of the daemon runs on a private `dbus-daemon` whose configuration has no service directory (`apple_kb_monitord::testbus`), session and system bus alike: a test can no longer activate the installed daemon nor reach the real BlueZ.

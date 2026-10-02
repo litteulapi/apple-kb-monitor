@@ -17,6 +17,10 @@
 //! battery_advice = true     # "batteries changed too often" after two sets under 30 days (#108)
 //! quiet_hours = "22:00-07:00" # non-critical notifications held until the range ends; "" = none (#91)
 //!
+//! [osd]
+//! fn_mode = true             # Plasma OSD when the Fn mode changes (#100)
+//! caps_lock = true           # Plasma OSD "Caps Lock on / off" when the key is pressed (#101)
+//!
 //! [usage]
 //! active_time = false        # count the minutes per day the keyboard is used; no key is ever recorded (#109)
 //!
@@ -67,6 +71,10 @@ pub struct Config {
     /// shown when they end (`"22:00-07:00"`, several separated by commas;
     /// #91). Default: none.
     pub quiet_hours: QuietHours,
+    /// Plasma OSD when `hid_apple.fnmode` changes (`[osd] fn_mode`, #100).
+    pub osd_fn_mode: bool,
+    /// Plasma OSD when Caps Lock is pressed (`[osd] caps_lock`, #101).
+    pub osd_caps_lock: bool,
     /// Count the active minutes per day from the mere presence of input
     /// reports (`[usage] active_time`, #109). Default **off**.
     pub usage_active_time: bool,
@@ -99,6 +107,8 @@ impl Default for Config {
             notify_battery_advice: true,
             defer_to_powerdevil: true,
             quiet_hours: QuietHours::none(),
+            osd_fn_mode: true,
+            osd_caps_lock: true,
             usage_active_time: false,
             chemistry: Chemistry::default(),
             apple_percent: true,
@@ -227,6 +237,8 @@ impl Reader {
                 }
                 None => false,
             },
+            ("osd", "fn_mode") => flag(&mut self.cfg.osd_fn_mode),
+            ("osd", "caps_lock") => flag(&mut self.cfg.osd_caps_lock),
             ("usage", "active_time") => flag(&mut self.cfg.usage_active_time),
             ("display", "apple_percent") => flag(&mut self.cfg.apple_percent),
             ("apple", "will_shutdown") => flag(&mut self.cfg.will_shutdown),
@@ -483,6 +495,20 @@ mod tests {
         let (c, w) = parse("[usage]\nactive_time = 1\nkeys = true\n");
         assert_eq!(w.len(), 2, "mistyped value, and no other key exists: {w:?}");
         assert!(!c.usage_active_time);
+    }
+
+    #[test]
+    fn both_osds_are_on_by_default_and_can_be_turned_off() {
+        // #100, #101
+        let d = Config::default();
+        assert!(d.osd_fn_mode && d.osd_caps_lock);
+        let (c, w) = parse("[osd]\nfn_mode = false\n");
+        assert!(w.is_empty() && !c.osd_fn_mode && c.osd_caps_lock);
+        let (c, w) = parse("[osd]\ncaps_lock = false\n");
+        assert!(w.is_empty() && c.osd_fn_mode && !c.osd_caps_lock);
+        let (c, w) = parse("[osd]\ncaps_lock = \"off\"\nvolume = true\n");
+        assert_eq!(w.len(), 2, "{w:?}");
+        assert!(c.osd_caps_lock, "a mistyped value keeps the default");
     }
 
     #[test]

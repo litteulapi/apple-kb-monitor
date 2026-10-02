@@ -54,7 +54,8 @@ impl Item {
     }
     #[zbus(property)]
     fn overlay_icon_name(&self) -> &str {
-        ""
+        // Caps Lock badge (#101).
+        lock(&self.shared).view.overlay_icon
     }
     #[zbus(property)]
     fn icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
@@ -118,6 +119,10 @@ impl Item {
     pub async fn new_icon(ctxt: &zbus::object_server::SignalContext<'_>) -> zbus::Result<()>;
     #[zbus(signal)]
     pub async fn new_attention_icon(
+        ctxt: &zbus::object_server::SignalContext<'_>,
+    ) -> zbus::Result<()>;
+    #[zbus(signal)]
+    pub async fn new_overlay_icon(
         ctxt: &zbus::object_server::SignalContext<'_>,
     ) -> zbus::Result<()>;
     #[zbus(signal)]
