@@ -116,7 +116,7 @@ Desktop layer
 /usr/share/applications/                   com.agenceapi.AppleKbMonitor.desktop, kcm_applekeyboard.desktop
 /usr/share/icons/hicolor/scalable/         apps/apihub-scarab.svg, status/apihub-kb-*.svg
 /usr/share/doc/apple-kb-monitor/           KCM.md, KEYD.md, QA-AUTOMATIQUE.md, TOUCHES.md, VEILLE-HID.md, udev-README.md, examples/keyd/
-/etc/apple-kb-monitor/hid-suspend.conf     enabled = true
+/etc/apple-kb-monitor/hid-suspend.conf     enabled = false (SUSPEND off by default)
 /etc/modprobe.d/hid_apple.conf             fnmode=1
 ~/.config/apple-kb-monitor/                config.toml, keymap.toml, selfcheck.env
 ~/.local/state/apple-kb-monitor/           history.jsonl, selfcheck.json, *-backup-<UTC>.json

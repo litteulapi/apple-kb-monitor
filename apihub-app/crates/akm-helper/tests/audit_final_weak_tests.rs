@@ -72,8 +72,8 @@ fn hid_suspend_conf_symlink_and_absent() {
     assert!(hidctl::read_config(&p).is_err(), "symlink followed");
     assert_eq!(
         hidctl::read_config(&d.join("absent")),
-        Ok(true),
-        "absent = enabled"
+        Ok(false),
+        "absent = disabled (SUSPEND is opt-in, #264)"
     );
     fs::remove_dir_all(&d).unwrap();
 }

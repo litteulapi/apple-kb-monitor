@@ -29,7 +29,7 @@ makepkg -si
 | `/usr/lib/apple-kb-monitor/` | `rssi-helper`, `akm-helper`, `akm-keymap-helper`, `akm-hid-control` |
 | `/usr/lib/systemd/user/` | `apple-kb-monitord.service`, `apple-kb-monitor-shutdown.service`, `apple-kb-monitor-selfcheck.{service,timer}` (+ `.wants` symlinks) |
 | `/usr/lib/systemd/system/` | `apple-kb-monitor-suspend.service`, `apple-kb-monitor-resume.service` (+ `sleep.target.wants`, `suspend/hibernate/hybrid-sleep/suspend-then-hibernate.target.wants`) |
-| `/etc/apple-kb-monitor/hid-suspend.conf`, `/etc/modprobe.d/hid_apple.conf` | `enabled = true`; `fnmode=1` (both in `backup=`: your edits survive upgrades) |
+| `/etc/apple-kb-monitor/hid-suspend.conf`, `/etc/modprobe.d/hid_apple.conf` | `enabled = false` (SUSPEND / EXIT_SUSPEND off by default); `fnmode=1` (both in `backup=`: your edits survive upgrades) |
 | `/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules` | `uaccess` tag on the hidraw node of the 17 Bluetooth product ids |
 | `/usr/lib/sysusers.d/apple-kb-monitor.conf` | group `akm` |
 | `/usr/share/polkit-1/actions/com.agenceapi.AppleKbMonitor.policy` | actions `set-fnmode`, `install-keymap`, `hid-control` |

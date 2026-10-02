@@ -16,8 +16,9 @@
 //! only describes the control channel, with its negotiated L2CAP MTUs
 //! (`getsockopt(L2CAP_OPTIONS)`, read-only): the pre-flight of
 //! `akmctl rename --device-name` reads the outgoing MTU
-//! there (#248). `/etc/apple-kb-monitor/hid-suspend.conf` `enabled = false`
-//! turns the sending off (`inspect` and `--dry-run` still run).
+//! there (#248). The sending is OFF unless
+//! `/etc/apple-kb-monitor/hid-suspend.conf` says `enabled = true` (file or
+//! key absent = off; `inspect` and `--dry-run` still run).
 //!
 //! Exit: 0 = done or nothing to do (no keyboard connected, disabled),
 //! 1 = refused or failed for at least one keyboard, 64 = usage.

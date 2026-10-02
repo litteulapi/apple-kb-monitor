@@ -73,8 +73,11 @@ post_upgrade() {
         _akm_keyd_notice
     fi
     if [ "$(vercmp "$2" 3.1.0-11)" -lt 0 ]; then
-        _akm_hid_suspend_notice
         _akm_kde_keys_hint
+    fi
+    # 3.1.0-20: SUSPEND / EXIT_SUSPEND are off unless explicitly enabled.
+    if [ "$(vercmp "$2" 3.1.0-20)" -lt 0 ]; then
+        _akm_hid_suspend_notice
     fi
     udevadm control --reload-rules 2>/dev/null || true
     udevadm trigger --subsystem-match=hidraw 2>/dev/null || true
@@ -149,11 +152,18 @@ _akm_setcap() {
 # #244: system units apple-kb-monitor-{suspend,resume}.service, enabled through
 # the .wants symlinks of the package (pacman's systemd hook reloads the units).
 _akm_hid_suspend_notice() {
-    echo ">>> Sleep/wake as macOS (#244): before the computer sleeps each connected Apple"
-    echo "    keyboard receives HID_CONTROL SUSPEND (0x13), and EXIT_SUSPEND (0x14) at wake,"
-    echo "    one byte on the HID control channel of bluetoothd. Test: akmctl hid-control suspend --dry-run"
-    echo "    Turn off: enabled = false in /etc/apple-kb-monitor/hid-suspend.conf, or"
-    echo "      sudo systemctl mask apple-kb-monitor-suspend.service apple-kb-monitor-resume.service"
+    echo ">>> Sleep/wake bytes of macOS (#244): HID_CONTROL SUSPEND (0x13) before the computer"
+    echo "    sleeps and EXIT_SUSPEND (0x14) at wake are OFF by default since 2026-10-02 (#264):"
+    echo "    measured on an A1314, SUSPEND leaves the keyboard connected but mute. Nothing is"
+    echo "    sent unless /etc/apple-kb-monitor/hid-suspend.conf says enabled = true (file or"
+    echo "    key absent = off). Look without sending: akmctl hid-control suspend --dry-run"
+    # An edited file is kept by pacman (backup=, new one in .pacnew): say so if
+    # it still turns the feature on. Read only, nothing is changed here.
+    if grep -qsE '^[[:space:]]*enabled[[:space:]]*=[[:space:]]*true' /etc/apple-kb-monitor/hid-suspend.conf; then
+        echo ">>> WARNING: /etc/apple-kb-monitor/hid-suspend.conf still says enabled = true (your"
+        echo "    edited file was kept): SUSPEND is sent before each sleep and can leave the"
+        echo "    keyboard mute after the wake. The packaged default is enabled = false."
+    fi
 }
 
 _akm_message() {

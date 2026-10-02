@@ -1,7 +1,7 @@
 # Maintainer: Han <han@agenceapi.com>
 pkgname=apple-kb-monitor
 pkgver=3.1.0
-pkgrel=19
+pkgrel=20
 pkgdesc="Telemetry and key mapping for Apple Bluetooth keyboards (BCM2042/BCM20733): battery, voltage, RSSI, BlueZ battery provider, KDE integration"
 arch=('x86_64')
 url="https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor"
@@ -87,9 +87,10 @@ package() {
     ln -s ../apple-kb-monitor-shutdown.service "$pkgdir/usr/lib/systemd/user/default.target.wants/apple-kb-monitor-shutdown.service"
     # ── HID_CONTROL SUSPEND (0x13) before sleep / EXIT_SUSPEND (0x14) at wake,
     #    as macOS bluetoothd (#244, docs/VEILLE-HID.md): SYSTEM units (root,
-    #    pidfd_getfd on bluetoothd), enabled by default; opt out:
-    #    enabled = false in /etc/apple-kb-monitor/hid-suspend.conf, or
-    #    systemctl mask apple-kb-monitor-suspend.service apple-kb-monitor-resume.service ──
+    #    pidfd_getfd on bluetoothd). OFF by default since 2026-10-02 (SUSPEND
+    #    measured harmful: the keyboard stays mute), in the packaged file AND in
+    #    the code (file or key absent = disabled); opt in:
+    #    enabled = true in /etc/apple-kb-monitor/hid-suspend.conf ──
     install -Dm644 "$startdir/systemd/apple-kb-monitor-suspend.service" "$pkgdir/usr/lib/systemd/system/apple-kb-monitor-suspend.service"
     install -Dm644 "$startdir/systemd/apple-kb-monitor-resume.service"  "$pkgdir/usr/lib/systemd/system/apple-kb-monitor-resume.service"
     install -Dm644 "$startdir/systemd/hid-suspend.conf"                 "$pkgdir/etc/apple-kb-monitor/hid-suspend.conf"

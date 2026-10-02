@@ -960,7 +960,9 @@ fn fmt_psm(p: Option<u16>) -> String {
 /// `/etc/apple-kb-monitor/hid-suspend.conf`.
 pub const CONFIG_PATH: &str = "/etc/apple-kb-monitor/hid-suspend.conf";
 
-/// `enabled = true|false` (comments `#`, blank lines). Absent key = true.
+/// `enabled = true|false` (comments `#`, blank lines). Absent key = false:
+/// SUSPEND is OFF unless a root-owned file says `enabled = true` (measured
+/// harmful on 2026-10-02: the keyboard stays mute after it, #264).
 pub fn parse_config(s: &str) -> Result<bool, String> {
     let mut enabled = None;
     for (i, raw) in s.lines().enumerate() {
@@ -988,7 +990,7 @@ pub fn parse_config(s: &str) -> Result<bool, String> {
             return Err(format!("line {}: `enabled` given twice", i + 1));
         }
     }
-    Ok(enabled.unwrap_or(true))
+    Ok(enabled.unwrap_or(false))
 }
 
 /// Largest `hid-suspend.conf` accepted.
@@ -1000,8 +1002,10 @@ pub fn config_meta_ok(is_file: bool, uid: u32, mode: u32, len: u64) -> bool {
     is_file && uid == 0 && mode & 0o022 == 0 && len <= CONFIG_MAX_LEN
 }
 
-/// Reads the configuration: absent = enabled; it must be a regular file owned
-/// by root, not group/world writable, else the feature stays OFF (fail closed).
+/// Reads the configuration: absent file = DISABLED (the default of the code,
+/// not only of the packaged file: a file removed or emptied never turns
+/// SUSPEND back on); it must be a regular file owned by root, not
+/// group/world writable, else the feature stays OFF too (fail closed).
 pub fn read_config(path: &Path) -> Result<bool, String> {
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
     let f = match fs::OpenOptions::new()
@@ -1010,7 +1014,7 @@ pub fn read_config(path: &Path) -> Result<bool, String> {
         .open(path)
     {
         Ok(f) => f,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(true),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(false),
         Err(e) => return Err(format!("{}: {e}", path.display())),
     };
     let md = f.metadata().map_err(|e| e.to_string())?;
@@ -1288,7 +1292,10 @@ mod tests {
 
     #[test]
     fn config_parsing() {
-        assert_eq!(parse_config(""), Ok(true));
+        // M7 of the final review: off unless explicitly turned on. An empty
+        // or comment-only file, like an absent one, never enables SUSPEND.
+        assert_eq!(parse_config(""), Ok(false));
+        assert_eq!(parse_config("# enabled = true\n\n"), Ok(false));
         assert_eq!(parse_config("# c\n\nenabled = false\n"), Ok(false));
         assert_eq!(parse_config("enabled=true # on"), Ok(true));
         for bad in [
@@ -1302,7 +1309,13 @@ mod tests {
         }
         assert_eq!(
             read_config(Path::new("/nonexistent/akm/hid-suspend.conf")),
-            Ok(true)
+            Ok(false),
+            "absent file = disabled"
+        );
+        // The packaged file agrees with the code.
+        assert_eq!(
+            parse_config(include_str!("../../../../systemd/hid-suspend.conf")),
+            Ok(false)
         );
     }
 

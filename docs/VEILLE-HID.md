@@ -87,10 +87,10 @@ Hardening: `CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH` (`pidfd_ge
 `/etc/apple-kb-monitor/hid-suspend.conf` (packaged, `backup=`):
 
 ```
-enabled = true
+enabled = false
 ```
 
-Absent file = enabled. `enabled = false` turns it off. A file that is not root-owned, is group/world writable, a symlink, or malformed turns the feature **off** (fail closed, logged). Units: `sudo systemctl mask apple-kb-monitor-suspend.service apple-kb-monitor-resume.service`.
+**Off by default since 2026-10-02**, in the packaged file and in the code: an absent file, an empty file or a file without the `enabled` key means **disabled**. Measured on an A1314 (firmware `0x0050`): after SUSPEND the keyboard stays connected but answers no GET_REPORT and no longer types, and EXIT_SUSPEND did not bring it back. `enabled = true` turns it on, at your own risk. A file edited before that date keeps its content at the upgrade (`backup=`, the new one is installed as `.pacnew`): if it still says `enabled = true`, the upgrade prints a warning. A file that is not root-owned, is group/world writable, a symlink, or malformed turns the feature **off** (fail closed, logged). Units: `sudo systemctl mask apple-kb-monitor-suspend.service apple-kb-monitor-resume.service`.
 
 ## Manual test
 
