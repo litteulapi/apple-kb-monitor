@@ -122,7 +122,7 @@ Start with `akmctl doctor`, then `akmctl selftest`. Full table (symptom → caus
 ## Security
 
 - **Daemon and clients are unprivileged.** The daemon is a user service hardened by systemd (`UMask=0077`, `MemoryMax`, `KeyringMode=private`…); it reaches the keyboard through the `uaccess` ACL of the active seat.
-- **Five privileged helpers, each doing one thing** (`/usr/lib/apple-kb-monitor/`): `rssi-helper` (file capability `cap_net_admin`, `root:akm 0750`, RSSI only); `akm-helper` (`pkexec`, `hid_apple` parameters and `/etc/modprobe.d`); `akm-keymap-helper` (`pkexec`, validated udev hwdb file); `akm-hid-control` (root at sleep / wake through the system units, `pkexec` for the manual test; emits the byte `0x13` or `0x14` only, on the control socket of `bluetoothd`); `akm-hid-inspect` (`pkexec`, read-only: the L2CAP MTU of that socket, no verb, cannot send). Polkit actions are `auth_admin` without `_keep`, local active sessions only, except the read-only `hid-inspect` (`allow_active = yes`), bound to its own executable (`polkit/com.agenceapi.AppleKbMonitor.policy`).
+- **Six privileged helpers, each doing one thing** (`/usr/lib/apple-kb-monitor/`): `rssi-helper` (file capability `cap_net_admin`, `root:akm 0750`, RSSI only); `akm-helper` (`pkexec`, `hid_apple` parameters and `/etc/modprobe.d`); `akm-keymap-helper` (`pkexec`, validated udev hwdb file); `akm-hid-control` (root at sleep / wake through the system units, `pkexec` for the manual test; emits the byte `0x13` or `0x14` only, on the control socket of `bluetoothd`); `akm-hid-inspect` (`pkexec`, read-only: the L2CAP MTU of that socket, no verb, cannot send); `akm-doctor-fix` (`pkexec`, launched by `akmctl doctor --fix`: the BlueZ / UPower settings and the adapter autosuspend rule, with `--dry-run`). Polkit actions (`set-fnmode`, `install-keymap`, `hid-control`, `doctor-fix`) are `auth_admin` without `_keep`, local active sessions only, except the read-only `hid-inspect` (`allow_active = yes`), bound to its own executable (`polkit/com.agenceapi.AppleKbMonitor.policy`).
 - **What is written to the keyboard**: only the **named operations of the register map** (`akm-core/src/registry.rs`, class `WriteApple`): `Shutdown` = Feature `0x40` (id alone, once at shutdown, default on, `[apple] will_shutdown`); `Forget` = Feature `0x41` (id alone, `akmctl repair` only, after a typed `OUBLIER`); `DeviceName` = Feature `0x55` (65 bytes, behind three locks, default refused). One function issues the write ioctl, with two fixed sizes (1 and 65 bytes), every byte logged, never retried; a test sweeps the 256 ids in the three directions and a source scan fails if a second write path appears. Reads are limited to `0x47`, `0x46`, `0x49`, GET Input `0x30`, and once per connection `0x4F`, `0x60`, `0x51`-`0x54`; `0x4C` (pairing record) and `0xFE` (froze the firmware twice) are never requested.
 - **Data**: history and backups live under `~/.local/state/apple-kb-monitor/` (`0600`); nothing goes to the network (the firmware table is embedded); the sensitive bytes of `0x4C` are never published. Audits: [docs/AUDIT-SECURITE-2.md](docs/AUDIT-SECURITE-2.md), accepted keylogger trade-off of `uaccess`: [udev/README.md](udev/README.md).
 
@@ -157,13 +157,15 @@ Start with `akmctl doctor`, then `akmctl selftest`. Full table (symptom → caus
  clients ├─ akmctl (CLI)        ├─ apihub-app (egui window, D-Bus activatable)
          ├─ Plasma widget       ├─ kcm_applekeyboard (System Settings)
          └─ pkexec akm-helper (hid_apple params), akm-keymap-helper (udev hwdb)
+            pkexec akm-doctor-fix (akmctl doctor --fix), akm-hid-inspect (read-only)
 ```
 
 Repository layout and the full description: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ```
 apihub-app/           Rust workspace: akm-core, apple-kb-monitord, crates/akmctl, crates/akm-helper
-                      (akm-helper, akm-keymap-helper, akm-hid-control, akm-hid-inspect), src/ (egui window), i18n/
+                      (akm-helper, akm-keymap-helper, akm-hid-control, akm-hid-inspect, akm-doctor-fix),
+                      src/ (egui window), i18n/
 rssi-helper.c         C helper with cap_net_admin (RSSI / TX power)
 kcm/ plasma/ data/    System Settings module, Plasma widget, KNotification events
 systemd/ dbus/ polkit/ udev/ sysusers/ modprobe/ keyd/ bluetooth/   system integration
