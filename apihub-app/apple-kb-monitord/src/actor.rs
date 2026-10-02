@@ -21,7 +21,7 @@ use akm_core::history::{
     RETENTION_S,
 };
 use akm_core::link::LinkTracker;
-use akm_core::machine::{Action, Event, Machine, RSSI_MAX_AGE};
+use akm_core::machine::{Action, Event, Machine, NameReread, RSSI_MAX_AGE};
 use akm_core::reminder::NoticeMemory;
 use akm_core::rssi::{self, RssiTracker};
 use akm_core::{discover, hidraw, led, power, KbReport, Snapshot, Watch};
@@ -37,12 +37,41 @@ pub enum Msg {
     Bus(Event),
     /// Explicit refresh (D-Bus `Refresh()`).
     Refresh,
-    /// The name stored in the keyboard was rewritten (D-Bus `RereadName()`).
-    RereadName,
+    /// The name stored in the keyboard was rewritten (D-Bus `RereadName()`);
+    /// the answer of the machine goes back through the reply slot.
+    RereadName(NameReply),
     /// The BlueZ alias of a keyboard is now this (`None` = unknown).
     Alias(String, Option<String>),
     /// Stop the actor.
     Quit,
+}
+
+/// Where the actor answers a `RereadName()` (`none()` = nobody waits). All
+/// replies compare equal: the message is what matters to `Msg: PartialEq`.
+#[derive(Debug, Clone, Default)]
+pub struct NameReply(Option<mpsc::SyncSender<NameReread>>);
+
+impl PartialEq for NameReply {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl NameReply {
+    pub fn none() -> Self {
+        Self(None)
+    }
+    /// A reply slot and the end the caller waits on.
+    pub fn channel() -> (Self, mpsc::Receiver<NameReread>) {
+        let (tx, rx) = mpsc::sync_channel(1);
+        (Self(Some(tx)), rx)
+    }
+    /// Give the answer (never blocks; a caller gone is not an error).
+    pub fn answer(&self, r: NameReread) {
+        if let Some(tx) = &self.0 {
+            let _ = tx.try_send(r);
+        }
+    }
 }
 
 /// Where commands for the running actor go. The actor installs its sender at
@@ -199,17 +228,38 @@ const HISTORY_SPACING: Duration = Duration::from_secs(300);
 /// The published snapshot (LED, RSSI expiry) is refreshed at least this often.
 const TICK: Duration = Duration::from_secs(5);
 
-/// D-Bus `RereadName()` in the actor: when the machine accepts it (connected,
-/// not asked in the last 30 s), `forget` drops the four fragments `0x51`-`0x54`
-/// (claims and cached values) and a read is due now. Otherwise nothing at all
-/// happens. Returns whether it was accepted.
-pub(crate) fn reread_name(machine: &mut Machine, now: Instant, forget: &mut dyn FnMut()) -> bool {
-    let accepted = machine.request_name_reread(now);
-    if accepted {
+/// D-Bus `RereadName()` in the actor: while a keyboard is connected, `forget`
+/// drops the four fragments `0x51`-`0x54` (claims and cached values) at once,
+/// so the daemon never shows a name it knows to be stale, and the machine
+/// schedules ONE read of these four reports: now, or at the end of the 30 s
+/// floor (deferred, never dropped). Disconnected: nothing happens.
+pub(crate) fn reread_name(
+    machine: &mut Machine,
+    now: Instant,
+    forget: &mut dyn FnMut(),
+) -> NameReread {
+    let r = machine.request_name_reread(now);
+    if r.accepted() {
         forget();
-        tracing::info!("RereadName: 0x51-0x54 forgotten, read due now");
+        tracing::info!("RereadName: 0x51-0x54 forgotten, {}", name_reread_text(r));
     }
-    accepted
+    r
+}
+
+/// What `RereadName()` answers on D-Bus (second value of `(bs)`).
+pub fn name_reread_text(r: NameReread) -> String {
+    match r {
+        NameReread::NotConnected => "no keyboard connected: nothing to read again".into(),
+        NameReread::Now => "name read again now (0x51-0x54 only)".into(),
+        NameReread::Deferred(d) if d.is_zero() => {
+            "name read again as soon as the keyboard can be read (0x51-0x54 only)".into()
+        }
+        NameReread::Deferred(d) => format!(
+            "name read again in {} s (0x51-0x54 only, at most once per {} s)",
+            d.as_secs().max(1),
+            akm_core::machine::NAME_REREAD_FLOOR.as_secs()
+        ),
+    }
 }
 
 fn unix_now() -> u64 {
@@ -346,8 +396,29 @@ impl Actor {
                 }
             }
         };
-        self.last_error = err;
         gate_wake_monitor(report.as_ref(), mac);
+        // Was a battery read really sent and left unanswered? (Not due, lock
+        // busy, breaker open: nothing was asked.)
+        let read_failed = akm_core::read_policy::peek_last_outcome()
+            .is_some_and(akm_core::read_policy::SafeRead::attempted_and_failed);
+        self.integrate(report, err, mac, read_failed)
+    }
+
+    /// Take the result of an acquisition (no hardware access here).
+    /// `read_failed`: vendor reports were requested and not all answered.
+    ///
+    /// A report without any battery value keeps the last known level instead
+    /// of showing "n/a" (#264), marked `battery.kept`: it is not a new
+    /// measure, so no history sample, no alert pass and `last_update`
+    /// unchanged (the age shown stays the one of the real read).
+    fn integrate(
+        &mut self,
+        report: Option<KbReport>,
+        err: Option<String>,
+        mac: Option<&str>,
+        read_failed: bool,
+    ) -> bool {
+        self.last_error = err;
         match report {
             Some(mut k) => {
                 let mac = k.device.mac.clone();
@@ -365,15 +436,22 @@ impl Actor {
                             });
                     }
                 }
-                // A read without any battery value (keyboard silent) keeps the
-                // last known level instead of showing "n/a" (#264).
+                let mut kept = false;
                 if k.battery_pct().is_none() {
                     if let Some(prev) = self.kb.as_ref().filter(|p| p.device.mac == mac) {
                         if prev.battery_pct().is_some() {
                             k.battery = prev.battery.clone();
-                            self.last_error.get_or_insert_with(|| {
-                                "keyboard silent: battery level kept from the last read".into()
-                            });
+                            k.battery.kept = true;
+                            // With the raw reports they were decoded from.
+                            for (id, hex) in &prev.raw {
+                                k.raw.entry(id.clone()).or_insert_with(|| hex.clone());
+                            }
+                            kept = true;
+                            if read_failed {
+                                self.last_error.get_or_insert_with(|| {
+                                    "keyboard silent: battery level kept from the last read".into()
+                                });
+                            }
                         }
                     }
                 }
@@ -385,7 +463,8 @@ impl Actor {
                 // The battery state READ (GET Input 0x30 after 0x47, Apple's
                 // R2, #251) joins the pushed `A1 30 xx` in the passive
                 // publisher: one state, one dedupe, the alerts of #189.
-                if let Some(ev) = battery_state_event(&k) {
+                // A kept state was already told when it was read.
+                if let Some(ev) = battery_state_event(&k).filter(|_| !kept) {
                     if !crate::passive::inject(ev) {
                         tracing::debug!(
                             "battery state {:?} read, no passive publisher to tell",
@@ -395,8 +474,10 @@ impl Actor {
                 }
                 self.kb = Some(k);
                 self.linked = true;
-                self.last_update = unix_now();
-                self.after_battery_update(true);
+                if !kept {
+                    self.last_update = unix_now();
+                    self.after_battery_update(true);
+                }
                 if let Some(ev) = mac.and_then(|m| self.link.acquired(&m, pct)) {
                     self.link_event(ev);
                 }
@@ -481,6 +562,7 @@ impl Actor {
         if let Some(r) = k.device.mac.as_deref().and_then(power::kernel_battery) {
             k.battery.percentage_fine = Some(f64::from(r.percent));
             k.battery.percentage = Some(f64::from(r.percent));
+            k.battery.kept = false;
             if k.battery.apple_display_pct.is_some() {
                 k.battery.apple_display_pct = Some(akm_core::registry::apple_display_percent(r.percent));
             }
@@ -938,13 +1020,23 @@ pub fn spawn(watch: Arc<Watch>, mailbox: Arc<Mailbox>, opts: Options) -> ActorHa
     }
 }
 
-/// Event loop. While the keyboard is disconnected nothing keyboard-related runs.
 /// After a system wake, has the keyboard stayed silent (no key press since)?
 /// `since_wake` = time since the wake (`None` = no wake pending), `input_age`
 /// = age of the last input report. While true no vendor report is requested:
 /// a keyboard still in its "host asleep" mode answers nothing, and each
 /// silence would count towards the breaker and a forced disconnection (#264).
-pub fn quiet_since_wake(since_wake: Option<Duration>, input_age: Option<Duration>) -> bool {
+///
+/// `listening`: the passive listener runs, so a key press is known. Without
+/// it nobody would ever lift the silence: never quiet, the reads follow the
+/// model as they did before #264.
+pub fn quiet_since_wake(
+    since_wake: Option<Duration>,
+    input_age: Option<Duration>,
+    listening: bool,
+) -> bool {
+    if !listening {
+        return false;
+    }
     match (since_wake, input_age) {
         (None, _) => false,
         (Some(_), None) => true,
@@ -952,6 +1044,50 @@ pub fn quiet_since_wake(since_wake: Option<Duration>, input_age: Option<Duration
     }
 }
 
+/// Before the machine says what is due: hold every vendor read while the
+/// keyboard is silent since the wake. The battery cycle is then not begun at
+/// all (not consumed, not counted as a failure and retried 1 h later): it
+/// goes out at the first pass after a key press. Clears `woke_at` once the
+/// keyboard was heard. Returns whether the reads are held.
+pub(crate) fn hold_while_quiet(
+    machine: &mut Machine,
+    woke_at: &mut Option<Instant>,
+    input_age: Option<Duration>,
+    listening: bool,
+    now: Instant,
+) -> bool {
+    let quiet = quiet_since_wake(
+        woke_at.map(|w| now.saturating_duration_since(w)),
+        input_age,
+        listening,
+    );
+    if !quiet {
+        *woke_at = None;
+    }
+    machine.set_vendor_hold(quiet);
+    quiet
+}
+
+/// After the read of an [`Action::RereadName`]. The node is gone: the machine
+/// acquires again, as after any failed acquisition. The HID lock was busy
+/// (another reader, nothing was sent): the request is put back and served at
+/// the end of the floor, not lost. A read that was sent and failed is never
+/// retried (the fragments stay unread in this connection).
+pub(crate) fn after_name_reread(
+    machine: &mut Machine,
+    ok: bool,
+    outcome: Option<akm_core::read_policy::SafeRead>,
+    now: Instant,
+) {
+    use akm_core::read_policy::{Gate, SafeRead};
+    if !ok {
+        machine.acquire_done(false, now);
+    } else if outcome == Some(SafeRead::Skipped(Gate::Busy)) {
+        let _ = machine.request_name_reread(now);
+    }
+}
+
+/// Event loop. While the keyboard is disconnected nothing keyboard-related runs.
 fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Options) {
     let (tx, rx) = mpsc::channel::<Msg>();
     mailbox.install(tx.clone());
@@ -994,10 +1130,10 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             Ok(Msg::Refresh) => {
                 let _ = machine.force_refresh(Instant::now());
             }
-            Ok(Msg::RereadName) => {
-                let _ = reread_name(&mut machine, Instant::now(), &mut || {
+            Ok(Msg::RereadName(reply)) => {
+                reply.answer(reread_name(&mut machine, Instant::now(), &mut || {
                     akm_core::read_policy::forget_name_fragments()
-                });
+                }));
             }
             Ok(Msg::Alias(mac, alias)) => actor.set_alias(&mac, alias),
             Ok(Msg::Quit) => break,
@@ -1023,24 +1159,24 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
         let due = if paused {
             Vec::new()
         } else {
-            machine.due(Instant::now())
+            let now = Instant::now();
+            hold_while_quiet(
+                &mut machine,
+                &mut woke_at,
+                akm_core::read_policy::last_input_age(now),
+                crate::passive::listener_started(),
+                now,
+            );
+            machine.due(now)
         };
         for action in due {
             match action {
                 Action::Acquire => {
                     let mac = machine.mac().map(str::to_string);
-                    // The Apple model decides whether vendor reports are read (#251).
-                    let now = Instant::now();
-                    let quiet = quiet_since_wake(
-                        woke_at.map(|w| now.saturating_duration_since(w)),
-                        akm_core::read_policy::last_input_age(now),
-                    );
-                    if !quiet {
-                        woke_at = None;
-                    }
-                    akm_core::read_policy::set_schedule(Some(
-                        machine.vendor_reads_due() && !quiet,
-                    ));
+                    // The Apple model decides whether vendor reports are read
+                    // (#251); a keyboard silent since a wake holds the cycle
+                    // before it begins (`hold_while_quiet`).
+                    akm_core::read_policy::set_schedule(Some(machine.vendor_reads_due()));
                     let ok = actor.acquire(mac.as_deref());
                     let read_ok = akm_core::read_policy::take_last_outcome()
                         .is_some_and(akm_core::read_policy::SafeRead::is_success);
@@ -1054,6 +1190,23 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
                             pct.map_or("n/a".into(), |p| format!("{p:.0}%"))
                         );
                     }
+                }
+                Action::RereadName => {
+                    // `0x51`-`0x54` alone: not a battery cycle, the model's
+                    // timer and `Refresh()`'s floor are untouched.
+                    let mac = machine.mac().map(str::to_string);
+                    akm_core::read_policy::set_name_only_schedule();
+                    let ok = actor.acquire(mac.as_deref());
+                    let outcome = akm_core::read_policy::take_last_outcome();
+                    // The name-only order must not outlive this read.
+                    akm_core::read_policy::set_schedule(Some(false));
+                    actor.after_breaker(mac.as_deref());
+                    tracing::info!(
+                        "name re-read for {}: {outcome:?} (node {})",
+                        mac.as_deref().unwrap_or("?"),
+                        if ok { "read" } else { "not reachable" }
+                    );
+                    after_name_reread(&mut machine, ok, outcome, Instant::now());
                 }
                 Action::KernelBattery => actor.kernel_battery(),
                 Action::Rssi => actor.refresh_rssi(),
@@ -1164,12 +1317,127 @@ mod tests {
     #[test]
     fn no_vendor_read_after_a_wake_until_a_key_press() {
         let s = Duration::from_secs;
-        assert!(!quiet_since_wake(None, None), "no wake pending");
-        assert!(!quiet_since_wake(None, Some(s(900))));
-        assert!(quiet_since_wake(Some(s(60)), None), "never typed");
-        assert!(quiet_since_wake(Some(s(60)), Some(s(600))), "typed before the sleep");
-        assert!(quiet_since_wake(Some(s(60)), Some(s(60))));
-        assert!(!quiet_since_wake(Some(s(60)), Some(s(5))), "typed since the wake");
+        assert!(!quiet_since_wake(None, None, true), "no wake pending");
+        assert!(!quiet_since_wake(None, Some(s(900)), true));
+        assert!(quiet_since_wake(Some(s(60)), None, true), "never typed");
+        assert!(
+            quiet_since_wake(Some(s(60)), Some(s(600)), true),
+            "typed before the sleep"
+        );
+        assert!(quiet_since_wake(Some(s(60)), Some(s(60)), true));
+        assert!(
+            !quiet_since_wake(Some(s(60)), Some(s(5)), true),
+            "typed since the wake"
+        );
+        // No passive listener: nobody would tell about a key press, never quiet.
+        assert!(!quiet_since_wake(Some(s(60)), None, false));
+        assert!(!quiet_since_wake(Some(s(60)), Some(s(600)), false));
+    }
+
+    /// M4 of the final review: a wake, the first key 2 min later. The read
+    /// due 60 s after the wake is held (not consumed, no 1 h retry) and goes
+    /// out at the first pass after the key press.
+    #[test]
+    fn the_read_after_a_wake_waits_for_the_first_key_press_then_goes_out() {
+        let s = Duration::from_secs;
+        let t0 = Instant::now();
+        let mac = "AA:BB:CC:DD:EE:F1";
+        let ready = |t0: Instant| {
+            let mut m = Machine::new();
+            m.on_event(&Event::Connected(mac.into()), t0);
+            m.due(t0);
+            m.acquire_done(true, t0);
+            m.on_sleep();
+            m.on_wake(t0 + s(100));
+            m
+        };
+        let mut m = ready(t0);
+        let mut woke_at = Some(t0 + s(100));
+        // 60 s after the wake, last key 10 min ago: held, nothing consumed.
+        let t = t0 + s(160);
+        assert!(hold_while_quiet(
+            &mut m,
+            &mut woke_at,
+            Some(s(600)),
+            true,
+            t
+        ));
+        assert!(woke_at.is_some());
+        assert!(!m.due(t).contains(&Action::Acquire));
+        assert_eq!(m.link().next_battery(), Some(t0 + s(160)), "still due");
+        // 2 min after the wake a key was pressed 1 s ago: released, read now.
+        let t = t0 + s(220);
+        assert!(!hold_while_quiet(&mut m, &mut woke_at, Some(s(1)), true, t));
+        assert_eq!(woke_at, None);
+        assert!(m.due(t).contains(&Action::Acquire));
+        assert!(m.vendor_reads_due(), "the battery read itself");
+
+        // Passive listener not started: nothing is held, the read goes out
+        // 60 s after the wake as it did before #264.
+        let mut m = ready(t0);
+        let mut woke_at = Some(t0 + s(100));
+        let t = t0 + s(160);
+        assert!(!hold_while_quiet(&mut m, &mut woke_at, None, false, t));
+        assert_eq!(woke_at, None);
+        assert!(m.due(t).contains(&Action::Acquire));
+        assert!(m.vendor_reads_due());
+    }
+
+    /// M1 of the final review: a level kept from an earlier read is not a
+    /// new measure (no history sample, age unchanged), and the keyboard is
+    /// called silent only when a read was really sent and failed.
+    #[test]
+    fn a_kept_battery_level_is_marked_and_never_recorded_as_a_measure() {
+        const M: &str = "AA:BB:CC:DD:EE:F1";
+        let mut a = quiet_actor();
+        assert!(a.integrate(Some(report_mv(60.0, 2600)), None, Some(M), false));
+        assert!(a.last_history.is_some(), "a real read is a sample");
+        assert!(a.last_update > 0);
+        assert!(!a.kb.as_ref().unwrap().battery.kept);
+        a.last_history = None;
+        a.last_update = 1234;
+        // An acquisition that read nothing (not due, lock busy, breaker open).
+        let mut blank = KbReport::default();
+        blank.device.mac = Some(M.into());
+        assert!(a.integrate(Some(blank.clone()), None, Some(M), false));
+        let b = &a.kb.as_ref().unwrap().battery;
+        assert_eq!(b.percentage, Some(60.0), "last level kept");
+        assert_eq!(b.voltage_filtered_mv, Some(2600));
+        assert!(b.kept, "and marked as kept");
+        assert!(
+            a.last_history.is_none(),
+            "no history sample for a kept value"
+        );
+        assert_eq!(
+            a.last_update, 1234,
+            "the age stays the one of the real read"
+        );
+        assert_eq!(a.last_error, None, "nothing was asked: not silent");
+        assert!(a.snapshot().keyboard.unwrap().battery.kept);
+        // Kept twice in a row: same thing.
+        assert!(a.integrate(Some(blank.clone()), None, Some(M), false));
+        assert!(a.last_history.is_none());
+        assert_eq!(a.last_update, 1234);
+        // A read really sent and left unanswered: the message says so.
+        assert!(a.integrate(Some(blank), None, Some(M), true));
+        assert!(a
+            .last_error
+            .as_deref()
+            .is_some_and(|e| e.contains("keyboard silent")));
+        assert!(a.last_history.is_none());
+        assert_eq!(a.last_update, 1234);
+        // The next real read is a measure again.
+        assert!(a.integrate(Some(report_mv(59.0, 2590)), None, Some(M), false));
+        assert!(!a.kb.as_ref().unwrap().battery.kept);
+        assert!(a.last_history.is_some());
+        assert!(a.last_update > 1234);
+        assert_eq!(a.last_error, None);
+        // Another keyboard: nothing of the previous one is kept.
+        let mut other = KbReport::default();
+        other.device.mac = Some("AA:BB:CC:DD:EE:02".into());
+        assert!(a.integrate(Some(other), None, None, true));
+        assert_eq!(a.kb.as_ref().unwrap().battery_pct(), None);
+        assert!(!a.kb.as_ref().unwrap().battery.kept);
     }
 
     #[test]
@@ -1466,32 +1734,98 @@ mod tests {
         assert_eq!(o.chemistry, Chemistry::Lithium);
     }
 
+    /// M2 + M3 of the final review: a request inside the 30 s floor is
+    /// deferred (and the stale fragments forgotten at once), never dropped;
+    /// what goes out is the name alone, not a battery cycle.
     #[test]
-    fn reread_name_forgets_the_fragments_at_most_once_per_30_s_and_only_connected() {
+    fn reread_name_forgets_at_once_and_defers_inside_the_floor() {
         let t0 = Instant::now();
         let s = Duration::from_secs;
         let mut m = Machine::new();
         let mut forgotten = 0;
         // Disconnected: no effect, nothing forgotten.
-        assert!(!reread_name(&mut m, t0, &mut || forgotten += 1));
+        assert_eq!(
+            reread_name(&mut m, t0, &mut || forgotten += 1),
+            NameReread::NotConnected
+        );
         assert_eq!(forgotten, 0);
         m.on_event(&Event::Connected("AA:BB:CC:DD:EE:F1".into()), t0);
         m.acquire_done(true, t0);
         m.due(t0);
-        assert!(reread_name(&mut m, t0 + s(1), &mut || forgotten += 1));
-        assert_eq!(forgotten, 1);
-        assert!(
-            m.due(t0 + s(1)).contains(&Action::Acquire),
-            "a read is due now"
+        assert_eq!(
+            reread_name(&mut m, t0 + s(1), &mut || forgotten += 1),
+            NameReread::Now
         );
-        m.acquire_done(true, t0 + s(2));
-        // Within 30 s: does nothing (the cache is not dropped again).
-        for dt in [2, 15, 30] {
-            assert!(!reread_name(&mut m, t0 + s(dt), &mut || forgotten += 1));
-        }
         assert_eq!(forgotten, 1);
-        assert!(reread_name(&mut m, t0 + s(32), &mut || forgotten += 1));
+        let due = m.due(t0 + s(1));
+        assert!(due.contains(&Action::RereadName), "{due:?}");
+        assert!(!due.contains(&Action::Acquire), "never the routine read");
+        // Second rename 9 s later: the cache is dropped again (it is stale)
+        // and the read is deferred to the end of the floor.
+        assert_eq!(
+            reread_name(&mut m, t0 + s(10), &mut || forgotten += 1),
+            NameReread::Deferred(s(21))
+        );
         assert_eq!(forgotten, 2);
+        assert!(!m.due(t0 + s(30)).contains(&Action::RereadName));
+        assert!(m.due(t0 + s(31)).contains(&Action::RereadName), "served");
+        // What D-Bus answers.
+        assert!(name_reread_text(NameReread::Now).contains("now"));
+        assert!(name_reread_text(NameReread::Deferred(s(21))).contains("in 21 s"));
+        assert!(name_reread_text(NameReread::NotConnected).contains("no keyboard"));
+    }
+
+    #[test]
+    fn a_name_reread_that_found_the_lock_busy_is_put_back_a_failed_one_is_not() {
+        use akm_core::read_policy::{Gate, SafeRead};
+        let s = Duration::from_secs;
+        let t0 = Instant::now();
+        let ready = || {
+            let mut m = Machine::new();
+            m.on_event(&Event::Connected("AA:BB:CC:DD:EE:F1".into()), t0);
+            m.acquire_done(true, t0);
+            m.due(t0);
+            assert_eq!(m.request_name_reread(t0 + s(1)), NameReread::Now);
+            assert!(m.due(t0 + s(1)).contains(&Action::RereadName));
+            m
+        };
+        // Lock busy, nothing sent: served again at the end of the floor.
+        let mut m = ready();
+        after_name_reread(&mut m, true, Some(SafeRead::Skipped(Gate::Busy)), t0 + s(2));
+        assert!(m.name_reread_pending());
+        assert!(!m.due(t0 + s(30)).contains(&Action::RereadName));
+        assert!(m.due(t0 + s(31)).contains(&Action::RereadName));
+        // Sent and failed, complete, breaker open: never asked again.
+        for o in [
+            SafeRead::Partial,
+            SafeRead::Complete,
+            SafeRead::Skipped(Gate::Tripped),
+        ] {
+            let mut m = ready();
+            after_name_reread(&mut m, true, Some(o), t0 + s(2));
+            assert!(!m.name_reread_pending(), "{o:?}");
+            assert!(m.is_acquired());
+        }
+        // Node gone: back to the acquisition, like any failed acquisition.
+        let mut m = ready();
+        after_name_reread(&mut m, false, None, t0 + s(2));
+        assert!(!m.is_acquired() && m.is_connected());
+        assert!(m.due(t0 + s(3)).contains(&Action::Acquire));
+    }
+
+    #[test]
+    fn the_name_reply_reaches_the_caller_and_never_blocks_the_actor() {
+        let (reply, rx) = NameReply::channel();
+        assert_eq!(
+            Msg::RereadName(reply.clone()),
+            Msg::RereadName(NameReply::none())
+        );
+        reply.answer(NameReread::Now);
+        reply.answer(NameReread::NotConnected); // slot full: dropped, no block
+        assert_eq!(rx.try_recv(), Ok(NameReread::Now));
+        NameReply::none().answer(NameReread::Now);
+        drop(rx);
+        reply.answer(NameReread::Now); // caller gone: no panic
     }
 
     #[test]

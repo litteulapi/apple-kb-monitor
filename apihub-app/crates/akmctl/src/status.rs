@@ -44,6 +44,9 @@ pub fn to_json(s: &Snapshot, fn_mode: Option<u8>, revision: Option<u64>) -> Valu
         "battery_estimate_high": est.map(|e| e.high),
         "battery_chemistry": est.map(|e| e.chemistry.as_str()),
         "new_batteries": battery.map(|b| b.new_batteries),
+        // The level was not read by the last acquisition: it is the one of
+        // an earlier read (`last_update` gives its age), not a new measure.
+        "battery_kept": battery.map(|b| b.kept),
         // Percentage as macOS shows it (#213): a labelled secondary figure.
         "battery_apple_display_pct": battery.and_then(|b| b.apple_display_pct).map(|p| p.round() as u32),
         // Thresholds the keyboard reports (report 0x60, once per connection).
@@ -111,7 +114,17 @@ pub fn to_text(s: &Snapshot, fn_mode: Option<u8>) -> String {
         "Battery:",
         s.battery_pct().map_or_else(
             || "n/a".into(),
-            |p| format!("{:.0} % (keyboard indication)", p),
+            |p| {
+                let kept = s.keyboard.as_ref().is_some_and(|k| k.battery.kept);
+                format!(
+                    "{p:.0} % (keyboard indication{})",
+                    if kept {
+                        ", kept from the last read"
+                    } else {
+                        ""
+                    }
+                )
+            },
         ),
     );
     if let Some(b) = s.keyboard.as_ref().map(|k| &k.battery) {
@@ -294,6 +307,13 @@ mod tests {
         assert!(t.contains("Name:      Clavier de alice #1"));
         assert!(t.contains("Fn mode:   1 - fkeyslast"));
         assert!(to_text(&Snapshot::default(), None).contains("Battery:   n/a"));
+        // A level kept from an earlier read is said so (text and JSON).
+        let mut k: Snapshot = serde_json::from_str(SAMPLE).unwrap();
+        assert_eq!(to_json(&k, None, None)["battery_kept"], false);
+        k.keyboard.as_mut().unwrap().battery.kept = true;
+        assert!(to_text(&k, None)
+            .contains("Battery:   99 % (keyboard indication, kept from the last read)"));
+        assert_eq!(to_json(&k, None, None)["battery_kept"], true);
     }
 
     #[test]

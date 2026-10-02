@@ -29,9 +29,29 @@ pub const SLOW_READ_PERIOD: Duration = APPLE.battery_period;
 /// (#206 : sinon toute appli de la session declenche des salves GET_REPORT
 /// pendant la frappe, cause de coupures de liaison).
 pub const FORCE_REFRESH_FLOOR: Duration = Duration::from_secs(5 * 60);
-/// Floor between two accepted `RereadName()` (D-Bus): a name written by
-/// `akmctl rename --device-name` is read again by the daemon at most this often.
+/// Floor between two re-reads of the name asked by `RereadName()` (D-Bus): a
+/// name written by `akmctl rename --device-name` is read again by the daemon
+/// (`0x51`-`0x54` only, never the routine reports) at most this often. A
+/// request made inside the floor is served when it ends, never dropped.
 pub const NAME_REREAD_FLOOR: Duration = Duration::from_secs(30);
+
+/// Answer to a `RereadName()` request ([`Machine::request_name_reread`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameReread {
+    /// No keyboard connected: nothing will be read.
+    NotConnected,
+    /// The name is read at the next pass of the actor.
+    Now,
+    /// The name is read after this delay (floor, or keyboard not acquired yet).
+    Deferred(Duration),
+}
+
+impl NameReread {
+    /// Will the name be read (now or later)?
+    pub fn accepted(self) -> bool {
+        self != NameReread::NotConnected
+    }
+}
 
 pub const RSSI_PERIOD: Duration = Duration::from_secs(45);
 /// A measurement older than this is shown as absent.
@@ -73,6 +93,8 @@ pub enum Event {
 pub enum Action {
     /// Full HID read (opens the current hidraw, possibly a new one).
     Acquire,
+    /// Read the name stored in the keyboard (`0x51`-`0x54`) and nothing else.
+    RereadName,
     /// Read the kernel power_supply capacity only.
     KernelBattery,
     /// Refresh RSSI through the helper.
@@ -105,8 +127,13 @@ pub struct Machine {
     /// Derniere lecture complete reussie / derniere relance acceptee (#206).
     last_read: Option<Instant>,
     last_forced: Option<Instant>,
-    /// Last accepted `RereadName()` (bounded by [`NAME_REREAD_FLOOR`]).
+    /// Last name re-read handed out (bounded by [`NAME_REREAD_FLOOR`]).
     last_name_reread: Option<Instant>,
+    /// A `RereadName()` is pending: the name is read at this instant.
+    name_reread: Option<Instant>,
+    /// No vendor report may be requested for now (keyboard silent since a
+    /// wake, #264): what is due stays due, nothing is consumed.
+    vendor_hold: bool,
 }
 
 /// Retry delay after `attempt` failed acquisitions: 0.5, 1, 2, 4 ... capped.
@@ -140,6 +167,8 @@ impl Machine {
             last_read: None,
             last_forced: None,
             last_name_reread: None,
+            name_reread: None,
+            vendor_hold: false,
         }
     }
 
@@ -179,26 +208,44 @@ impl Machine {
     }
 
     /// D-Bus `RereadName()`: the name stored in the keyboard was just rewritten
-    /// (`akmctl rename --device-name`); a read is due now so that `0x51`-`0x54`
-    /// (forgotten by the caller when this returns true) are read again. No
-    /// effect while disconnected; accepted at most once per
-    /// [`NAME_REREAD_FLOOR`], else nothing happens.
-    pub fn request_name_reread(&mut self, now: Instant) -> bool {
+    /// (`akmctl rename --device-name`). A read of `0x51`-`0x54` alone
+    /// ([`Action::RereadName`], never the routine reports: `Refresh()` and its
+    /// 5 min floor are not bypassed) is due now, or, when one was handed out
+    /// less than [`NAME_REREAD_FLOOR`] ago, when that floor ends: a request is
+    /// deferred, never dropped (the name cached by the daemon would stay stale
+    /// until the next connection). No effect while disconnected.
+    ///
+    /// Before the first acquisition nothing is read (that acquisition requests
+    /// no vendor report): the request waits for it.
+    pub fn request_name_reread(&mut self, now: Instant) -> NameReread {
         if !self.connected {
-            return false;
+            return NameReread::NotConnected;
         }
-        if self
-            .last_name_reread
-            .is_some_and(|t| now.saturating_duration_since(t) < NAME_REREAD_FLOOR)
-        {
-            return false;
+        let floor = self.last_name_reread.map_or(now, |t| t + NAME_REREAD_FLOOR);
+        // A request already pending keeps its (earlier) deadline.
+        let due = self.name_reread.unwrap_or_else(|| floor.max(now));
+        self.name_reread = Some(due);
+        match due.saturating_duration_since(now) {
+            d if d.is_zero() && self.acquired && !self.vendor_hold => NameReread::Now,
+            d => NameReread::Deferred(d),
         }
-        self.last_name_reread = Some(now);
-        if self.acquired {
-            self.forced = Some(now);
-        }
-        // Not acquired yet: the pending acquisition reads the name anyway.
-        true
+    }
+
+    /// Is a `RereadName()` waiting to be served?
+    pub fn name_reread_pending(&self) -> bool {
+        self.name_reread.is_some()
+    }
+
+    /// The keyboard has been silent since a system wake (`true`): no vendor
+    /// report is requested, and what is due (battery cycle, `Refresh()`, name
+    /// re-read) is neither handed out nor consumed. Lifted (`false`) at the
+    /// first key press: what was due goes out at once (#264).
+    pub fn set_vendor_hold(&mut self, on: bool) {
+        self.vendor_hold = on;
+    }
+
+    pub fn vendor_hold(&self) -> bool {
+        self.vendor_hold
     }
 
     pub fn mac(&self) -> Option<&str> {
@@ -247,6 +294,9 @@ impl Machine {
         self.battery_cycle = false;
         self.next_rssi = None;
         self.next_kernel = None;
+        // A new connection reads the name anyway (first battery cycle).
+        self.name_reread = None;
+        self.vendor_hold = false;
     }
 
     /// Feed an event; may return an immediate action (`Clear`).
@@ -367,11 +417,20 @@ impl Machine {
             }
             return out;
         }
-        let scheduled = self.link.begin_cycle(now);
-        if scheduled || self.forced.is_some_and(|t| t <= now) {
-            self.forced = None;
-            self.battery_cycle = true;
-            out.push(Action::Acquire);
+        // While held (silent since a wake) the cycle is not even begun: it
+        // stays due and goes out when the hold is lifted.
+        if !self.vendor_hold {
+            let scheduled = self.link.begin_cycle(now);
+            if scheduled || self.forced.is_some_and(|t| t <= now) {
+                self.forced = None;
+                self.battery_cycle = true;
+                out.push(Action::Acquire);
+            }
+            if self.name_reread.is_some_and(|t| t <= now) {
+                self.name_reread = None;
+                self.last_name_reread = Some(now);
+                out.push(Action::RereadName);
+            }
         }
         if self.next_kernel.is_some_and(|t| t <= now) {
             self.next_kernel = None;
@@ -441,9 +500,14 @@ impl Machine {
         if !self.acquired {
             return self.next_acquire;
         }
-        [self.link.next_deadline(), self.forced, self.next_kernel, self.next_rssi]
+        // Held: the vendor deadlines are not served, so they must not wake
+        // the loop either (it would spin on an instant already past).
+        let vendor = [self.link.next_deadline(), self.forced, self.name_reread]
             .into_iter()
             .flatten()
+            .filter(|_| !self.vendor_hold);
+        vendor
+            .chain([self.next_kernel, self.next_rssi].into_iter().flatten())
             .min()
     }
 }
@@ -717,28 +781,127 @@ mod tests {
         assert!(m.is_connected() && !m.is_acquired());
     }
 
-    #[test]
-    fn name_reread_is_accepted_once_per_30_s_and_only_when_connected() {
-        let t0 = Instant::now();
+    fn acquired_machine(t0: Instant) -> Machine {
         let mut m = Machine::new();
-        assert!(!m.request_name_reread(t0), "disconnected: no effect");
-        assert!(m.due(t0).is_empty());
         m.on_event(&Event::Connected(MAC.into()), t0);
+        m.due(t0);
         m.acquire_done(true, t0);
         m.due(t0);
-        // Right after a read (where Refresh is ignored), the re-read is accepted.
-        assert!(m.request_name_reread(t0 + s(1)));
-        assert!(m.due(t0 + s(1)).contains(&Action::Acquire));
-        m.acquire_done(true, t0 + s(2));
-        // Again within 30 s: nothing happens.
-        assert!(!m.request_name_reread(t0 + s(10)));
-        assert!(!m.request_name_reread(t0 + s(30)));
-        assert!(!m.due(t0 + s(30)).contains(&Action::Acquire));
-        // After the floor: accepted again.
+        m
+    }
+
+    /// M3 of the final review: `RereadName()` reads the name alone, never the
+    /// routine reports (a battery cycle), so `Refresh()`'s 5 min floor is not
+    /// bypassed.
+    #[test]
+    fn name_reread_is_its_own_action_and_never_a_battery_cycle() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        assert_eq!(m.request_name_reread(t0), NameReread::NotConnected);
+        assert!(!NameReread::NotConnected.accepted());
+        assert!(m.due(t0).is_empty());
+        let mut m = acquired_machine(t0);
+        assert_eq!(m.request_name_reread(t0 + s(1)), NameReread::Now);
+        assert_eq!(m.next_deadline(), Some(t0 + s(1)));
+        let due = m.due(t0 + s(1));
+        assert_eq!(due, vec![Action::RereadName]);
+        assert!(!due.contains(&Action::Acquire), "no routine read");
+        assert!(!m.vendor_reads_due(), "not a battery cycle");
+        assert!(!m.name_reread_pending());
+        // The battery timer of the model is untouched.
+        assert_eq!(m.link().next_battery(), Some(t0 + s(60)));
+    }
+
+    /// M2 of the final review: a second request inside the floor is deferred
+    /// to its end, not dropped (rename A->B then B->C within 30 s).
+    #[test]
+    fn name_reread_inside_the_floor_is_deferred_not_dropped() {
+        let t0 = Instant::now();
+        let mut m = acquired_machine(t0);
+        assert_eq!(m.request_name_reread(t0 + s(1)), NameReread::Now);
+        assert_eq!(m.due(t0 + s(1)), vec![Action::RereadName]);
+        // 9 s later: deferred to the end of the floor (t0 + 31 s).
+        assert_eq!(
+            m.request_name_reread(t0 + s(10)),
+            NameReread::Deferred(s(21))
+        );
+        assert!(NameReread::Deferred(s(21)).accepted());
+        assert!(m.name_reread_pending());
+        // Asked again: still one read, same deadline.
+        assert_eq!(
+            m.request_name_reread(t0 + s(20)),
+            NameReread::Deferred(s(11))
+        );
+        assert!(!m.due(t0 + s(30)).contains(&Action::RereadName));
         let t1 = t0 + s(1) + NAME_REREAD_FLOOR;
-        assert!(m.request_name_reread(t1));
-        assert!(m.due(t1).contains(&Action::Acquire));
+        assert!(m.next_deadline().is_some_and(|d| d <= t1));
+        assert_eq!(m.due(t1), vec![Action::RereadName], "served at the floor");
+        assert!(!m.due(t1 + s(1)).contains(&Action::RereadName), "once");
         assert_eq!(NAME_REREAD_FLOOR, s(30));
+        // A disconnection forgets the request (the new connection reads the name).
+        assert_eq!(
+            m.request_name_reread(t1 + s(1)),
+            NameReread::Deferred(s(29))
+        );
+        m.on_event(&Event::Disconnected(MAC.into()), t1 + s(2));
+        assert!(!m.name_reread_pending());
+    }
+
+    /// m4: before the first acquisition nothing is read; the request waits.
+    #[test]
+    fn name_reread_before_the_first_acquisition_waits_for_it() {
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        assert_eq!(m.request_name_reread(t0), NameReread::Deferred(s(0)));
+        assert_eq!(m.due(t0), vec![Action::Acquire]);
+        assert!(!m.vendor_reads_due());
+        m.acquire_done(true, t0 + s(1));
+        assert!(m.due(t0 + s(1)).contains(&Action::RereadName));
+    }
+
+    /// M4 of the final review: while the keyboard is silent after a wake the
+    /// battery cycle is not consumed (no 1 h retry): it goes out as soon as
+    /// the hold is lifted (first key press).
+    #[test]
+    fn a_held_battery_cycle_is_not_consumed_and_goes_out_when_released() {
+        let t0 = Instant::now();
+        let mut m = acquired_machine(t0);
+        m.due(t0 + s(60));
+        m.acquire_done_with(true, Some(true), t0 + s(60));
+        m.on_sleep();
+        let wake = t0 + s(6000);
+        m.on_wake(wake);
+        assert_eq!(m.link().next_battery(), Some(wake + s(60)));
+        m.set_vendor_hold(true);
+        // 60 s after the wake, no key pressed: nothing vendor goes out, the
+        // cycle stays due and the loop is not woken for it.
+        let due = m.due(wake + s(60));
+        assert!(!due.contains(&Action::Acquire), "{due:?}");
+        assert!(!m.vendor_reads_due());
+        assert_eq!(m.link().next_battery(), Some(wake + s(60)), "not consumed");
+        assert!(
+            m.next_deadline().is_none_or(|d| d > wake + s(60)),
+            "no spin"
+        );
+        // A re-read of the name is held the same way.
+        assert_eq!(
+            m.request_name_reread(wake + s(70)),
+            NameReread::Deferred(s(0))
+        );
+        assert!(!m.due(wake + s(80)).contains(&Action::RereadName));
+        // First key press at 2 min: the read goes out at once, not 1 h later.
+        m.set_vendor_hold(false);
+        let due = m.due(wake + s(120));
+        assert!(due.contains(&Action::Acquire), "{due:?}");
+        assert!(due.contains(&Action::RereadName));
+        assert!(m.vendor_reads_due());
+        m.acquire_done_with(true, Some(true), wake + s(121));
+        assert_eq!(
+            m.link().next_battery(),
+            Some(wake + s(121) + SLOW_READ_PERIOD),
+            "a success: 4 h, never the 1 h retry of a failure"
+        );
     }
 
     #[test]

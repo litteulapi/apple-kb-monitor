@@ -77,6 +77,10 @@ pub struct KbBattery {
     /// `0x47` (Apple's `getBatteryState`, R2 #251): 0 normal, 1 low, 2-3
     /// critical. `None` when not read in this burst.
     pub state: Option<u8>,
+    /// The values above were not read by the last acquisition: they are the
+    /// ones of an earlier read, kept so that the level does not turn "n/a"
+    /// (#264). Never a new sample: `last_update` keeps the age of the read.
+    pub kept: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

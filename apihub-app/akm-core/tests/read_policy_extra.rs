@@ -498,6 +498,110 @@ fn build_report_safe_paths() {
     std::fs::remove_dir_all(&d).ok();
 }
 
+/// Revue finale M3 : `RereadName` ne relit QUE 0x51-0x54, jamais la routine
+/// (0x47, 0x30, 0x46, 0x49) ni 0x4F/0x60 ; des fragments déjà relus ne
+/// coûtent aucune requête.
+#[test]
+fn name_only_schedule_reads_the_four_fragments_and_nothing_else() {
+    let _g = serial();
+    let d = private_runtime_dir("nameonly");
+    akm_core::read_policy::note_connection();
+    let mut ans = full();
+    ans.push((0x4F, vec![0x4F, 1, 2, 3, 4]));
+    ans.push((0x60, vec![0x60, 5, 6]));
+    for id in [0x51u8, 0x52, 0x53, 0x54] {
+        ans.push((id, vec![id, b'N', b'o', b'm', 0, 0, 0, 0, 0]));
+    }
+    let src = Src::new(0, ans.clone());
+    akm_core::read_policy::set_name_only_schedule();
+    let (r, o) = build_report_safe(BCM, None, &src, KbWake::default(), Instant::now());
+    assert_eq!(o, SafeRead::Complete);
+    assert_eq!(src.ids(), vec![0x51, 0x52, 0x53, 0x54], "the name alone");
+    assert_eq!(r.battery.percentage, None, "no battery read");
+    assert!(r.device.name_on_keyboard_hex.is_some());
+    // Encore : déjà lus dans cette connexion, aucune requête.
+    let src = Src::new(0, ans.clone());
+    akm_core::read_policy::set_name_only_schedule();
+    let (_, o) = build_report_safe(BCM, None, &src, KbWake::default(), Instant::now());
+    assert_eq!(o, SafeRead::Complete);
+    assert!(src.ids().is_empty(), "{:x?}", src.ids());
+    // Un clavier muet : arrêt à la première requête, jamais de nouvel essai.
+    akm_core::read_policy::forget_name_fragments();
+    let src = Src::new(0, full());
+    akm_core::read_policy::set_name_only_schedule();
+    let (_, o) = build_report_safe(BCM, None, &src, KbWake::default(), Instant::now());
+    assert_eq!(o, SafeRead::Partial);
+    assert!(o.attempted_and_failed());
+    assert_eq!(src.ids(), vec![0x51]);
+    // « Pas dû » ordinaire : rien n'est demandé, et ce n'est pas un échec de lecture.
+    akm_core::read_policy::set_schedule(Some(false));
+    let src = Src::new(0, ans);
+    let (_, o) = build_report_safe(BCM, None, &src, KbWake::default(), Instant::now());
+    assert_eq!(o, SafeRead::Skipped(Gate::NotDue));
+    assert!(!o.attempted_and_failed());
+    assert!(src.ids().is_empty());
+    akm_core::read_policy::set_schedule(None);
+    akm_core::read_policy::note_connection();
+    std::fs::remove_dir_all(&d).ok();
+}
+
+/// Revue finale M3 : l'instant du dernier accès matériel est partagé entre
+/// processus (fichier à côté de hid.lock). Une requête d'un autre processus
+/// (akmctl) il y a moins de 1 s fait attendre la première requête de celui-ci.
+#[test]
+fn the_last_hardware_access_of_another_process_spaces_the_first_request() {
+    use akm_core::read_policy::{
+        hw_stamp_path, monotonic_ms, read_hw_stamp, share_hw_access, stamp_age, write_hw_stamp,
+    };
+    let _g = serial();
+    let d = private_runtime_dir("stamp");
+    // Décision pure.
+    assert_eq!(stamp_age(1_000, 1_400), Some(Duration::from_millis(400)));
+    assert_eq!(stamp_age(1_000, 1_000), Some(Duration::ZERO));
+    assert_eq!(stamp_age(1_000, 2_000), None, "old: nothing to wait for");
+    assert_eq!(stamp_age(5_000, 1_000), None, "another boot: ignored");
+    // Le fichier est à côté du verrou, dans le dossier privé.
+    let stamp = hw_stamp_path();
+    assert_eq!(stamp.parent(), lock_path().parent());
+    assert_eq!(read_hw_stamp(&stamp), None);
+    let breaker = Mutex::new(akm_core::read_policy::Breaker::new());
+    let conn = Mutex::new(akm_core::read_policy::ConnState::new());
+    let src = Src::new(0, full());
+
+    share_hw_access(true);
+    // « Un autre processus » vient d'écrire au clavier.
+    let before = monotonic_ms();
+    write_hw_stamp(&stamp, before).unwrap();
+    let safe = SafeSource::with_parts(&src, &breaker, &conn);
+    let t = Instant::now();
+    safe.feature(0x47).unwrap();
+    let waited = t.elapsed();
+    assert!(
+        waited >= MIN_GAP - Duration::from_millis(100),
+        "first request {waited:?} after another process's access: no spacing"
+    );
+    // Et cet accès est publié à son tour pour les autres.
+    assert!(read_hw_stamp(&stamp).unwrap() >= before + 900);
+    assert!(akm_core::read_policy::last_hw_access().is_some());
+    // Un tampon ancien ou illisible n'impose aucune attente.
+    write_hw_stamp(&stamp, monotonic_ms().saturating_sub(5_000)).unwrap();
+    let safe = SafeSource::with_parts(&src, &breaker, &conn);
+    let t = Instant::now();
+    safe.feature(0x47).unwrap();
+    assert!(t.elapsed() < Duration::from_millis(500));
+    std::fs::write(&stamp, "garbage").unwrap();
+    assert_eq!(read_hw_stamp(&stamp), None);
+
+    // Partage coupé (défaut : tests, bibliothèques) : le fichier est ignoré.
+    share_hw_access(false);
+    write_hw_stamp(&stamp, monotonic_ms()).unwrap();
+    let safe = SafeSource::with_parts(&src, &breaker, &conn);
+    let t = Instant::now();
+    safe.feature(0x47).unwrap();
+    assert!(t.elapsed() < Duration::from_millis(500));
+    std::fs::remove_dir_all(&d).ok();
+}
+
 #[test]
 fn in_process_contention_honours_wait_and_survives_a_panicking_holder() {
     let _g = serial();

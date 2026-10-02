@@ -48,6 +48,10 @@ pub const DEVICES_PATH: &str = "/com/agenceapi/AppleKbMonitor1/devices";
 /// only, 2 = per-device objects + write methods + event signals.
 pub const INTERFACE_VERSION: u32 = 2;
 
+/// How long `RereadName()` waits for the actor's answer before saying the
+/// request is queued (the actor may be in the middle of a read burst).
+pub const NAME_REPLY_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Object path of a keyboard, `None` if `mac` is not `XX:XX:XX:XX:XX:XX`.
 pub fn device_path(mac: &str) -> Option<OwnedObjectPath> {
     let parts: Vec<&str> = mac.split(':').collect();
@@ -140,15 +144,25 @@ impl Shared {
         }
     }
 
-    /// `RereadName()`: handed to the actor, which bounds it (30 s) itself.
-    pub fn reread_name(&self) -> zbus::fdo::Result<()> {
-        if self.mailbox.send(Msg::RereadName) {
-            Ok(())
-        } else {
-            Err(zbus::fdo::Error::Failed(
+    /// `RereadName()`: handed to the actor, which forgets `0x51`-`0x54` and
+    /// reads them again now or at the end of its 30 s floor. Returns
+    /// `(accepted, what will happen)`; the actor is given
+    /// [`NAME_REPLY_WAIT`] to answer (it may be in the middle of a read).
+    pub fn reread_name(&self) -> zbus::fdo::Result<(bool, String)> {
+        let (reply, rx) = crate::actor::NameReply::channel();
+        if !self.mailbox.send(Msg::RereadName(reply)) {
+            return Err(zbus::fdo::Error::Failed(
                 "acquisition thread not running".into(),
-            ))
+            ));
         }
+        Ok(match rx.recv_timeout(NAME_REPLY_WAIT) {
+            Ok(r) => (r.accepted(), crate::actor::name_reread_text(r)),
+            Err(_) => (
+                true,
+                "request queued: the daemon is reading the keyboard, the name is read again after that"
+                    .into(),
+            ),
+        })
     }
 
     pub fn history_json(&self, since: u64) -> zbus::fdo::Result<String> {

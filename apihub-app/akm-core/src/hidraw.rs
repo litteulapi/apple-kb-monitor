@@ -250,7 +250,10 @@ fn daemon_breaker_verdict(mac: &str) -> crate::breaker_state::Verdict {
 }
 
 impl WriteDoor {
-    /// Open the BCM2042 node, or explain why not (nothing is written).
+    /// Open the BCM2042 node, or explain why not (nothing is written). The
+    /// node is the first Apple keyboard found: the caller MUST compare
+    /// [`WriteDoor::mac`] with the keyboard it means to write
+    /// ([`crate::devname::check_door_mac`]) before any write.
     pub fn open() -> Result<Self, String> {
         let dev = find_apple_hidraw().ok_or("no Apple keyboard found (hidraw)")?;
         let uevent = std::fs::read_to_string(format!(
@@ -308,6 +311,9 @@ impl crate::devname::NameDoor for WriteDoor {
     }
     fn as_sink(&self) -> &dyn crate::parity::FeatureSink {
         self
+    }
+    fn mac(&self) -> String {
+        WriteDoor::mac(self)
     }
 }
 

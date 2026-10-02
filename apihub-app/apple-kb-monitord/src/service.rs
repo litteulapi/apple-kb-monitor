@@ -26,9 +26,9 @@
 //!   method writes the keyboard's name (only `akmctl rename --device-name`);
 //!   `RereadName()` makes the daemon read it again after such a write
 //!
-//! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `RereadName()` (forget `0x51`-`0x54`
-//! and read them again now; at most once per 30 s, no effect while disconnected; writes
-//! nothing to the keyboard, #248), `SetAlias(s mac, s name) -> s`
+//! Methods: `GetState() -> s` (= `Json`), `Refresh()`, `RereadName() -> (bs)` (forget
+//! `0x51`-`0x54` and read these four again, now or at the end of a 30 s floor: deferred,
+//! never dropped; `false` while disconnected; writes nothing to the keyboard, #248), `SetAlias(s mac, s name) -> s`
 //! (BlueZ alias, `""` = restore the keyboard's own name), `History(t since) -> s` (JSON array of
 //! `{ts,pct,voltage?,event?,schema?,mv_0x46?,mv_0x49?,voltage_valid?}`, `voltage_valid=false` = legacy value, #180); since API 2 `GetDevices() -> ao`,
 //! `BatterySets() -> s`, `NotifyShutdown() -> (b, s)` (the one write macOS does: `WillShutdown`, #191),
@@ -232,10 +232,12 @@ impl Monitor {
 
     /// The name stored in the keyboard was just rewritten by `akmctl rename
     /// --device-name` (#248): forget the four fragments `0x51`-`0x54` (claims
-    /// and cached values, nothing else) and read them again now. At most once
-    /// per 30 s (otherwise nothing happens); no effect while the keyboard is
-    /// disconnected. Writes nothing to the keyboard.
-    fn reread_name(&self) -> zbus::fdo::Result<()> {
+    /// and cached values, nothing else) and read these four reports again
+    /// (never the routine reports): now, or, when a re-read was made less
+    /// than 30 s ago, when those 30 s end (deferred, never dropped). Returns
+    /// `(accepted, text)`: `false` while no keyboard is connected. Writes
+    /// nothing to the keyboard.
+    fn reread_name(&self) -> zbus::fdo::Result<(bool, String)> {
         self.shared.reread_name()
     }
 

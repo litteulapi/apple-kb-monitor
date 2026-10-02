@@ -84,16 +84,22 @@ pub fn expect_disconnect(conn: &Connection) -> Result<bool, BusError> {
 }
 
 /// `RereadName()`: after a write of the name stored in the keyboard, the
-/// daemon forgets `0x51`-`0x54` and reads them again (at most once per 30 s).
-pub fn reread_name(conn: &Connection) -> Result<(), BusError> {
+/// daemon forgets `0x51`-`0x54` and reads these four again, now or at the end
+/// of its 30 s floor. Returns `(accepted, what the daemon said)`; a daemon
+/// older than this answer (no return value) counts as accepted.
+pub fn reread_name(conn: &Connection) -> Result<(bool, String), BusError> {
     if !daemon_present(conn) {
         return Err(BusError::Absent(format!(
             "daemon not running ({BUS_NAME} absent on the session bus)"
         )));
     }
-    proxy(conn)?
-        .call("RereadName", &())
-        .map_err(|e| BusError::Failed(format!("RereadName: {e}")))
+    let reply = proxy(conn)?
+        .call_method("RereadName", &())
+        .map_err(|e| BusError::Failed(format!("RereadName: {e}")))?;
+    Ok(reply
+        .body()
+        .deserialize::<(bool, String)>()
+        .unwrap_or_else(|_| (true, "accepted (daemon without an answer)".into())))
 }
 
 #[cfg(test)]

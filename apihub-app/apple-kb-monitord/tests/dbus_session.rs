@@ -137,20 +137,44 @@ fn inner() {
         Msg::Refresh
     );
 
-    // RereadName() (#248): reaches the actor as its own message, no argument,
-    // no return value (the 30 s bound and the forgetting are the actor's).
-    c.call_method(
-        Some(apple_kb_monitord::service::BUS_NAME),
-        apple_kb_monitord::service::OBJECT_PATH,
-        Some(apple_kb_monitord::service::INTERFACE),
-        "RereadName",
-        &(),
-    )
-    .unwrap();
-    assert_eq!(
-        rx.recv_timeout(Duration::from_secs(2)).unwrap(),
-        Msg::RereadName
+    // RereadName() (#248): reaches the actor as its own message and answers
+    // `(accepted, text)`. Nobody answers here: after the wait the caller is
+    // told the request is queued, never an error and never a silent "ok".
+    let reply = c
+        .call_method(
+            Some(apple_kb_monitord::service::BUS_NAME),
+            apple_kb_monitord::service::OBJECT_PATH,
+            Some(apple_kb_monitord::service::INTERFACE),
+            "RereadName",
+            &(),
+        )
+        .unwrap();
+    let (accepted, text): (bool, String) = reply.body().deserialize().unwrap();
+    assert!(accepted && text.contains("queued"), "{text}");
+    let msg = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(matches!(msg, Msg::RereadName(_)), "{msg:?}");
+    // An actor that answers: its answer is what D-Bus returns.
+    let answering = std::thread::spawn(move || {
+        if let Ok(Msg::RereadName(reply)) = rx.recv_timeout(Duration::from_secs(5)) {
+            reply.answer(akm_core::machine::NameReread::NotConnected);
+        }
+        rx
+    });
+    let reply = c
+        .call_method(
+            Some(apple_kb_monitord::service::BUS_NAME),
+            apple_kb_monitord::service::OBJECT_PATH,
+            Some(apple_kb_monitord::service::INTERFACE),
+            "RereadName",
+            &(),
+        )
+        .unwrap();
+    let (accepted, text): (bool, String) = reply.body().deserialize().unwrap();
+    assert!(
+        !accepted && text.contains("no keyboard connected"),
+        "{text}"
     );
+    drop(answering.join().unwrap());
 
     // Signals: subscribe, publish a change, expect PropertiesChanged(Battery)
     // and StateChanged with the new revision.

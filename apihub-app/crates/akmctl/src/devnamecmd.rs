@@ -53,6 +53,10 @@ pub const EXIT_CANCELLED: u8 = 12;
 pub const EXIT_UNVERIFIED: u8 = 13;
 /// Written, read back DIFFERENT: the exact rollback command was printed.
 pub const EXIT_MISMATCH: u8 = 14;
+/// Write UNCERTAIN: the write was handed to the keyboard's node and failed
+/// (not retried). A frame may have been sent: the stored name is unknown
+/// until it is read again (`--show`), never "nothing written".
+pub const EXIT_WRITE_UNCERTAIN: u8 = 15;
 
 /// What the user asked.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,8 +155,9 @@ pub trait World {
     fn open_door(&mut self) -> Result<Box<dyn NameDoor>, String>;
     fn save_backup(&mut self, b: &Backup) -> std::io::Result<PathBuf>;
     fn now_unix(&mut self) -> u64;
-    /// Ask the daemon to read the name again (D-Bus `RereadName`).
-    fn reread_name(&mut self) -> Result<(), String>;
+    /// Ask the daemon to read the name again (D-Bus `RereadName`): whether
+    /// it will (false = no keyboard connected) and what it said.
+    fn reread_name(&mut self) -> Result<(bool, String), String>;
 }
 
 struct Stdio;
@@ -205,7 +210,7 @@ impl World for RealWorld {
     fn now_unix(&mut self) -> u64 {
         now_unix()
     }
-    fn reread_name(&mut self) -> Result<(), String> {
+    fn reread_name(&mut self) -> Result<(bool, String), String> {
         let conn = bus::connect().map_err(|e| e.to_string())?;
         bus::reread_name(&conn).map_err(|e| e.to_string())
     }
@@ -286,11 +291,14 @@ fn show(lang: Lang, world: &mut dyn World, io: &mut dyn Io) -> u8 {
         lang.t("Alias (ce poste) :", "Alias (this computer):"),
         s.alias().unwrap_or(lang.t("(aucun)", "(none)"))
     ));
-    match s
+    // The cached bytes decide: a name macOS wrote in UTF-8 is shown too.
+    let raw = cached_raw(&s);
+    let name = s
         .keyboard
         .as_ref()
         .and_then(|k| k.device.name_on_keyboard.clone())
-    {
+        .or_else(|| raw.as_deref().map(devname::display_name_from_raw));
+    match name {
         Some(n) => {
             io.out(&format!(
                 "{} {n}\n",
@@ -299,7 +307,7 @@ fn show(lang: Lang, world: &mut dyn World, io: &mut dyn Io) -> u8 {
                     "Stored in the keyboard (0x51-0x54, daemon cache):"
                 )
             ));
-            if let Some(h) = cached_raw(&s) {
+            if let Some(h) = raw {
                 io.out(&format!(
                     "  {} {}\n",
                     lang.t("octets :", "bytes:"),
@@ -582,7 +590,7 @@ fn restore(
         lang.t("Sauvegarde", "Backup"),
         file.display(),
         lang.t("nom", "name"),
-        b.name,
+        b.display_name(),
         lang.t("clavier", "keyboard"),
         b.mac,
         lang.t("enregistrée le", "saved at"),
@@ -627,8 +635,16 @@ struct Flow<'a> {
     mtu: Option<Result<u16, String>>,
     probes: u32,
     preflights: u32,
-    /// Why the hidraw door did not open (then nothing can be written).
-    door_error: Option<String>,
+    /// Why there is no hidraw door (then nothing can be written).
+    door_error: Option<DoorError>,
+}
+
+/// Why the write door is not available.
+enum DoorError {
+    /// The node could not be opened.
+    NotOpened(String),
+    /// It opened on another keyboard than the one of the pre-flight.
+    OtherKeyboard(String),
 }
 
 /// A sink that refuses: used when the door is not open.
@@ -721,7 +737,12 @@ impl RenameEnv for Flow<'_> {
             let current = s
                 .keyboard
                 .as_ref()
-                .and_then(|k| k.device.name_on_keyboard.clone());
+                .and_then(|k| k.device.name_on_keyboard.clone())
+                .or_else(|| {
+                    cached_raw(&s)
+                        .as_deref()
+                        .map(devname::display_name_from_raw)
+                });
             self.io.out(&format!(
                 "{} {} → « {} »\n",
                 self.lang.t(
@@ -788,10 +809,23 @@ impl RenameEnv for Flow<'_> {
         }
         // Only now is the hardware node opened (under the HID lock).
         match self.world.open_door() {
-            Ok(d) => self.door = Some(d),
+            Ok(d) => {
+                // The node opened is the first Apple keyboard found: it must
+                // be the one the pre-flight, the MTU and the backup concern
+                // (two keyboards connected), else nothing is written.
+                let expected = RenameEnv::mac(self);
+                match devname::check_door_mac(&d.mac(), &expected) {
+                    Ok(()) => self.door = Some(d),
+                    Err(e) => {
+                        drop(d);
+                        self.verbose(&format!("[devname] write door refused: {e}"));
+                        self.door_error = Some(DoorError::OtherKeyboard(e));
+                    }
+                }
+            }
             Err(e) => {
                 self.verbose(&format!("[devname] write door not opened: {e}"));
-                self.door_error = Some(e);
+                self.door_error = Some(DoorError::NotOpened(e));
             }
         }
         true
@@ -831,7 +865,7 @@ fn guarded(
     }
     let target = match req {
         Request::Rename(n) => n.clone(),
-        Request::Restore(b) => b.name.clone(),
+        Request::Restore(b) => b.display_name(),
     };
     if opts.verbose {
         io.out(&frames_text(&frames, lang));
@@ -858,18 +892,36 @@ fn guarded(
     if let (Outcome::WriteFailed(_), Some(d)) = (&o, &flow.door_error) {
         // The door never opened: the closed sink refused, nothing left akmctl.
         flow.io.out(lang.t(
-            &format!("Arrêt : le nœud hidraw ne s'est pas ouvert ({d}). Rien n'a été écrit.\n"),
-            &format!("Stopped: the hidraw node did not open ({d}). Nothing was written.\n"),
+            &match d {
+                DoorError::NotOpened(d) => format!(
+                    "Arrêt : le nœud hidraw ne s'est pas ouvert ({d}). Rien n'a été écrit.\n"
+                ),
+                DoorError::OtherKeyboard(d) => format!(
+                    "Arrêt : un autre clavier Apple est connecté et c'est son nœud hidraw qui s'est ouvert ({d}). Rien n'a été écrit. Déconnectez l'autre clavier, puis relancez.\n"
+                ),
+            },
+            &match d {
+                DoorError::NotOpened(d) => format!(
+                    "Stopped: the hidraw node did not open ({d}). Nothing was written.\n"
+                ),
+                DoorError::OtherKeyboard(d) => format!(
+                    "Stopped: another Apple keyboard is connected and its hidraw node is the one that opened ({d}). Nothing was written. Disconnect the other keyboard, then run again.\n"
+                ),
+            },
         ));
         return EXIT_ERROR;
     }
-    if matches!(
-        o,
-        Outcome::Verified { .. } | Outcome::Mismatch { .. } | Outcome::Unverified { .. }
-    ) {
-        // The daemon's cached name is stale: ask it to read 0x51-0x54 again.
-        if let Err(e) = flow.world.reread_name() {
-            flow.verbose(&format!("[devname] RereadName not delivered: {e}"));
+    // From here a `WriteFailed` went through the open door: a frame may have
+    // been sent.
+    if o.wrote() {
+        // The daemon's cached name is stale (or unknown): ask it to read
+        // 0x51-0x54 again, and say what it answered.
+        match flow.world.reread_name() {
+            Ok((true, text)) => flow.verbose(&format!("[devname] RereadName: {text}")),
+            Ok((false, text)) => flow
+                .io
+                .journal(&format!("akmctl: RereadName refused by the daemon: {text}")),
+            Err(e) => flow.verbose(&format!("[devname] RereadName not delivered: {e}")),
         }
     }
     let (text, code) = report(&o, mode, lang, &target);
@@ -987,6 +1039,21 @@ pub fn report(o: &Outcome, mode: Mode, lang: Lang, target: &str) -> (String, u8)
             .to_string(),
             EXIT_ERROR,
         ),
+        Outcome::WriteFailed(e) => (
+            format!(
+                "✎ {} ({e}). {}\n  {} akmctl rename --device-name --show\n",
+                l.t(
+                    "Écriture incertaine : l'écriture a échoué en cours de route, sans nouvel essai",
+                    "Write uncertain: the write failed on its way, not retried"
+                ),
+                l.t(
+                    "Une trame peut être partie : le nom stocké dans le clavier n'est pas connu.",
+                    "A frame may have been sent: the name stored in the keyboard is not known."
+                ),
+                l.t("Vérifiez dans un instant :", "Check in a moment:")
+            ),
+            EXIT_WRITE_UNCERTAIN,
+        ),
         other => (
             format!(
                 "{} {other:?}. {}\n",
@@ -1097,6 +1164,8 @@ mod tests {
         writes: Writes,
         events: Events,
         back: Back,
+        mac: String,
+        write_fails: bool,
     }
 
     impl FeatureSink for FakeDoor {
@@ -1105,6 +1174,9 @@ mod tests {
             self.events
                 .borrow_mut()
                 .push(format!("write {:#04x}", report[0]));
+            if self.write_fails {
+                return Err(std::io::Error::from_raw_os_error(libc::EIO));
+            }
             Ok(())
         }
     }
@@ -1121,6 +1193,9 @@ mod tests {
         fn as_sink(&self) -> &dyn FeatureSink {
             self
         }
+        fn mac(&self) -> String {
+            self.mac.clone()
+        }
     }
 
     struct FakeWorld {
@@ -1130,6 +1205,12 @@ mod tests {
         mtu: Result<(u16, String), String>,
         probes: u32,
         door_fails: bool,
+        /// Address of the keyboard whose node the door opens.
+        door_mac: String,
+        /// The write through the open door fails (EIO).
+        write_fails: bool,
+        /// What the daemon answers to `RereadName`.
+        reread: (bool, String),
         back: Back,
         writes: Writes,
         events: Events,
@@ -1145,6 +1226,9 @@ mod tests {
                 mtu: Ok((185, format!("akm-hid-control:   {MAC} fd 23: psm local 0x0000 peer 0x0011 cid 0x0041 state connected (hci handle 0x000b) mtu out 185 in 672\nakm-hid-control: {MAC}: inspected, nothing sent"))),
                 probes: 0,
                 door_fails: false,
+                door_mac: MAC.into(),
+                write_fails: false,
+                reread: (true, "name read again now (0x51-0x54 only)".into()),
                 back: Back::Echo,
                 writes: Rc::default(),
                 events: Rc::default(),
@@ -1177,6 +1261,8 @@ mod tests {
                 writes: self.writes.clone(),
                 events: self.events.clone(),
                 back: self.back.clone(),
+                mac: self.door_mac.clone(),
+                write_fails: self.write_fails,
             }))
         }
         fn save_backup(&mut self, b: &Backup) -> std::io::Result<PathBuf> {
@@ -1187,9 +1273,9 @@ mod tests {
         fn now_unix(&mut self) -> u64 {
             1_790_812_799
         }
-        fn reread_name(&mut self) -> Result<(), String> {
+        fn reread_name(&mut self) -> Result<(bool, String), String> {
             self.events.borrow_mut().push("RereadName".into());
-            Ok(())
+            Ok(self.reread.clone())
         }
     }
 
@@ -1346,7 +1432,7 @@ mod tests {
             assert_eq!(wr[0].0, WriteOp::DeviceName);
             assert_eq!(wr[0].1, want, "{name}: the fixture bytes, exactly");
             assert_eq!(wr[0].1.len(), 65);
-            assert_eq!(w.backups[0].name, "Clavier de alice #1");
+            assert_eq!(w.backups[0].name.as_deref(), Some("Clavier de alice #1"));
             assert_eq!(io.lines.len(), 1, "{name}: nothing is asked with --yes");
             assert!(!io.out.contains("[y/N]"), "{name}");
             assert!(io.out.contains("read back identical"), "{name}");
@@ -1539,6 +1625,140 @@ mod tests {
         assert!(!acts(&w).contains(&"RereadName".to_string()));
     }
 
+    /// M6 of the final review: two Apple keyboards, the door opens the node
+    /// of the other one (whose name was not saved): nothing is written.
+    #[test]
+    fn a_door_opened_on_another_keyboard_writes_nothing() {
+        for explicit in [None, Some(MAC.to_string())] {
+            let mut w = FakeWorld::green();
+            w.door_mac = "AA:BB:CC:DD:EE:02".into();
+            let mut io = FakeIo::new(false, &[]);
+            let code = dispatch(
+                Action::Rename {
+                    name: "Bureau".into(),
+                    mode: Mode::Write,
+                },
+                explicit,
+                YES,
+                Lang::En,
+                &mut w,
+                &mut io,
+            );
+            assert_eq!(code, EXIT_ERROR);
+            assert!(
+                w.writes.borrow().is_empty(),
+                "no frame for the other keyboard"
+            );
+            let a = acts(&w);
+            assert!(a.contains(&"door".to_string()), "{a:?}");
+            assert!(!a.iter().any(|e| e.starts_with("write")), "{a:?}");
+            assert!(!a.contains(&"RereadName".to_string()));
+            assert!(
+                io.out.contains("another Apple keyboard")
+                    && io.out.contains("AA:BB:CC:DD:EE:02")
+                    && io.out.contains("Nothing was written"),
+                "{}",
+                io.out
+            );
+        }
+        // Address of the node unknown: refused the same way.
+        let mut w = FakeWorld::green();
+        w.door_mac = String::new();
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_ERROR);
+        assert!(w.writes.borrow().is_empty());
+    }
+
+    /// m2 of the final review: a write that failed THROUGH the open door may
+    /// have sent a frame: own exit code, never "nothing written", and the
+    /// daemon is asked to read the name again.
+    #[test]
+    fn a_failed_write_through_the_door_is_uncertain_not_unwritten() {
+        let mut w = FakeWorld::green();
+        w.write_fails = true;
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_WRITE_UNCERTAIN);
+        assert_eq!(EXIT_WRITE_UNCERTAIN, 15);
+        let a = acts(&w);
+        assert_eq!(
+            a,
+            vec!["pkexec", "backup", "door", "write 0x55", "RereadName"],
+            "one write, no retry, no read-back, the daemon re-reads"
+        );
+        assert!(io.out.contains("Write uncertain"), "{}", io.out);
+        assert!(io.out.contains("A frame may have been sent"));
+        assert!(!io.out.contains("Nothing was written"));
+        assert!(io.out.contains("--show"));
+    }
+
+    /// M2 of the final review: what the daemon answers to `RereadName` is no
+    /// longer swallowed. A refusal is said even without `--verbose`.
+    #[test]
+    fn the_daemons_answer_to_reread_name_is_reported() {
+        let mut w = FakeWorld::green();
+        w.reread = (false, "no keyboard connected: nothing to read again".into());
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_OK);
+        assert!(
+            io.journal
+                .iter()
+                .any(|l| l.contains("RereadName refused") && l.contains("no keyboard connected")),
+            "{:?}",
+            io.journal
+        );
+        // Accepted (now or deferred): only the verbose journal tells.
+        let mut w = FakeWorld::green();
+        w.reread = (
+            true,
+            "name read again in 21 s (0x51-0x54 only, at most once per 30 s)".into(),
+        );
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_OK);
+        assert!(!io.journal.iter().any(|l| l.contains("RereadName")));
+        let verbose = Opts {
+            yes: true,
+            verbose: true,
+        };
+        let mut w = FakeWorld::green();
+        w.reread = (true, "name read again in 21 s".into());
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", verbose, &mut w, &mut io), EXIT_OK);
+        assert!(io
+            .journal
+            .iter()
+            .any(|l| l.contains("RereadName: name read again in 21 s")));
+    }
+
+    /// M5 of the final review: the current name was written by macOS in
+    /// UTF-8 ("Clavier de Cécile"): shown, saved as raw bytes, renamed.
+    #[test]
+    fn a_keyboard_named_with_an_accent_is_shown_saved_and_renamed() {
+        let mut raw = "Clavier de Cécile".as_bytes().to_vec();
+        raw.resize(devname::MAX_NAME_LEN, 0);
+        let hex: String = raw.iter().map(|b| format!("{b:02x}")).collect();
+        let mut w = FakeWorld::green();
+        w.raw_hex = Some(hex.clone());
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_OK, "{}", io.out);
+        assert_eq!(w.backups.len(), 1);
+        assert_eq!(w.backups[0].name, None);
+        assert_eq!(w.backups[0].raw().unwrap(), raw);
+        assert!(
+            io.out.contains("« Clavier de Cécile » → « Bureau »"),
+            "{}",
+            io.out
+        );
+        // --show tells the name instead of "not read yet".
+        let mut w = FakeWorld::green();
+        w.raw_hex = Some(hex);
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(
+            dispatch(Action::Show, None, YES, Lang::En, &mut w, &mut io),
+            EXIT_OK
+        );
+        assert!(io.out.contains("Clavier de Cécile"), "{}", io.out);
+    }
+
     #[test]
     fn dry_run_never_probes_asks_nor_writes_and_shows_the_bytes() {
         let mut w = FakeWorld::green();
@@ -1696,23 +1916,28 @@ mod tests {
             Outcome::NoCachedName,
             Outcome::Disconnected,
             Outcome::Refused("r".into()),
-            Outcome::WriteFailed("w".into()),
         ] {
             assert_eq!(r(&o, Mode::Write), EXIT_ERROR, "{o:?}");
         }
+        // A write that failed on its way may have sent a frame: its own code.
+        assert_eq!(
+            r(&Outcome::WriteFailed("w".into()), Mode::Write),
+            EXIT_WRITE_UNCERTAIN
+        );
         assert_eq!(
             [
                 EXIT_NO_CONFIRM,
                 EXIT_PREFLIGHT,
                 EXIT_CANCELLED,
                 EXIT_UNVERIFIED,
-                EXIT_MISMATCH
+                EXIT_MISMATCH,
+                EXIT_WRITE_UNCERTAIN
             ],
-            [10, 11, 12, 13, 14]
+            [10, 11, 12, 13, 14, 15]
         );
         assert!(![EXIT_OK, EXIT_ERROR, EXIT_ABSENT]
             .iter()
-            .any(|c| (10..=14).contains(c)));
+            .any(|c| (10..=15).contains(c)));
         // The French and English verdicts both name the rollback command.
         for l in [Lang::Fr, Lang::En] {
             let t = report(

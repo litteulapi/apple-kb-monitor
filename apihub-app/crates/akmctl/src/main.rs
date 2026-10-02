@@ -48,6 +48,9 @@ fn helper_path() -> String {
 }
 
 fn main() -> ExitCode {
+    // The 1 s spacing between two requests to the keyboard holds across
+    // processes (daemon and akmctl): share the instant of the last access.
+    akm_core::read_policy::share_hw_access(true);
     let cli = match Cli::try_parse() {
         Ok(c) => c,
         Err(e) => {

@@ -71,6 +71,15 @@ pub fn inject(ev: PassiveEvent) -> bool {
     })
 }
 
+/// The listener thread was started: key presses reach
+/// [`akm_core::read_policy::note_input`], so "no key since the wake" means
+/// something. False (no bus, start failed) = nobody tells about key presses.
+static LISTENING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn listener_started() -> bool {
+    LISTENING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 fn now_unix() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -361,6 +370,7 @@ pub fn start(
     let listener = passive::spawn(cfg, find, move |m| {
         let _ = tx.send(m);
     })?;
+    LISTENING.store(true, std::sync::atomic::Ordering::Relaxed);
     Ok(PassiveHandle {
         _listener: listener,
     })

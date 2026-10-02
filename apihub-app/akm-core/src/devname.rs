@@ -417,6 +417,34 @@ pub fn name_from_raw(raw: &[u8]) -> Option<String> {
         .then(|| String::from_utf8_lossy(s).into_owned())
 }
 
+/// A name to SHOW for 32 raw bytes, whatever they hold: the printable ASCII
+/// name when there is one, else the bytes up to the first NUL read as UTF-8
+/// (what macOS writes: "Clavier de Cécile"), anything else replaced. Never
+/// used to build a frame.
+pub fn display_name_from_raw(raw: &[u8]) -> String {
+    let n = raw.iter().position(|&b| b == 0).unwrap_or(raw.len());
+    String::from_utf8_lossy(&raw[..n])
+        .chars()
+        .map(|c| if c.is_control() { '\u{FFFD}' } else { c })
+        .collect()
+}
+
+/// The node the door opened must be the keyboard the pre-flight, the MTU
+/// probe and the backup were made for: with two Apple keyboards connected
+/// the door may have opened the other one, whose name was not saved.
+/// `expected` = `--mac`, else the keyboard followed by the daemon.
+pub fn check_door_mac(door_mac: &str, expected: &str) -> Result<(), String> {
+    let known = |m: &str| m.len() == 17 && m.split(':').count() == 6;
+    if known(door_mac) && known(expected) && door_mac.eq_ignore_ascii_case(expected) {
+        return Ok(());
+    }
+    Err(format!(
+        "the hidraw node opened belongs to keyboard {} while the pre-flight and the backup concern {}",
+        if door_mac.is_empty() { "(address unknown)" } else { door_mac },
+        if expected.is_empty() { "(address unknown)" } else { expected },
+    ))
+}
+
 /// Read `0x51`-`0x54` through `src` (in production a
 /// [`crate::read_policy::SafeSource`]: register map, 1 s spacing, breaker)
 /// and return the 32 data bytes. Stops at the first failure, never retries;
@@ -448,11 +476,16 @@ pub trait NameDoor: FeatureSink {
     fn read_name(&self) -> io::Result<Vec<u8>>;
     /// The same door as a plain write sink.
     fn as_sink(&self) -> &dyn FeatureSink;
+    /// Bluetooth address of the keyboard whose node was opened (`HID_UNIQ`,
+    /// upper-case; empty if unknown).
+    fn mac(&self) -> String;
 }
 
 // ── backup ─────────────────────────────────────────────────────────────────
 
-/// What was in `0x51`-`0x54` before any write.
+/// What was in `0x51`-`0x54` before any write: the 32 bytes as they are,
+/// whatever they hold (macOS writes UTF-8: a name with an accent is saved
+/// and restored byte for byte; only a name TYPED here must be ASCII).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Backup {
     pub schema: u32,
@@ -461,8 +494,10 @@ pub struct Backup {
     pub mac: String,
     /// The four fragments, 8 data bytes each, hex (id not included).
     pub fragments_hex: [String; 4],
-    /// The name they spell.
-    pub name: String,
+    /// The name they spell when it is printable ASCII, else `None` (the
+    /// bytes are the backup; this is only a readable copy).
+    #[serde(default)]
+    pub name: Option<String>,
     /// Where the bytes come from (`daemon-cache`: read once in this
     /// connection by the daemon, 1 s spacing, no new request).
     pub source: String,
@@ -471,24 +506,43 @@ pub struct Backup {
 impl Backup {
     pub const SCHEMA: u32 = 1;
 
+    /// Save 32 raw bytes. Never refused for their content.
     pub fn new(mac: &str, raw: &[u8], created_unix: u64, source: &str) -> Result<Self, String> {
         if raw.len() != MAX_NAME_LEN {
             return Err(format!("{} bytes, expected {MAX_NAME_LEN}", raw.len()));
         }
-        let name = name_from_raw(raw).ok_or("the saved name is not printable ASCII")?;
         let frag = |i: usize| hex_compact(&raw[i * FRAGMENT_LEN..(i + 1) * FRAGMENT_LEN]);
         Ok(Self {
             schema: Self::SCHEMA,
             created_unix,
             mac: mac.to_string(),
             fragments_hex: [frag(0), frag(1), frag(2), frag(3)],
-            name,
+            name: name_from_raw(raw),
             source: source.to_string(),
         })
     }
 
-    /// The 32 saved bytes, checked: 4 × 8 bytes, printable ASCII then NUL
-    /// only, and consistent with `name`.
+    /// The saved name for the user (lossy for bytes that are not ASCII).
+    pub fn display_name(&self) -> String {
+        match &self.name {
+            Some(n) => n.clone(),
+            None => {
+                let raw: Vec<u8> = self
+                    .fragments_hex
+                    .iter()
+                    .filter_map(|h| unhex(h))
+                    .flatten()
+                    .collect();
+                display_name_from_raw(&raw)
+            }
+        }
+    }
+
+    /// The 32 saved bytes, checked for what makes a backup trustworthy, not
+    /// for their alphabet: 4 × 8 bytes, a non-empty name then NUL only, and
+    /// consistent with `name` (the readable copy must be what the bytes
+    /// spell, `None` when they are not printable ASCII). They are written
+    /// back as they are.
     pub fn raw(&self) -> Result<Vec<u8>, String> {
         if self.schema != Self::SCHEMA {
             return Err(format!("backup schema {} unknown", self.schema));
@@ -511,11 +565,13 @@ impl Backup {
                 "bytes after the NUL terminator: refused (not a name this tool restores)".into(),
             );
         }
-        match name_from_raw(&raw) {
-            Some(n) if n == self.name && !n.is_empty() => Ok(raw),
-            Some(_) => Err("the fragments do not spell the saved name".into()),
-            None => Err("the saved bytes are not printable ASCII".into()),
+        if n == 0 {
+            return Err("the saved name is empty: refused".into());
         }
+        if name_from_raw(&raw) != self.name {
+            return Err("the fragments do not spell the saved name".into());
+        }
+        Ok(raw)
     }
 }
 
@@ -779,7 +835,7 @@ pub fn run(
             }
         },
         Request::Restore(b) => match frames_for_restore(b) {
-            Ok(f) => (f, b.name.clone()),
+            Ok(f) => (f, b.display_name()),
             Err(e) => {
                 env.log(&format!("[devname] backup refused: {e}"));
                 return Outcome::InvalidName(e);
@@ -826,7 +882,7 @@ pub fn run(
                 env.log(&format!(
                     "[devname] backup written: {} (0600), name {:?}",
                     p.display(),
-                    b.name
+                    b.display_name()
                 ));
                 Some(p)
             }
@@ -1207,8 +1263,11 @@ mod tests {
         assert!(raw_from_frames(&f).is_none(), "ids out of order");
         assert!(raw_from_frames(&measured_frames()[..3]).is_none());
         let mut bad = b.clone();
-        bad.name = "autre".into();
+        bad.name = Some("autre".into());
         assert!(bad.raw().is_err());
+        let mut bad = b.clone();
+        bad.name = None;
+        assert!(bad.raw().is_err(), "ASCII bytes with no readable copy");
         let mut bad = b.clone();
         bad.fragments_hex[3] = "00ff000000000000".into();
         assert!(bad.raw().is_err(), "garbage after the NUL");
@@ -1219,7 +1278,77 @@ mod tests {
         bad.schema = 9;
         assert!(bad.raw().is_err());
         assert!(Backup::new("m", &raw[..31], 0, "x").is_err());
-        assert!(Backup::new("m", &[0xffu8; 32], 0, "x").is_err());
+        // An empty name is saved (never a reason to refuse a rename), not restored.
+        let empty = Backup::new("m", &[0u8; 32], 0, "x").unwrap();
+        assert!(empty.raw().is_err());
+    }
+
+    /// M5 of the final review: macOS stores the name as UTF-8. A keyboard
+    /// named "Clavier de Cécile" must be saveable (else it can never be
+    /// renamed) and its backup restored byte for byte.
+    #[test]
+    fn a_non_ascii_current_name_is_saved_and_restored_byte_for_byte() {
+        let mut raw = "Clavier de Cécile".as_bytes().to_vec();
+        assert_eq!(raw.len(), 18);
+        raw.resize(MAX_NAME_LEN, 0);
+        assert_eq!(name_from_raw(&raw), None, "not printable ASCII");
+        let b = Backup::new("AA:BB:CC:DD:EE:F1", &raw, 1_790_000_000, "daemon-cache")
+            .expect("32 raw bytes are always saveable");
+        assert_eq!(b.name, None);
+        assert_eq!(b.display_name(), "Clavier de Cécile");
+        assert_eq!(b.raw().unwrap(), raw, "the bytes as they are");
+        // Through the file format.
+        let json = serde_json::to_string(&b).unwrap();
+        let back: Backup = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, b);
+        // The restore frame carries exactly these bytes, then NUL.
+        let f = frames_for_restore(&back).unwrap();
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].id(), LONG_DEVICE_NAME_ID);
+        assert_eq!(&f[0].data()[..MAX_NAME_LEN], &raw[..]);
+        assert!(f[0].data()[MAX_NAME_LEN..].iter().all(|&x| x == 0));
+        assert_eq!(expected_readback(&f), raw);
+        // Even bytes that are no text at all are saved and shown harmlessly.
+        let odd = Backup::new("m", &[0xffu8; 32], 0, "x").unwrap();
+        assert_eq!(odd.raw().unwrap(), vec![0xffu8; 32]);
+        assert!(!odd.display_name().chars().any(char::is_control));
+        // A name TYPED here is still ASCII only.
+        assert!(frames_for("Clavier de Cécile").is_err());
+        // A readable copy that contradicts the bytes is refused.
+        let mut bad = b.clone();
+        bad.name = Some("Clavier".into());
+        assert!(bad.raw().is_err());
+    }
+
+    /// M5: the whole guarded rename goes through with such a current name.
+    #[test]
+    fn a_keyboard_with_a_non_ascii_name_can_be_renamed() {
+        let mut raw = "Clavier de Cécile".as_bytes().to_vec();
+        raw.resize(MAX_NAME_LEN, 0);
+        let mut sim = Sim::new(true);
+        sim.cached = Some(raw.clone());
+        sim.back = Ok(expected_readback(&frames_for("Bureau").unwrap()));
+        let o = rename(&mut sim, "Bureau", SEQUENCE_PROOF);
+        assert!(matches!(o, Outcome::Verified { backup: Some(_) }), "{o:?}");
+        assert_eq!(sim.backups.len(), 1);
+        assert_eq!(sim.backups[0].raw().unwrap(), raw);
+        assert_eq!(
+            *sim.spy.events.borrow(),
+            vec!["backup", "confirm", "write 0x55", "read back"]
+        );
+    }
+
+    /// M6 of the final review: the node opened must be the keyboard of the
+    /// pre-flight and of the backup.
+    #[test]
+    fn the_door_must_be_the_keyboard_of_the_preflight() {
+        assert!(check_door_mac("AA:BB:CC:DD:EE:F1", "aa:bb:cc:dd:ee:f1").is_ok());
+        let e = check_door_mac("AA:BB:CC:DD:EE:02", "AA:BB:CC:DD:EE:F1").unwrap_err();
+        assert!(e.contains("AA:BB:CC:DD:EE:02") && e.contains("AA:BB:CC:DD:EE:F1"));
+        // Unknown on either side is never a match.
+        assert!(check_door_mac("", "AA:BB:CC:DD:EE:F1").is_err());
+        assert!(check_door_mac("AA:BB:CC:DD:EE:F1", "unknown").is_err());
+        assert!(check_door_mac("", "").is_err());
     }
 
     #[test]
@@ -1577,7 +1706,7 @@ mod tests {
             assert_eq!(w[0].0, WriteOp::DeviceName);
             assert_eq!(w[0].1, want, "{name}: the fixture bytes, exactly");
             assert_eq!(w[0].1.len(), 65);
-            assert_eq!(sim.backups[0].name, "Clavier de alice #1");
+            assert_eq!(sim.backups[0].name.as_deref(), Some("Clavier de alice #1"));
             // Every byte sent is in the journal, with the wire form.
             assert!(sim.log.iter().any(|l| l.contains(&hex(&w[0].1))));
             assert!(sim

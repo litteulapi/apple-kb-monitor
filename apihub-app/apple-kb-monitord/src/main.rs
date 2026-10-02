@@ -129,6 +129,9 @@ fn print_batteries(json: bool) -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    // The 1 s spacing between two requests to the keyboard holds across
+    // processes (daemon and akmctl): share the instant of the last access.
+    akm_core::read_policy::share_hw_access(true);
     let args = match parse_args(std::env::args().skip(1)) {
         Ok(Some(a)) => a,
         Ok(None) => return ExitCode::SUCCESS,

@@ -203,19 +203,110 @@ pub fn last_input_age(now: Instant) -> Option<Duration> {
 /// Milliseconds since EPOCH of the last request sent to the keyboard, +1.
 static LAST_HW: AtomicU64 = AtomicU64::new(0);
 
+/// The instant of the last hardware access is also shared between processes
+/// (file [`HW_STAMP_FILE`] next to the HID lock). Off by default (tests,
+/// libraries); the daemon and `akmctl` turn it on at start.
+static SHARE_HW: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Name of the shared stamp, next to `hid.lock`: the `CLOCK_MONOTONIC`
+/// milliseconds of the last request any process of this user sent to the
+/// keyboard. Written and read under the HID lock.
+pub const HW_STAMP_FILE: &str = "hid.last";
+
+/// Share the instant of the last hardware access with the other processes
+/// (the daemon and `akmctl`): the [`MIN_GAP`] spacing then holds between a
+/// read-back of `akmctl` and the read of the daemon that follows it.
+pub fn share_hw_access(on: bool) {
+    SHARE_HW.store(on, Ordering::Relaxed);
+}
+
+/// Path of the shared stamp (`$XDG_RUNTIME_DIR/apple-kb-monitor/hid.last`).
+pub fn hw_stamp_path() -> PathBuf {
+    lock_path().with_file_name(HW_STAMP_FILE)
+}
+
+/// `CLOCK_MONOTONIC` in milliseconds: the same clock in every process.
+pub fn monotonic_ms() -> u64 {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: `ts` is a valid timespec; CLOCK_MONOTONIC always exists.
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
+    (ts.tv_sec as u64)
+        .saturating_mul(1000)
+        .saturating_add(ts.tv_nsec as u64 / 1_000_000)
+}
+
+/// Write the shared stamp (private directory, no symlink followed).
+pub fn write_hw_stamp(path: &std::path::Path, mono_ms: u64) -> io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    ensure_private_dir(path.parent().ok_or_else(|| io::Error::other("no parent"))?)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)?;
+    writeln!(f, "{mono_ms}")
+}
+
+/// The shared stamp, if the file holds one.
+pub fn read_hw_stamp(path: &std::path::Path) -> Option<u64> {
+    use std::io::Read;
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut text = String::new();
+    std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(path)
+        .ok()?
+        .take(32)
+        .read_to_string(&mut text)
+        .ok()?;
+    text.trim().parse().ok()
+}
+
+/// How long ago was a stamp written, if that is recent enough to matter?
+/// `None` for a stamp in the future (another boot) or older than
+/// [`MIN_GAP`]: nothing to wait for (pure).
+pub fn stamp_age(stamp_ms: u64, now_ms: u64) -> Option<Duration> {
+    let age = Duration::from_millis(now_ms.checked_sub(stamp_ms)?);
+    (age < MIN_GAP).then_some(age)
+}
+
+/// Last hardware access of ANOTHER process (or of this one), from the shared
+/// stamp; `None` when sharing is off or nothing recent is recorded.
+fn shared_hw_access() -> Option<Instant> {
+    if !SHARE_HW.load(Ordering::Relaxed) {
+        return None;
+    }
+    let age = stamp_age(read_hw_stamp(&hw_stamp_path())?, monotonic_ms())?;
+    Instant::now().checked_sub(age)
+}
+
 /// A request was just sent to the keyboard (read or the `WillShutdown` write):
-/// the next one waits [`MIN_GAP`] after it.
+/// the next one waits [`MIN_GAP`] after it, in this process and, through the
+/// shared stamp, in the others.
 pub fn note_hw_access() {
     let ms = Instant::now()
         .saturating_duration_since(epoch())
         .as_millis() as u64;
     LAST_HW.store(ms + 1, Ordering::Relaxed);
+    if SHARE_HW.load(Ordering::Relaxed) {
+        // Best effort: without the stamp the spacing holds in-process only.
+        let _ = write_hw_stamp(&hw_stamp_path(), monotonic_ms());
+    }
 }
 
-/// Instant of the last request sent to the keyboard, if any.
+/// Instant of the last request sent to the keyboard, if any: by this process
+/// or, when shared ([`share_hw_access`]), by another one.
 pub fn last_hw_access() -> Option<Instant> {
     let v = LAST_HW.load(Ordering::Relaxed);
-    (v != 0).then(|| epoch() + Duration::from_millis(v - 1))
+    let own = (v != 0).then(|| epoch() + Duration::from_millis(v - 1));
+    own.max(shared_hw_access())
 }
 
 /// Why a read was or was not done.
@@ -241,7 +332,8 @@ pub fn gate(age: Option<Duration>) -> Gate {
 
 // ── schedule given by the Apple model (#251) ───────────────────────────────
 
-/// 0 = none (CLI, tests: activity gate), 1 = a battery read is due, 2 = not due.
+/// 0 = none (CLI, tests: activity gate), 1 = a battery read is due, 2 = not
+/// due, 3 = not due but the name `0x51`-`0x54` is to be read again.
 static SCHEDULE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 /// The daemon tells, before each acquisition, whether the Apple model has a
@@ -251,12 +343,23 @@ pub fn set_schedule(due: Option<bool>) {
     SCHEDULE.store(due.map_or(0, |d| if d { 1 } else { 2 }), Ordering::Relaxed);
 }
 
+/// The daemon tells that the next acquisition reads the name stored in the
+/// keyboard (`0x51`-`0x54`, D-Bus `RereadName`) and nothing else: no routine
+/// report, so no battery cycle. Replaced by the next [`set_schedule`].
+pub fn set_name_only_schedule() {
+    SCHEDULE.store(3, Ordering::Relaxed);
+}
+
 fn schedule() -> Option<bool> {
     match SCHEDULE.load(Ordering::Relaxed) {
         1 => Some(true),
-        2 => Some(false),
+        2 | 3 => Some(false),
         _ => None,
     }
+}
+
+fn name_only_scheduled() -> bool {
+    SCHEDULE.load(Ordering::Relaxed) == 3
 }
 
 /// Gate of a read: the model's schedule when there is one (a due read does
@@ -290,6 +393,12 @@ pub fn take_last_outcome() -> Option<SafeRead> {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .take()
+}
+
+/// Same outcome without consuming it (the actor decides what to say about a
+/// read that brought no battery value before the loop takes it).
+pub fn peek_last_outcome() -> Option<SafeRead> {
+    *LAST_OUTCOME.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 // ── circuit breaker (#214, #243, #251) ─────────────────────────────────────
@@ -565,7 +674,11 @@ impl SafeSource<'_> {
         if once {
             self.conn().claim(report_id);
         }
-        let w = wait_before(self.last.get(), Instant::now());
+        // First request of this source: the previous access may be the one
+        // of another process (`akmctl` then the daemon), known from the
+        // shared stamp when sharing is on.
+        let last = self.last.get().or_else(shared_hw_access);
+        let w = wait_before(last, Instant::now());
         if !w.is_zero() {
             std::thread::sleep(w);
         }
@@ -651,6 +764,13 @@ impl SafeRead {
     /// reports (`Skipped(Allowed)`) has nothing to read: a success.
     pub fn is_success(self) -> bool {
         matches!(self, SafeRead::Complete | SafeRead::Skipped(Gate::Allowed))
+    }
+
+    /// Were requests really sent to the keyboard without all of them being
+    /// answered? A skipped read (not due, lock busy, breaker open) asked
+    /// nothing: the keyboard cannot be called silent for it.
+    pub fn attempted_and_failed(self) -> bool {
+        matches!(self, SafeRead::Partial)
     }
 }
 
@@ -781,6 +901,27 @@ fn read_with_hold(
     }
 }
 
+/// Read the name fragments `0x51`-`0x54` that are not cached in this
+/// connection, and nothing else (D-Bus `RereadName` after `akmctl rename
+/// --device-name`): at most 4 requests through the same [`SafeSource`]
+/// (register map, spacing, breaker), stop at the first failure, never a
+/// retry. Fragments already requested since they were forgotten cost nothing.
+fn read_name_fragments(safe: SafeSource<'_>, hold: &std::sync::atomic::AtomicBool) -> SafeRead {
+    for id in crate::devname::FRAGMENT_IDS {
+        if safe.conn().requested(id) {
+            continue;
+        }
+        if hold.load(Ordering::SeqCst) {
+            return SafeRead::Partial;
+        }
+        match safe.feature(id) {
+            Ok(b) => safe.conn().store(id, b),
+            Err(_) => return SafeRead::Partial,
+        }
+    }
+    SafeRead::Complete
+}
+
 /// Fill the report from the frames read once in this connection: firmware
 /// version (`0x4F`), battery thresholds (`0x60`), then the firmware check
 /// against the embedded table for the model `pid`. Nothing is read here.
@@ -850,6 +991,16 @@ pub fn build_report_safe(
         return (report, SafeRead::Skipped(Gate::Allowed));
     }
     let outcome = match gate_for(schedule(), last_input_age(now)) {
+        Gate::NotDue if name_only_scheduled() => {
+            if tripped() {
+                SafeRead::Skipped(Gate::Tripped)
+            } else {
+                match try_lock(LOCK_WAIT) {
+                    Some(_lock) => read_name_fragments(SafeSource::new(src), &HOLD),
+                    None => SafeRead::Skipped(Gate::Busy),
+                }
+            }
+        }
         Gate::Allowed if tripped() => SafeRead::Skipped(Gate::Tripped),
         Gate::Allowed => match try_lock(LOCK_WAIT) {
             Some(_lock) => read_with(SafeSource::new(src), &mut report, true),
