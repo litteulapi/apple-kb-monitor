@@ -155,6 +155,43 @@ pub fn battery_state_event(k: &KbReport) -> Option<akm_core::passive::PassiveEve
         .map(|value| akm_core::passive::PassiveEvent::BattStat { value })
 }
 
+/// Journal line for a change of the BlueZ alias from `old` to `new`:
+/// `(warn, text)`. A change to the alias this program set last is the echo
+/// of its own write (info); any other change was made elsewhere (KDE
+/// Bluetooth settings, `bluetoothctl`, a removed pairing) and is a warning
+/// naming what was expected, set by whom and when. `None`: no change, or
+/// first reading.
+pub fn alias_change_log(
+    mac: &str,
+    old: Option<&str>,
+    new: Option<&str>,
+    memory: &akm_core::alias::AliasMemory,
+) -> Option<(bool, String)> {
+    let old = old?;
+    if Some(old) == new {
+        return None;
+    }
+    let new_s = new.unwrap_or("(none)");
+    Some(match memory.expected(mac) {
+        Some(e) if Some(e.alias.as_str()) == new => (
+            false,
+            format!("BlueZ alias of {mac}: {old:?} -> {new_s:?} (set through this monitor by {})", e.by),
+        ),
+        Some(e) => (
+            true,
+            format!(
+                "BlueZ alias of {mac} changed OUTSIDE this monitor: {old:?} -> {new_s:?}; expected {:?} (set by {} at {}). \
+                 BlueZ does not tell who: KDE Bluetooth settings, bluetoothctl, or a removed and re-made pairing",
+                e.alias, e.by, e.set_at
+            ),
+        ),
+        None => (
+            true,
+            format!("BlueZ alias of {mac} changed outside this monitor: {old:?} -> {new_s:?} (no alias remembered)"),
+        ),
+    })
+}
+
 /// Minimum spacing between two history samples.
 const HISTORY_SPACING: Duration = Duration::from_secs(300);
 /// The published snapshot (LED, RSSI expiry) is refreshed at least this often.
@@ -199,6 +236,9 @@ struct Actor {
     /// Where `notices` is kept across restarts (single writer: only when
     /// the history is written too).
     notices_path: Option<std::path::PathBuf>,
+    /// `alias.json` (alias last set through this program), read to journal
+    /// an alias changed from outside; `None` in tests.
+    alias_memory_path: Option<std::path::PathBuf>,
 }
 
 impl Actor {
@@ -228,6 +268,9 @@ impl Actor {
                 .map(NoticeMemory::load)
                 .unwrap_or_default(),
             notices_path,
+            alias_memory_path: opts
+                .history
+                .then(akm_core::alias::AliasMemory::default_path),
             alerts: AlertState::new(opts.alerts.clone()),
             detector: Detector::primed(&past),
             link: LinkTracker::new(),
@@ -379,9 +422,25 @@ impl Actor {
     }
 
     /// The BlueZ alias changed (rename, `bluetoothctl`, system settings).
+    /// A change is journalled with what this program remembers having set
+    /// (`alias.json`): BlueZ does not say who renamed the device.
     fn set_alias(&mut self, mac: &str, alias: Option<String>) {
+        let memory = self
+            .alias_memory_path
+            .as_deref()
+            .map(akm_core::alias::AliasMemory::load)
+            .unwrap_or_default();
         if let Some(k) = self.kb.as_mut() {
             if k.device.mac.as_deref().is_some_and(|m| m.eq_ignore_ascii_case(mac)) {
+                if let Some((warn, line)) =
+                    alias_change_log(mac, k.device.alias.as_deref(), alias.as_deref(), &memory)
+                {
+                    if warn {
+                        tracing::warn!("{line}");
+                    } else {
+                        tracing::info!("{line}");
+                    }
+                }
                 k.device.alias = alias;
             }
         }
@@ -1004,6 +1063,40 @@ mod tests {
         assert!(
             battery_state_alert(Some(2), 1).is_none(),
             "de-escalation: nothing"
+        );
+    }
+
+    /// An alias changed behind the monitor's back is journalled as a warning
+    /// with what was expected and who set it; the echo of our own write is
+    /// info; no change, or the first reading, says nothing.
+    #[test]
+    fn alias_changes_are_journalled_with_the_expected_alias() {
+        use akm_core::alias::AliasMemory;
+        const M: &str = "AA:BB:CC:DD:EE:F1";
+        let mut mem = AliasMemory::default();
+        assert_eq!(alias_change_log(M, None, Some("x"), &mem), None);
+        assert_eq!(alias_change_log(M, Some("x"), Some("x"), &mem), None);
+        let (warn, l) =
+            alias_change_log(M, Some("Bureau"), Some("Clavier de alice"), &mem).unwrap();
+        assert!(warn && l.contains("no alias remembered"), "{l}");
+        mem.remember(M, "Bureau", ":1.9 pid 4 (kcmshell6)", 100);
+        let (warn, l) =
+            alias_change_log(M, Some("Clavier de alice"), Some("Bureau"), &mem).unwrap();
+        assert!(!warn && l.contains("kcmshell6"), "{l}");
+        let (warn, l) =
+            alias_change_log(M, Some("Bureau"), Some("Clavier de alice"), &mem).unwrap();
+        assert!(
+            warn && l.contains("OUTSIDE") && l.contains("\"Bureau\"") && l.contains("at 100"),
+            "{l}"
+        );
+        // The actor of the tests reads no alias.json (history off).
+        let mut a = quiet_actor();
+        assert!(a.alias_memory_path.is_none());
+        a.kb = Some(report(50.0, None));
+        a.set_alias(M, Some("Bureau".into()));
+        assert_eq!(
+            a.kb.as_ref().unwrap().device.alias.as_deref(),
+            Some("Bureau")
         );
     }
 

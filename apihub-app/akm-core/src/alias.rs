@@ -86,9 +86,145 @@ pub fn validate(input: &str) -> Result<String, AliasError> {
     Ok(name.to_string())
 }
 
+// ── Expected alias (who set it, for the self-test) ─────────────────────────
+
+/// The alias last set THROUGH this program, per keyboard, with who asked:
+/// `$XDG_STATE_HOME/apple-kb-monitor/alias.json`. Written only by the real
+/// BlueZ backend after a successful write; read by `akmctl selftest`, which
+/// reports (info) a BlueZ alias that differs from it — something else renamed
+/// the keyboard, or its pairing was removed (BlueZ forgets the alias with the
+/// device: `akmctl repair`, Plasma "Forget", `bluetoothctl remove`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AliasMemory {
+    #[serde(default)]
+    pub keyboards: std::collections::BTreeMap<String, Remembered>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Remembered {
+    /// Alias in effect right after the write (the own name after a reset).
+    pub alias: String,
+    /// Unix time of the write.
+    pub set_at: u64,
+    /// Who asked (D-Bus sender, pid and program name, or "tray").
+    pub by: String,
+}
+
+impl AliasMemory {
+    pub fn default_path() -> std::path::PathBuf {
+        crate::history::default_path().with_file_name("alias.json")
+    }
+
+    /// Unreadable or corrupt = nothing remembered.
+    pub fn load(path: &std::path::Path) -> Self {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_default()
+    }
+
+    /// Atomic write (temporary file + rename), mode 0600.
+    pub fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        if let Some(d) = path.parent() {
+            std::fs::create_dir_all(d)?;
+        }
+        let tmp = path.with_extension("json.tmp");
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&tmp)?;
+        f.write_all(
+            serde_json::to_string_pretty(self)
+                .map_err(std::io::Error::other)?
+                .as_bytes(),
+        )?;
+        f.sync_all()?;
+        std::fs::rename(&tmp, path)
+    }
+
+    pub fn remember(&mut self, mac: &str, alias: &str, by: &str, set_at: u64) {
+        self.keyboards.insert(
+            mac.to_ascii_uppercase(),
+            Remembered {
+                alias: alias.to_string(),
+                set_at,
+                by: by.to_string(),
+            },
+        );
+    }
+
+    pub fn expected(&self, mac: &str) -> Option<&Remembered> {
+        self.keyboards.get(&mac.to_ascii_uppercase())
+    }
+}
+
+/// How the BlueZ alias of a keyboard compares with the remembered one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AliasDrift {
+    /// Never set through this program: nothing to compare.
+    NotRemembered,
+    /// BlueZ alias unknown (keyboard not paired / not seen).
+    Unknown,
+    Same,
+    /// Something else changed it since `expected` was set.
+    Differs {
+        expected: Remembered,
+        actual: String,
+    },
+}
+
+pub fn drift(memory: &AliasMemory, mac: &str, actual: Option<&str>) -> AliasDrift {
+    match (memory.expected(mac), actual) {
+        (None, _) => AliasDrift::NotRemembered,
+        (Some(_), None) => AliasDrift::Unknown,
+        (Some(e), Some(a)) if e.alias == a => AliasDrift::Same,
+        (Some(e), Some(a)) => AliasDrift::Differs {
+            expected: e.clone(),
+            actual: a.to_string(),
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remembered_alias_round_trip_and_drift() {
+        let dir = std::env::temp_dir().join(format!("akm-alias-mem-{}", std::process::id()));
+        let path = dir.join("alias.json");
+        let mut m = AliasMemory::default();
+        assert_eq!(
+            drift(&m, "aa:bb:cc:dd:ee:f1", Some("x")),
+            AliasDrift::NotRemembered
+        );
+        m.remember("aa:bb:cc:dd:ee:f1", "Bureau", "tray", 100);
+        m.save(&path).unwrap();
+        let back = AliasMemory::load(&path);
+        assert_eq!(back, m);
+        assert_eq!(back.expected("AA:BB:CC:DD:EE:F1").unwrap().by, "tray");
+        assert_eq!(
+            drift(&back, "AA:BB:CC:DD:EE:F1", Some("Bureau")),
+            AliasDrift::Same
+        );
+        assert_eq!(drift(&back, "AA:BB:CC:DD:EE:F1", None), AliasDrift::Unknown);
+        match drift(&back, "AA:BB:CC:DD:EE:F1", Some("Clavier de alice")) {
+            AliasDrift::Differs { expected, actual } => {
+                assert_eq!(
+                    (expected.alias.as_str(), expected.set_at, actual.as_str()),
+                    ("Bureau", 100, "Clavier de alice")
+                );
+            }
+            d => panic!("{d:?}"),
+        }
+        std::fs::write(&path, "[").unwrap();
+        assert_eq!(AliasMemory::load(&path), AliasMemory::default());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn accepts_and_trims() {

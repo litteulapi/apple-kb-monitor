@@ -244,8 +244,15 @@ impl Monitor {
     /// Rename the keyboard `mac` on this computer (BlueZ alias; nothing is
     /// written into the keyboard). `""` restores its own name. Returns the
     /// name now in effect.
-    async fn set_alias(&self, mac: &str, name: &str) -> zbus::fdo::Result<String> {
-        self.shared.rename(mac, name).await
+    async fn set_alias(
+        &self,
+        mac: &str,
+        name: &str,
+        #[zbus(header)] hdr: zbus::message::Header<'_>,
+        #[zbus(connection)] conn: &zbus::Connection,
+    ) -> zbus::fdo::Result<String> {
+        let caller = crate::devices::describe_caller(conn, &hdr).await;
+        self.shared.rename(mac, name, caller).await
     }
 
     /// History entries with `ts >= since`, as a JSON array.

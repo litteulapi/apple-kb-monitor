@@ -425,7 +425,8 @@ fn rename_flow(
         }
     };
     let backend = apple_kb_monitord::alias::BluezAlias::default();
-    match apple_kb_monitord::alias::rename(&backend, mailbox, mac, &text) {
+    match apple_kb_monitord::alias::rename(&backend, mailbox, mac, &text, "tray (Rename keyboard…)")
+    {
         Ok(now) => tracing::info!("tray: keyboard renamed to {now:?}"),
         Err(e) => {
             tracing::warn!("tray: rename refused: {e}");

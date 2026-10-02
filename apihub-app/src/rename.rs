@@ -39,9 +39,15 @@ fn apply(mac: &str, name: &str) -> Result<String, String> {
         }
     }
     // Daemon absent (local fallback): BlueZ directly.
-    rename(&BluezAlias::default(), &Mailbox::default(), mac, name)
-        .map(Option::unwrap_or_default)
-        .map_err(|e| e.to_string())
+    rename(
+        &BluezAlias::default(),
+        &Mailbox::default(),
+        mac,
+        name,
+        "apihub-app window (daemon absent)",
+    )
+    .map(Option::unwrap_or_default)
+    .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

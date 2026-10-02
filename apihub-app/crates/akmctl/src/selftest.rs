@@ -134,6 +134,34 @@ fn run(cmd: &str, args: &[&str]) -> Option<String> {
 
 // ── pure assessments (unit-tested) ─────────────────────────────────────────
 
+/// The BlueZ alias against the one last set through this program
+/// (`alias.json`). A difference is reported as INFO (not a fault of the
+/// monitor): something else renamed the keyboard, or its pairing was removed
+/// and made again (BlueZ forgets the alias with the device). `None` when no
+/// alias was ever set through this program or the alias is unknown.
+pub fn alias_check(
+    memory: &akm_core::alias::AliasMemory,
+    mac: &str,
+    actual: Option<&str>,
+) -> Option<Check> {
+    use akm_core::alias::{drift, AliasDrift};
+    match drift(memory, mac, actual) {
+        AliasDrift::NotRemembered | AliasDrift::Unknown => None,
+        AliasDrift::Same => Some(check("alias", Level::Ok, "ok", "keyboard alias as last set through this monitor")),
+        AliasDrift::Differs { expected, actual } => Some(check(
+            "alias",
+            Level::Info,
+            format!("{}->{}", expected.alias, actual),
+            format!(
+                "keyboard alias is {actual:?}, last set to {:?} by {} at {} (unix): changed elsewhere (KDE Bluetooth settings, \
+                 bluetoothctl) or the pairing was removed (akmctl repair, Plasma Forget); see the daemon journal for \
+                 \"BlueZ alias\" lines",
+                expected.alias, expected.by, expected.set_at
+            ),
+        )),
+    }
+}
+
 /// A core dump is a crash unless it was requested by `kill()` (si_code
 /// SI_USER = 0). abort()/panic=abort is SI_TKILL (-6): a crash.
 pub fn coredump_is_crash(si_code: Option<i64>) -> bool {
@@ -404,6 +432,13 @@ fn daemon_checks(
                     "keyboard not connected (nothing to acquire)",
                 ),
             });
+            if let Some(mac) = s.mac() {
+                let actual = s.keyboard.as_ref().and_then(|k| k.device.alias.as_deref());
+                let memory = akm_core::alias::AliasMemory::load(
+                    &akm_core::alias::AliasMemory::default_path(),
+                );
+                out.extend(alias_check(&memory, mac, actual));
+            }
             if let Some(e) = s.last_error.as_deref().filter(|e| !e.is_empty()) {
                 out.push(check(
                     "daemon-error",
@@ -1071,6 +1106,35 @@ mod tests {
         assert_eq!(cpu_share(None, 10.0, 100.0), None);
         assert_eq!(cpu_share(Some((0.0, 90.0)), 10.0, 100.0), None);
         assert_eq!(cpu_share(Some((0.0, 0.0)), 900.0, 900.0), Some(1.0));
+    }
+
+    #[test]
+    fn alias_differing_from_the_remembered_one_is_reported_as_info() {
+        let mut m = akm_core::alias::AliasMemory::default();
+        let mac = "AA:BB:CC:DD:EE:F1";
+        assert_eq!(
+            alias_check(&m, mac, Some("x")),
+            None,
+            "never set here: nothing"
+        );
+        m.remember(mac, "Bureau", ":1.7 pid 12 (akmctl)", 1000);
+        assert_eq!(alias_check(&m, mac, None), None, "unknown alias: nothing");
+        assert_eq!(
+            alias_check(&m, mac, Some("Bureau")).unwrap().level,
+            Level::Ok
+        );
+        let c = alias_check(&m, mac, Some("Clavier de alice")).unwrap();
+        assert_eq!(c.level, Level::Info, "information, never a fault");
+        assert!(
+            c.text.contains("\"Bureau\"") && c.text.contains("akmctl") && c.text.contains("1000"),
+            "{}",
+            c.text
+        );
+        assert_eq!(c.key, "alias:Bureau->Clavier de alice");
+        assert!(
+            new_grave(&[c], &serde_json::Value::Null).is_empty(),
+            "info is never notified"
+        );
     }
 
     #[test]

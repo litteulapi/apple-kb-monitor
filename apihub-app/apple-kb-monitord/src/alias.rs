@@ -25,6 +25,10 @@ pub trait AliasBackend: Send + Sync + std::fmt::Debug {
     fn get(&self, mac: &str) -> Option<String>;
     /// Apply an alias already validated; `""` resets it.
     fn set(&self, mac: &str, alias: &str) -> Result<(), SetError>;
+    /// Remember the alias now in effect and who asked for it, for the
+    /// self-test (`alias.json`). Only the real backend keeps it: test
+    /// backends never touch the user's state directory.
+    fn remember(&self, _mac: &str, _alias: &str, _caller: &str) {}
 }
 
 /// Real backend: BlueZ on the system bus.
@@ -120,22 +124,50 @@ impl AliasBackend for BluezAlias {
         .map_err(fail)?;
         Ok(())
     }
+
+    fn remember(&self, mac: &str, alias: &str, caller: &str) {
+        let path = alias::AliasMemory::default_path();
+        let mut m = alias::AliasMemory::load(&path);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        m.remember(mac, alias, caller, now);
+        if let Err(e) = m.save(&path) {
+            tracing::warn!("alias: cannot save {}: {e}", path.display());
+        }
+    }
 }
 
 /// Validate, write, and tell the acquisition thread so the new name is
 /// published at once. Returns the alias now in effect (`None` = unknown).
+/// `caller` says who asked (D-Bus sender, pid and program, "tray", ...): it
+/// is logged with every write and remembered with the alias, so that an
+/// alias changed behind the user's back can be traced (`akmctl selftest`).
 pub fn rename(
     backend: &dyn AliasBackend,
     mailbox: &Mailbox,
     mac: &str,
     requested: &str,
+    caller: &str,
 ) -> Result<Option<String>, SetError> {
     if crate::devices::device_path(mac).is_none() {
         return Err(SetError::Invalid(format!("invalid MAC address {mac:?}")));
     }
     let name = alias::validate(requested).map_err(|e| SetError::Invalid(e.to_string()))?;
+    let before = backend.get(mac);
+    tracing::info!(
+        mac,
+        before = ?before,
+        requested = %name,
+        caller,
+        "BlueZ alias write requested (SetAlias)"
+    );
     backend.set(mac, &name)?;
     let now = backend.get(mac);
+    tracing::info!(mac, alias = ?now, caller, "BlueZ alias written");
+    if let Some(n) = now.as_deref() {
+        backend.remember(mac, n, caller);
+    }
     mailbox.send(Msg::Alias(mac.to_ascii_uppercase(), now.clone()));
     Ok(now)
 }
@@ -180,7 +212,7 @@ mod tests {
     fn rename_validates_writes_and_notifies() {
         let f = Fake::default();
         let (mb, rx) = mailbox();
-        let r = rename(&f, &mb, "aa:bb:cc:dd:ee:f1", "  Bureau  ").unwrap();
+        let r = rename(&f, &mb, "aa:bb:cc:dd:ee:f1", "  Bureau  ", "test").unwrap();
         assert_eq!(r.as_deref(), Some("Bureau"));
         assert_eq!(
             rx.try_recv().unwrap(),
@@ -192,8 +224,8 @@ mod tests {
     fn empty_resets_to_the_native_name() {
         let f = Fake::default();
         let (mb, rx) = mailbox();
-        rename(&f, &mb, MAC, "Bureau").unwrap();
-        let r = rename(&f, &mb, MAC, "   ").unwrap();
+        rename(&f, &mb, MAC, "Bureau", "test").unwrap();
+        let r = rename(&f, &mb, MAC, "   ", "test").unwrap();
         assert_eq!(r.as_deref(), Some("Native name"));
         assert_eq!(rx.try_iter().count(), 2);
     }
@@ -203,16 +235,63 @@ mod tests {
         let f = Fake::default();
         let (mb, rx) = mailbox();
         for bad in ["a\nb", "x\u{202E}y", &"z".repeat(65)] {
-            assert!(matches!(rename(&f, &mb, MAC, bad), Err(SetError::Invalid(_))), "{bad:?}");
+            assert!(
+                matches!(rename(&f, &mb, MAC, bad, "test"), Err(SetError::Invalid(_))),
+                "{bad:?}"
+            );
         }
-        assert!(matches!(rename(&f, &mb, "not-a-mac", "ok"), Err(SetError::Invalid(_))));
+        assert!(matches!(
+            rename(&f, &mb, "not-a-mac", "ok", "test"),
+            Err(SetError::Invalid(_))
+        ));
         assert!(f.0.lock().unwrap().is_empty());
         assert!(rx.try_recv().is_err());
+    }
+
+    /// Every write names its caller and remembers the alias in effect (the
+    /// own name after a reset); a refused input remembers nothing. Spy
+    /// backend only: the real alias is never touched.
+    #[test]
+    fn rename_remembers_the_alias_and_its_caller() {
+        #[derive(Debug, Default)]
+        struct Spy(Fake, Mutex<Vec<(String, String, String)>>);
+        impl AliasBackend for Spy {
+            fn get(&self, mac: &str) -> Option<String> {
+                self.0.get(mac)
+            }
+            fn set(&self, mac: &str, alias: &str) -> Result<(), SetError> {
+                self.0.set(mac, alias)
+            }
+            fn remember(&self, mac: &str, alias: &str, caller: &str) {
+                self.1
+                    .lock()
+                    .unwrap()
+                    .push((mac.into(), alias.into(), caller.into()));
+            }
+        }
+        let s = Spy::default();
+        let mb = Mailbox::default();
+        rename(&s, &mb, MAC, "Bureau", ":1.42 pid 77 (plasmashell)").unwrap();
+        rename(&s, &mb, MAC, "", "tray").unwrap();
+        assert!(rename(&s, &mb, MAC, "a\nb", "tray").is_err());
+        assert_eq!(
+            *s.1.lock().unwrap(),
+            [
+                (
+                    MAC.into(),
+                    "Bureau".into(),
+                    ":1.42 pid 77 (plasmashell)".into()
+                ),
+                (MAC.into(), "Native name".into(), "tray".into()),
+            ]
+        );
+        // The trait's default keeps nothing (test backends, fakes).
+        Fake::default().remember(MAC, "x", "y");
     }
 
     #[test]
     fn works_without_a_running_actor() {
         let f = Fake::default();
-        assert!(rename(&f, &Mailbox::default(), MAC, "Bureau").is_ok());
+        assert!(rename(&f, &Mailbox::default(), MAC, "Bureau", "test").is_ok());
     }
 }

@@ -85,6 +85,29 @@ pub async fn caller_uid(
     Ok(uid)
 }
 
+/// Who sent this D-Bus call, for the logs: unique name, pid and program
+/// (`:1.42 pid 1234 (plasmashell)`). Best effort, never fails: the alias has
+/// been reset behind the user's back before and the culprit must be findable
+/// in the journal.
+pub async fn describe_caller(conn: &zbus::Connection, hdr: &zbus::message::Header<'_>) -> String {
+    let Some(sender) = hdr.sender() else {
+        return "anonymous D-Bus caller".into();
+    };
+    let pid = match zbus::fdo::DBusProxy::new(conn).await {
+        Ok(p) => p
+            .get_connection_unix_process_id(sender.clone().into())
+            .await
+            .ok(),
+        Err(_) => None,
+    };
+    let comm = pid.and_then(|p| std::fs::read_to_string(format!("/proc/{p}/comm")).ok());
+    match (pid, comm) {
+        (Some(p), Some(c)) => format!("{sender} pid {p} ({})", c.trim()),
+        (Some(p), None) => format!("{sender} pid {p}"),
+        _ => sender.to_string(),
+    }
+}
+
 /// What every exported object shares.
 pub struct Shared {
     pub watch: Arc<Watch>,
@@ -128,10 +151,12 @@ impl Shared {
 
     /// Rename a keyboard on this computer; `""` restores its own name.
     /// Returns the alias now in effect (empty = unknown).
-    pub async fn rename(&self, mac: &str, name: &str) -> zbus::fdo::Result<String> {
+    /// `caller` names who asked ([`describe_caller`]), logged and remembered.
+    pub async fn rename(&self, mac: &str, name: &str, caller: String) -> zbus::fdo::Result<String> {
         let (backend, mailbox) = (self.alias.clone(), self.mailbox.clone());
         let (mac, name) = (mac.to_string(), name.to_string());
-        let r = unblock(move || alias::rename(backend.as_ref(), &mailbox, &mac, &name)).await?;
+        let r = unblock(move || alias::rename(backend.as_ref(), &mailbox, &mac, &name, &caller))
+            .await?;
         Ok(r.unwrap_or_default())
     }
 
@@ -326,8 +351,14 @@ impl Device {
 
     /// Rename this keyboard on this computer (BlueZ alias, nothing is written
     /// into the keyboard). `""` restores its own name. Returns the new name.
-    async fn set_alias(&self, name: &str) -> zbus::fdo::Result<String> {
-        self.shared.rename(&self.mac, name).await
+    async fn set_alias(
+        &self,
+        name: &str,
+        #[zbus(header)] hdr: zbus::message::Header<'_>,
+        #[zbus(connection)] conn: &zbus::Connection,
+    ) -> zbus::fdo::Result<String> {
+        let caller = describe_caller(conn, &hdr).await;
+        self.shared.rename(&self.mac, name, caller).await
     }
 
     async fn set_fn_mode(

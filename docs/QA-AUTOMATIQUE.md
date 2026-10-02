@@ -148,6 +148,7 @@ délai maximal de 20 s (son étape hidraw se limite à un `open()` de contrôle 
 | `ui-cpu` | — | fenêtre à > 90 % d'un cœur en moyenne entre deux passages (boucle active) |
 | `disk` | < 100 Mio ou < 1 % libres (`/var/lib/bluetooth`, `~/.local/state/apple-kb-monitor`) | < 1 Gio ou < 5 % |
 | `history` | — | lignes illisibles parmi les 1000 dernières, fichier > 50 Mio |
+| `alias` | — | — ; **info** : alias BlueZ ≠ celui mémorisé au dernier renommage par ce programme (`~/.local/state/apple-kb-monitor/alias.json` : alias, appelant, date) |
 
 **Résultat** : `$XDG_STATE_HOME/apple-kb-monitor/selfcheck.json` (écrit atomiquement) :
 `verdict`, `checks[]` (`id`, `level`, `key`, `text`), `new_grave[]`, `reported[]`, `since`,
