@@ -120,6 +120,15 @@ Comment[fr]=Des piles neuves ont été détectées ; les alertes sont réarmées
 Icon=battery-full
 Action=Popup
 
+[Event/ForgetConfirm]
+Name=Confirmation before forgetting the keyboard
+Name[fr]=Confirmation avant d'oublier le clavier
+Comment=Asked by "Forget this keyboard" of the tray menu (button: Forget)
+Comment[fr]=Demandée par « Oublier ce clavier » du menu de l'icône (bouton : Oublier)
+Icon=dialog-warning
+Action=Popup
+ShowPopupsInDndMode=true
+
 [Event/LinkUnstable]
 Name=Unstable link
 Name[fr]=Liaison instable

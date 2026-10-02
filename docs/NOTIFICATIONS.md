@@ -31,6 +31,7 @@ installé). Les réglages de l'utilisateur sont écrits par Plasma dans
 | `KeyboardUnreachable` | clavier appairé qui ne répond plus | normale | Ouvrir | `link` |
 | `RepairNeeded` | ré-appairage nécessaire | critique, persistante | Réparer…, Ouvrir | `repair` |
 | `KeyboardRemoved` | clavier supprimé du poste depuis l'extérieur (Oublier de Plasma, `bluetoothctl remove`) (#252) | normale, 12 s | Réparer…, Ouvrir | `repair` |
+| `ForgetConfirm` | « Oublier le clavier ? » : confirmation demandée par l'entrée « Oublier ce clavier… » du tray ou par `Link.RequestForget` (#104) ; valable 60 s | critique, 60 s | Oublier (seul bouton ; un clic sur le corps ne fait rien) | `forget` |
 | `LinkUnstable` | « liaison instable » : plus de 3 déconnexions en une heure (hors veille du système, déconnexion demandée, clavier éteint), une fois par épisode (#105) | normale, 12 s | Ouvrir | `link-quality` |
 | `BatteryEstimate` | l'unique rappel « estimation selon vos piles » quand PowerDevil alerte déjà (#254) | normale, 12 s | Ouvrir, Me rappeler demain | `battery` |
 | `FirmwareUpdate` | firmware plus récent connu (table embarquée) : une fois par version, mémorisé | normale | Ouvrir, Me rappeler demain | `firmware` |
@@ -63,6 +64,7 @@ installé). Les réglages de l'utilisateur sont écrits par Plasma dans
 | Ouvrir | `org.freedesktop.Application.Activate` sur `com.agenceapi.AppleKbMonitor` (activation D-Bus, instance unique, jeton d'activation Wayland fourni par Plasma via `ActivationToken` s'il existe), sinon `apihub-app` |
 | Réparer… | `akmctl repair` dans un terminal (`konsole --hold -e`, puis les autres terminaux connus) |
 | Me rappeler demain | la notification est mise de côté et réémise à l'identique 24 h plus tard (#110), y compris après un redémarrage du démon (`deferred-notifications.json`) ; si l'échéance tombe dans une plage « ne pas déranger », elle attend la fin de la plage ; des piles neuves, ou « Ignorer ce rappel », annulent un rappel de piles en attente. Proposé par `BatteryLow`, `BatteryEstimate`, `BatteryReminder` et `FirmwareUpdate`, jamais par ce qui doit être traité tout de suite (`BatteryCritical`, `RepairNeeded`) |
+| Oublier | confirme l'oubli demandé depuis le tray : le démon appelle `org.bluez.Adapter1.RemoveDevice` pour ce clavier, une seule fois, si la demande a moins de 60 s. Rien n'est écrit dans le clavier. Sans serveur de notifications, la demande ouvre `akmctl repair` (confirmation tapée) à la place |
 | Ignorer ce rappel | coupe le rappel du seuil Bas jusqu'à la détection de piles neuves ; le rappel Critique reste émis |
 
 Le signal `ActionInvoked` est écouté par un fil dédié (`kb-notify-actions`), sur sa

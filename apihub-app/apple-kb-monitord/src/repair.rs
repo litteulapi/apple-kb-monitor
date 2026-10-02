@@ -11,10 +11,16 @@
 //!   `NameOwnerChanged(org.bluez)`), logind sleep events ([`crate::sleep`]),
 //!   and the keeper thread that calls `Device1.Connect` asynchronously.
 //! * [`LinkIface`] — session D-Bus object `/com/agenceapi/AppleKbMonitor1/Link`
-//!   (`Status()` JSON, `Reconnect()`), read by `akmctl doctor` and the tray.
+//!   (`Status()` JSON, `Quality()` JSON, `Reconnect()`, `Disconnect(s mac)`,
+//!   `RequestForget(s mac)`), read by `akmctl doctor` and the tray.
 //!
-//! The keeper never removes a pairing: it only connects, reports and
-//! notifies. Removal is `akmctl repair`, after an explicit typed confirmation.
+//! The keeper never removes a pairing by itself: it connects, reports and
+//! notifies. A removal is always the user's: `akmctl repair` after a typed
+//! confirmation, or the tray's "Forget this keyboard" after the confirmation
+//! of [`crate::forget`] (#104), which is the only sender of
+//! [`KMsg::UserForget`]. "Disconnect" and "Reconnect" of the tray go through
+//! the same keeper: `Device1.Disconnect`, and a page that keeps the spacing
+//! of [`Recovery`].
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -40,6 +46,8 @@ pub const RECONCILE_PERIOD: Duration = Duration::from_secs(5 * 60);
 /// forgotten. A `Paired=false` is believed (and the re-pairing notice
 /// raised) only if the object is still there after this delay (#252).
 pub const BOND_GRACE: Duration = Duration::from_millis(1500);
+/// A disconnection within this delay of the user's request is the user's.
+pub const USER_DOWN_WINDOW: Duration = Duration::from_secs(15);
 /// Longest idle wait of the keeper loop.
 const IDLE_WAIT: Duration = Duration::from_secs(60);
 
@@ -76,6 +84,12 @@ pub enum KMsg {
     ConnectDone(String, Result<(), ConnectError>),
     /// User asked for an immediate attempt (tray, akmctl).
     Request,
+    /// User asked to disconnect a keyboard (by MAC; `None` = every connected
+    /// one): `Device1.Disconnect`, and no page until asked (#104).
+    UserDisconnect(Option<String>),
+    /// User CONFIRMED the removal of this keyboard (MAC), see
+    /// [`crate::forget`]: `Adapter1.RemoveDevice` (#104).
+    UserForget(String),
     Quit,
 }
 
@@ -95,6 +109,11 @@ pub trait LinkBus {
     /// The keyboard `name` was removed from the computer from outside; tell
     /// the user once what to do next (#252).
     fn removed(&mut self, _name: &str) {}
+    /// Start `Device1.Disconnect` on `path`. Must not block.
+    fn disconnect(&mut self, _path: &str, _mac: &str) {}
+    /// Start `Adapter1.RemoveDevice(path)`: the pairing is removed from this
+    /// computer. Only called after the user's confirmation. Must not block.
+    fn forget(&mut self, _path: &str, _mac: &str) {}
     /// The link of keyboard `name` keeps dropping: `count` disconnections
     /// within the last hour (#105). Told once per episode.
     fn notify_unstable(&mut self, _name: &str, _count: usize) {}
@@ -245,6 +264,8 @@ pub struct Keeper<B: LinkBus> {
     /// Link statistics (#105) and whether the "unstable link" alert is told.
     stats: Option<Arc<crate::linkq::Store>>,
     notify_unstable: bool,
+    /// Disconnections the user just asked for (MAC -> when): their reason.
+    user_down: HashMap<String, Instant>,
     /// An instant and the unix time it was: unix time of any later instant.
     epoch: (Instant, u64),
 }
@@ -263,6 +284,7 @@ impl<B: LinkBus> Keeper<B> {
             fr: french(),
             stats: None,
             notify_unstable: true,
+            user_down: HashMap::new(),
             epoch: (Instant::now(), unix_now()),
         }
     }
@@ -282,8 +304,14 @@ impl<B: LinkBus> Keeper<B> {
     /// The reason recorded for a disconnection BlueZ explains by `reason`:
     /// what the daemon knows better comes first (system sleep, a forget in
     /// progress, the keyboard switched off by its button).
-    fn down_reason(&self, reason: DisconnectReason) -> &'static str {
-        if self.sleeping || reason == DisconnectReason::Suspend {
+    fn down_reason(&self, mac: &str, reason: DisconnectReason, now: Instant) -> &'static str {
+        let asked = self
+            .user_down
+            .get(mac)
+            .is_some_and(|t| now.saturating_duration_since(*t) <= USER_DOWN_WINDOW);
+        if asked {
+            "user"
+        } else if self.sleeping || reason == DisconnectReason::Suspend {
             "suspend"
         } else if akm_core::link::expected_disconnect_recent() {
             "expected"
@@ -297,7 +325,7 @@ impl<B: LinkBus> Keeper<B> {
     /// The keyboard `mac` went from connected to disconnected.
     fn note_down(&self, mac: &str, reason: DisconnectReason, now: Instant) {
         if let Some(s) = self.stats.as_ref() {
-            s.disconnect(mac, self.unix(now), self.down_reason(reason));
+            s.disconnect(mac, self.unix(now), self.down_reason(mac, reason, now));
         }
     }
 
@@ -457,7 +485,7 @@ impl<B: LinkBus> Keeper<B> {
                         self.note_down(&mac, reason, now);
                     } else if let Some(s) = self.stats.as_ref() {
                         // `Connected = false` came first: its record gets the reason.
-                        s.refine(&mac, self.unix(now), self.down_reason(reason));
+                        s.refine(&mac, self.unix(now), self.down_reason(&mac, reason, now));
                     }
                 }
             }
@@ -512,8 +540,42 @@ impl<B: LinkBus> Keeper<B> {
                     d.rec.request_now(now);
                 }
             }
+            KMsg::UserDisconnect(which) => {
+                let targets: Vec<(String, String)> = self
+                    .devs
+                    .iter()
+                    .filter(|(m, d)| {
+                        d.connected && which.as_ref().is_none_or(|w| w.eq_ignore_ascii_case(m))
+                    })
+                    .map(|(m, d)| (m.clone(), d.path.clone()))
+                    .collect();
+                for (mac, path) in targets {
+                    tracing::info!("link: disconnecting {mac} on the user's request");
+                    if let Some(d) = self.devs.get_mut(&mac) {
+                        d.rec.on_user_disconnect(now);
+                    }
+                    self.user_down.insert(mac.clone(), now);
+                    self.bus.disconnect(&path, &mac);
+                }
+            }
+            KMsg::UserForget(mac) => {
+                let mac = mac.to_ascii_uppercase();
+                match self.devs.get_mut(&mac) {
+                    Some(d) => {
+                        tracing::warn!("link: removing {mac} from BlueZ (confirmed by the user)");
+                        // No page while BlueZ removes it.
+                        d.rec.on_user_disconnect(now);
+                        let path = d.path.clone();
+                        self.user_down.insert(mac.clone(), now);
+                        self.bus.forget(&path, &mac);
+                    }
+                    None => tracing::warn!("link: {mac} is unknown to BlueZ, nothing to forget"),
+                }
+            }
             KMsg::Quit => {}
         }
+        self.user_down
+            .retain(|_, t| now.saturating_duration_since(*t) <= USER_DOWN_WINDOW);
         self.publish(now);
     }
 
@@ -718,6 +780,59 @@ impl LinkBus for SystemBus {
             });
     }
 
+    fn disconnect(&mut self, path: &str, mac: &str) {
+        let (path, mac) = (path.to_string(), mac.to_string());
+        let Some(conn) = self.calls().cloned() else {
+            tracing::warn!("link: no system bus, {mac} not disconnected");
+            return;
+        };
+        let _ = std::thread::Builder::new()
+            .name("kb-link-disconnect".into())
+            .spawn(move || {
+                let r = conn.call_method(
+                    Some("org.bluez"),
+                    path.as_str(),
+                    Some("org.bluez.Device1"),
+                    "Disconnect",
+                    &(),
+                );
+                match r {
+                    Ok(_) => tracing::info!("link: {mac} disconnected on request"),
+                    Err(e) => tracing::warn!("link: disconnection of {mac} failed: {e}"),
+                }
+            });
+    }
+
+    fn forget(&mut self, path: &str, mac: &str) {
+        let (path, mac) = (path.to_string(), mac.to_string());
+        let Some(adapter) = adapter_of(&path) else {
+            tracing::warn!("link: {path} has no adapter, {mac} not removed");
+            return;
+        };
+        let Some(conn) = self.calls().cloned() else {
+            tracing::warn!("link: no system bus, {mac} not removed");
+            return;
+        };
+        let _ = std::thread::Builder::new()
+            .name("kb-link-forget".into())
+            .spawn(move || {
+                let Ok(dev) = zbus::zvariant::ObjectPath::try_from(path.as_str()) else {
+                    return;
+                };
+                let r = conn.call_method(
+                    Some("org.bluez"),
+                    adapter.as_str(),
+                    Some("org.bluez.Adapter1"),
+                    FORGET_CALL,
+                    &(dev,),
+                );
+                match r {
+                    Ok(_) => tracing::warn!("link: {mac} removed from this computer"),
+                    Err(e) => tracing::warn!("link: removal of {mac} failed: {e}"),
+                }
+            });
+    }
+
     fn notify(&mut self, summary: &str, body: &str, urgency: Urgency) {
         crate::notify::send_with(
             summary,
@@ -762,6 +877,51 @@ impl LinkBus for SystemBus {
             None => None,
         }
     }
+}
+
+/// The BlueZ method that removes a pairing (`org.bluez.Adapter1`).
+pub const FORGET_CALL: &str = "RemoveDevice";
+
+/// Adapter object of a device object: `/org/bluez/hci0/dev_XX` -> `/org/bluez/hci0`.
+pub fn adapter_of(device_path: &str) -> Option<String> {
+    let (adapter, dev) = device_path.rsplit_once('/')?;
+    (dev.starts_with("dev_") && adapter.starts_with("/org/bluez/")).then(|| adapter.to_string())
+}
+
+/// Sender of the running keeper, for the tray and the confirmation gate.
+static CONTROL: std::sync::OnceLock<Mutex<Option<Sender<KMsg>>>> = std::sync::OnceLock::new();
+
+fn control() -> Option<Sender<KMsg>> {
+    CONTROL
+        .get()
+        .and_then(|m| m.lock().unwrap_or_else(|e| e.into_inner()).clone())
+}
+
+fn install_control(tx: Sender<KMsg>) {
+    *CONTROL
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(tx);
+}
+
+/// "Reconnect" (tray): one page now, at least 20 s after the previous one,
+/// never while asleep or while the pairing is refused. False: no keeper.
+pub fn user_reconnect() -> bool {
+    control().is_some_and(|tx| tx.send(KMsg::Request).is_ok())
+}
+
+/// "Disconnect" (tray): `Device1.Disconnect` of `mac` (`None`: every
+/// connected keyboard); the daemon then pages nothing until asked.
+pub fn user_disconnect(mac: Option<&str>) -> bool {
+    control().is_some_and(|tx| {
+        tx.send(KMsg::UserDisconnect(mac.map(str::to_string)))
+            .is_ok()
+    })
+}
+
+/// Remove `mac` from BlueZ. Only [`crate::forget::confirmed`] calls this.
+pub(crate) fn user_forget(mac: &str) -> bool {
+    control().is_some_and(|tx| tx.send(KMsg::UserForget(mac.to_string())).is_ok())
 }
 
 pub fn add_rules(conn: &Connection) -> zbus::Result<()> {
@@ -946,6 +1106,7 @@ pub fn spawn_with(
     alert: bool,
 ) -> KeeperHandle {
     let (tx, rx) = mpsc::channel::<KMsg>();
+    install_control(tx.clone());
     let shared: SharedStatus = Arc::new(Mutex::new(Vec::new()));
     let ltx = tx.clone();
     let _ = std::thread::Builder::new()
@@ -1032,6 +1193,34 @@ impl LinkIface {
     fn reconnect(&self) -> bool {
         self.handle.tx.send(KMsg::Request).is_ok()
     }
+
+    /// Disconnect the keyboard `mac` (`""` = every connected keyboard):
+    /// BlueZ `Device1.Disconnect`. The daemon then does not page it until it
+    /// comes back by itself or `Reconnect()` is called (#104). Writes nothing
+    /// to the keyboard.
+    fn disconnect(&self, mac: &str) -> bool {
+        let which = (!mac.is_empty()).then(|| mac.to_string());
+        self.handle.tx.send(KMsg::UserDisconnect(which)).is_ok()
+    }
+
+    /// Ask to forget the keyboard `mac`: raises a notification "Forget the
+    /// keyboard?" whose button, pressed within a minute, removes the pairing
+    /// from BlueZ (#104). This method never removes anything by itself.
+    /// Returns false for an unknown keyboard.
+    fn request_forget(&self, mac: &str) -> bool {
+        let name = self
+            .handle
+            .shared
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .find(|s| s.mac.eq_ignore_ascii_case(mac))
+            .map(|s| s.name.clone());
+        match name {
+            Some(name) => crate::forget::request(mac, &name),
+            None => false,
+        }
+    }
 }
 
 /// Export the link object on the daemon's session connection.
@@ -1103,6 +1292,8 @@ mod tests {
         notes: Vec<(String, Urgency)>,
         removed: Vec<String>,
         unstable: Vec<(String, usize)>,
+        disconnects: Vec<String>,
+        forgets: Vec<String>,
         machine: Machine,
         clears: usize,
         now: Instant,
@@ -1120,6 +1311,12 @@ mod tests {
         }
         fn notify_unstable(&mut self, name: &str, count: usize) {
             self.unstable.push((name.to_string(), count));
+        }
+        fn disconnect(&mut self, path: &str, _mac: &str) {
+            self.disconnects.push(path.to_string());
+        }
+        fn forget(&mut self, path: &str, _mac: &str) {
+            self.forgets.push(path.to_string());
         }
         fn reconcile(&mut self, connected: Vec<String>) {
             if self
@@ -1153,6 +1350,8 @@ mod tests {
             notes: Vec::new(),
             removed: Vec::new(),
             unstable: Vec::new(),
+            disconnects: Vec::new(),
+            forgets: Vec::new(),
             machine: Machine::new(),
             clears: 0,
             now: t0,
@@ -1553,6 +1752,120 @@ mod tests {
             j[MAC]["disconnects"].as_array().unwrap().last().unwrap()["reason"],
             "suspend"
         );
+    }
+
+    /// #104: "Disconnect" calls BlueZ once, is recorded as the user's, and
+    /// the daemon pages nothing until "Reconnect", which keeps its spacing.
+    #[test]
+    fn user_disconnect_goes_to_bluez_and_is_not_undone_until_reconnect() {
+        let t0 = Instant::now();
+        let (mut k, stats) = keeper_with_stats(t0);
+        let t = t0 + Duration::from_secs(60);
+        k.handle(KMsg::UserDisconnect(Some(MAC.to_ascii_lowercase())), t);
+        assert_eq!(
+            k.bus().disconnects,
+            [PATH],
+            "Device1.Disconnect on the keyboard"
+        );
+        // BlueZ reports it: reason Local, then the property.
+        k.bus().world = vec![kb(false)];
+        k.handle(
+            KMsg::Disconnected(PATH.into(), DisconnectReason::Local),
+            t + Duration::from_secs(1),
+        );
+        k.handle(
+            KMsg::Connected(PATH.into(), false),
+            t + Duration::from_secs(1),
+        );
+        assert_eq!(health(&k, t), "dormant");
+        let j = stats.json(k.unix(t) + 2);
+        assert_eq!(j[MAC]["disconnects"][0]["reason"], "user");
+        // Six hours: the daemon never pages a keyboard the user disconnected.
+        let t = run_for(&mut k, t, 6 * 3600);
+        assert!(k.bus().connects.is_empty(), "paged against the user's will");
+        assert!(k.bus().unstable.is_empty() && k.bus().notes.is_empty());
+        // Already disconnected: a second request calls nothing.
+        k.handle(KMsg::UserDisconnect(None), t);
+        assert_eq!(k.bus().disconnects.len(), 1);
+        // "Reconnect": one page now; a second request 5 s later waits for the
+        // 20 s spacing of the recovery machine.
+        k.handle(KMsg::Request, t);
+        k.bus().now = t;
+        k.tick(t);
+        assert_eq!(k.bus().connects.len(), 1);
+        k.handle(
+            KMsg::ConnectDone(MAC.into(), Err(ConnectError::NoAnswer)),
+            t + Duration::from_secs(2),
+        );
+        k.handle(KMsg::Request, t + Duration::from_secs(5));
+        k.tick(t + Duration::from_secs(5));
+        assert_eq!(k.bus().connects.len(), 1, "5 s after the last page");
+        k.tick(t + MIN_SPACING);
+        assert_eq!(k.bus().connects.len(), 2);
+    }
+
+    /// #104: `UserDisconnect(None)` disconnects every connected keyboard and
+    /// only those; an unknown address does nothing.
+    #[test]
+    fn user_disconnect_targets_connected_keyboards_only() {
+        let t0 = Instant::now();
+        let mut k = keeper(false, t0);
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        k.handle(KMsg::UserDisconnect(None), t0);
+        assert!(
+            k.bus().disconnects.is_empty(),
+            "not connected: nothing to do"
+        );
+        let mut k = keeper(true, t0);
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        k.handle(KMsg::UserDisconnect(Some("AA:BB:CC:DD:EE:02".into())), t0);
+        assert!(k.bus().disconnects.is_empty(), "another keyboard");
+        k.handle(KMsg::UserDisconnect(None), t0);
+        assert_eq!(k.bus().disconnects, [PATH]);
+    }
+
+    /// #104: the keeper removes a pairing only on `UserForget` (sent by the
+    /// confirmation gate), for a keyboard it follows, and pages nothing while
+    /// BlueZ removes it.
+    #[test]
+    fn a_confirmed_forget_removes_the_device_through_the_adapter() {
+        let t0 = Instant::now();
+        let mut k = keeper(true, t0);
+        let w = k.bus().world.clone();
+        k.handle(KMsg::Sync(w), t0);
+        k.handle(KMsg::UserForget("AA:BB:CC:DD:EE:02".into()), t0);
+        assert!(k.bus().forgets.is_empty(), "unknown keyboard");
+        k.handle(KMsg::UserForget(MAC.to_ascii_lowercase()), t0);
+        assert_eq!(k.bus().forgets, [PATH]);
+        // BlueZ: disconnected, unpaired, object removed.
+        let t1 = t0 + Duration::from_millis(200);
+        k.bus().world = vec![];
+        k.handle(KMsg::Disconnected(PATH.into(), DisconnectReason::Local), t1);
+        k.handle(KMsg::Connected(PATH.into(), false), t1);
+        k.handle(KMsg::Paired(PATH.into(), false), t1);
+        k.handle(KMsg::Removed(PATH.into()), t1);
+        assert!(k.status(t1).is_empty());
+        assert_eq!(
+            k.bus().removed,
+            ["Clavier de alice #1"],
+            "one notice: what to do next"
+        );
+        run_for(&mut k, t1, 3600);
+        assert!(k.bus().connects.is_empty() && k.bus().notes.is_empty());
+        assert_eq!(adapter_of(PATH).as_deref(), Some("/org/bluez/hci0"));
+        assert_eq!(adapter_of("/org/bluez/hci0"), None);
+        assert_eq!(adapter_of("/some/where/dev_AA"), None);
+        assert_eq!(FORGET_CALL, concat!("Remove", "Device"));
+        // Nothing but the confirmation gate can send `UserForget`.
+        let src = include_str!("repair.rs");
+        let code = src.split("#[cfg(test)]").next().unwrap();
+        assert_eq!(code.matches("KMsg::UserForget(mac.to_string())").count(), 1);
+        assert!(code.contains("pub(crate) fn user_forget"));
+        let tray = [include_str!("forget.rs"), include_str!("notify.rs")].concat();
+        assert!(tray.contains("crate::repair::user_forget(&p.mac)"));
+        assert!(!include_str!("notify.rs").contains("user_forget"));
     }
 
     /// #105: with the alert turned off the counts are still kept.

@@ -164,6 +164,8 @@ pub enum Event {
     KeyboardRemoved,
     /// More than 3 disconnections within an hour (#105).
     LinkUnstable,
+    /// "Forget the keyboard?": the confirmation asked by the tray (#104).
+    ForgetConfirm,
     BatteryEstimate,
     FirmwareUpdate,
     BatteryReminder,
@@ -174,7 +176,7 @@ pub enum Event {
 }
 
 impl Event {
-    pub const ALL: [Event; 16] = [
+    pub const ALL: [Event; 17] = [
         Event::BatteryLow,
         Event::BatteryCritical,
         Event::KeyboardAlert,
@@ -185,6 +187,7 @@ impl Event {
         Event::RepairNeeded,
         Event::KeyboardRemoved,
         Event::LinkUnstable,
+        Event::ForgetConfirm,
         Event::BatteryEstimate,
         Event::FirmwareUpdate,
         Event::BatteryReminder,
@@ -206,6 +209,7 @@ impl Event {
             Event::RepairNeeded => "RepairNeeded",
             Event::KeyboardRemoved => "KeyboardRemoved",
             Event::LinkUnstable => "LinkUnstable",
+            Event::ForgetConfirm => "ForgetConfirm",
             Event::BatteryEstimate => "BatteryEstimate",
             Event::FirmwareUpdate => "FirmwareUpdate",
             Event::BatteryReminder => "BatteryReminder",
@@ -232,6 +236,7 @@ impl Event {
             | Event::KeyboardUnreachable => "link",
             Event::RepairNeeded | Event::KeyboardRemoved => "repair",
             Event::LinkUnstable => "link-quality",
+            Event::ForgetConfirm => "forget",
             Event::FirmwareUpdate => "firmware",
             // Its own slot: "new batteries", sent just before, stays visible.
             Event::BatteryAdvice => "advice",
@@ -262,6 +267,8 @@ impl Event {
     pub fn actions(self) -> &'static [Action] {
         match self {
             Event::RepairNeeded | Event::KeyboardRemoved => &[Action::Repair, Action::Open],
+            // One button, and no `default`: a click on the body forgets nothing.
+            Event::ForgetConfirm => &[Action::Forget],
             Event::BatteryReminder => &[Action::Open, Action::RemindTomorrow, Action::Ignore],
             // Nothing urgent: may be shown again tomorrow (#110).
             Event::BatteryLow | Event::BatteryEstimate | Event::FirmwareUpdate => {
@@ -284,6 +291,8 @@ pub enum Action {
     Ignore,
     /// Show this notification again in 24 hours (#110).
     RemindTomorrow,
+    /// Confirm "Forget this keyboard" asked from the tray (#104).
+    Forget,
 }
 
 impl Action {
@@ -294,6 +303,7 @@ impl Action {
             Action::Repair => "repair",
             Action::Ignore => "ignore",
             Action::RemindTomorrow => "remind",
+            Action::Forget => "forget",
         }
     }
 
@@ -303,6 +313,7 @@ impl Action {
             Action::Repair => lang.t("Repair\u{2026}", "R\u{e9}parer\u{2026}"),
             Action::Ignore => lang.t("Ignore this reminder", "Ignorer ce rappel"),
             Action::RemindTomorrow => lang.t("Remind me tomorrow", "Me rappeler demain"),
+            Action::Forget => lang.t("Forget", "Oublier"),
         }
     }
 
@@ -313,6 +324,7 @@ impl Action {
             "repair" => Some(Action::Repair),
             "ignore" => Some(Action::Ignore),
             "remind" => Some(Action::RemindTomorrow),
+            "forget" => Some(Action::Forget),
             _ => None,
         }
     }
@@ -406,6 +418,8 @@ impl Notification {
     /// otherwise a delay long enough to read.
     pub fn timeout_ms(&self) -> i32 {
         match (self.urgency, self.event) {
+            // As long as the confirmation is accepted.
+            (_, Event::ForgetConfirm) => crate::forget::CONFIRM_WINDOW.as_millis() as i32,
             (Urgency::Critical, _) => 0,
             (_, Event::BatteryReminder) => 15_000,
             (Urgency::Low, _) => 6_000,
@@ -761,6 +775,33 @@ pub fn estimate_notification(pct: f64, low_level: u8, lang: Lang) -> Notificatio
 
 pub fn battery_estimate(pct: f64, low_level: u8) {
     deliver(estimate_notification(pct, low_level, Lang::detect()));
+}
+
+/// "Forget the keyboard?": the confirmation of the tray's "Forget this
+/// keyboard" (#104). Critical so that it is shown at once whatever the
+/// quiet hours: the user just asked for it.
+pub fn forget_confirm_notification(name: &str, lang: Lang) -> Notification {
+    let body = match lang {
+        Lang::En => format!(
+            "\u{201c}{name}\u{201d} will be removed from this computer. To use it again you will have \
+             to switch it off and on and pair it again. Nothing is written to the keyboard. \
+             Press \u{201c}Forget\u{201d} within one minute to confirm."
+        ),
+        Lang::Fr => format!(
+            "\u{ab}\u{a0}{name}\u{a0}\u{bb} sera supprim\u{e9} de ce poste. Pour le r\u{e9}utiliser il faudra \
+             l'\u{e9}teindre, le rallumer et le r\u{e9}-appairer. Rien n'est \u{e9}crit dans le clavier. \
+             Appuyez sur \u{ab}\u{a0}Oublier\u{a0}\u{bb} dans la minute pour confirmer."
+        ),
+    };
+    Notification::new(
+        Event::ForgetConfirm,
+        lang,
+        lang.t("Forget the keyboard?", "Oublier le clavier ?")
+            .into(),
+        body,
+        "dialog-warning",
+        Urgency::Critical,
+    )
 }
 
 /// The link keeps dropping: `count` disconnections within the last hour
@@ -1128,6 +1169,9 @@ fn run_action(action: Action, token: Option<String>, content: Option<Notificatio
             tracing::info!("notification: battery reminder ignored");
         }
         Action::RemindTomorrow => {}
+        Action::Forget => {
+            crate::forget::confirmed();
+        }
     }
 }
 
@@ -1531,6 +1575,39 @@ mod tests {
             );
         }
         assert_eq!(Action::from_key("remind"), Some(Action::RemindTomorrow));
+    }
+
+    /// #104: the confirmation has ONE button and no default action: a click
+    /// on the body of the notification forgets nothing.
+    #[test]
+    fn the_forget_confirmation_offers_one_button_and_no_default() {
+        let n = forget_confirm_notification("Clavier de alice", Lang::Fr);
+        assert_eq!(n.event, Event::ForgetConfirm);
+        assert_eq!(n.action_list(), ["forget", "Oublier"]);
+        assert_eq!(
+            n.urgency,
+            Urgency::Critical,
+            "shown at once, quiet hours or not"
+        );
+        assert_eq!(n.timeout_ms(), 60_000);
+        assert!(n.body.contains("supprim\u{e9} de ce poste") && n.body.contains("dans la minute"));
+        let en = forget_confirm_notification("Kb", Lang::En);
+        assert_eq!(en.action_list(), ["forget", "Forget"]);
+        assert!(en.body.contains("Nothing is written to the keyboard"));
+        // The registry refuses `default` (body click) for it.
+        let mut r = Registry::default();
+        r.record("forget", 5, Event::ForgetConfirm);
+        assert!(r.take_action(5, "default").is_none());
+        assert!(r.take_action(5, "open").is_none());
+        assert_eq!(r.take_action(5, "forget"), Some((Action::Forget, None)));
+        // No other event offers it.
+        for e in Event::ALL {
+            assert_eq!(
+                e.actions().contains(&Action::Forget),
+                e == Event::ForgetConfirm,
+                "{e:?}"
+            );
+        }
     }
 
     /// #105: the alert says how many disconnections and where to look.

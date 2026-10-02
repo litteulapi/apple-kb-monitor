@@ -261,12 +261,17 @@ pub mod id {
     pub const FN_MODE: i32 = 18;
     pub const FN_MEDIA: i32 = 19;
     pub const FN_FKEYS: i32 = 22;
+    /// Bluetooth actions (#104): reconnect, disconnect, forget (confirmed).
+    pub const RECONNECT: i32 = 23;
+    pub const DISCONNECT: i32 = 24;
+    pub const FORGET: i32 = 25;
     pub const SEP2: i32 = 20;
     pub const QUIT: i32 = 21;
     #[cfg(test)]
-    pub const ALL: [i32; 21] = [
+    pub const ALL: [i32; 24] = [
         HEADER, BATTERY, ESTIMATE, CONNECTION, SIGNAL, AUTONOMY, ADVICE, CAPS, SEP1, OPEN, REFRESH,
-        COPY, BLUETOOTH, RENAME, REPAIR, SEP_FN, FN_MODE, FN_MEDIA, FN_FKEYS, SEP2, QUIT,
+        COPY, BLUETOOTH, RENAME, REPAIR, RECONNECT, DISCONNECT, FORGET, SEP_FN, FN_MODE, FN_MEDIA,
+        FN_FKEYS, SEP2, QUIT,
     ];
 }
 
@@ -675,6 +680,26 @@ impl View {
                 "network-wireless-disconnected-symbolic",
                 true,
             ),
+            // Bluetooth actions (#104). "Forget" only asks: the removal is
+            // confirmed in a notification.
+            action(
+                id::RECONNECT,
+                lang.t("Reconnec_ter", "Reconnec_t"),
+                "network-connect-symbolic",
+                snap.mac().is_some() && !snap.connected,
+            ),
+            action(
+                id::DISCONNECT,
+                lang.t("_Déconnecter", "_Disconnect"),
+                "network-disconnect-symbolic",
+                snap.connected,
+            ),
+            action(
+                id::FORGET,
+                lang.t("Oub_lier ce clavier…", "For_get this keyboard…"),
+                "edit-delete-symbolic",
+                snap.mac().is_some(),
+            ),
         ];
         menu.extend(fn_entries(lang, fn_mode, snap.mac().is_some()));
         menu.extend([
@@ -749,6 +774,42 @@ pub fn clipboard_text(snap: &Snapshot, charging: bool, lang: Lang, now: u64) -> 
 mod tests {
     use super::*;
     use akm_core::KbReport;
+
+    /// #104: Reconnect / Disconnect / Forget follow the state of the link.
+    #[test]
+    fn bluetooth_actions_follow_the_link_state() {
+        let enabled =
+            |v: &View, i: i32| v.entry(i).unwrap().get("enabled") != Some(&Prop::Bool(false));
+        // No keyboard known: nothing to act on.
+        let none = View::build(&Snapshot::default(), false, None, Lang::Fr);
+        assert!(!enabled(&none, id::RECONNECT) && !enabled(&none, id::DISCONNECT));
+        assert!(!enabled(&none, id::FORGET));
+        let mut k = KbReport::default();
+        k.battery.percentage_fine = Some(90.0);
+        k.device.mac = Some("AA:BB:CC:DD:EE:F1".into());
+        let mut s = Snapshot {
+            connected: true,
+            keyboard: Some(k),
+            ..Default::default()
+        };
+        let on = View::build(&s, false, None, Lang::Fr);
+        assert!(!enabled(&on, id::RECONNECT), "already connected");
+        assert!(enabled(&on, id::DISCONNECT) && enabled(&on, id::FORGET));
+        s.connected = false;
+        let off = View::build(&s, false, None, Lang::Fr);
+        assert!(enabled(&off, id::RECONNECT) && !enabled(&off, id::DISCONNECT));
+        assert!(enabled(&off, id::FORGET));
+        // "Forget" announces that something follows (the confirmation).
+        let label = |v: &View, i: i32| match v.entry(i).unwrap().get("label") {
+            Some(Prop::Str(l)) => l.clone(),
+            _ => String::new(),
+        };
+        assert_eq!(label(&off, id::FORGET), "Oub_lier ce clavier…");
+        assert_eq!(label(&off, id::RECONNECT), "Reconnec_ter");
+        let en = View::build(&s, false, None, Lang::En);
+        assert_eq!(label(&en, id::DISCONNECT), "_Disconnect");
+        assert!(label(&en, id::FORGET).ends_with('…'));
+    }
 
     /// #101: Caps Lock on = a badge on the icon, gone when off or offline.
     #[test]

@@ -268,6 +268,10 @@ pub struct Recovery {
     sleeping: bool,
     adapter_on: bool,
     paired: bool,
+    /// The user asked for this disconnection (tray "Disconnect", #104): the
+    /// host does not page the keyboard until it comes back by itself or the
+    /// user asks to reconnect.
+    held: bool,
 }
 
 impl Default for Recovery {
@@ -295,7 +299,13 @@ impl Recovery {
             sleeping: false,
             adapter_on: true,
             paired: true,
+            held: false,
         }
+    }
+
+    /// The host pages nothing: the user disconnected the keyboard on purpose.
+    pub fn held_by_user(&self) -> bool {
+        self.held
     }
 
     // ── read side ──────────────────────────────────────────────────────────
@@ -331,6 +341,7 @@ impl Recovery {
 
     fn may_attempt(&self) -> bool {
         !self.sleeping
+            && !self.held
             && self.adapter_on
             && self.paired
             && matches!(self.health, Health::Dormant | Health::Unreachable)
@@ -363,6 +374,7 @@ impl Recovery {
         self.notified = false;
         self.last_error = None;
         self.paired = true;
+        self.held = false;
         if was_bad {
             self.pending.push(Notice::Recovered);
         }
@@ -482,10 +494,27 @@ impl Recovery {
     /// The user asked for an immediate attempt (tray / akmctl). Still honours
     /// [`MIN_SPACING`] and never runs while suspended or refused.
     pub fn request_now(&mut self, now: Instant) {
+        // "Reconnect" ends a disconnection the user had asked for.
+        if self.held {
+            self.held = false;
+            if self.next_attempt.is_none() {
+                self.next_attempt = Some(self.spaced(now));
+            }
+        }
         if self.may_attempt() && !self.in_flight {
             let t = self.spaced(now);
             self.next_attempt = Some(self.next_attempt.map_or(t, |n| n.min(t)));
         }
+    }
+
+    /// The user asks to disconnect the keyboard (tray, #104). The episode
+    /// that follows (BlueZ reports reason *Local*) is quiet AND held: no page
+    /// at all, until the keyboard reconnects by itself (a key press) or the
+    /// user asks to reconnect ([`Recovery::request_now`]).
+    pub fn on_user_disconnect(&mut self, _now: Instant) {
+        self.held = true;
+        self.in_flight = false;
+        self.next_attempt = None;
     }
 
     // ── output ─────────────────────────────────────────────────────────────
@@ -676,6 +705,65 @@ mod tests {
             t += s(1);
         }
         at
+    }
+
+    /// #104: "Disconnect" from the tray is never undone by the host; the
+    /// keyboard coming back by itself, or "Reconnect", ends it.
+    #[test]
+    fn a_disconnection_asked_by_the_user_is_never_paged_until_asked() {
+        let t0 = Instant::now();
+        let s = Duration::from_secs;
+        let mut r = Recovery::new();
+        r.start(true, true, t0);
+        r.on_user_disconnect(t0);
+        r.on_disconnected(DisconnectReason::Local, t0 + s(1));
+        assert_eq!(r.health(), Health::Dormant);
+        assert!(r.held_by_user());
+        assert_eq!(r.next_deadline(), None, "nothing scheduled");
+        // A whole day: not a single page.
+        let mut t = t0;
+        for _ in 0..(24 * 60) {
+            t += s(60);
+            assert!(r.poll(t).is_empty());
+        }
+        assert_eq!(r.attempts(), 0);
+        // "Reconnect": one page now, then the usual spacing.
+        r.request_now(t);
+        assert!(!r.held_by_user());
+        assert_eq!(r.poll(t), [Action::Connect]);
+        r.on_connect_result(Err(ConnectError::NoAnswer), t + s(5));
+        assert!(r.next_deadline().is_some_and(|d| d >= t + MIN_SPACING));
+        // The keyboard comes back by itself: nothing is held any more.
+        let mut r = Recovery::new();
+        r.start(true, true, t0);
+        r.on_user_disconnect(t0);
+        r.on_disconnected(DisconnectReason::Local, t0);
+        r.on_connected(t0 + s(600));
+        assert!(!r.held_by_user());
+        r.on_disconnected(DisconnectReason::Timeout, t0 + s(700));
+        assert!(r.next_deadline().is_some(), "an ordinary loss is recovered");
+    }
+
+    /// #104: "Reconnect" twice in a row never pages faster than MIN_SPACING.
+    #[test]
+    fn reconnect_requests_keep_the_minimum_spacing() {
+        let t0 = Instant::now();
+        let s = Duration::from_secs;
+        let mut r = Recovery::new();
+        r.start(false, true, t0);
+        r.request_now(t0);
+        assert_eq!(r.poll(t0), [Action::Connect]);
+        r.on_connect_result(Err(ConnectError::NoAnswer), t0 + s(2));
+        r.request_now(t0 + s(3));
+        assert!(r.poll(t0 + s(3)).is_empty(), "3 s after the last page");
+        assert!(r.poll(t0 + MIN_SPACING - s(1)).is_empty());
+        assert_eq!(r.poll(t0 + MIN_SPACING), [Action::Connect]);
+        // Never while the pairing is refused.
+        let mut r = Recovery::new();
+        r.start(false, false, t0);
+        r.request_now(t0);
+        assert!(!r.poll(t0 + s(60)).contains(&Action::Connect));
+        assert_eq!(r.attempts(), 0);
     }
 
     #[test]

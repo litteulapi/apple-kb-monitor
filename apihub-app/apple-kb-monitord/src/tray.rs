@@ -146,6 +146,14 @@ pub(crate) enum Action {
     Rename,
     /// `akmctl repair` in a terminal (#147).
     Repair,
+    /// Page the keyboard now (`Device1.Connect`, spaced by the recovery
+    /// machine; #104).
+    Reconnect,
+    /// `Device1.Disconnect` (#104).
+    Disconnect,
+    /// Ask to forget the keyboard: a confirmation notification, never the
+    /// removal itself (#104).
+    Forget,
     /// Set `hid_apple.fnmode` through the daemon (`Device.SetFnMode`, polkit).
     FnMode(u8),
     Hide,
@@ -789,6 +797,34 @@ impl Tray {
                 let _ = std::thread::Builder::new()
                     .name("tray-repair".into())
                     .spawn(apple_kb_monitord::repair::launch_repair);
+            }
+            Action::Reconnect => {
+                tracing::info!("tray: reconnection asked from the menu");
+                if !apple_kb_monitord::repair::user_reconnect() {
+                    tracing::warn!("tray: link keeper not running, nothing asked");
+                }
+            }
+            Action::Disconnect => {
+                let mac = self.watch.get().mac().map(str::to_string);
+                tracing::info!("tray: disconnection asked from the menu");
+                if !apple_kb_monitord::repair::user_disconnect(mac.as_deref()) {
+                    tracing::warn!("tray: link keeper not running, nothing asked");
+                }
+            }
+            Action::Forget => {
+                let snap = self.watch.get();
+                let Some(mac) = snap.mac().map(str::to_string) else {
+                    return;
+                };
+                let name = snap
+                    .display_name()
+                    .or(snap.model())
+                    .unwrap_or(mac.as_str())
+                    .to_string();
+                // Only asks: the removal needs the button of the notification.
+                if !apple_kb_monitord::forget::request(&mac, &name) {
+                    tracing::warn!("tray: forget of {mac} not asked");
+                }
             }
             Action::FnMode(mode) => {
                 let snap = self.watch.get();

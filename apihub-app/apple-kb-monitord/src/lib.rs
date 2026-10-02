@@ -12,6 +12,7 @@
 //! * [`osd`]     Plasma OSD at a change of Fn mode and at a Caps Lock press (#100, #101)
 //! * [`devices`] D-Bus API v2: one object per keyboard (#93)
 //! * [`diagnose`] D-Bus `Diagnose()`: the checks of the Diag tab, as JSON (#120)
+//! * [`forget`]  "Forget this keyboard" from the tray: asked, then confirmed (#104)
 //! * [`events`]  in-process event hub (alerts, replacements, link changes)
 //! * [`passive`]  passive input-report listening, `...Input` interface (#130, #187, #129)
 //! * [`linkq`]   link quality: disconnection counts, 7 days of signal (#105)
@@ -33,6 +34,7 @@ pub mod client;
 pub mod devices;
 pub mod diagnose;
 pub mod events;
+pub mod forget;
 pub mod keymap;
 pub mod linkq;
 pub mod notify;
