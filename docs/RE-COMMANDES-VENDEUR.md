@@ -4,6 +4,7 @@
 * Corrigé le 2026-10-02 (issue #194) : §6 point 4, `MVLT` n'est pas une tension lue par macOS 26.5 pour calculer le % (source : `RE-PILOTE-MACOS.md` §6, `RE-PILOTES-ANCIENS.md` §4).
 * Corrigé le 2026-10-02 (issue #218) : §1.3, §4.3, §5 et §7 : `bfu` ne passe pas par HIDP (PSM L2CAP vendeur `0xF30D`) et vise `0x0239-0x023B`, pas notre `0x0256` ; `0x44` = oubli de tous les hôtes ; `0xFA`/`0xFB` « délai de veille » = spéculation sans trace (source : `RE-PILOTES-ANCIENS.md` §2, §5, §6, §7).
 * Corrigé le 2026-10-02 (issue #229) : §1.3, `0xFA`/`0xFB` et les ID `0xDx` sont absents des systèmes Apple de 10.2.8 à 10.7.5 ; `0xD1-0xDC` ne sont que des opcodes de l'updater sur le PSM `0xF30D` (source : `RE-SYSTEMES-ANCIENS.md` §4-5).
+* Corrigé le 2026-10-02 (issue #188) : §3.2 et §5.1, les commandes de remise à zéro existent (`0x44`, `0x45`, `0x41`) ; les onze registres refusés au GET ne sont pas le canal de flash ; classes actuelles du registre du projet (source : `RE-PILOTE-MACOS.md` §3, `RE-PILOTES-ANCIENS.md` §5-6, `registry.rs`).
 
 Recherche **documentaire uniquement**, **sans aucun accès au clavier** (il a décroché trois fois sous
 des rafales de lecture — voir #175). Objet : identifier, à partir de sources publiques, ce que sont
@@ -176,6 +177,9 @@ RPT_ID_IN_CNT_CTL    = 0xcc,   // Connection Control (feature aussi)
 - **[déduction]** Il n'existe **pas** de commande HID publique de reset/factory sur le A1314 ; le
   désappairage se fait côté hôte (BlueZ `remove`). Les registres `0xD0/0xD4/0xD5` ou `0x40/0x41`
   pourraient en théorie en porter une [spéculation], mais rien ne l'atteste — **ne pas écrire**.
+  **Corrigé (#188)** : ces commandes existent. La personnalité Apple du PID 598 déclare `0x44` `FullFactoryDefault`, `0x45`
+  `FactoryDefault` et `0x41` `RecantConnection` **[plist]** (`RE-PILOTE-MACOS.md` §3) ; Lion envoyait `0x44` à la suppression
+  du clavier (`RE-PILOTES-ANCIENS.md` §5). Elles restent interdites sans accord explicite du gérant.
 
 ### 3.3 CVE-2024-0230 (`0x35`) — Magic Keyboard uniquement, PAS le A1314
 
@@ -311,8 +315,13 @@ chaînes, méthodes Objective-C, `Parameters.plist`) :
   ou déclencher une séquence de maintenance (§4.3). **Pas de retour arrière logiciel garanti** sur un
   BCM2042 ROM-based sans dump préalable (impossible sans démontage). → `RE-FIRMWARE-MAINTENANCE.md` §6,
   plan #182 palier **W7 « déconseillé »**.
+  **Corrigé (#188)** : six de ces onze registres sont nommés par Apple (§1, #193), et aucun n'est le canal de flash, qui
+  passe par le PSM L2CAP `0xF30D` (§4.3). État du registre du projet (`apihub-app/akm-core/src/registry.rs`) : `0x40`,
+  `0x41` et `0x55` sont en classe `WriteApple` (écrits seulement par une opération Apple nommée) ; `0x44`, `0x45`, `0x50`,
+  `0xD0`, `0xD4`, `0xD5`, `0xFA` et `0xFB` sont en classe `NeverWrite`.
 - **`0x4C`** : écriture = perte probable de l'appairage.
-- **Tout ce qui ressemble au canal de maintenance `bfu`/L2CAP** (§4.3) : réservé à l'updater macOS.
+- **Tout ce qui ressemble au canal de maintenance `bfu`/L2CAP** (§4.3) : réservé à l'updater macOS. Ce canal est le PSM
+  `0xF30D` ; aucun updater ne vise notre PID et aucun outil ne sera écrit pour l'ouvrir (#188).
 
 ### 5.2 Exploitable SANS RISQUE, tout de suite (lecture passive seule)
 

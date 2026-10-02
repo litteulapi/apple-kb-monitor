@@ -1,5 +1,7 @@
 # RE — Fonctions cachées, maintenance et diagnostic (BCM2042 / claviers Apple sans fil)
 
+* Corrigé le 2026-10-02 (issue #188) : §1.4 et §1.5, le canal de mise à jour Bluetooth est un PSM L2CAP vendeur (`0xF30D`), ni HIDP ni bootloader Cypress, et l'updater de 2009 vise `0x0239-0x023B` : aucun updater public pour notre `0x0256` (source : `RE-PILOTES-ANCIENS.md` §2 et §6, `RE-SYSTEMES-ANCIENS.md` §5, `RE-MACOS-SILICON.md` §6).
+
 Recherche **documentaire uniquement**, sans accès au matériel. Objet : tout ce qui est
 publiquement connu ou déductible des fonctions cachées, de maintenance et de diagnostic
 de la puce Broadcom BCM2042 (et parents BCM207xx) et des claviers Apple sans fil, en
@@ -118,6 +120,13 @@ Paquets de 64 octets, préfixe `ff` + opcode :
   L'appairage BT expose la version `0x0050` (notre `0x4F` décodé). **[source publique + mesuré]** (corrigé au contre-audit).
 - **[déduction]** Les updaters `.pkg` 2009–2011 restent le seul canal officiel ; ils exigent
   **macOS ancien + clavier appairé**. Aucun canal Linux/Windows public de flash n'existe.
+- **Corrigé (#188)** : le canal de mise à jour des claviers Bluetooth n'est ni le bootloader Cypress de Chen
+  (`ff 38/39/3a/3b`, clavier filaire USB), ni une suite de SET_REPORT HID. L'updater `bfu` isole le clavier, ouvre un canal
+  L2CAP sur le **PSM vendeur `0xF30D`** et y envoie des trames brutes (opcodes `D1` à `DC`), avec une image `config.hex`
+  chiffrée, qui n'a pas été déchiffrée (`RE-PILOTES-ANCIENS.md` §6, `RE-SYSTEMES-ANCIENS.md` §5). L'updater de 2009 ne vise
+  que les PID `0x0239-0x023B` (micrologiciel `0x44` ou `0x46`, porté à `0x50`) : il n'existe **aucun** updater public pour
+  `0x0255-0x0257`, donc pour notre `0x0256`, et macOS 26.5 n'en contient pas non plus (`RE-MACOS-SILICON.md` §6). Les onze
+  registres Feature refusés au GET ne sont pas ce canal.
 - README `apple-kb-monitor` (avant contre-audit) : « Signed Apple firmware (not flashable from
   Linux) ». **Statut de signature inconnu pour le A1314** : Chen (2009) a analysé l'updater du clavier **filaire USB**
   (A1243, Cypress CY7C63923), pas celui du clavier Bluetooth (`bfu`, RE-COMMANDES-VENDEUR §4.3). Ni « signé » ni « non
@@ -128,7 +137,7 @@ Paquets de 64 octets, préfixe `ff` + opcode :
 | Génération | Bootloader | Signature | Flashable hors macOS ancien |
 |---|---|---|---|
 | 2007–2009 USB (Cypress) | `ff 38/39/3a/3b`, mdp constant, checksum | **Aucune** [source publique] | Techniquement oui (Chen l'a fait), risque de brique |
-| 2009–2011 BT (BCM2042, A1314) | updater `bfu` sur L2CAP (RE-COMMANDES-VENDEUR §4.3) ; ROM-based | **inconnue** (ni démontrée ni réfutée) | **Non** (canal `.pkg` macOS uniquement) [déduction] |
+| 2009–2011 BT (BCM2042, A1314) | updater `bfu` sur un PSM L2CAP vendeur `0xF30D` (RE-PILOTES-ANCIENS §6 ; corrigé #188), pour les PID `0x0239-0x023B` seulement : aucun updater public pour notre `0x0256` ; ROM-based | **inconnue** (ni démontrée ni réfutée) | **Non** (canal `.pkg` macOS uniquement) [déduction] |
 | Magic Keyboard (BCM207xx ARM) | OTA sans fil Apple | **Oui** (chaîne moderne) | Non |
 
 ---
