@@ -130,7 +130,17 @@ fn inner() {
     assert_eq!(first.hints["x-kde-eventId"], "BatteryLow");
     assert_eq!(first.hints["urgency"], "1");
     assert_eq!(first.hints["category"], "device");
-    assert_eq!(first.actions, ["default", "Ouvrir", "open", "Ouvrir"]);
+    assert_eq!(
+        first.actions,
+        [
+            "default",
+            "Ouvrir",
+            "open",
+            "Ouvrir",
+            "remind",
+            "Me rappeler demain"
+        ]
+    );
     assert_eq!(first.timeout, 12_000);
 
     // 2. Critical alert replaces it (same id), persistent.

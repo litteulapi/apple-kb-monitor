@@ -4,8 +4,6 @@
 //! brings the notification back 24 hours later, also across a restart of the
 //! store. No real notification reaches the desktop.
 
-#![allow(dead_code, unused_variables)] // completed by the "Remind me tomorrow" test
-
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -16,6 +14,7 @@ use akm_core::alerts::{Crossing, Urgency};
 use akm_core::chemistry::AlertBasis;
 use akm_core::link::LinkEvent;
 use akm_core::quiet::QuietHours;
+use akm_core::reminder::{BatteryReminder, ReminderLevel};
 use apple_kb_monitord::notify;
 use apple_kb_monitord::notify_policy::{self, Now};
 use zbus::zvariant::OwnedValue;
@@ -182,6 +181,70 @@ fn inner() {
     assert_eq!(released, ["BatteryLow", "KeyboardDisconnected"]);
     notify::tick();
     assert!(calls.recv_timeout(SHORT).is_err(), "shown once");
+    assert_eq!(notify_policy::waiting(), 0);
+
+    // ── #110 ───────────────────────────────────────────────────────────────
+    // 10:00: the reminder, with its "Remind me tomorrow" button.
+    at(1, 10, 0);
+    let rem = BatteryReminder {
+        level: ReminderLevel::Low,
+        mv: 2500,
+        threshold_mv: 2506,
+    };
+    assert!(notify::battery_reminder(&rem, Some(35.0)));
+    let shown = calls.recv_timeout(WAIT).expect("reminder");
+    assert_eq!(shown.event, "BatteryReminder");
+    let i = shown
+        .actions
+        .iter()
+        .position(|a| a == "remind")
+        .expect("button");
+    assert_eq!(shown.actions[i + 1], "Me rappeler demain");
+    // The user presses it (the signal comes from the notification server).
+    server
+        .emit_signal(
+            None::<&str>,
+            "/org/freedesktop/Notifications",
+            "org.freedesktop.Notifications",
+            "ActionInvoked",
+            &(shown.id, "remind"),
+        )
+        .unwrap();
+    wait_until("reminder put aside", || notify_policy::waiting() == 1);
+
+    // The daemon restarts in between: the reminder is read back from disk.
+    notify_policy::configure(quiet(), Some(store.clone()));
+    assert_eq!(notify_policy::waiting(), 1);
+
+    // 23 h 59 later: nothing. 24 h later: the same notification again.
+    at(2, 9, 59);
+    notify::tick();
+    assert!(calls.recv_timeout(SHORT).is_err(), "before 24 h");
+    at(2, 10, 0);
+    notify::tick();
+    let again = calls.recv_timeout(WAIT).expect("reminder 24 h later");
+    assert_eq!(again.event, "BatteryReminder");
+    assert_eq!(again.summary, shown.summary);
+    assert!(
+        again.actions.contains(&"remind".to_string()),
+        "can be put off again"
+    );
+    notify::tick();
+    assert!(calls.recv_timeout(SHORT).is_err(), "once");
+    assert_eq!(notify_policy::waiting(), 0);
+
+    // A button pressed by another client than the server puts nothing aside.
+    let rogue = zbus::blocking::Connection::session().unwrap();
+    rogue
+        .emit_signal(
+            None::<&str>,
+            "/org/freedesktop/Notifications",
+            "org.freedesktop.Notifications",
+            "ActionInvoked",
+            &(again.id, "remind"),
+        )
+        .unwrap();
+    std::thread::sleep(SHORT);
     assert_eq!(notify_policy::waiting(), 0);
 
     let _ = std::fs::remove_dir_all(&dir);

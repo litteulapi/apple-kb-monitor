@@ -367,6 +367,7 @@ mod tests {
             minute: 600,
         });
         assert_eq!(due, [low()], "same text, same buttons");
+        assert!(due[0].action_list().contains(&"remind".to_string()));
         assert_eq!(p.waiting(), 0);
     }
 

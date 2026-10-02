@@ -250,7 +250,11 @@ impl Event {
     pub fn actions(self) -> &'static [Action] {
         match self {
             Event::RepairNeeded | Event::KeyboardRemoved => &[Action::Repair, Action::Open],
-            Event::BatteryReminder => &[Action::Open, Action::Ignore],
+            Event::BatteryReminder => &[Action::Open, Action::RemindTomorrow, Action::Ignore],
+            // Nothing urgent: may be shown again tomorrow (#110).
+            Event::BatteryLow | Event::BatteryEstimate | Event::FirmwareUpdate => {
+                &[Action::Open, Action::RemindTomorrow]
+            }
             Event::Error => &[],
             _ => &[Action::Open],
         }
@@ -1423,6 +1427,10 @@ mod tests {
         assert!(
             rem.contains(&"ignore".to_string()) && rem.contains(&"Ignorer ce rappel".to_string())
         );
+        // #110: "Remind me tomorrow" between "Open" and "Ignore".
+        let keys: Vec<&str> = rem.iter().step_by(2).map(|s| s.as_str()).collect();
+        assert_eq!(keys, ["default", "open", "remind", "ignore"]);
+        assert!(rem.contains(&"Me rappeler demain".to_string()));
         assert!(
             generic_notification("s", "b", "dialog-error", Urgency::Critical, false)
                 .action_list()
@@ -1434,8 +1442,27 @@ mod tests {
                 AlertBasis::Estimate,
                 Lang::En
             )),
-            ["default", "Open", "open", "Open"]
+            [
+                "default",
+                "Open",
+                "open",
+                "Open",
+                "remind",
+                "Remind me tomorrow"
+            ]
         );
+        // What must be dealt with now offers no "tomorrow".
+        for urgent in [
+            Event::BatteryCritical,
+            Event::RepairNeeded,
+            Event::KeyboardAlert,
+        ] {
+            assert!(
+                !urgent.actions().contains(&Action::RemindTomorrow),
+                "{urgent:?}"
+            );
+        }
+        assert_eq!(Action::from_key("remind"), Some(Action::RemindTomorrow));
     }
 
     /// A notification put aside comes back identical (texts, buttons, hints).
