@@ -19,11 +19,13 @@ struct Application {
 /// Wayland/X11 activation token sent by the caller in `platform_data`
 /// (`activation-token`, else the legacy `desktop-startup-id`).
 pub fn activation_token(platform_data: &HashMap<String, OwnedValue>) -> Option<String> {
-    ["activation-token", "desktop-startup-id"].iter().find_map(|k| {
-        let v = platform_data.get(*k)?;
-        let s: String = v.try_clone().ok()?.try_into().ok()?;
-        (!s.is_empty()).then_some(s)
-    })
+    ["activation-token", "desktop-startup-id"]
+        .iter()
+        .find_map(|k| {
+            let v = platform_data.get(*k)?;
+            let s: String = v.try_clone().ok()?.try_into().ok()?;
+            (!s.is_empty()).then_some(s)
+        })
 }
 
 #[interface(name = "org.freedesktop.Application")]
@@ -34,7 +36,12 @@ impl Application {
     fn open(&self, _uris: Vec<String>, platform_data: HashMap<String, OwnedValue>) {
         (self.on_activate)(activation_token(&platform_data));
     }
-    fn activate_action(&self, _name: String, _params: Vec<OwnedValue>, platform_data: HashMap<String, OwnedValue>) {
+    fn activate_action(
+        &self,
+        _name: String,
+        _params: Vec<OwnedValue>,
+        platform_data: HashMap<String, OwnedValue>,
+    ) {
         (self.on_activate)(activation_token(&platform_data));
     }
 }
@@ -87,11 +94,24 @@ pub fn negotiate(
 }
 
 pub fn claim(on_activate: impl Fn(Option<String>) + Send + Sync + 'static) -> Claim {
-    let Ok(conn) = Connection::session() else { return Claim::NoBus };
-    if conn.object_server().at(APP_PATH, Application { on_activate: Box::new(on_activate) }).is_err() {
+    let Ok(conn) = Connection::session() else {
+        return Claim::NoBus;
+    };
+    if conn
+        .object_server()
+        .at(
+            APP_PATH,
+            Application {
+                on_activate: Box::new(on_activate),
+            },
+        )
+        .is_err()
+    {
         return Claim::NoBus;
     }
-    let Ok(name) = WellKnownName::try_from(APP_ID) else { return Claim::NoBus };
+    let Ok(name) = WellKnownName::try_from(APP_ID) else {
+        return Claim::NoBus;
+    };
     use zbus::fdo::RequestNameFlags::DoNotQueue;
     let try_own = || match conn.request_name_with_flags(name.clone(), DoNotQueue.into()) {
         Ok(RequestNameReply::PrimaryOwner | RequestNameReply::AlreadyOwner) => Step::Owned,
@@ -103,7 +123,12 @@ pub fn claim(on_activate: impl Fn(Option<String>) + Send + Sync + 'static) -> Cl
         }
     };
     // ~20 s at worst: long enough for an exiting instance to release the name.
-    match negotiate(8, try_own, || activate_existing(&conn), || std::thread::sleep(std::time::Duration::from_millis(500))) {
+    match negotiate(
+        8,
+        try_own,
+        || activate_existing(&conn),
+        || std::thread::sleep(std::time::Duration::from_millis(500)),
+    ) {
         Ok(true) => Claim::Primary(conn),
         Ok(false) => Claim::Existing,
         Err(e) if conn.unique_name().is_some() && e != "cannot request the name" => {
@@ -118,24 +143,35 @@ pub fn claim(on_activate: impl Fn(Option<String>) + Send + Sync + 'static) -> Cl
 /// not block this launch for the bus' 25 s reply timeout at every attempt.
 fn activate_existing(conn: &Connection) -> Result<(), String> {
     // Forward the token we were started with, so the running window may take focus.
-    let token = std::env::var("XDG_ACTIVATION_TOKEN").ok().filter(|t| !t.is_empty());
+    let token = std::env::var("XDG_ACTIVATION_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty());
     let conn = conn.clone();
     let (tx, rx) = std::sync::mpsc::channel();
-    let spawned = std::thread::Builder::new().name("activate".into()).spawn(move || {
-        let mut args: HashMap<&str, Value<'_>> = HashMap::new();
-        if let Some(t) = &token {
-            args.insert("activation-token", Value::from(t.as_str()));
-        }
-        let r = conn
-            .call_method(Some(APP_ID), APP_PATH, Some("org.freedesktop.Application"), "Activate", &(args,))
-            .map(|_| ())
-            .map_err(|e| e.to_string());
-        let _ = tx.send(r);
-    });
+    let spawned = std::thread::Builder::new()
+        .name("activate".into())
+        .spawn(move || {
+            let mut args: HashMap<&str, Value<'_>> = HashMap::new();
+            if let Some(t) = &token {
+                args.insert("activation-token", Value::from(t.as_str()));
+            }
+            let r = conn
+                .call_method(
+                    Some(APP_ID),
+                    APP_PATH,
+                    Some("org.freedesktop.Application"),
+                    "Activate",
+                    &(args,),
+                )
+                .map(|_| ())
+                .map_err(|e| e.to_string());
+            let _ = tx.send(r);
+        });
     if let Err(e) = spawned {
         return Err(e.to_string());
     }
-    rx.recv_timeout(ACTIVATE_TIMEOUT).unwrap_or_else(|_| Err("no answer to Activate".into()))
+    rx.recv_timeout(ACTIVATE_TIMEOUT)
+        .unwrap_or_else(|_| Err("no answer to Activate".into()))
 }
 
 const ACTIVATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
@@ -143,9 +179,19 @@ const ACTIVATE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
 /// Run `f` on a worker thread and wait for it at most `timeout`; `default`
 /// when it does not answer in time (zbus 4.4 has no client-side call
 /// timeout: a peer that never replies blocks the caller for ever).
-pub fn bounded<T: Send + 'static>(timeout: std::time::Duration, default: T, f: impl FnOnce() -> T + Send + 'static) -> T {
+pub fn bounded<T: Send + 'static>(
+    timeout: std::time::Duration,
+    default: T,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> T {
     let (tx, rx) = std::sync::mpsc::channel();
-    if std::thread::Builder::new().name("bounded-call".into()).spawn(move || { let _ = tx.send(f()); }).is_err() {
+    if std::thread::Builder::new()
+        .name("bounded-call".into())
+        .spawn(move || {
+            let _ = tx.send(f());
+        })
+        .is_err()
+    {
         return default;
     }
     rx.recv_timeout(timeout).unwrap_or(default)
@@ -171,23 +217,47 @@ mod tests {
     fn token_from_platform_data() {
         let mut pd: HashMap<String, OwnedValue> = HashMap::new();
         assert_eq!(activation_token(&pd), None);
-        pd.insert("desktop-startup-id".into(), Value::from("legacy").try_into().unwrap());
+        pd.insert(
+            "desktop-startup-id".into(),
+            Value::from("legacy").try_into().unwrap(),
+        );
         assert_eq!(activation_token(&pd).as_deref(), Some("legacy"));
-        pd.insert("activation-token".into(), Value::from("tok").try_into().unwrap());
+        pd.insert(
+            "activation-token".into(),
+            Value::from("tok").try_into().unwrap(),
+        );
         assert_eq!(activation_token(&pd).as_deref(), Some("tok"));
-        pd.insert("activation-token".into(), Value::from("").try_into().unwrap());
+        pd.insert(
+            "activation-token".into(),
+            Value::from("").try_into().unwrap(),
+        );
         assert_eq!(activation_token(&pd).as_deref(), Some("legacy"));
     }
 
     #[test]
     fn negotiate_owns_activates_or_refuses() {
         // Free name: we own it.
-        assert_eq!(negotiate(3, || Step::Owned, || unreachable!(), || {}), Ok(true));
+        assert_eq!(
+            negotiate(3, || Step::Owned, || unreachable!(), || {}),
+            Ok(true)
+        );
         // Live owner answering: raise it.
         assert_eq!(negotiate(3, || Step::Taken, || Ok(()), || {}), Ok(false));
         // Owner dying during Activate (NoReply), name freed on the 3rd try.
         let mut n = 0;
-        let r = negotiate(5, || { n += 1; if n < 3 { Step::Taken } else { Step::Owned } }, || Err("NoReply".into()), || {});
+        let r = negotiate(
+            5,
+            || {
+                n += 1;
+                if n < 3 {
+                    Step::Taken
+                } else {
+                    Step::Owned
+                }
+            },
+            || Err("NoReply".into()),
+            || {},
+        );
         assert_eq!(r, Ok(true));
         // Owner alive but never answering: error, never "open anyway".
         let mut pauses = 0;

@@ -1,5 +1,5 @@
-//! The "Diag" tab: checks of the installed components, run on a worker
-//! thread (extracted from `main.rs`, #62).
+//! DIAG tab: checks of the installed components, run on a worker thread
+//! (extracted from `main.rs`, #62) and shown as a terminal log.
 
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -9,7 +9,7 @@ use std::thread;
 use eframe::egui;
 
 use crate::i18n::{tr, trf};
-use crate::view::Palette;
+use crate::theme::{self, Theme};
 
 #[derive(Clone)]
 struct DiagResult {
@@ -31,7 +31,8 @@ impl DiagTab {
         }
     }
 
-    fn run(&mut self) {
+    /// Start the checks (button, F5); ignored while they are running.
+    pub fn run(&mut self) {
         // Guard against concurrent runs
         if self.running.swap(true, Ordering::Relaxed) {
             return;
@@ -238,109 +239,159 @@ impl DiagTab {
         });
     }
 
-    pub fn show(&mut self, ui: &mut egui::Ui, palette: &Palette) {
+    /// The tab: a terminal log, one entry per check, each failed entry
+    /// carrying its fix; one gauge block per check on top.
+    pub fn show(&mut self, ui: &mut egui::Ui, th: &Theme) {
         let is_running = self.running.load(std::sync::atomic::Ordering::Relaxed);
-
-        ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new(tr("System Diagnostics"))
-                    .strong()
-                    .size(18.0),
-            );
-            if is_running {
-                ui.label(
-                    egui::RichText::new(tr("Running..."))
-                        .size(16.0)
-                        .color(palette.warn),
-                );
-            } else if ui
-                .button(
-                    egui::RichText::new(tr("Run Full Check"))
-                        .size(16.0)
-                        .strong(),
-                )
-                .clicked()
-            {
-                self.run();
-            }
-        });
-        ui.separator();
-
         let results = self.results.lock().map(|r| r.clone()).unwrap_or_default();
-
-        if results.is_empty() {
-            if is_running {
-                ui.label(
-                    egui::RichText::new(tr("Diagnostics in progress..."))
-                        .weak()
-                        .size(16.0),
-                );
-            } else {
-                ui.label(
-                    egui::RichText::new(tr("Press 'Run Full Check' to scan all components."))
-                        .weak()
-                        .size(16.0),
-                );
-            }
-            return;
-        }
-
-        let total = results.len();
-        let ok_count = results.iter().filter(|r| r.ok).count();
-        let fail_count = total - ok_count;
-
-        ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new(trf("{}/{} passed", &[&ok_count, &total]))
-                    .strong()
-                    .size(18.0)
-                    .color(if fail_count == 0 {
-                        palette.good
+        theme::scroll_body(ui, crate::shell::Tab::Diag.label(), |ui| {
+            th.panel(ui, tr("System Diagnostics"), 0.0, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    if theme::action(ui, tr("Run Full Check"), !is_running).clicked() {
+                        self.run();
+                    }
+                    if is_running {
+                        theme::text(ui, tr("Running..."), theme::BODY, theme::AMBER);
+                    }
+                });
+                if results.is_empty() {
+                    let msg = if is_running {
+                        tr("Diagnostics in progress...")
                     } else {
-                        palette.warn
-                    }),
-            );
-            if fail_count > 0 {
-                ui.label(
-                    egui::RichText::new(trf("  {} issues", &[&fail_count]))
-                        .size(16.0)
-                        .color(palette.bad),
-                );
-            }
-        });
-
-        ui.add_space(8.0);
-
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                egui::Grid::new("diag")
-                    .num_columns(3)
-                    .spacing([8.0, 6.0])
-                    .show(ui, |ui| {
-                        for r in &results {
-                            let (icon, c) = if r.ok {
-                                (tr("OK"), palette.good)
-                            } else {
-                                (tr("FAIL"), palette.bad)
-                            };
-                            ui.label(egui::RichText::new(icon).size(16.0).strong().color(c));
-                            ui.label(egui::RichText::new(&r.label).strong().size(16.0));
-                            // Long details wrap instead of running off the window (#195).
-                            ui.add(
-                                egui::Label::new(egui::RichText::new(&r.detail).weak().size(16.0))
-                                    .wrap(),
-                            );
-                            ui.end_row();
-                        }
-                    });
+                        tr("Press 'Run Full Check' to scan all components.")
+                    };
+                    theme::text(ui, &format!("> {msg} _"), theme::BODY, theme::GREEN_MID);
+                    return;
+                }
+                let total = results.len();
+                let ok_count = results.iter().filter(|r| r.ok).count();
+                let fail_count = total - ok_count;
+                let color = if fail_count == 0 {
+                    theme::PHOSPHOR
+                } else {
+                    theme::AMBER
+                };
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    th.glow_label(
+                        ui,
+                        &theme::caps(&trf("{}/{} passed", &[&ok_count, &total])),
+                        theme::VALUE,
+                        color,
+                    );
+                    if fail_count > 0 {
+                        th.glow_label(
+                            ui,
+                            &theme::caps(&trf("  {} issues", &[&fail_count])),
+                            theme::VALUE,
+                            theme::RED,
+                        );
+                    }
+                });
+                // One block per check, in the order of the log below.
+                theme::segments(ui, 16.0, total, |i| {
+                    Some(if results[i].ok {
+                        theme::PHOSPHOR
+                    } else {
+                        theme::RED
+                    })
+                });
             });
+            if results.is_empty() {
+                return;
+            }
+            ui.add_space(theme::GAP);
+            th.panel(ui, tr("Log"), 0.0, |ui| {
+                for (i, r) in results.iter().enumerate() {
+                    if i > 0 {
+                        ui.add_space(2.0);
+                    }
+                    entry(ui, th, r);
+                }
+            });
+        });
     }
+}
+
+/// Width of the `[ OK ]` / `[FAIL]` column, sized for the longest tag.
+fn tag_column() -> f32 {
+    let longest = [tr("OK"), tr("FAIL")]
+        .iter()
+        .map(|t| t.chars().count())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+    (longest + 3) as f32 * theme::ADVANCE * theme::BODY
+}
+
+/// `[ OK ]` or `[FAIL]`, padded to the same width.
+fn tag(ok: bool) -> String {
+    let word = if ok { tr("OK") } else { tr("FAIL") };
+    let width = [tr("OK"), tr("FAIL")]
+        .iter()
+        .map(|t| t.chars().count())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+    format!("[{word:^width$}]")
+}
+
+/// One log entry: the tag, the name of the check, then its detail (which
+/// holds the fix when the check failed) wrapped under the name.
+fn entry(ui: &mut egui::Ui, th: &Theme, r: &DiagResult) {
+    let color = if r.ok { theme::PHOSPHOR } else { theme::RED };
+    let avail = ui.available_width();
+    let col = tag_column();
+    let text_w = (avail - col).max(60.0);
+    let p = ui.painter();
+    let label = p.layout(
+        theme::caps(&r.label),
+        theme::font(theme::BODY),
+        theme::PHOSPHOR,
+        text_w,
+    );
+    // A failed check is read in full phosphor: its detail is the fix.
+    let detail_ink = if r.ok {
+        theme::GREEN_MID
+    } else {
+        theme::PHOSPHOR
+    };
+    let detail = p.layout(
+        theme::glyphs(&r.detail).into_owned(),
+        theme::font(theme::BODY),
+        detail_ink,
+        text_w,
+    );
+    let h = label.size().y + detail.size().y + 2.0;
+    let (rect, resp) = ui.allocate_exact_size(egui::Vec2::new(avail, h), egui::Sense::hover());
+    let p = ui.painter();
+    th.glow(
+        p,
+        rect.left_top(),
+        egui::Align2::LEFT_TOP,
+        &tag(r.ok),
+        theme::BODY,
+        color,
+    );
+    let x = rect.left() + col;
+    let ly = label.size().y;
+    p.galley(egui::Pos2::new(x, rect.top()), label, theme::PHOSPHOR);
+    p.galley(egui::Pos2::new(x, rect.top() + ly), detail, detail_ink);
+    let said = format!("{} {}: {}", tag(r.ok), r.label, r.detail);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &said));
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tags_have_one_width() {
+        assert_eq!(tag(true), "[ OK ]");
+        assert_eq!(tag(false), "[FAIL]");
+        assert_eq!(tag(true).chars().count(), tag(false).chars().count());
+        assert!(tag_column() >= 7.0 * theme::ADVANCE * theme::BODY);
+    }
 
     #[test]
     fn diag_results_survive_a_panicking_writer() {

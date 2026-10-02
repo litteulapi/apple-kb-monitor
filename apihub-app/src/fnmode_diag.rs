@@ -50,12 +50,24 @@ pub fn verdict(live: Option<i32>, configured: Option<i32>) -> (bool, String) {
     let show = |v: Option<i32>, none: &str| v.map_or(none.to_string(), |n| n.to_string());
     let state = trf(
         "applied (sysfs) = {} · configured (modprobe.d) = {}",
-        &[&show(live, tr("unreadable (hid_apple not loaded?)")), &show(configured, tr("none"))],
+        &[
+            &show(live, tr("unreadable (hid_apple not loaded?)")),
+            &show(configured, tr("none")),
+        ],
     );
     match (live, configured) {
         (Some(l), Some(c)) if l == c => (true, state),
-        (Some(_), Some(_)) => (false, trf("{} — differ: reload hid_apple or reboot", &[&state])),
-        (Some(_), None) => (true, trf("{} (not persistent: akmctl set fnmode N --persist)", &[&state])),
+        (Some(_), Some(_)) => (
+            false,
+            trf("{} — differ: reload hid_apple or reboot", &[&state]),
+        ),
+        (Some(_), None) => (
+            true,
+            trf(
+                "{} (not persistent: akmctl set fnmode N --persist)",
+                &[&state],
+            ),
+        ),
         (None, _) => (false, state),
     }
 }
@@ -75,11 +87,17 @@ mod tests {
     #[test]
     fn parses_options_line() {
         assert_eq!(parse_modprobe("options hid_apple fnmode=2\n"), Some(2));
-        assert_eq!(parse_modprobe("options hid_apple iso_layout=0 fnmode=3 # x"), Some(3));
+        assert_eq!(
+            parse_modprobe("options hid_apple iso_layout=0 fnmode=3 # x"),
+            Some(3)
+        );
         assert_eq!(parse_modprobe("# options hid_apple fnmode=1"), None);
         assert_eq!(parse_modprobe("options other fnmode=1"), None);
         assert_eq!(parse_modprobe("options hid_apple fnmode=9"), None);
-        assert_eq!(parse_modprobe("options hid_apple fnmode=1\noptions hid_apple fnmode=2"), Some(2));
+        assert_eq!(
+            parse_modprobe("options hid_apple fnmode=1\noptions hid_apple fnmode=2"),
+            Some(2)
+        );
     }
 
     #[test]

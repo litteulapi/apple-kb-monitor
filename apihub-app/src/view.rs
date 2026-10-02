@@ -1,14 +1,13 @@
 //! Pure presentation logic of the window (no egui context, unit-tested):
-//! unknown-value formatting, semantic levels and the light/dark palette.
-
-use eframe::egui::Color32;
+//! unknown-value formatting, semantic levels, alerts and the chart model.
+//! Colours and sizes live in `theme.rs`.
 
 use crate::i18n::{is_french, tr, tr_in, trf, trf_in};
 
 /// BlueZ / the daemon report 127 when a radio value is unavailable.
 pub const RADIO_UNKNOWN: i32 = 127;
-/// Shown instead of any unknown value.
-pub const DASH: &str = "—";
+/// Shown instead of any unknown value, terminal style: never an empty field.
+pub const DASH: &str = "---";
 
 /// Relative BR/EDR RSSI in dB (0 = ideal reception range), **not** dBm
 /// (#174). `None` when unknown (absent, 127, out of range); 0 and positive
@@ -47,7 +46,12 @@ pub fn estimate_text_in(fr: bool, b: &akm_core::report::KbBattery) -> Option<Str
     Some(trf_in(
         fr,
         "\u{2248} {}% ({} to {}%), {}",
-        &[&format!("{:.0}", e.pct), &format!("{:.0}", e.low), &format!("{:.0}", e.high), &e.chemistry.as_str()],
+        &[
+            &format!("{:.0}", e.pct),
+            &format!("{:.0}", e.low),
+            &format!("{:.0}", e.high),
+            &e.chemistry.as_str(),
+        ],
     ))
 }
 
@@ -95,7 +99,14 @@ pub fn thresholds_text_in(fr: bool, b: &akm_core::report::KbBattery) -> Option<S
         Some([_, low, crit, _]) => trf_in(
             fr,
             "Full {} / Low {} / Critical {} / Empty {} mV \u{b7} {} mV to Low, {} mV to Critical",
-            &[&t.full_mv, &t.low_mv, &t.critical_mv, &t.empty_mv, &format!("{low:+}"), &format!("{crit:+}")],
+            &[
+                &t.full_mv,
+                &t.low_mv,
+                &t.critical_mv,
+                &t.empty_mv,
+                &format!("{low:+}"),
+                &format!("{crit:+}"),
+            ],
         ),
         None => trf_in(
             fr,
@@ -135,7 +146,11 @@ pub fn pct_text(p: Option<f64>, decimals: usize) -> String {
         Some(v) => {
             let n = dec_in(is_french(), format!("{v:.decimals$}"));
             // French typography: narrow no-break space before the percent sign.
-            if is_french() { format!("{n}\u{202f}%") } else { format!("{n}%") }
+            if is_french() {
+                format!("{n}\u{202f}%")
+            } else {
+                format!("{n}%")
+            }
         }
         None => DASH.to_string(),
     }
@@ -143,7 +158,9 @@ pub fn pct_text(p: Option<f64>, decimals: usize) -> String {
 
 /// Fraction 0..=1 for a progress bar (unknown = empty).
 pub fn pct_fraction(p: Option<f64>) -> f32 {
-    p.filter(|v| v.is_finite()).map(|v| (v / 100.0).clamp(0.0, 1.0) as f32).unwrap_or(0.0)
+    p.filter(|v| v.is_finite())
+        .map(|v| (v / 100.0).clamp(0.0, 1.0) as f32)
+        .unwrap_or(0.0)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,7 +183,11 @@ pub fn battery_level(p: Option<f64>) -> Level {
 /// Measured battery voltage, rounded to 0.01 V.
 pub fn volts_text(v: f64) -> String {
     let fr = is_french();
-    format!("{}{}V", dec_in(fr, format!("{v:.2}")), if fr { "\u{202f}" } else { " " })
+    format!(
+        "{}{}V",
+        dec_in(fr, format!("{v:.2}")),
+        if fr { "\u{202f}" } else { " " }
+    )
 }
 
 pub fn voltage_level(v: f64) -> Level {
@@ -247,9 +268,12 @@ pub fn chemistry_text(b: &akm_core::report::KbBattery) -> Option<String> {
     if let Some(e) = &b.charge_estimate {
         return Some(trf("{} (declared)", &[&e.chemistry.as_str()]));
     }
-    b.voltage
-        .filter(|v| v.is_finite() && *v > 0.0)
-        .map(|v| trf("{} (guess from the voltage)", &[&akm_core::calibration::detect_battery_type(v)]))
+    b.voltage.filter(|v| v.is_finite() && *v > 0.0).map(|v| {
+        trf(
+            "{} (guess from the voltage)",
+            &[&akm_core::calibration::detect_battery_type(v)],
+        )
+    })
 }
 
 /// Paired state. The daemon never fills `bluetooth.paired` (always false
@@ -273,21 +297,20 @@ fn format_days(remaining_s: u64) -> String {
     if days >= 2.0 {
         trf("\u{2248} {} days left", &[&format!("{days:.0}")])
     } else {
-        trf("\u{2248} {} h left", &[&format!("{:.0}", remaining_s as f64 / 3600.0)])
+        trf(
+            "\u{2248} {} h left",
+            &[&format!("{:.0}", remaining_s as f64 / 3600.0)],
+        )
     }
 }
 
 /// Last wake event of the keyboard (input report 0x13), passive listening.
 pub fn wake_text(w: &akm_core::report::KbWake) -> Option<String> {
     let age = w.last_age_s.filter(|a| a.is_finite() && *a >= 0.0)?;
-    Some(trf("{} ({} since start)", &[&age_text(Some(age as u64)), &w.count]))
-}
-
-/// Two side-by-side tiles only when each gets a usable width; below, the
-/// tiles are stacked (#195).
-pub const TWO_COLUMNS_MIN_WIDTH: f32 = 660.0;
-pub fn two_columns(width: f32) -> bool {
-    width >= TWO_COLUMNS_MIN_WIDTH
+    Some(trf(
+        "{} ({} since start)",
+        &[&age_text(Some(age as u64)), &w.count],
+    ))
 }
 
 /// Period shown by the history chart (#96). The daemon keeps 90 days.
@@ -382,8 +405,16 @@ pub fn chart_points(pts: &[(f64, f64)], cutoff: f64, window: f64, pct: bool) -> 
     let mut v: Vec<(f64, f64)> = pts
         .iter()
         .copied()
-        .filter(|(t, y)| t.is_finite() && y.is_finite() && *t >= cutoff && *t <= cutoff + window + CLOCK_SLACK_S)
-        .filter(|(_, y)| if pct { (0.0..=100.0).contains(y) } else { *y > 0.0 && *y < 10.0 })
+        .filter(|(t, y)| {
+            t.is_finite() && y.is_finite() && *t >= cutoff && *t <= cutoff + window + CLOCK_SLACK_S
+        })
+        .filter(|(_, y)| {
+            if pct {
+                (0.0..=100.0).contains(y)
+            } else {
+                *y > 0.0 && *y < 10.0
+            }
+        })
         .collect();
     v.sort_by(|a, b| a.0.total_cmp(&b.0));
     v
@@ -432,9 +463,15 @@ pub fn chart_model(
     let (t_min, t_max) = (batt[0].0, batt[batt.len() - 1].0);
     if batt.len() < 2 || t_max - t_min < 1.0 {
         let last = pct_text(Some(batt[batt.len() - 1].1), 0);
-        return Err(trf("Only one reading in the last {}: {}.", &[&range.text(), &last]));
+        return Err(trf(
+            "Only one reading in the last {}: {}.",
+            &[&range.text(), &last],
+        ));
     }
-    let volt: Vec<(f64, f64)> = chart_points(voltage, t_min, window, false).into_iter().filter(|p| p.0 <= t_max).collect();
+    let volt: Vec<(f64, f64)> = chart_points(voltage, t_min, window, false)
+        .into_iter()
+        .filter(|p| p.0 <= t_max)
+        .collect();
     // The summary counts the real readings; the painter gets a bounded series.
     let readings = batt.len();
     let batt = downsample(batt, CHART_POINTS_MAX);
@@ -448,7 +485,10 @@ pub fn chart_model(
         let fr = is_french();
         legend.push(clip_label(&trf(
             "Voltage {}\u{2013}{} V",
-            &[&dec_in(fr, format!("{lo:.2}")), &dec_in(fr, format!("{hi:.2}"))],
+            &[
+                &dec_in(fr, format!("{lo:.2}")),
+                &dec_in(fr, format!("{hi:.2}")),
+            ],
         )));
         Some((lo - pad, hi + pad))
     } else {
@@ -471,7 +511,10 @@ fn clip_label(s: &str) -> String {
     if s.chars().count() <= CHART_LABEL_MAX {
         s.to_string()
     } else {
-        s.chars().take(CHART_LABEL_MAX - 1).chain(std::iter::once('\u{2026}')).collect()
+        s.chars()
+            .take(CHART_LABEL_MAX - 1)
+            .chain(std::iter::once('\u{2026}'))
+            .collect()
     }
 }
 
@@ -481,7 +524,10 @@ fn span_text(hours: f64) -> String {
     } else if hours < 48.0 {
         trf("{} h", &[&dec_in(is_french(), format!("{hours:.1}"))])
     } else {
-        trf("{} d", &[&dec_in(is_french(), format!("{:.1}", hours / 24.0))])
+        trf(
+            "{} d",
+            &[&dec_in(is_french(), format!("{:.1}", hours / 24.0))],
+        )
     }
 }
 
@@ -492,9 +538,28 @@ pub fn time_ticks(t_min: f64, t_max: f64, now: f64) -> Vec<(f64, String)> {
         return Vec::new();
     }
     const DAY: f64 = 86400.0;
-    const STEPS: [f64; 14] = [300.0, 600.0, 900.0, 1800.0, 3600.0, 7200.0, 10800.0, 21600.0, 43200.0, DAY, 2.0 * DAY, 7.0 * DAY, 14.0 * DAY, 30.0 * DAY];
+    const STEPS: [f64; 14] = [
+        300.0,
+        600.0,
+        900.0,
+        1800.0,
+        3600.0,
+        7200.0,
+        10800.0,
+        21600.0,
+        43200.0,
+        DAY,
+        2.0 * DAY,
+        7.0 * DAY,
+        14.0 * DAY,
+        30.0 * DAY,
+    ];
     let span = t_max - t_min;
-    let step = STEPS.iter().copied().find(|s| span / s <= (CHART_TICKS_MAX - 1) as f64).unwrap_or(30.0 * DAY);
+    let step = STEPS
+        .iter()
+        .copied()
+        .find(|s| span / s <= (CHART_TICKS_MAX - 1) as f64)
+        .unwrap_or(30.0 * DAY);
     // Ticks at whole multiples of `step` before `now`, inside [t_min, t_max].
     let mut ticks = Vec::new();
     let mut k = ((now - t_max) / step).ceil().max(0.0);
@@ -517,47 +582,120 @@ pub fn time_ticks(t_min: f64, t_max: f64, now: f64) -> Vec<(f64, String)> {
     ticks
 }
 
-pub fn accent_color(rgb: [u8; 3]) -> Color32 {
-    Color32::from_rgb(rgb[0], rgb[1], rgb[2])
+/// Where the window gets its state from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Feed {
+    /// Nothing received yet.
+    #[default]
+    Starting,
+    /// The daemon publishes the state (normal case).
+    Daemon,
+    /// Daemon absent: the window reads the keyboard itself (fallback).
+    Local,
 }
 
-/// Semantic colours, readable on both the light and the dark background.
-#[derive(Debug, Clone, Copy)]
-pub struct Palette {
-    pub good: Color32,
-    pub warn: Color32,
-    pub bad: Color32,
-    pub info: Color32,
+/// The keyboard is known and its Bluetooth link is up.
+pub fn link_up(s: &akm_core::Snapshot) -> bool {
+    s.keyboard.as_ref().is_some_and(|k| k.bluetooth.connected)
 }
 
-impl Palette {
-    pub fn new(dark: bool) -> Self {
-        if dark {
-            Self {
-                good: Color32::from_rgb(80, 220, 100),
-                warn: Color32::from_rgb(255, 200, 50),
-                bad: Color32::from_rgb(255, 90, 90),
-                info: Color32::from_rgb(100, 180, 255),
+/// State of the batteries against the thresholds the keyboard itself
+/// reports (0x60), else the state byte it sends (0x30): `OK`, `LOW`,
+/// `CRITICAL`, `EMPTY`. Unknown when neither was read.
+pub fn battery_state(b: &akm_core::report::KbBattery) -> (&'static str, Level) {
+    match (b.threshold_level.as_deref(), b.state) {
+        (Some("ok"), _) => (tr("OK"), Level::Good),
+        (Some("low"), _) => (tr("LOW"), Level::Warn),
+        (Some("critical"), _) => (tr("CRITICAL"), Level::Bad),
+        (Some("empty"), _) => (tr("EMPTY"), Level::Bad),
+        (_, Some(0)) => (tr("OK"), Level::Good),
+        (_, Some(1)) => (tr("LOW"), Level::Warn),
+        (_, Some(2 | 3)) => (tr("CRITICAL"), Level::Bad),
+        _ => (DASH, Level::Unknown),
+    }
+}
+
+/// One line of the alert block under the tabs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Alert {
+    pub level: Level,
+    pub text: String,
+}
+
+/// What the user must know at a glance, most urgent first: daemon absent,
+/// read error, no data yet, link down, batteries low or critical.
+pub fn alerts(s: &akm_core::Snapshot, feed: Feed) -> Vec<Alert> {
+    let mut out = Vec::new();
+    let mut push = |level, text: String| out.push(Alert { level, text });
+    if feed == Feed::Local {
+        push(
+            Level::Warn,
+            tr("Daemon absent: this window reads the keyboard itself").into(),
+        );
+    }
+    if let Some(e) = s.kb_error.as_deref().filter(|e| !e.trim().is_empty()) {
+        push(Level::Bad, e.to_string());
+    }
+    match &s.keyboard {
+        None => push(Level::Unknown, tr("Waiting for keyboard data...").into()),
+        Some(kb) => {
+            if !kb.bluetooth.connected {
+                push(
+                    Level::Bad,
+                    tr("Keyboard disconnected: press a key, or use Reconnect").into(),
+                );
             }
-        } else {
-            Self {
-                good: Color32::from_rgb(20, 130, 50),
-                warn: Color32::from_rgb(160, 100, 0),
-                bad: Color32::from_rgb(190, 30, 30),
-                info: Color32::from_rgb(20, 90, 190),
+            match battery_state(&kb.battery).1 {
+                Level::Warn => push(
+                    Level::Warn,
+                    tr("Batteries low: plan their replacement").into(),
+                ),
+                Level::Bad => push(
+                    Level::Bad,
+                    tr("Batteries critical: replace them now").into(),
+                ),
+                _ => {}
             }
         }
     }
+    out
+}
 
-    /// `None` = neutral (caller uses the text colour of the theme).
-    pub fn color(&self, l: Level) -> Option<Color32> {
-        match l {
-            Level::Good => Some(self.good),
-            Level::Warn => Some(self.warn),
-            Level::Bad => Some(self.bad),
-            Level::Unknown => None,
-        }
+/// Bluetooth address with its middle hidden (`AA:BB:XX:XX:XX:F1`), for the
+/// status bar; the full address stays in the DATA tab.
+pub fn mask_mac(mac: Option<&str>) -> String {
+    let parts: Vec<&str> = mac.unwrap_or("").split(':').collect();
+    let hex = |p: &&str| p.len() == 2 && p.chars().all(|c| c.is_ascii_hexdigit());
+    if parts.len() != 6 || !parts.iter().all(hex) {
+        return "--:--:--:--:--:--".into();
     }
+    format!("{}:{}:XX:XX:XX:{}", parts[0], parts[1], parts[5]).to_uppercase()
+}
+
+/// `HH:MM:SS`, or dashes for a time not known yet.
+pub fn clock_text(hms: Option<(u32, u32, u32)>) -> String {
+    match hms {
+        Some((h, m, s)) if h < 24 && m < 60 && s < 61 => format!("{h:02}:{m:02}:{s:02}"),
+        _ => "--:--:--".into(),
+    }
+}
+
+/// Where the reading sits on the scale of the signal tuner, 0 (weakest
+/// shown) to 1 (strongest shown); `None` when unknown.
+pub const TUNER_MIN_DB: i32 = -20;
+pub const TUNER_MAX_DB: i32 = 5;
+pub fn tuner_fraction(r: Option<i32>) -> Option<f32> {
+    let v = rssi_valid(r)?.clamp(TUNER_MIN_DB, TUNER_MAX_DB);
+    Some((v - TUNER_MIN_DB) as f32 / (TUNER_MAX_DB - TUNER_MIN_DB) as f32)
+}
+
+/// Where a voltage sits between the Empty and Full thresholds, 0 to 1.
+pub fn threshold_fraction(t: &akm_core::registry::Thresholds, mv: u32) -> f32 {
+    let (lo, hi) = (f32::from(t.empty_mv), f32::from(t.full_mv));
+    if hi <= lo {
+        return 0.0;
+    }
+    ((mv as f32 - lo) / (hi - lo)).clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
@@ -572,9 +710,9 @@ mod tests {
 
     #[test]
     fn unknown_rssi_is_a_dash_never_127() {
-        assert_eq!(rssi_text(None), "—");
-        assert_eq!(rssi_text(Some(127)), "—");
-        assert_eq!(rssi_text(Some(-200)), "—");
+        assert_eq!(rssi_text(None), "---");
+        assert_eq!(rssi_text(Some(127)), "---");
+        assert_eq!(rssi_text(Some(-200)), "---");
         // #174: 0 is the ideal range, a real value; no dBm unit.
         assert_eq!(rssi_text(Some(0)), "excellent (0)");
         assert_eq!(rssi_text(Some(-3)), "good (\u{2212}3)");
@@ -599,7 +737,7 @@ mod tests {
         );
         b.new_batteries = true;
         assert!(estimate_text(&b).unwrap().starts_with("new batteries"));
-        assert_eq!(age_text(None), "—");
+        assert_eq!(age_text(None), "---");
         assert_eq!(age_text(Some(12)), "12 s ago");
         assert_eq!(age_text(Some(300)), "5 min ago");
         assert_eq!(age_text(Some(7200)), "2 h ago");
@@ -609,14 +747,14 @@ mod tests {
     #[test]
     fn tx_power_keeps_positive_values() {
         assert_eq!(tx_power_text(Some(4)), "4 dBm");
-        assert_eq!(tx_power_text(Some(127)), "—");
-        assert_eq!(tx_power_text(None), "—");
+        assert_eq!(tx_power_text(Some(127)), "---");
+        assert_eq!(tx_power_text(None), "---");
     }
 
     #[test]
     fn unknown_battery_is_not_zero_percent() {
-        assert_eq!(pct_text(None, 0), "—");
-        assert_eq!(pct_text(Some(f64::NAN), 0), "—");
+        assert_eq!(pct_text(None, 0), "---");
+        assert_eq!(pct_text(Some(f64::NAN), 0), "---");
         assert_eq!(pct_text(Some(73.4), 0), "73%");
         assert_eq!(pct_text(Some(73.46), 1), "73.5%");
         assert_eq!(pct_fraction(None), 0.0);
@@ -637,12 +775,6 @@ mod tests {
         assert_eq!(rssi_level(Some(-9)), Level::Warn);
         assert_eq!(rssi_level(Some(-40)), Level::Bad);
         assert_ne!(rssi_bar_count(Some(0)), rssi_bar_count(Some(-40)));
-    }
-
-    #[test]
-    fn palettes_differ_between_themes() {
-        assert_ne!(Palette::new(true).good, Palette::new(false).good);
-        assert!(Palette::new(true).color(Level::Unknown).is_none());
     }
 
     #[test]
@@ -709,15 +841,31 @@ mod tests {
 
     #[test]
     fn chart_drops_unusable_points() {
-        let pts = [(10.0, 50.0), (5.0, 60.0), (11.0, f64::NAN), (12.0, 1e308), (13.0, -1.0), (1.0, 70.0), (f64::INFINITY, 1.0)];
-        assert_eq!(chart_points(&pts, 2.0, 86_400.0, true), vec![(5.0, 60.0), (10.0, 50.0)]);
+        let pts = [
+            (10.0, 50.0),
+            (5.0, 60.0),
+            (11.0, f64::NAN),
+            (12.0, 1e308),
+            (13.0, -1.0),
+            (1.0, 70.0),
+            (f64::INFINITY, 1.0),
+        ];
+        assert_eq!(
+            chart_points(&pts, 2.0, 86_400.0, true),
+            vec![(5.0, 60.0), (10.0, 50.0)]
+        );
         let v = [(1.0, 2.9), (2.0, 0.0), (3.0, 1e9)];
         assert_eq!(chart_points(&v, 0.0, 86_400.0, false), vec![(1.0, 2.9)]);
     }
 
     fn labels_are_short(m: &ChartModel) {
         assert!(m.x_ticks.len() <= CHART_TICKS_MAX, "{:?}", m.x_ticks);
-        for t in m.legend.iter().chain(m.x_ticks.iter().map(|t| &t.1)).chain(std::iter::once(&m.summary)) {
+        for t in m
+            .legend
+            .iter()
+            .chain(m.x_ticks.iter().map(|t| &t.1))
+            .chain(std::iter::once(&m.summary))
+        {
             assert!(t.chars().count() <= CHART_LABEL_MAX, "label too long: {t}");
             assert!(!t.contains("inf") && !t.contains("NaN"), "{t}");
         }
@@ -728,24 +876,46 @@ mod tests {
     #[test]
     fn real_history_without_reliable_voltage_has_a_short_legend() {
         let now = 1_790_858_400.0;
-        let batt: Vec<(f64, f64)> = (0..56).map(|i| (now - 43_200.0 + i as f64 * 785.0, if i < 7 { 90.0 } else { 96.0 })).collect();
+        let batt: Vec<(f64, f64)> = (0..56)
+            .map(|i| {
+                (
+                    now - 43_200.0 + i as f64 * 785.0,
+                    if i < 7 { 90.0 } else { 96.0 },
+                )
+            })
+            .collect();
         let m = chart_model(&batt, &[], now, Range::Day).unwrap();
         assert_eq!(m.legend, vec!["Battery %".to_string()]);
         assert_eq!(m.volt_axis, None);
         assert_eq!(m.summary, "56 points over 12.0 h");
         labels_are_short(&m);
         assert!(m.x_ticks.len() >= 2);
-        assert!(m.x_ticks.iter().all(|(t, _)| *t >= m.t_min && *t <= m.t_max));
+        assert!(m
+            .x_ticks
+            .iter()
+            .all(|(t, _)| *t >= m.t_min && *t <= m.t_max));
     }
 
     #[test]
     fn chart_handles_empty_single_constant_and_nan() {
         let now = 100_000.0;
-        assert_eq!(chart_model(&[], &[], now, Range::Day), Err("No history data yet.".into()));
-        assert_eq!(chart_model(&[(1.0, 50.0)], &[], now, Range::Day), Err("No data in the last 24 h.".into()));
-        assert_eq!(chart_model(&[(now - 10.0, 42.0)], &[], now, Range::Day), Err("Only one reading in the last 24 h: 42%.".into()));
+        assert_eq!(
+            chart_model(&[], &[], now, Range::Day),
+            Err("No history data yet.".into())
+        );
+        assert_eq!(
+            chart_model(&[(1.0, 50.0)], &[], now, Range::Day),
+            Err("No data in the last 24 h.".into())
+        );
+        assert_eq!(
+            chart_model(&[(now - 10.0, 42.0)], &[], now, Range::Day),
+            Err("Only one reading in the last 24 h: 42%.".into())
+        );
         let nan = [(now - 100.0, f64::NAN), (now - 50.0, f64::NAN)];
-        assert_eq!(chart_model(&nan, &nan, now, Range::Day), Err("No data in the last 24 h.".into()));
+        assert_eq!(
+            chart_model(&nan, &nan, now, Range::Day),
+            Err("No data in the last 24 h.".into())
+        );
         // Constant battery and voltage: a padded axis, no division by zero.
         let batt = [(now - 7200.0, 80.0), (now - 3600.0, 80.0), (now, 80.0)];
         let volt = [(now - 7200.0, 2.9), (now - 3600.0, 2.9), (now, 2.9)];
@@ -756,7 +926,13 @@ mod tests {
         assert_eq!(m.x_ticks.last().map(|t| t.1.as_str()), Some("now"));
         labels_are_short(&m);
         // Absurd voltages are dropped, never formatted.
-        let m = chart_model(&batt, &[(now - 10.0, f64::MAX), (now - 5.0, f64::MIN)], now, Range::Day).unwrap();
+        let m = chart_model(
+            &batt,
+            &[(now - 10.0, f64::MAX), (now - 5.0, f64::MIN)],
+            now,
+            Range::Day,
+        )
+        .unwrap();
         assert_eq!(m.legend.len(), 1);
         // A point dated in 30 days does not stretch the time axis (#236).
         let mut fut = batt.to_vec();
@@ -769,12 +945,26 @@ mod tests {
     #[test]
     fn time_ticks_are_bounded_and_relative() {
         let now = 1_000_000.0;
-        for span in [60.0, 600.0, 3600.0, 5.0 * 3600.0, 12.0 * 3600.0, 24.0 * 3600.0, 1e7] {
+        for span in [
+            60.0,
+            600.0,
+            3600.0,
+            5.0 * 3600.0,
+            12.0 * 3600.0,
+            24.0 * 3600.0,
+            1e7,
+        ] {
             let t = time_ticks(now - span, now, now);
             assert!(!t.is_empty() && t.len() <= CHART_TICKS_MAX, "{span}: {t:?}");
             assert_eq!(t.last().unwrap().1, "now");
         }
-        assert_eq!(time_ticks(now - 43_200.0, now, now).iter().map(|t| t.1.as_str()).collect::<Vec<_>>(), ["12 h ago", "9 h ago", "6 h ago", "3 h ago", "now"]);
+        assert_eq!(
+            time_ticks(now - 43_200.0, now, now)
+                .iter()
+                .map(|t| t.1.as_str())
+                .collect::<Vec<_>>(),
+            ["12 h ago", "9 h ago", "6 h ago", "3 h ago", "now"]
+        );
         assert!(time_ticks(f64::NAN, now, now).is_empty());
         assert!(time_ticks(now, now, now).is_empty());
     }
@@ -868,24 +1058,140 @@ mod tests {
     }
 
     #[test]
-    fn layout_switches_to_one_column_when_narrow() {
-        assert!(!two_columns(500.0));
-        assert!(two_columns(704.0));
+    fn battery_state_follows_the_keyboard_thresholds_then_its_state_byte() {
+        let mut b = akm_core::report::KbBattery::default();
+        assert_eq!(battery_state(&b), (DASH, Level::Unknown));
+        b.state = Some(1);
+        assert_eq!(battery_state(&b), ("LOW", Level::Warn));
+        b.state = Some(3);
+        assert_eq!(battery_state(&b), ("CRITICAL", Level::Bad));
+        b.state = Some(9);
+        assert_eq!(battery_state(&b), (DASH, Level::Unknown));
+        // The thresholds of the keyboard win over the state byte.
+        b.state = Some(0);
+        for (lvl, text, level) in [
+            ("ok", "OK", Level::Good),
+            ("low", "LOW", Level::Warn),
+            ("critical", "CRITICAL", Level::Bad),
+            ("empty", "EMPTY", Level::Bad),
+        ] {
+            b.threshold_level = Some(lvl.into());
+            assert_eq!(battery_state(&b), (text, level));
+        }
+    }
+
+    #[test]
+    fn alerts_are_ordered_by_urgency_and_empty_when_all_is_well() {
+        let mut s = akm_core::Snapshot::default();
+        let texts = |s: &akm_core::Snapshot, f| {
+            alerts(s, f)
+                .into_iter()
+                .map(|a| (a.level, a.text))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            texts(&s, Feed::Starting),
+            vec![(Level::Unknown, "Waiting for keyboard data...".to_string())]
+        );
+        let mut kb = akm_core::report::KbReport::default();
+        kb.bluetooth.connected = true;
+        s.keyboard = Some(kb.clone());
+        assert!(alerts(&s, Feed::Daemon).is_empty());
+        assert!(link_up(&s));
+        let local = texts(&s, Feed::Local);
+        assert_eq!(local.len(), 1);
+        assert_eq!(local[0].0, Level::Warn);
+        kb.bluetooth.connected = false;
+        kb.battery.threshold_level = Some("critical".into());
+        s.keyboard = Some(kb);
+        s.kb_error = Some("hidraw: permission denied".into());
+        let all = texts(&s, Feed::Local);
+        assert_eq!(
+            all.iter().map(|a| a.0).collect::<Vec<_>>(),
+            [Level::Warn, Level::Bad, Level::Bad, Level::Bad]
+        );
+        assert_eq!(all[1].1, "hidraw: permission denied");
+        assert!(all[2].1.starts_with("Keyboard disconnected"));
+        assert!(all[3].1.starts_with("Batteries critical"));
+        assert!(!link_up(&s));
+        s.kb_error = Some("  ".into());
+        assert_eq!(alerts(&s, Feed::Daemon).len(), 2);
+    }
+
+    #[test]
+    fn status_bar_texts() {
+        assert_eq!(mask_mac(Some("aa:bb:cc:dd:ee:f1")), "AA:BB:XX:XX:XX:F1");
+        assert_eq!(mask_mac(Some("AA:BB:CC:DD:EE:F1")), "AA:BB:XX:XX:XX:F1");
+        for bad in [
+            None,
+            Some(""),
+            Some("AA:BB:CC"),
+            Some("AA:BB:CC:DD:EE:ZZ"),
+            Some("AAA:B:CC:DD:EE:F1"),
+        ] {
+            assert_eq!(mask_mac(bad), "--:--:--:--:--:--");
+        }
+        assert_eq!(clock_text(Some((7, 5, 9))), "07:05:09");
+        assert_eq!(clock_text(Some((23, 59, 60))), "23:59:60");
+        assert_eq!(clock_text(Some((24, 0, 0))), "--:--:--");
+        assert_eq!(clock_text(None), "--:--:--");
+    }
+
+    #[test]
+    fn scales_of_the_tuner_and_of_the_thresholds() {
+        assert_eq!(tuner_fraction(None), None);
+        assert_eq!(tuner_fraction(Some(127)), None);
+        assert_eq!(tuner_fraction(Some(-20)), Some(0.0));
+        assert_eq!(tuner_fraction(Some(-90)), Some(0.0));
+        assert_eq!(tuner_fraction(Some(5)), Some(1.0));
+        assert_eq!(tuner_fraction(Some(20)), Some(1.0));
+        assert!((tuner_fraction(Some(0)).unwrap() - 20.0 / 25.0).abs() < 1e-6);
+        let t = akm_core::registry::Thresholds {
+            full_mv: 3000,
+            low_mv: 2500,
+            critical_mv: 2400,
+            empty_mv: 2000,
+        };
+        assert_eq!(threshold_fraction(&t, 2000), 0.0);
+        assert_eq!(threshold_fraction(&t, 1000), 0.0);
+        assert_eq!(threshold_fraction(&t, 2500), 0.5);
+        assert_eq!(threshold_fraction(&t, 9000), 1.0);
+        let flat = akm_core::registry::Thresholds {
+            full_mv: 2000,
+            low_mv: 2000,
+            critical_mv: 2000,
+            empty_mv: 2000,
+        };
+        assert_eq!(threshold_fraction(&flat, 2000), 0.0);
     }
 
     #[test]
     fn dynamic_texts_in_french() {
         assert_eq!(age_text_in(true, Some(12)), "il y a 12\u{202f}s");
         assert_eq!(age_text_in(true, Some(7200)), "il y a 2\u{202f}h");
-        assert_eq!(age_text_in(true, None), "\u{2014}");
+        assert_eq!(age_text_in(true, None), DASH);
         let mut b = akm_core::report::KbBattery {
-            charge_estimate: akm_core::chemistry::estimate_charge(2460, akm_core::chemistry::Chemistry::Alkaline),
+            charge_estimate: akm_core::chemistry::estimate_charge(
+                2460,
+                akm_core::chemistry::Chemistry::Alkaline,
+            ),
             ..Default::default()
         };
-        assert_eq!(estimate_text_in(true, &b).unwrap(), "\u{2248} 30\u{202f}% (20 \u{e0} 40\u{202f}%), alkaline");
+        assert_eq!(
+            estimate_text_in(true, &b).unwrap(),
+            "\u{2248} 30\u{202f}% (20 \u{e0} 40\u{202f}%), alkaline"
+        );
         b.new_batteries = true;
-        assert_eq!(estimate_text_in(true, &b).unwrap(), "piles neuves, pas encore d\u{2019}estimation");
-        let t = akm_core::registry::Thresholds { full_mv: 2954, low_mv: 2506, critical_mv: 2404, empty_mv: 2054 };
+        assert_eq!(
+            estimate_text_in(true, &b).unwrap(),
+            "piles neuves, pas encore d\u{2019}estimation"
+        );
+        let t = akm_core::registry::Thresholds {
+            full_mv: 2954,
+            low_mv: 2506,
+            critical_mv: 2404,
+            empty_mv: 2054,
+        };
         b.thresholds = Some(t);
         b.threshold_margins_mv = Some(t.margins(2986));
         assert_eq!(
@@ -920,7 +1226,10 @@ mod tests {
         let mut b = akm_core::report::KbBattery::default();
         assert_eq!((apple_display_text(&b), thresholds_text(&b)), (None, None));
         b.apple_display_pct = Some(100.0);
-        assert_eq!(apple_display_text(&b).unwrap(), "100% (macOS-style display)");
+        assert_eq!(
+            apple_display_text(&b).unwrap(),
+            "100% (macOS-style display)"
+        );
         b.apple_display_pct = Some(f64::NAN);
         assert_eq!(apple_display_text(&b), None);
         let t = akm_core::registry::Thresholds {
@@ -930,8 +1239,13 @@ mod tests {
             empty_mv: 2054,
         };
         b.thresholds = Some(t);
-        assert_eq!(thresholds_text(&b).unwrap(), "Full 2954 / Low 2506 / Critical 2404 / Empty 2054 mV");
+        assert_eq!(
+            thresholds_text(&b).unwrap(),
+            "Full 2954 / Low 2506 / Critical 2404 / Empty 2054 mV"
+        );
         b.threshold_margins_mv = Some(t.margins(2986));
-        assert!(thresholds_text(&b).unwrap().ends_with("+480 mV to Low, +582 mV to Critical"));
+        assert!(thresholds_text(&b)
+            .unwrap()
+            .ends_with("+480 mV to Low, +582 mV to Critical"));
     }
 }

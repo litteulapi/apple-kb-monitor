@@ -89,6 +89,7 @@ struct State {
     refuse: bool,
     connected: bool,
     json: String,
+    reconnects: u32,
 }
 
 type Shared = Arc<Mutex<State>>;
@@ -138,6 +139,17 @@ impl Device {
     }
 }
 
+struct Link(Shared);
+
+#[interface(name = "com.agenceapi.AppleKbMonitor1.Link")]
+impl Link {
+    fn reconnect(&self) -> bool {
+        let mut s = self.0.lock().unwrap();
+        s.reconnects += 1;
+        !s.refuse
+    }
+}
+
 /// Fake daemon on its own private bus; everything is torn down on drop.
 pub struct FakeDaemon {
     bus: PrivateBus,
@@ -159,6 +171,7 @@ impl FakeDaemon {
         let server = zbus::blocking::connection::Builder::address(bus.addr.as_str())
             .and_then(|b| b.serve_at(OBJECT_PATH, Root(state.clone())))
             .and_then(|b| b.serve_at(device, Device(state.clone())))
+            .and_then(|b| b.serve_at(apple_kb_monitord::repair::LINK_PATH, Link(state.clone())))
             .and_then(|b| b.name(BUS_NAME))
             .and_then(|b| b.build())
             .expect("fake daemon on the private bus");
@@ -175,6 +188,11 @@ impl FakeDaemon {
 
     pub fn set_calls(&self) -> Vec<i32> {
         self.state.lock().unwrap().set_calls.clone()
+    }
+
+    /// Calls of `Link.Reconnect` received so far.
+    pub fn reconnects(&self) -> u32 {
+        self.state.lock().unwrap().reconnects
     }
 
     pub fn force_mode(&self, mode: i32) {

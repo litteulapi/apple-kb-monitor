@@ -7,7 +7,7 @@
 //! locally (fallback), and stops it as soon as the daemon appears, so a
 //! single process reads `/dev/hidraw` at any time.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -19,8 +19,34 @@ use apple_kb_monitord::service::{BUS_NAME, INTERFACE, OBJECT_PATH};
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::MatchRule;
 
+use crate::view::Feed;
+
+/// Where the state currently comes from, readable from the UI thread.
+#[derive(Clone, Default)]
+pub struct FeedCell(Arc<AtomicU8>);
+
+impl FeedCell {
+    pub fn get(&self) -> Feed {
+        match self.0.load(Ordering::Relaxed) {
+            1 => Feed::Daemon,
+            2 => Feed::Local,
+            _ => Feed::Starting,
+        }
+    }
+
+    fn set(&self, f: Feed) {
+        let v = match f {
+            Feed::Starting => 0,
+            Feed::Daemon => 1,
+            Feed::Local => 2,
+        };
+        self.0.store(v, Ordering::Relaxed);
+    }
+}
+
 struct Source {
     watch: Arc<Watch>,
+    feed: FeedCell,
     local: Option<ActorHandle>,
     /// Set by [`SourceHandle::stop`]: never start the fallback again.
     stopped: bool,
@@ -30,7 +56,14 @@ impl Source {
     fn go_local(&mut self) {
         if self.local.is_none() && !self.stopped {
             eprintln!("[source] daemon absent: local acquisition (fallback)");
-            self.local = Some(actor::spawn(self.watch.clone(), actor::Mailbox::new(), actor::Options::default()));
+            self.local = Some(actor::spawn(
+                self.watch.clone(),
+                actor::Mailbox::new(),
+                actor::Options::default(),
+            ));
+        }
+        if self.local.is_some() {
+            self.feed.set(Feed::Local);
         }
     }
 
@@ -39,6 +72,7 @@ impl Source {
             eprintln!("[source] daemon present: local acquisition stopped");
             h.stop();
         }
+        self.feed.set(Feed::Daemon);
         self.watch.publish(s);
     }
 
@@ -106,7 +140,12 @@ fn serve_once(src: &Shared, quit: &AtomicBool) -> zbus::Result<()> {
             return Ok(());
         }
         let msg = msg?;
-        match msg.header().member().map(|m| m.as_str().to_string()).as_deref() {
+        match msg
+            .header()
+            .member()
+            .map(|m| m.as_str().to_string())
+            .as_deref()
+        {
             Some("NameOwnerChanged") => {
                 // Daemon (re)started or stopped; do not re-activate a daemon
                 // that was just stopped on purpose.
@@ -130,9 +169,15 @@ fn serve_once(src: &Shared, quit: &AtomicBool) -> zbus::Result<()> {
 pub struct SourceHandle {
     src: Shared,
     quit: Arc<AtomicBool>,
+    feed: FeedCell,
 }
 
 impl SourceHandle {
+    /// Daemon or local fallback, for the alert of the window.
+    pub fn feed(&self) -> FeedCell {
+        self.feed.clone()
+    }
+
     pub fn stop(self) {
         self.quit.store(true, Ordering::Relaxed);
         let local = {
@@ -148,21 +193,29 @@ impl SourceHandle {
 
 /// Spawn the state source thread.
 pub fn spawn(watch: Arc<Watch>) -> SourceHandle {
-    let src: Shared = Arc::new(Mutex::new(Source { watch, local: None, stopped: false }));
+    let feed = FeedCell::default();
+    let src: Shared = Arc::new(Mutex::new(Source {
+        watch,
+        feed: feed.clone(),
+        local: None,
+        stopped: false,
+    }));
     let quit = Arc::new(AtomicBool::new(false));
     let (s2, q2) = (src.clone(), quit.clone());
-    let _ = std::thread::Builder::new().name("state-source".into()).spawn(move || {
-        while !q2.load(Ordering::Relaxed) {
-            if let Err(e) = serve_once(&s2, &q2) {
-                eprintln!("[source] session bus: {e} — local acquisition, retry in 10s");
-                if !q2.load(Ordering::Relaxed) {
-                    lock(&s2).go_local();
+    let _ = std::thread::Builder::new()
+        .name("state-source".into())
+        .spawn(move || {
+            while !q2.load(Ordering::Relaxed) {
+                if let Err(e) = serve_once(&s2, &q2) {
+                    eprintln!("[source] session bus: {e} — local acquisition, retry in 10s");
+                    if !q2.load(Ordering::Relaxed) {
+                        lock(&s2).go_local();
+                    }
                 }
+                std::thread::sleep(Duration::from_secs(10));
             }
-            std::thread::sleep(Duration::from_secs(10));
-        }
-    });
-    SourceHandle { src, quit }
+        });
+    SourceHandle { src, quit, feed }
 }
 
 /// Battery history from the daemon, `None` when it is absent or fails.
@@ -173,7 +226,9 @@ pub fn load_history_from_daemon() -> Option<Vec<HistoryEntry>> {
     if !client::daemon_present(&conn) {
         return None;
     }
-    client::fetch_history(&conn, 0).map_err(|e| eprintln!("[source] History() failed: {e}")).ok()
+    client::fetch_history(&conn, 0)
+        .map_err(|e| eprintln!("[source] History() failed: {e}"))
+        .ok()
 }
 
 /// Battery history from the file (fallback). Disk I/O: worker thread only.
@@ -186,10 +241,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn feed_cell_round_trips() {
+        let c = FeedCell::default();
+        assert_eq!(c.get(), Feed::Starting);
+        for f in [Feed::Daemon, Feed::Local, Feed::Starting] {
+            c.set(f);
+            assert_eq!(c.clone().get(), f);
+        }
+    }
+
+    #[test]
     fn unreadable_daemon_keeps_last_state_and_says_why() {
-        let last = Snapshot { caps_lock: true, ..Default::default() };
+        let last = Snapshot {
+            caps_lock: true,
+            ..Default::default()
+        };
         let s = unreadable_snapshot(&last, "bad Json property");
         assert!(s.caps_lock);
-        assert_eq!(s.kb_error.as_deref(), Some("daemon unreadable: bad Json property"));
+        assert_eq!(
+            s.kb_error.as_deref(),
+            Some("daemon unreadable: bad Json property")
+        );
     }
 }

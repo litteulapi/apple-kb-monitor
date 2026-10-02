@@ -183,7 +183,7 @@ msgid "estimate from the voltage curve"
 msgstr "estimation d’après la courbe de tension"
 
 msgid "battery level unknown"
-msgstr "niveau de batterie inconnu"
+msgstr "niveau des piles inconnu"
 
 msgid "{} (declared)"
 msgstr "{} (déclarée)"
@@ -213,7 +213,7 @@ msgid "Only one reading in the last {}: {}."
 msgstr "Une seule mesure sur {} : {}."
 
 msgid "Battery %"
-msgstr "Batterie %"
+msgstr "Piles %"
 
 msgid "Voltage {}–{} V"
 msgstr "Tension {}–{} V"
@@ -233,12 +233,6 @@ msgstr "maintenant"
 msgid "daemon unreadable: {}"
 msgstr "démon illisible : {}"
 
-msgid "Keys"
-msgstr "Touches"
-
-msgid "Diag"
-msgstr "Diag"
-
 msgid "Waiting for keyboard data..."
 msgstr "En attente des données du clavier…"
 
@@ -255,7 +249,7 @@ msgid "Thresholds"
 msgstr "Seuils"
 
 msgid "Batteries"
-msgstr "Batteries"
+msgstr "Piles"
 
 msgid "Updated"
 msgstr "Mis à jour"
@@ -311,14 +305,8 @@ msgstr "CAPS"
 msgid "NUM"
 msgstr "NUM"
 
-msgid "Radio"
-msgstr "Radio"
-
 msgid "Device"
 msgstr "Appareil"
-
-msgid "Name"
-msgstr "Nom"
 
 msgid "Firmware"
 msgstr "Firmware"
@@ -351,7 +339,7 @@ msgid "Restore the keyboard's own name"
 msgstr "Rétablir le nom d’origine du clavier"
 
 msgid "Battery History"
-msgstr "Historique de la batterie"
+msgstr "Historique des piles"
 
 msgid "Loading history..."
 msgstr "Chargement de l’historique…"
@@ -535,3 +523,122 @@ msgstr "lu {}"
 
 msgid "Now: {}"
 msgstr "Actuellement : {}"
+
+# Pip-Boy shell (docs/DA-PIPBOY.md): header, tabs, alerts, actions.
+
+msgid "Batteries, link and actions"
+msgstr "Piles, liaison et actions"
+
+msgid "Bluetooth link and signal"
+msgstr "Liaison Bluetooth et signal"
+
+msgid "Function keys and key mapping"
+msgstr "Touches de fonction et mapping des touches"
+
+msgid "History, batteries, device and firmware"
+msgstr "Historique, piles, appareil et firmware"
+
+msgid "ONLINE"
+msgstr "EN LIGNE"
+
+msgid "OFFLINE"
+msgstr "HORS LIGNE"
+
+msgid "NO DATA"
+msgstr "SANS DONNÉES"
+
+msgid "READ"
+msgstr "LU"
+
+msgid "Copy"
+msgstr "Copier"
+
+msgid "Copy the command to the clipboard"
+msgstr "Copier la commande dans le presse-papiers"
+
+msgid "Reconnect"
+msgstr "Reconnecter"
+
+msgid "Ask the daemon to page the keyboard now"
+msgstr "Demander au démon d’appeler le clavier maintenant"
+
+msgid "Manual mapping"
+msgstr "Mapping manuel"
+
+msgid "Function keys"
+msgstr "Touches de fonction"
+
+msgid "Reconnection requested: press a key on the keyboard"
+msgstr "Reconnexion demandée : appuyez sur une touche du clavier"
+
+msgid "The daemon refused the reconnection request"
+msgstr "Le démon a refusé la demande de reconnexion"
+
+msgid "State"
+msgstr "État"
+
+msgid "Actions"
+msgstr "Actions"
+
+msgid "Name of this keyboard on this computer"
+msgstr "Nom de ce clavier sur cet ordinateur"
+
+msgid "Fn: {}"
+msgstr "Fn : {}"
+
+msgid "Log"
+msgstr "Journal"
+
+msgid "LOW"
+msgstr "BAS"
+
+msgid "CRITICAL"
+msgstr "CRITIQUE"
+
+msgid "EMPTY"
+msgstr "VIDE"
+
+msgid "Daemon absent: this window reads the keyboard itself"
+msgstr "Démon absent : cette fenêtre lit elle-même le clavier"
+
+msgid "Keyboard disconnected: press a key, or use Reconnect"
+msgstr "Clavier déconnecté : appuyez sur une touche, ou utilisez Reconnecter"
+
+msgid "Batteries low: plan their replacement"
+msgstr "Piles faibles : prévoyez leur remplacement"
+
+msgid "Batteries critical: replace them now"
+msgstr "Piles critiques : remplacez-les maintenant"
+
+msgid "Link"
+msgstr "Liaison"
+
+msgid "Restore the link"
+msgstr "Rétablir la liaison"
+
+msgid "Pairing lost or refused? Redo it from a terminal (asks for a confirmation):"
+msgstr "Appairage perdu ou refusé ? Refaites-le depuis un terminal (une confirmation est demandée) :"
+
+msgid "NAME"
+msgstr "NOM"
+
+msgid "Chemistry"
+msgstr "Chimie"
+
+msgid "Empty"
+msgstr "Vide"
+
+msgid "Critical"
+msgstr "Critique"
+
+msgid "Low"
+msgstr "Bas"
+
+msgid "Full"
+msgstr "Plein"
+
+msgid "Name on this computer"
+msgstr "Nom sur cet ordinateur"
+
+msgid "The name stored in the keyboard is changed from a terminal:"
+msgstr "Le nom enregistré dans le clavier se change depuis un terminal :"
