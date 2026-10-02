@@ -15,7 +15,7 @@
 //! it would use (pid, fd, MAC, PSM, state) and writes nothing. `inspect`
 //! only describes the control channel, with its negotiated L2CAP MTUs
 //! (`getsockopt(L2CAP_OPTIONS)`, read-only): the pre-flight of
-//! `akmctl rename --device-name --write-device-name` reads the outgoing MTU
+//! `akmctl rename --device-name` reads the outgoing MTU
 //! there (#248). `/etc/apple-kb-monitor/hid-suspend.conf` `enabled = false`
 //! turns the sending off (`inspect` and `--dry-run` still run).
 //!

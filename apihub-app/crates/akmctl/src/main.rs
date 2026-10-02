@@ -87,17 +87,21 @@ fn run(cmd: Command) -> u8 {
             device_name: Some(dn),
             show,
             restore,
-            write_device_name,
+            // Accepted and ignored (compatibility): writing is the default.
+            write_device_name: _,
+            dry_run,
             check,
+            yes,
+            verbose,
             mac,
             ..
         } => {
-            let mode = if write_device_name {
-                devnamecmd::Mode::Write
+            let mode = if dry_run {
+                devnamecmd::Mode::DryRun
             } else if check {
                 devnamecmd::Mode::Check
             } else {
-                devnamecmd::Mode::DryRun
+                devnamecmd::Mode::Write
             };
             let action = match (dn, show, restore) {
                 (_, true, _) => devnamecmd::Action::Show,
@@ -108,7 +112,7 @@ fn run(cmd: Command) -> u8 {
                     return EXIT_USAGE;
                 }
             };
-            devnamecmd::run(action, mac)
+            devnamecmd::run(action, mac, devnamecmd::Opts { yes, verbose })
         }
         Command::Rename { name, mac, .. } => cmd_rename(name.as_deref().unwrap_or(""), mac),
         Command::Watch => cmd_watch(),

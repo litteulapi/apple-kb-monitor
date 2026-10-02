@@ -35,7 +35,7 @@
 //! `akm-hid-control inspect` ([`Action::Inspect`]) stops after step 4 and
 //! reports the channel, among others its negotiated L2CAP MTUs read with
 //! `getsockopt(SOL_L2CAP, L2CAP_OPTIONS)` (read-only): the pre-flight of
-//! `akmctl rename --device-name --write-device-name` needs the **outgoing**
+//! `akmctl rename --device-name` needs the **outgoing**
 //! MTU of the control channel (#248, lock 2). No byte is ever sent on that path.
 //!
 //! This file holds the only `send` of the crate (checked by a source scan).

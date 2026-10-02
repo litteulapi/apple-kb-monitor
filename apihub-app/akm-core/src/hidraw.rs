@@ -219,8 +219,9 @@ pub fn send_will_shutdown(enabled: bool, connected: bool) -> crate::parity::Outc
 }
 
 /// The keyboard's hidraw node opened by a short-lived command (`akmctl`)
-/// for ONE guarded write, under the cross-process lock shared with the
-/// daemon (released on drop). Every write still goes through
+/// for ONE guarded write (and, for the name, the read-back of `0x51`-`0x54`
+/// that follows it, [`WriteDoor::read_name`]), under the cross-process lock
+/// shared with the daemon (released on drop). Every write still goes through
 /// [`hid_write_feature`] (register map, operation, length, fixed-size doors),
 /// after the 1 s spacing that follows the last hardware access, and is
 /// recorded by the circuit breaker. Apple's R3 (#251): the breaker that
@@ -282,6 +283,31 @@ impl WriteDoor {
     /// `HID_UNIQ` of the opened node (upper-case).
     pub fn mac(&self) -> String {
         self.mac.to_ascii_uppercase()
+    }
+
+    /// Read `0x51`-`0x54` now, in this connection (still under the HID lock):
+    /// the 32 data bytes of the name. Every request goes through
+    /// [`crate::read_policy::SafeSource`] (register map, 1 s spacing, circuit
+    /// breaker, stop at the first failure, never a retry), after the spacing
+    /// that follows the last hardware access (the write).
+    pub fn read_name(&self) -> io::Result<Vec<u8>> {
+        use std::os::fd::AsRawFd;
+        let wait =
+            crate::read_policy::wait_before(crate::read_policy::last_hw_access(), Instant::now());
+        if !wait.is_zero() {
+            std::thread::sleep(wait);
+        }
+        let raw = Hidraw(self.file.as_raw_fd());
+        crate::devname::read_name_from(&crate::read_policy::SafeSource::new(&raw))
+    }
+}
+
+impl crate::devname::NameDoor for WriteDoor {
+    fn read_name(&self) -> io::Result<Vec<u8>> {
+        WriteDoor::read_name(self)
+    }
+    fn as_sink(&self) -> &dyn crate::parity::FeatureSink {
+        self
     }
 }
 

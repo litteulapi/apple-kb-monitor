@@ -2,47 +2,38 @@
 //!
 //! Two names exist (docs/RENOMMER-CLAVIER.md):
 //! * `akmctl rename <nom>`: alias of THIS computer (BlueZ `Alias`), the
-//!   default, risk-free, unchanged;
-//! * `akmctl rename --device-name ...`: the keyboard's own name, stored in its
-//!   firmware (`0x51`-`0x54` read, `0x55` written by Lion), seen by every host.
+//!   default, unchanged;
+//! * `akmctl rename --device-name <nom>`: the keyboard's own name, stored in
+//!   its firmware (`0x51`-`0x54` read, `0x55` written), seen by every host.
 //!
-//! Four modes:
-//! * `--show`: the daemon's cache (no hardware request);
-//! * `--dry-run` (the default): validates the name, shows the pre-flight
-//!   without the MTU (it needs `pkexec`), saves the current name (backup
-//!   0600) and prints every byte that would be sent with its level of proof;
-//! * `--check`: the WHOLE pre-flight, control-channel MTU included (one
-//!   `pkexec akm-hid-control inspect`, read-only), the backup, the plan, then
-//!   stops where the consent would be asked. Nothing is written, nothing is
-//!   asked;
-//! * `--write-device-name`: the guarded sequence of [`akm_core::devname::run`],
-//!   which writes only once THREE locks are lifted.
+//! `akmctl rename --device-name NOM` WRITES the name (measured on the real
+//! keyboard on 02/10/2026: the firmware accepts the frame and `0x51`-`0x54`
+//! show the new name in the same connection). The flow of
+//! [`akm_core::devname::run`]: name validated → pre-flight (connected,
+//! battery, breaker, last read complete, `doctor` green, control-channel MTU
+//! ≥ 66 read by the single `pkexec akm-hid-control inspect`, no password in
+//! the active local session) → backup 0600 of the current name → ONE
+//! confirmation (`[o/N]` / `[y/N]`; `--yes` skips it and works without a
+//! terminal) → the hidraw door (under the HID lock) → ONE write → immediate
+//! read-back of `0x51`-`0x54` through the same door → verdict → the daemon is
+//! asked to read the name again (D-Bus `RereadName`).
 //!
-//! The three locks (none removed, lock 1 gained an interactive form):
-//! 1. **consent**: `[apple] allow_device_name_write = true` in `config.toml`
-//!    (the only way for automation, no terminal) **or**, in an interactive
-//!    terminal (stdin AND stdout are a TTY) when that key is absent/false,
-//!    the word `ECRIRE` typed exactly (case-sensitive) after the plan, the
-//!    backup and the unmeasured risks were shown. That consent is for THIS
-//!    run only: nothing is written into `config.toml`. Without a terminal and
-//!    without the key: refused before any pre-flight, as before;
-//! 2. the outgoing MTU of the L2CAP control channel, read here through
-//!    `pkexec akm-hid-control inspect --mac <MAC>` (read-only, once per
-//!    command), ≥ 66;
-//! 3. the name typed again in the terminal.
+//! Other modes: `--show` (the daemon's cache, no hardware request),
+//! `--dry-run` (the bytes, no pkexec, nothing written), `--check` (the whole
+//! pre-flight and the backup, nothing written, nothing asked), `--restore
+//! FILE` (writes a backup back, same flow). Without a terminal and without
+//! `--yes`: refused before anything is probed.
 //!
-//! No D-Bus method, no window nor tray button can reach this: only this
-//! interactive command. The Settings module only opens a terminal on it.
-//!
-//! Messages are in French when `LC_ALL`/`LC_MESSAGES`/`LANG` starts with `fr`,
-//! in English otherwise. Exit codes: see [`EXIT_LOCK1`] and the following.
+//! The output is short; `--verbose` (and `--dry-run`) add the byte-by-byte
+//! detail and the `[devname]` journal. Messages are in French when
+//! `LC_ALL`/`LC_MESSAGES`/`LANG` starts with `fr`, in English otherwise. Exit
+//! codes: see [`EXIT_NO_CONFIRM`] and the following.
 
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use akm_core::devname::{
-    self, Backup, Frame, Outcome, Preflight, PreflightFail, Reconnect, RenameEnv, Request,
+    self, Backup, Frame, NameDoor, Outcome, Preflight, PreflightFail, RenameEnv, Request,
 };
 use akm_core::parity::FeatureSink;
 use akm_core::registry::WriteSession;
@@ -51,22 +42,17 @@ use akm_core::Snapshot;
 use crate::bus;
 use crate::cli::{EXIT_ABSENT, EXIT_ERROR, EXIT_OK};
 
-/// Refused at lock 1: the configuration key is not `true` and no interactive
-/// consent is possible (no terminal). Nothing was touched.
-pub const EXIT_LOCK1: u8 = 10;
-/// Refused by the pre-flight (lock 2, the control-channel MTU, included).
-/// Nothing was written.
+/// No confirmation possible: not a terminal and no `--yes`. Nothing was
+/// touched (no pre-flight, no pkexec, no backup).
+pub const EXIT_NO_CONFIRM: u8 = 10;
+/// Refused by the pre-flight (control-channel MTU included). Nothing written.
 pub const EXIT_PREFLIGHT: u8 = 11;
-/// Cancelled at the keyboard: `ECRIRE` not typed, or the name typed again
-/// differs. Nothing was written (the backup stays).
+/// Cancelled: the answer was not a yes. Nothing written (the backup stays).
 pub const EXIT_CANCELLED: u8 = 12;
-/// Written, but the keyboard did not reconnect within the delay.
-pub const EXIT_NO_RECONNECT: u8 = 13;
+/// Written, but the read-back was not possible: check later with `--show`.
+pub const EXIT_UNVERIFIED: u8 = 13;
 /// Written, read back DIFFERENT: the exact rollback command was printed.
 pub const EXIT_MISMATCH: u8 = 14;
-
-/// The word that lifts lock 1 for one run (case-sensitive, no accent).
-pub const CONSENT_WORD: &str = "ECRIRE";
 
 /// What the user asked.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,11 +67,20 @@ pub enum Action {
 pub enum Mode {
     /// Validate, show the bytes, pre-flight without MTU, backup. No pkexec.
     DryRun,
-    /// The whole pre-flight (one pkexec for the MTU), backup, the plan; stops
-    /// where the consent would be asked. Nothing written, nothing asked.
+    /// The whole pre-flight (one pkexec for the MTU) and the backup; stops
+    /// where the confirmation would be asked. Nothing written, nothing asked.
     Check,
-    /// The guarded write.
+    /// The write (the default).
     Write,
+}
+
+/// Options of a run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Opts {
+    /// `--yes`: do not ask the confirmation (works without a terminal).
+    pub yes: bool,
+    /// `--verbose`: frames, wire bytes, proof, `[devname]` journal.
+    pub verbose: bool,
 }
 
 /// Language of the messages (French if the locale starts with `fr`).
@@ -153,10 +148,11 @@ pub trait World {
     /// control channel and the helper's text (read-only, nothing sent).
     fn probe_control_mtu(&mut self, mac: &str) -> Result<(u16, String), String>;
     /// Open the hidraw node under the HID lock (writes nothing by itself).
-    fn open_door(&mut self) -> Result<Box<dyn FeatureSink>, String>;
+    fn open_door(&mut self) -> Result<Box<dyn NameDoor>, String>;
     fn save_backup(&mut self, b: &Backup) -> std::io::Result<PathBuf>;
     fn now_unix(&mut self) -> u64;
-    fn sleep(&mut self, d: Duration);
+    /// Ask the daemon to read the name again (D-Bus `RereadName`).
+    fn reread_name(&mut self) -> Result<(), String>;
 }
 
 struct Stdio;
@@ -200,8 +196,8 @@ impl World for RealWorld {
     fn probe_control_mtu(&mut self, mac: &str) -> Result<(u16, String), String> {
         crate::hid_control::inspect_control_mtu(mac)
     }
-    fn open_door(&mut self) -> Result<Box<dyn FeatureSink>, String> {
-        akm_core::hidraw::WriteDoor::open().map(|d| Box::new(d) as Box<dyn FeatureSink>)
+    fn open_door(&mut self) -> Result<Box<dyn NameDoor>, String> {
+        akm_core::hidraw::WriteDoor::open().map(|d| Box::new(d) as Box<dyn NameDoor>)
     }
     fn save_backup(&mut self, b: &Backup) -> std::io::Result<PathBuf> {
         devname::write_backup(&devname::state_dir(), b)
@@ -209,8 +205,9 @@ impl World for RealWorld {
     fn now_unix(&mut self) -> u64 {
         now_unix()
     }
-    fn sleep(&mut self, d: Duration) {
-        std::thread::sleep(d);
+    fn reread_name(&mut self) -> Result<(), String> {
+        let conn = bus::connect().map_err(|e| e.to_string())?;
+        bus::reread_name(&conn).map_err(|e| e.to_string())
     }
 }
 
@@ -236,13 +233,8 @@ fn snapshot_mac(s: &Snapshot) -> Option<String> {
         .or_else(|| s.keyboard.as_ref().and_then(|k| k.device.mac.clone()))
 }
 
-/// Pre-flight facts from a snapshot (+ doctor verdict, terminal, MTU probe).
-pub fn preflight_from(
-    s: &Snapshot,
-    doctor_green: bool,
-    interactive: bool,
-    control_mtu: Option<u16>,
-) -> Preflight {
+/// Pre-flight facts from a snapshot (+ doctor verdict, MTU probe).
+pub fn preflight_from(s: &Snapshot, doctor_green: bool, control_mtu: Option<u16>) -> Preflight {
     let k = s.keyboard.as_ref();
     Preflight {
         connected: s.connected,
@@ -253,47 +245,30 @@ pub fn preflight_from(
         breaker_open: k.is_some_and(|k| k.breaker_open),
         recent_read_failure: k.is_some_and(|k| k.incomplete) || s.kb_error.is_some(),
         doctor_green,
-        interactive,
         control_mtu,
     }
 }
 
-/// Lock 1, as read from `config.toml` (default false).
-fn config_allows_write() -> bool {
-    akm_core::config::load(&akm_core::config::default_path())
-        .0
-        .allow_device_name_write
-}
-
-pub fn run(action: Action, mac: Option<String>) -> u8 {
+pub fn run(action: Action, mac: Option<String>, opts: Opts) -> u8 {
     let lang = Lang::detect();
     let mut world = RealWorld;
     let mut io = Stdio;
-    dispatch(
-        action,
-        mac,
-        config_allows_write(),
-        lang,
-        &mut world,
-        &mut io,
-    )
+    dispatch(action, mac, opts, lang, &mut world, &mut io)
 }
 
 /// The whole command on a given world and terminal (what the tests drive).
 pub fn dispatch(
     action: Action,
     mac: Option<String>,
-    config_allowed: bool,
+    opts: Opts,
     lang: Lang,
     world: &mut dyn World,
     io: &mut dyn Io,
 ) -> u8 {
     match action {
         Action::Show => show(lang, world, io),
-        Action::Rename { name, mode } => rename(&name, mode, mac, config_allowed, lang, world, io),
-        Action::Restore { file, mode } => {
-            restore(&file, mode, mac, config_allowed, lang, world, io)
-        }
+        Action::Rename { name, mode } => rename(&name, mode, mac, opts, lang, world, io),
+        Action::Restore { file, mode } => restore(&file, mode, mac, opts, lang, world, io),
     }
 }
 
@@ -343,6 +318,8 @@ fn show(lang: Lang, world: &mut dyn World, io: &mut dyn Io) -> u8 {
     }
 }
 
+/// The detail shown by `--verbose` and `--dry-run`: proof of the frame, what
+/// was measured, what is not.
 fn proof_state(lang: Lang) -> String {
     let mut s = format!(
         "{} {}.\n{}\n",
@@ -356,7 +333,17 @@ fn proof_state(lang: Lang) -> String {
     for u in devname::RESOLVED_BY_DISASSEMBLY {
         s.push_str(&format!("  - {u}\n"));
     }
-    s.push_str(&risks(lang));
+    s.push_str(lang.t(
+        "Mesuré sur le clavier (micrologiciel 0x0050) :\n",
+        "Measured on the keyboard (firmware 0x0050):\n",
+    ));
+    for u in devname::RESOLVED_BY_MEASUREMENT {
+        s.push_str(&format!("  - {u}\n"));
+    }
+    s.push_str(lang.t("Non mesuré :\n", "Not measured:\n"));
+    for u in devname::UNKNOWNS {
+        s.push_str(&format!("  - {u}\n"));
+    }
     s.push_str(lang.t("Expériences :\n", "Experiments:\n"));
     for e in devname::VALIDATION_EXPERIMENTS {
         s.push_str(&format!("  - {e}\n"));
@@ -364,59 +351,15 @@ fn proof_state(lang: Lang) -> String {
     s
 }
 
-/// The two unmeasured risks, in the user's language, then akm-core's list.
-fn risks(lang: Lang) -> String {
-    let mut s = String::from(lang.t(
-        "RISQUES NON MESURÉS (aucun désassemblage ne peut les donner ; docs/RENOMMER-CLAVIER.md §5.3, §6) :\n\
-         \x20 - U5 : la réponse du micrologiciel à un SET 0x55 est inconnue (Apple attend un HANDSHAKE réussi sous 1 s ; une erreur serait visible dans [hid-write] failed) ;\n\
-         \x20 - U3 : la persistance du nom au changement de piles n'est pas garantie (le 0x55 du Magic Keyboard est déclaré volatile) ; la sauvegarde permet de réécrire.\n\
-         \x20 Avoir un second clavier fonctionnel avant d'écrire.\n",
-        "RISKS NOT MEASURED (no disassembly can give them; docs/RENOMMER-CLAVIER.md §5.3, §6):\n\
-         \x20 - U5: the firmware's answer to a SET 0x55 is unknown (Apple waits for a successful HANDSHAKE within 1 s; an error would show as [hid-write] failed);\n\
-         \x20 - U3: persistence of the name across a battery change is not guaranteed (the Magic Keyboard declares its 0x55 volatile); the backup allows rewriting it.\n\
-         \x20 Have a second working keyboard before writing.\n",
-    ));
-    for u in devname::UNKNOWNS {
-        s.push_str(&format!("  - {u}\n"));
-    }
-    s
-}
-
-fn locks_state(lang: Lang, allow: bool, interactive: bool) -> String {
-    let lock1 = match (allow, interactive) {
-        (true, _) => lang.t(
-            "levé par config.toml ([apple] allow_device_name_write = true)",
-            "lifted by config.toml ([apple] allow_device_name_write = true)",
-        ),
-        (false, true) => lang.t(
-            "config.toml fermé (défaut) : dans ce terminal, le mot ECRIRE tapé après le plan vaut consentement pour CETTE exécution seulement (rien n'est écrit dans config.toml)",
-            "config.toml closed (default): in this terminal, typing ECRIRE after the plan is the consent for THIS run only (nothing is written into config.toml)",
-        ),
-        (false, false) => lang.t(
-            "config.toml fermé (défaut) et pas de terminal : refus. Automatisation : [apple] allow_device_name_write = true dans ~/.config/apple-kb-monitor/config.toml ; sinon lancer la commande dans un terminal",
-            "config.toml closed (default) and no terminal: refused. Automation: [apple] allow_device_name_write = true in ~/.config/apple-kb-monitor/config.toml; otherwise run the command in a terminal",
-        ),
-    };
+/// The frames, byte for byte, with their proof (`--verbose`, `--dry-run`).
+fn frames_text(frames: &[Frame], lang: Lang) -> String {
     format!(
-        "{}\n  1. {} {lock1}\n  2. {} {} {}\n  3. {}\n",
+        "{}\n{}",
         lang.t(
-            "Trois verrous, tous nécessaires pour une écriture réelle :",
-            "Three locks, all required for a real write:"
+            "Trame envoyée (celle de Lion 10.7.5 setDeviceName:, établie par désassemblage) :",
+            "Frame sent (the one of Lion 10.7.5 setDeviceName:, established by disassembly):"
         ),
-        lang.t("consentement :", "consent:"),
-        lang.t(
-            "MTU sortante du canal de contrôle L2CAP >=",
-            "outgoing MTU of the L2CAP control channel >="
-        ),
-        devname::MIN_CONTROL_MTU,
-        lang.t(
-            ": lue sur la socket vivante (`pkexec akm-hid-control inspect --mac <MAC>`, authentification administrateur, getsockopt en lecture seule, rien n'est envoyé) ; inconnue ou plus petite = refus",
-            ": read on the live socket (`pkexec akm-hid-control inspect --mac <MAC>`, administrator authentication, getsockopt read-only, nothing sent); unknown or smaller = refused"
-        ),
-        lang.t(
-            "le nom retapé exactement, dans un terminal interactif",
-            "the name typed again, exactly, in an interactive terminal"
-        ),
+        devname::render_frames(frames)
     )
 }
 
@@ -426,11 +369,16 @@ fn fail_text(f: &PreflightFail, lang: Lang) -> String {
     }
     match f {
         PreflightFail::NotConnected => "clavier non connecté".into(),
-        PreflightFail::Battery => "batterie sous 20 % et état différent de « normal » (ou inconnu)".into(),
+        PreflightFail::Battery => {
+            "batterie sous 20 % et état différent de « normal » (ou inconnu)".into()
+        }
         PreflightFail::BreakerOpen => "disjoncteur ouvert : le clavier a cessé de répondre".into(),
-        PreflightFail::RecentReadFailure => "la dernière lecture matérielle a échoué ou est incomplète".into(),
-        PreflightFail::DoctorNotGreen => "`akmctl doctor` n'est pas vert (liaison, appairage, configuration)".into(),
-        PreflightFail::NotInteractive => "pas de terminal interactif (stdin et stdout doivent être un terminal)".into(),
+        PreflightFail::RecentReadFailure => {
+            "la dernière lecture matérielle a échoué ou est incomplète".into()
+        }
+        PreflightFail::DoctorNotGreen => {
+            "`akmctl doctor` n'est pas vert (liaison, appairage, configuration)".into()
+        }
         PreflightFail::ControlMtuUnknown => format!(
             "MTU sortante du canal de contrôle L2CAP inconnue : elle doit être lue (akm-hid-control inspect, lecture seule) et valoir >= {} avant d'envoyer une trame de 66 octets",
             devname::MIN_CONTROL_MTU
@@ -442,72 +390,55 @@ fn fail_text(f: &PreflightFail, lang: Lang) -> String {
     }
 }
 
-fn preflight_text(p: &Preflight, lang: Lang, dry_run: bool) -> String {
-    let fails: Vec<_> = devname::preflight(p)
-        .into_iter()
-        .filter(|f| !(dry_run && f.is_mtu()))
-        .collect();
-    let mut s = String::new();
-    if fails.is_empty() {
-        s.push_str(lang.t("Pré-vol : ok", "Pre-flight: ok"));
-        s.push_str(&format!(
-            " ({}{}{}{})\n",
-            lang.t("doctor vert, ", "doctor green, "),
-            match p.battery_pct {
-                Some(b) => format!("{} {b:.0} %, ", lang.t("batterie", "battery")),
-                None => String::new(),
-            },
-            lang.t("disjoncteur fermé", "breaker closed"),
-            match p.control_mtu {
-                Some(m) if !dry_run => format!(
-                    ", {} {m} >= {}",
-                    lang.t("MTU sortante", "outgoing MTU"),
-                    devname::MIN_CONTROL_MTU
-                ),
-                _ => String::new(),
-            }
-        ));
-    } else {
-        for f in &fails {
-            s.push_str(&format!(
-                "{} {}\n",
-                lang.t("Pré-vol : ÉCHEC -", "Pre-flight: FAILED -"),
-                fail_text(f, lang)
-            ));
-        }
-    }
-    if dry_run {
-        s.push_str(&format!(
-            "{} {} {}\n",
-            lang.t(
-                "Pré-vol : la MTU du canal de contrôle n'est pas lue en essai à blanc (elle demande pkexec) ; lue et exigée >=",
-                "Pre-flight: control-channel MTU not probed in a dry run (needs pkexec); probed and required >="
+/// The pre-flight in one line when it passes (`with_mtu` false: dry run, the
+/// MTU is not probed); the failures are listed by [`report`].
+fn preflight_ok_line(p: &Preflight, lang: Lang, with_mtu: bool) -> String {
+    format!(
+        "{} ({}{}{}{})\n",
+        lang.t("Pré-vol : ok", "Pre-flight: ok"),
+        lang.t("doctor vert, ", "doctor green, "),
+        match p.battery_pct {
+            Some(b) => format!("{} {b:.0} %, ", lang.t("batterie", "battery")),
+            None => String::new(),
+        },
+        lang.t("disjoncteur fermé", "breaker closed"),
+        match p.control_mtu {
+            Some(m) if with_mtu => format!(
+                ", {} {m} >= {}",
+                lang.t("MTU sortante", "outgoing MTU"),
+                devname::MIN_CONTROL_MTU
             ),
-            devname::MIN_CONTROL_MTU,
-            lang.t("avec --check ou --write-device-name", "with --check or --write-device-name")
-        ));
-    }
-    s
+            _ => String::new(),
+        }
+    )
 }
 
-fn restore_command(backup: &Path) -> String {
+/// The exact rollback command for a backup.
+pub fn restore_command(backup: &Path) -> String {
     format!(
-        "akmctl rename --device-name --restore {} --write-device-name",
+        "akmctl rename --device-name --restore {} --yes",
         backup.display()
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Not a terminal and no `--yes`: refused before anything is probed.
+fn refuse_no_confirmation(lang: Lang, io: &mut dyn Io) -> u8 {
+    io.out(lang.t(
+        "Refusé : pas de terminal pour confirmer. Ajoutez --yes pour écrire sans question. Rien n'a été touché.\n",
+        "Refused: no terminal to confirm. Add --yes to write without the question. Nothing was touched.\n",
+    ));
+    EXIT_NO_CONFIRM
+}
+
 fn rename(
     name: &str,
     mode: Mode,
     mac: Option<String>,
-    config_allowed: bool,
+    opts: Opts,
     lang: Lang,
     world: &mut dyn World,
     io: &mut dyn Io,
 ) -> u8 {
-    io.out(lang.t(TWO_NAMES_FR, TWO_NAMES));
     let frames = match devname::prepare(name) {
         Ok(f) => f,
         Err(e) => {
@@ -518,23 +449,14 @@ fn rename(
             return EXIT_ERROR;
         }
     };
-    io.out(&format!(
-        "\n{} {name:?}\n{}\n{}",
-        lang.t("Nouveau nom stocké dans le clavier :", "New name stored in the keyboard:"),
-        lang.t(
-            "Trame envoyée par le renommage d'Apple (Lion 10.7.5 setDeviceName:, établie par désassemblage) :",
-            "Frame Apple's rename sends (Lion 10.7.5 setDeviceName:, established by disassembly):"
-        ),
-        devname::render_frames(&frames)
-    ));
     match mode {
-        Mode::DryRun => dry_run(name, mac, config_allowed, lang, world, io),
+        Mode::DryRun => dry_run(name, &frames, mac, lang, world, io),
         Mode::Check | Mode::Write => guarded(
             &Request::Rename(name.to_string()),
             frames,
             mode,
             mac,
-            config_allowed,
+            opts,
             lang,
             world,
             io,
@@ -543,25 +465,52 @@ fn rename(
 }
 
 fn dry_run(
-    _name: &str,
+    name: &str,
+    frames: &[Frame],
     mac: Option<String>,
-    config_allowed: bool,
     lang: Lang,
     world: &mut dyn World,
     io: &mut dyn Io,
 ) -> u8 {
+    io.out(lang.t(TWO_NAMES_FR, TWO_NAMES));
+    io.out(&format!(
+        "\n{} {name:?}\n{}",
+        lang.t(
+            "Nouveau nom stocké dans le clavier :",
+            "New name stored in the keyboard:"
+        ),
+        frames_text(frames, lang)
+    ));
     io.out(lang.t(
         "\nESSAI À BLANC : rien n'est écrit dans le clavier.\n",
         "\nDRY RUN: nothing is written to the keyboard.\n",
     ));
-    let interactive = io.interactive();
     match world.snapshot() {
         Ok(s) => {
             let green = world.doctor_green(mac.as_deref());
-            io.out(&preflight_text(
-                &preflight_from(&s, green, interactive, None),
-                lang,
-                true,
+            let p = preflight_from(&s, green, None);
+            let fails: Vec<_> = devname::preflight(&p)
+                .into_iter()
+                .filter(|f| !f.is_mtu())
+                .collect();
+            if fails.is_empty() {
+                io.out(&preflight_ok_line(&p, lang, false));
+            }
+            for f in &fails {
+                io.out(&format!(
+                    "{} {}\n",
+                    lang.t("Pré-vol : ÉCHEC -", "Pre-flight: FAILED -"),
+                    fail_text(f, lang)
+                ));
+            }
+            io.out(&format!(
+                "{} {} {}\n",
+                lang.t(
+                    "Pré-vol : la MTU du canal de contrôle n'est pas lue en essai à blanc (elle demande pkexec) ; lue et exigée >=",
+                    "Pre-flight: control-channel MTU not probed in a dry run (needs pkexec); probed and required >="
+                ),
+                devname::MIN_CONTROL_MTU,
+                lang.t("avec --check ou à l'écriture", "with --check or when writing")
             ));
             match cached_raw(&s) {
                 Some(raw) => {
@@ -576,7 +525,10 @@ fn dry_run(
                             lang.t("Sauvegarde du nom actuel :", "Backup of the current name:"),
                             p.display()
                         )),
-                        Err(e) => io.out(&format!("{} {e}\n", lang.t("Sauvegarde : ÉCHEC -", "Backup: FAILED -"))),
+                        Err(e) => io.out(&format!(
+                            "{} {e}\n",
+                            lang.t("Sauvegarde : ÉCHEC -", "Backup: FAILED -")
+                        )),
                     }
                 }
                 None => io.out(lang.t(
@@ -594,33 +546,36 @@ fn dry_run(
         )),
     }
     io.out(&proof_state(lang));
-    io.out(&locks_state(lang, config_allowed, interactive));
     io.out(lang.t(
-        "\nÉtape suivante sans rien écrire : la même commande avec --check (pré-vol complet, MTU lue par pkexec). L'écriture réelle : --write-device-name et les trois verrous ci-dessus.\n",
-        "\nNext step without writing: the same command with --check (whole pre-flight, MTU read via pkexec). The real write: --write-device-name and the three locks above.\n",
+        "\nPour écrire : la même commande sans --dry-run (une confirmation [o/N], ou --yes). Pour tout vérifier sans écrire : --check.\n",
+        "\nTo write: the same command without --dry-run (one confirmation [y/N], or --yes). To check everything without writing: --check.\n",
     ));
     EXIT_OK
 }
 
-#[allow(clippy::too_many_arguments)]
 fn restore(
     file: &Path,
     mode: Mode,
     mac: Option<String>,
-    config_allowed: bool,
+    opts: Opts,
     lang: Lang,
     world: &mut dyn World,
     io: &mut dyn Io,
 ) -> u8 {
+    let refused = |io: &mut dyn Io, e: &str| {
+        io.journal(&format!(
+            "akmctl: {} {e}",
+            lang.t("sauvegarde refusée :", "backup refused:")
+        ));
+        EXIT_ERROR
+    };
     let b = match devname::read_backup(file) {
         Ok(b) => b,
-        Err(e) => {
-            io.journal(&format!(
-                "akmctl: {} {e}",
-                lang.t("sauvegarde refusée :", "backup refused:")
-            ));
-            return EXIT_ERROR;
-        }
+        Err(e) => return refused(io, &e),
+    };
+    let frames = match devname::frames_for_restore(&b) {
+        Ok(f) => f,
+        Err(e) => return refused(io, &e),
     };
     io.out(&format!(
         "{} {}: {} {:?}, {} {}, {} {}\n",
@@ -633,24 +588,12 @@ fn restore(
         lang.t("enregistrée le", "saved at"),
         devname::utc_stamp(b.created_unix)
     ));
-    let frames = match devname::frames_for_restore(&b) {
-        Ok(f) => f,
-        Err(e) => {
-            io.journal(&format!(
-                "akmctl: {} {e}",
-                lang.t("sauvegarde refusée :", "backup refused:")
-            ));
-            return EXIT_ERROR;
-        }
-    };
-    io.out(&devname::render_frames(&frames));
     if mode == Mode::DryRun {
+        io.out(&frames_text(&frames, lang));
         io.out(lang.t(
-            "ESSAI À BLANC : rien d'écrit. Ajoutez --check (pré-vol complet) ou --write-device-name pour restaurer (même protocole, mêmes trois verrous, nouvelle confirmation).\n",
-            "DRY RUN: nothing written. Add --check (whole pre-flight) or --write-device-name to restore (same protocol, same three locks, new confirmation).\n",
+            "ESSAI À BLANC : rien d'écrit. Sans --dry-run, la sauvegarde est réécrite dans le clavier (une confirmation [o/N], ou --yes).\n",
+            "DRY RUN: nothing written. Without --dry-run, the backup is written back into the keyboard (one confirmation [y/N], or --yes).\n",
         ));
-        io.out(&proof_state(lang));
-        io.out(&locks_state(lang, config_allowed, io.interactive()));
         return EXIT_OK;
     }
     guarded(
@@ -658,7 +601,7 @@ fn restore(
         frames,
         mode,
         mac,
-        config_allowed,
+        opts,
         lang,
         world,
         io,
@@ -667,34 +610,23 @@ fn restore(
 
 // ── the guarded flow ───────────────────────────────────────────────────────
 
-/// How lock 1 is (or is not) lifted in this run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Consent {
-    /// `[apple] allow_device_name_write = true`.
-    Config,
-    /// To be typed (`ECRIRE`) after the plan, this run only.
-    Interactive,
-    /// `--check`: never asked, never written.
-    Check,
-}
-
-/// The real environment of [`devname::run`]: daemon snapshot, doctor,
-/// terminal, MTU probe (one `pkexec` per command), backup dir, hidraw door,
-/// and the plan/consent/countdown shown to the user.
+/// The real environment of [`devname::run`]: daemon snapshot, doctor, MTU
+/// probe (one `pkexec` per command), backup dir, the single confirmation,
+/// the hidraw door (write, then read-back).
 struct Flow<'a> {
     world: &'a mut dyn World,
     io: &'a mut dyn Io,
     lang: Lang,
-    consent: Consent,
+    mode: Mode,
+    opts: Opts,
     mac: Option<String>,
-    frames: Vec<Frame>,
-    door: Option<Box<dyn FeatureSink>>,
+    /// The name being written (shown in the header and the question).
+    target: String,
+    door: Option<Box<dyn NameDoor>>,
     /// Result of the single MTU probe of this command (`None` = not run yet).
     mtu: Option<Result<u16, String>>,
     probes: u32,
-    last_preflight: Option<Preflight>,
-    backup_path: Option<PathBuf>,
-    consent_typed: bool,
+    preflights: u32,
     /// Why the hidraw door did not open (then nothing can be written).
     door_error: Option<String>,
 }
@@ -712,20 +644,31 @@ impl FeatureSink for Closed {
 
 static CLOSED: Closed = Closed;
 
+/// Is this answer a yes? (`o`, `oui` in French; `y`, `yes` in both.)
+fn is_yes(answer: &str, lang: Lang) -> bool {
+    let a = answer.trim().to_lowercase();
+    matches!(a.as_str(), "y" | "yes") || (lang == Lang::Fr && matches!(a.as_str(), "o" | "oui"))
+}
+
 impl Flow<'_> {
+    fn verbose(&mut self, line: &str) {
+        if self.opts.verbose {
+            self.io.journal(line);
+        }
+    }
+
     fn snapshot(&mut self) -> Option<Snapshot> {
         match self.world.snapshot() {
             Ok(s) => Some(s),
             Err((_, m)) => {
-                self.io
-                    .journal(&format!("[devname] daemon unavailable: {m}"));
+                self.io.journal(&format!("akmctl: daemon unavailable: {m}"));
                 None
             }
         }
     }
 
-    /// Lock 2: the outgoing MTU of the control channel, probed once (the
-    /// second pre-flight call, just before the write, reuses the value).
+    /// The outgoing MTU of the control channel, probed once (the second
+    /// pre-flight call, just before the write, reuses the value).
     fn control_mtu(&mut self, snapshot_mac: Option<&str>) -> Option<u16> {
         if self.mtu.is_none() {
             let Some(mac) = self
@@ -733,17 +676,12 @@ impl Flow<'_> {
                 .clone()
                 .or_else(|| snapshot_mac.map(str::to_string))
             else {
-                self.io
-                    .journal("[devname] MTU probe skipped: the keyboard's MAC is unknown");
+                self.verbose("[devname] MTU probe skipped: the keyboard's MAC is unknown");
                 self.mtu = Some(Err("MAC unknown".into()));
                 return None;
             };
-            self.io.out(&format!(
-                "\n{}\n",
-                self.lang.t(
-                    &format!("→ Verrou 2 : lecture de la MTU sortante du canal de contrôle L2CAP vers {mac} (pkexec akm-hid-control inspect --mac {mac} : UNE authentification administrateur, lecture seule, rien n'est envoyé)…"),
-                    &format!("→ Lock 2: reading the outgoing MTU of the L2CAP control channel to {mac} (pkexec akm-hid-control inspect --mac {mac}: ONE administrator authentication, read-only, nothing sent)...")
-                )
+            self.verbose(&format!(
+                "[devname] reading the outgoing MTU of the L2CAP control channel to {mac} (pkexec akm-hid-control inspect --mac {mac}: read-only, nothing sent)"
             ));
             self.probes += 1;
             let r = match self.world.probe_control_mtu(&mac) {
@@ -752,17 +690,18 @@ impl Flow<'_> {
                         .lines()
                         .filter(|l| l.contains(" fd ") || l.contains("inspected"))
                     {
-                        self.io.journal(&format!("[devname]   {}", l.trim()));
+                        self.verbose(&format!("[devname]   {}", l.trim()));
                     }
-                    self.io.journal(&format!(
+                    self.verbose(&format!(
                         "[devname] control-channel outgoing MTU = {m} (required >= {})",
                         devname::MIN_CONTROL_MTU
                     ));
                     Ok(m)
                 }
                 Err(e) => {
+                    // Always said: it explains the pre-flight refusal that follows.
                     self.io
-                        .journal(&format!("[devname] control-channel MTU unknown: {e}"));
+                        .journal(&format!("akmctl: control-channel MTU unknown: {e}"));
                     Err(e)
                 }
             };
@@ -770,82 +709,39 @@ impl Flow<'_> {
         }
         self.mtu.as_ref().and_then(|r| r.as_ref().ok().copied())
     }
-
-    /// The plan: what will be written, where, the backup, the pre-flight,
-    /// the risks. Shown once, just before the consent.
-    fn plan(&self) -> String {
-        let l = self.lang;
-        let mut s = String::new();
-        s.push_str(l.t(
-            "\n━━━ PLAN ━━━\nCe qui va être écrit dans la MÉMOIRE du clavier (micrologiciel BCM2042, rapport Feature 0x55, UNE trame) :\n",
-            "\n━━━ PLAN ━━━\nWhat will be written into the keyboard's MEMORY (BCM2042 firmware, Feature report 0x55, ONE frame):\n",
-        ));
-        for f in &self.frames {
-            s.push_str(&format!(
-                "  {} {:#04x} {} : {}\n  {} : {}\n",
-                l.t("rapport", "report"),
-                f.id(),
-                l.t("(65 octets)", "(65 bytes)"),
-                devname::hex(&f.report),
-                l.t("sur le fil (66 octets)", "on the wire (66 bytes)"),
-                devname::hex(&f.wire())
-            ));
-        }
-        if let Some(p) = &self.last_preflight {
-            s.push_str(&preflight_text(p, l, false));
-        }
-        match &self.backup_path {
-            Some(p) => s.push_str(&format!(
-                "{} {} (0600)\n  {} {}\n",
-                l.t("Sauvegarde du nom actuel :", "Backup of the current name:"),
-                p.display(),
-                l.t("retour arrière :", "rollback:"),
-                restore_command(p)
-            )),
-            None => s.push_str(l.t(
-                "Sauvegarde : aucune nouvelle (retour arrière = réécriture d'une sauvegarde existante)\n",
-                "Backup: none new (a rollback rewrites an existing backup)\n",
-            )),
-        }
-        s.push_str(&risks(l));
-        s.push_str(match self.consent {
-            Consent::Config => l.t(
-                "Verrou 1 : levé par config.toml ([apple] allow_device_name_write = true).\n",
-                "Lock 1: lifted by config.toml ([apple] allow_device_name_write = true).\n",
-            ),
-            Consent::Interactive => l.t(
-                "Verrou 1 : config.toml fermé (défaut). Le consentement vaut pour CETTE exécution seulement ; rien n'est écrit dans config.toml.\n",
-                "Lock 1: config.toml closed (default). The consent is for THIS run only; nothing is written into config.toml.\n",
-            ),
-            Consent::Check => l.t(
-                "Verrou 1 : non demandé (--check).\n",
-                "Lock 1: not asked (--check).\n",
-            ),
-        });
-        s
-    }
-
-    fn read_trimmed(&mut self) -> Option<String> {
-        self.io
-            .read_line()
-            .map(|l| l.trim_end_matches(['\n', '\r']).to_string())
-    }
 }
 
 impl RenameEnv for Flow<'_> {
     fn preflight(&mut self) -> Preflight {
-        let interactive = self.io.interactive();
-        let p = match self.snapshot() {
-            Some(s) => {
-                let mtu = self.control_mtu(snapshot_mac(&s).as_deref());
-                let mac = self.mac.clone();
-                let green = self.world.doctor_green(mac.as_deref());
-                preflight_from(&s, green, interactive, mtu)
-            }
-            None => Preflight::default(),
+        self.preflights += 1;
+        let Some(s) = self.snapshot() else {
+            return Preflight::default();
         };
-        if self.last_preflight.is_none() {
-            self.last_preflight = Some(p.clone());
+        if self.preflights == 1 {
+            let current = s
+                .keyboard
+                .as_ref()
+                .and_then(|k| k.device.name_on_keyboard.clone());
+            self.io.out(&format!(
+                "{} {} → « {} »\n",
+                self.lang.t(
+                    "Nom stocké dans le clavier :",
+                    "Name stored in the keyboard:"
+                ),
+                match current {
+                    Some(n) => format!("« {n} »"),
+                    None => self.lang.t("(pas encore lu)", "(not read yet)").to_string(),
+                },
+                self.target
+            ));
+        }
+        let mtu = self.control_mtu(snapshot_mac(&s).as_deref());
+        let mac = self.mac.clone();
+        let green = self.world.doctor_green(mac.as_deref());
+        let p = preflight_from(&s, green, mtu);
+        if self.preflights == 1 && devname::preflight(&p).is_empty() {
+            let line = preflight_ok_line(&p, self.lang, true);
+            self.io.out(&line);
         }
         p
     }
@@ -863,64 +759,38 @@ impl RenameEnv for Flow<'_> {
     }
     fn save_backup(&mut self, b: &Backup) -> std::io::Result<PathBuf> {
         let p = self.world.save_backup(b)?;
-        self.backup_path = Some(p.clone());
+        self.io.out(&format!(
+            "{} {}\n",
+            self.lang
+                .t("Sauvegarde du nom actuel :", "Backup of the current name:"),
+            p.display()
+        ));
         Ok(p)
     }
-    fn confirm(&mut self, prompt: &str, expected: &str) -> bool {
+    fn confirm(&mut self, target: &str) -> bool {
         let l = self.lang;
-        let plan = self.plan();
-        self.io.out(&plan);
-        if self.consent == Consent::Check {
-            self.io.out(l.t(
-                "\n--check : arrêt ici, avant toute demande de consentement. Rien n'est écrit, rien n'est demandé.\n",
-                "\n--check: stopping here, before any consent is asked. Nothing is written, nothing is asked.\n",
-            ));
+        if self.mode == Mode::Check {
             return false;
         }
-        if !self.io.interactive() {
-            self.io.out(l.t(
-                "\nrefusé : confirmation interactive requise (stdin et stdout doivent être un terminal)\n",
-                "\nrefused: interactive confirmation required (stdin and stdout must be a terminal)\n",
+        if !self.opts.yes {
+            self.io.out(&format!(
+                "{} « {target} » {} ",
+                l.t("Écrire", "Write"),
+                l.t(
+                    "dans la mémoire du clavier ? [o/N]",
+                    "into the keyboard's memory? [y/N]"
+                )
             ));
-            return false;
-        }
-        if self.consent == Consent::Interactive {
-            self.io.out(l.t(
-                &format!("\nPour consentir à cette écriture, pour cette exécution seulement, tapez exactement {CONSENT_WORD} (majuscules, sans accent) puis Entrée ; tout autre texte annule : "),
-                &format!("\nTo consent to this write, for this run only, type exactly {CONSENT_WORD} (upper case) then Enter; anything else cancels: "),
-            ));
-            if self.read_trimmed().as_deref() != Some(CONSENT_WORD) {
-                self.io.out(l.t(
-                    &format!("\nannulé : {CONSENT_WORD} n'a pas été tapé exactement ; rien n'est écrit (verrou 1).\n"),
-                    &format!("\ncancelled: {CONSENT_WORD} was not typed exactly; nothing written (lock 1).\n"),
-                ));
-                self.io.journal("[devname] decision: cancelled (lock 1, interactive consent not typed); nothing written, config.toml untouched");
+            let answer = self.io.read_line().unwrap_or_default();
+            if !is_yes(&answer, l) {
                 return false;
             }
-            self.consent_typed = true;
-            self.io.journal(&format!(
-                "[devname] lock 1 lifted for THIS run only: {CONSENT_WORD} typed in the terminal (config.toml untouched)"
-            ));
-        }
-        self.io.journal(&format!("[devname] {}", prompt.trim_end()));
-        self.io.out(l.t(
-            &format!("\nVerrou 3 : retapez le nom exactement ({expected:?}) puis Entrée ; tout autre texte annule : "),
-            &format!("\nLock 3: type the name again exactly ({expected:?}) then Enter; anything else cancels: "),
-        ));
-        let ok = self.read_trimmed().as_deref() == Some(expected);
-        if !ok {
-            self.io.out(l.t(
-                "\nannulé : le nom retapé diffère ; rien n'est écrit (verrou 3).\n",
-                "\ncancelled: the name typed again differs; nothing written (lock 3).\n",
-            ));
-            return false;
         }
         // Only now is the hardware node opened (under the HID lock).
         match self.world.open_door() {
             Ok(d) => self.door = Some(d),
             Err(e) => {
-                self.io
-                    .journal(&format!("[devname] write door not opened: {e}"));
+                self.verbose(&format!("[devname] write door not opened: {e}"));
                 self.door_error = Some(e);
             }
         }
@@ -928,68 +798,19 @@ impl RenameEnv for Flow<'_> {
     }
     fn sink(&self) -> &dyn FeatureSink {
         match &self.door {
-            Some(d) => d.as_ref(),
+            Some(d) => d.as_sink(),
             None => &CLOSED,
         }
     }
-    fn wait_reconnect(&mut self, max: Duration) -> Reconnect {
-        // Release the HID lock first: the daemon must read the name again.
-        self.door = None;
-        let l = self.lang;
-        let total = max.as_secs();
-        self.io.out(l.t(
-            &format!("\n✎ Trame envoyée.\n→ ÉTEIGNEZ le clavier (bouton latéral 3 s, voyant éteint), ATTENDEZ 5 s, RALLUMEZ-le.\n  Le nom ne se relit qu'après une reconnexion. Attente au plus {total} s…\n"),
-            &format!("\n✎ Frame sent.\n→ Switch the keyboard OFF (side button, 3 s, light off), WAIT 5 s, switch it ON.\n  The name is only read back after a reconnection. Waiting at most {total} s...\n"),
-        ));
-        let mut seen_down = false;
-        for elapsed in 0..total {
-            if let Ok(s) = self.world.snapshot() {
-                if !s.connected {
-                    if !seen_down {
-                        self.io.out(l.t(
-                            "\r  clavier éteint, rallumez-le…      ",
-                            "\r  keyboard off, switch it on...      ",
-                        ));
-                    }
-                    seen_down = true;
-                } else if seen_down {
-                    if let Some(raw) = cached_raw(&s) {
-                        self.io.out(&format!(
-                            "\r  {} ({elapsed} s)                     \n",
-                            l.t("reconnecté, nom relu", "reconnected, name read back")
-                        ));
-                        // BlueZ's Device1.Name (what Apple would check through
-                        // the HCI remote name), informative only.
-                        let bluez_name = s.keyboard.as_ref().and_then(|k| k.device.name.clone());
-                        return Reconnect::Back { raw, bluez_name };
-                    }
-                }
-            }
-            self.io.out(&format!(
-                "\r  {} {} s   ",
-                l.t("restant :", "left:"),
-                total - elapsed
-            ));
-            self.world.sleep(Duration::from_secs(1));
+    fn read_back(&mut self) -> std::io::Result<Vec<u8>> {
+        // The door is dropped right after: the HID lock goes back to the daemon.
+        match self.door.take() {
+            Some(d) => d.read_name(),
+            None => Err(std::io::Error::other("no hidraw door")),
         }
-        self.io.out("\n");
-        Reconnect::Timeout
     }
     fn log(&mut self, line: &str) {
-        // akm-core knows one lock 1 (the boolean); say how it was lifted.
-        let line = match self.consent {
-            Consent::Interactive if line.starts_with("[devname] lock 1 lifted") => {
-                "[devname] lock 1: config.toml closed; the consent (ECRIRE) will be asked in this terminal for this run only, after the pre-flight, the backup and the plan".to_string()
-            }
-            Consent::Check if line.starts_with("[devname] lock 1 lifted") => {
-                "[devname] --check: lock 1 not evaluated, nothing will be asked nor written".to_string()
-            }
-            Consent::Check if line.contains("cancelled (lock 3") => {
-                "[devname] --check: stopped before any consent; nothing written".to_string()
-            }
-            _ => line.to_string(),
-        };
-        self.io.journal(&line);
+        self.verbose(line);
     }
 }
 
@@ -999,215 +820,176 @@ fn guarded(
     frames: Vec<Frame>,
     mode: Mode,
     mac: Option<String>,
-    config_allowed: bool,
+    opts: Opts,
     lang: Lang,
     world: &mut dyn World,
     io: &mut dyn Io,
 ) -> u8 {
-    let interactive = io.interactive();
-    let consent = match mode {
-        Mode::Check => Consent::Check,
-        _ if config_allowed => Consent::Config,
-        _ => Consent::Interactive,
+    // No way to confirm: refused before any pre-flight, pkexec or backup.
+    if mode == Mode::Write && !opts.yes && !io.interactive() {
+        return refuse_no_confirmation(lang, io);
+    }
+    let target = match req {
+        Request::Rename(n) => n.clone(),
+        Request::Restore(b) => b.name.clone(),
     };
-    // Lock 1 as akm-core sees it: lifted by the configuration (automation),
-    // or lifted in principle by a terminal where ECRIRE will be demanded
-    // before anything is written; --check never writes (no consent asked, no
-    // door). Without a terminal and without the key: refused, as before.
-    let allow_write = match consent {
-        Consent::Config => true,
-        Consent::Interactive => interactive,
-        Consent::Check => true,
-    };
-    io.out(match mode {
-        Mode::Check => lang.t(
-            "\n--check : pré-vol complet (MTU lue par pkexec), sauvegarde et plan ; RIEN n'est écrit, rien n'est demandé.\n",
-            "\n--check: whole pre-flight (MTU read via pkexec), backup and plan; NOTHING is written, nothing is asked.\n",
-        ),
-        _ => lang.t(
-            "\nÉCRITURE RÉELLE demandée. Ordre : pré-vol (doctor, batterie, disjoncteur, MTU par pkexec) → plan et sauvegarde → consentement → nom retapé → UNE écriture → reconnexion → relecture.\n",
-            "\nREAL WRITE requested. Order: pre-flight (doctor, battery, breaker, MTU via pkexec) → plan and backup → consent → name typed again → ONE write → reconnection → read back.\n",
-        ),
-    });
+    if opts.verbose {
+        io.out(&frames_text(&frames, lang));
+        io.out(&proof_state(lang));
+    }
     let mut flow = Flow {
         world,
         io,
         lang,
-        consent,
+        mode,
+        opts,
         mac,
-        frames,
+        target: target.clone(),
         door: None,
         mtu: None,
         probes: 0,
-        last_preflight: None,
-        backup_path: None,
-        consent_typed: false,
+        preflights: 0,
         door_error: None,
     };
     let mut session = WriteSession::new();
-    let o = devname::run(
-        req,
-        devname::SEQUENCE_PROOF,
-        allow_write,
-        &mut session,
-        &mut flow,
-    );
+    let o = devname::run(req, devname::SEQUENCE_PROOF, &mut session, &mut flow);
     debug_assert!(flow.probes <= 1, "one pkexec per command");
+    flow.door = None;
     if let (Outcome::WriteFailed(_), Some(d)) = (&o, &flow.door_error) {
         // The door never opened: the closed sink refused, nothing left akmctl.
         flow.io.out(lang.t(
-            &format!("\nArrêt : le nœud hidraw ne s'est pas ouvert ({d}). Rien n'a été écrit.\n"),
-            &format!("\nStopped: the hidraw node did not open ({d}). Nothing was written.\n"),
+            &format!("Arrêt : le nœud hidraw ne s'est pas ouvert ({d}). Rien n'a été écrit.\n"),
+            &format!("Stopped: the hidraw node did not open ({d}). Nothing was written.\n"),
         ));
         return EXIT_ERROR;
     }
-    let text = report(&o, mode, lang, interactive);
-    flow.io.out(&text.0);
-    text.1
+    if matches!(
+        o,
+        Outcome::Verified { .. } | Outcome::Mismatch { .. } | Outcome::Unverified { .. }
+    ) {
+        // The daemon's cached name is stale: ask it to read 0x51-0x54 again.
+        if let Err(e) = flow.world.reread_name() {
+            flow.verbose(&format!("[devname] RereadName not delivered: {e}"));
+        }
+    }
+    let (text, code) = report(&o, mode, lang, &target);
+    flow.io.out(&text);
+    code
 }
 
-/// Text for the user and exit code of an outcome.
-pub fn report(o: &Outcome, mode: Mode, lang: Lang, interactive: bool) -> (String, u8) {
+/// What stays true after a write, in one line.
+fn after_write_note(lang: Lang) -> &'static str {
+    lang.t(
+        "  BlueZ peut afficher l'ancien nom jusqu'à une prochaine connexion ; la persistance après un changement de piles n'est pas mesurée.\n",
+        "  BlueZ may show the old name until a later connection; persistence across a battery change is not measured.\n",
+    )
+}
+
+/// Text for the user and exit code of an outcome (`target` = the name asked).
+pub fn report(o: &Outcome, mode: Mode, lang: Lang, target: &str) -> (String, u8) {
     let l = lang;
     match o {
         Outcome::NotProven => (
-            format!(
-                "{}\n{}",
-                l.t(
-                    "\nREFUSÉ (NotProven) : les octets exacts qu'Apple envoie ne sont pas établis ; rien n'a été touché (ni sauvegarde, ni confirmation, ni écriture).",
-                    "\nREFUSED (NotProven): the exact bytes Apple sends to rename this keyboard are not established; nothing was touched (no backup, no confirmation, no write)."
-                ),
-                proof_state(l)
-            ),
+            l.t(
+                "Refusé (NotProven) : les octets exacts qu'Apple envoie ne sont pas établis ; rien n'a été touché.\n",
+                "Refused (NotProven): the exact bytes Apple sends are not established; nothing was touched.\n",
+            )
+            .to_string(),
             EXIT_ERROR,
         ),
-        Outcome::ConfigDisabled => (
-            format!(
-                "{}\n\n{}\n\n{}\n",
-                l.t(
-                    "\nREFUSÉ (verrou 1, consentement) : [apple] allow_device_name_write n'est pas true et cette commande ne tourne pas dans un terminal interactif ; rien n'a été touché (ni pré-vol, ni pkexec, ni sauvegarde, ni confirmation, ni écriture).\nDeux voies :\n  * dans un TERMINAL (konsole…), relancer la même commande : le consentement se tape (ECRIRE) pour cette exécution seulement, rien n'est écrit dans config.toml ;\n  * automatisation (sans terminal) : ajouter à ~/.config/apple-kb-monitor/config.toml",
-                    "\nREFUSED (lock 1, consent): [apple] allow_device_name_write is not true and this command does not run in an interactive terminal; nothing was touched (no pre-flight, no pkexec, no backup, no confirmation, no write).\nTwo ways:\n  * in a TERMINAL (konsole...), run the same command again: the consent is typed (ECRIRE) for that run only, nothing is written into config.toml;\n  * automation (no terminal): add to ~/.config/apple-kb-monitor/config.toml"
-                ),
-                devname::CONFIG_HOWTO,
-                l.t(
-                    "Lire d'abord docs/RENOMMER-CLAVIER.md §5.3 et §6 : le HANDSHAKE du micrologiciel au SET 0x55 (U5) et la persistance au changement de piles (U3) ne sont PAS mesurés.",
-                    "Read docs/RENOMMER-CLAVIER.md §5.3 and §6 first: the firmware's HANDSHAKE to SET 0x55 (U5) and persistence across a battery change (U3) are NOT measured."
-                )
-            ),
-            EXIT_LOCK1,
-        ),
         Outcome::Preflight(fails) => {
-            let mut s = String::from(if fails.iter().any(|f| f.is_mtu()) {
-                l.t(
-                    "\nREFUSÉ (verrou 2, MTU du canal de contrôle) : rien n'a été écrit (ni sauvegarde, ni confirmation).",
-                    "\nREFUSED (lock 2, control-channel MTU): nothing was written (no backup, no confirmation).",
-                )
-            } else {
-                l.t(
-                    "\nREFUSÉ (pré-vol) : rien n'a été écrit (ni sauvegarde, ni confirmation).",
-                    "\nREFUSED (pre-flight): nothing was written (no backup, no confirmation).",
-                )
-            });
-            s.push('\n');
+            let mut s = String::from(l.t(
+                "Pré-vol refusé, rien n'a été écrit :\n",
+                "Pre-flight refused, nothing was written:\n",
+            ));
             for f in fails {
                 s.push_str(&format!("  - {}\n", fail_text(f, l)));
-            }
-            if fails.iter().any(|f| f.is_mtu()) {
-                s.push_str(&format!(
-                    "  {}\n",
-                    l.t(
-                        &format!("La MTU est lue sur la socket L2CAP vivante par `pkexec akm-hid-control inspect --mac <MAC>` (lecture seule). Si le helper ne l'a pas donnée, réinstaller le paquet ; si elle est sous {}, ce clavier ne peut pas recevoir la trame de 66 octets en un morceau depuis Linux.", devname::MIN_CONTROL_MTU),
-                        &format!("The MTU is read on the live L2CAP socket by `pkexec akm-hid-control inspect --mac <MAC>` (read-only). If the helper did not report it, reinstall the package; if it is below {}, this keyboard cannot take the 66-byte frame in one piece from Linux.", devname::MIN_CONTROL_MTU)
-                    )
-                ));
-            }
-            if mode == Mode::Check {
-                s.push_str(l.t(
-                    "✗ --check : l'écriture serait refusée ici.\n",
-                    "✗ --check: the write would be refused here.\n",
-                ));
             }
             (s, EXIT_PREFLIGHT)
         }
         Outcome::Cancelled if mode == Mode::Check => (
             l.t(
-                &format!("\n✓ --check : tout le pré-vol est vert, la sauvegarde est faite, rien n'a été écrit. Pour écrire : la même commande avec --write-device-name (le consentement {CONSENT_WORD} et le nom retapé seront demandés{}).\n", if interactive { "" } else { " ; dans un terminal" }),
-                &format!("\n✓ --check: the whole pre-flight is green, the backup is made, nothing was written. To write: the same command with --write-device-name (the consent {CONSENT_WORD} and the name typed again will be asked{}).\n", if interactive { "" } else { "; in a terminal" }),
-            ).to_string(),
+                "✓ --check : pré-vol vert, sauvegarde faite, rien n'a été écrit, rien n'a été demandé.\n",
+                "✓ --check: pre-flight green, backup made, nothing was written, nothing was asked.\n",
+            )
+            .to_string(),
             EXIT_OK,
         ),
         Outcome::Cancelled => (
             l.t(
-                "\nAnnulé au clavier : rien n'a été écrit dans le clavier, rien dans config.toml. La sauvegarde reste dans ~/.local/state/apple-kb-monitor/.\n",
-                "\nCancelled at the keyboard: nothing was written into the keyboard, nothing into config.toml. The backup stays in ~/.local/state/apple-kb-monitor/.\n",
+                "Annulé : rien n'a été écrit dans le clavier.\n",
+                "Cancelled: nothing was written into the keyboard.\n",
             )
             .to_string(),
             EXIT_CANCELLED,
         ),
-        Outcome::Verified { backup, bluez_name } => {
-            let mut s = String::from(l.t(
-                "\n✓ Nom écrit et relu identique (0x51-0x54).\n",
-                "\n✓ Name written and read back identical (0x51-0x54).\n",
-            ));
-            if let Some(n) = bluez_name {
-                s.push_str(&format!(
-                    "  {} {n:?} {}\n",
-                    l.t("BlueZ Device1.Name maintenant :", "BlueZ Device1.Name now:"),
-                    l.t(
-                        "(informatif ; BlueZ peut garder son nom en cache jusqu'à sa prochaine requête de nom)",
-                        "(informative; BlueZ may still show its cached name until its next remote name request)"
-                    )
-                ));
-            }
-            if let Some(b) = backup {
-                s.push_str(&format!(
-                    "  {} {}\n",
-                    l.t("sauvegarde conservée :", "backup kept:"),
-                    b.display()
-                ));
-            }
-            s.push_str(l.t(
-                "  Vérifiez sur un autre appareil ou après un changement de piles (risque U3 non mesuré).\n",
-                "  Check on another device or after a battery change (risk U3 not measured).\n",
-            ));
-            (s, EXIT_OK)
-        }
-        Outcome::Mismatch { read, backup, bluez_name } => {
+        Outcome::Verified { .. } => (
+            format!(
+                "✓ {} « {target} »\n{}",
+                l.t(
+                    "Nom écrit dans le clavier et relu identique :",
+                    "Name written into the keyboard and read back identical:"
+                ),
+                after_write_note(l)
+            ),
+            EXIT_OK,
+        ),
+        Outcome::Mismatch { read, backup } => {
             let mut s = format!(
-                "\n✗ {} {}\n",
-                l.t("Le nom relu diffère :", "The name read back differs:"),
+                "✗ {} {} ({})\n",
+                l.t(
+                    "Écrit, mais le nom relu diffère :",
+                    "Written, but the name read back differs:"
+                ),
+                match devname::name_from_raw(read) {
+                    Some(n) => format!("« {n} »"),
+                    None => l.t("(non imprimable)", "(not printable)").to_string(),
+                },
                 devname::hex(read)
             );
-            if let Some(n) = bluez_name {
-                s.push_str(&format!("  {} {n:?}\n", l.t("BlueZ Device1.Name maintenant :", "BlueZ Device1.Name now:")));
-            }
             match backup {
                 Some(b) => s.push_str(&format!(
-                    "  {}\n  {}\n",
-                    l.t(
-                        "RETOUR ARRIÈRE (même protocole, mêmes trois verrous, nouvelle confirmation, nouvelle session) : tapez exactement",
-                        "ROLLBACK (same protocol, same three locks, new confirmation, new session): type exactly"
-                    ),
+                    "  {} {}\n",
+                    l.t("Retour arrière :", "Rollback:"),
                     restore_command(b)
                 )),
                 None => s.push_str(l.t(
-                    "  Retour arrière : relancer la commande --restore avec la sauvegarde d'origine.\n",
-                    "  Rollback: run the --restore command again with the original backup.\n",
+                    "  Retour arrière : relancer --restore avec la sauvegarde d'origine.\n",
+                    "  Rollback: run --restore again with the original backup.\n",
                 )),
             }
             (s, EXIT_MISMATCH)
         }
-        Outcome::NoReconnect => (
+        Outcome::Unverified { backup, error } => {
+            let mut s = format!(
+                "✎ {} ({error}).\n  {} akmctl rename --device-name --show\n",
+                l.t(
+                    "Nom écrit, mais la relecture n'a pas été possible",
+                    "Name written, but the read-back was not possible"
+                ),
+                l.t("Vérifiez plus tard :", "Check later:")
+            );
+            if let Some(b) = backup {
+                s.push_str(&format!(
+                    "  {} {}\n",
+                    l.t("Retour arrière si besoin :", "Rollback if needed:"),
+                    restore_command(b)
+                ));
+            }
+            s.push_str(after_write_note(l));
+            (s, EXIT_UNVERIFIED)
+        }
+        Outcome::NoCachedName => (
             l.t(
-                "\n✗ Le clavier n'est pas revenu dans le délai. Rien d'autre n'est tenté. Éteignez-le et rallumez-le, puis `akmctl rename --device-name --show` ; si le nom diffère, retour arrière : la commande --restore affichée dans le plan.\n",
-                "\n✗ The keyboard did not come back in time. Nothing else is attempted. Switch it off and on, then `akmctl rename --device-name --show`; if the name differs, rollback: the --restore command shown in the plan.\n",
+                "Arrêt : le démon n'a pas encore lu le nom actuel (0x51-0x54) dans cette connexion, la sauvegarde est impossible. Réessayez dans un instant. Rien n'a été écrit.\n",
+                "Stopped: the daemon has not read the current name (0x51-0x54) in this connection yet, no backup is possible. Try again in a moment. Nothing was written.\n",
             )
             .to_string(),
-            EXIT_NO_RECONNECT,
+            EXIT_ERROR,
         ),
         other => (
             format!(
-                "\n{} {other:?}. {}\n",
+                "{} {other:?}. {}\n",
                 l.t("Arrêt :", "Stopped:"),
                 if other.wrote() {
                     l.t("Une trame peut être partie.", "A frame may have been sent.")
@@ -1237,6 +1019,7 @@ mod tests {
         "2023310000000000",
         "0000000000000000"
     );
+    const BACKUP: &str = "/sim/devname-backup-20260930T235959Z.json";
 
     fn fixture() -> serde_json::Value {
         let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1253,6 +1036,9 @@ mod tests {
         k.device.mac = Some(MAC.into());
         k.device.name = Some("Clavier de alice #1".into());
         k.device.name_on_keyboard_hex = raw_hex.map(str::to_string);
+        k.device.name_on_keyboard = raw_hex
+            .and_then(devname::unhex)
+            .and_then(|r| devname::name_from_raw(&r));
         Snapshot {
             connected,
             keyboard: Some(k),
@@ -1295,21 +1081,45 @@ mod tests {
     }
 
     type Writes = Rc<RefCell<Vec<(WriteOp, Vec<u8>)>>>;
+    type Events = Rc<RefCell<Vec<String>>>;
 
-    /// The spy sink the fake door hands out.
-    #[derive(Default)]
-    struct Spy {
-        writes: Writes,
-        events: Rc<RefCell<Vec<String>>>,
+    /// What the fake door reads back from 0x51-0x54.
+    #[derive(Clone)]
+    enum Back {
+        /// What was written (the first 32 data bytes of the frame).
+        Echo,
+        Hex(String),
+        Error(String),
     }
 
-    impl FeatureSink for Spy {
+    /// The fake door: a spy sink and a scripted read-back. No hardware.
+    struct FakeDoor {
+        writes: Writes,
+        events: Events,
+        back: Back,
+    }
+
+    impl FeatureSink for FakeDoor {
         fn set_feature(&self, op: WriteOp, report: &[u8]) -> std::io::Result<()> {
             self.writes.borrow_mut().push((op, report.to_vec()));
             self.events
                 .borrow_mut()
                 .push(format!("write {:#04x}", report[0]));
             Ok(())
+        }
+    }
+
+    impl NameDoor for FakeDoor {
+        fn read_name(&self) -> std::io::Result<Vec<u8>> {
+            self.events.borrow_mut().push("read back".into());
+            match &self.back {
+                Back::Echo => Ok(self.writes.borrow()[0].1[1..33].to_vec()),
+                Back::Hex(h) => Ok(devname::unhex(h).unwrap()),
+                Back::Error(e) => Err(std::io::Error::other(e.clone())),
+            }
+        }
+        fn as_sink(&self) -> &dyn FeatureSink {
+            self
         }
     }
 
@@ -1320,12 +1130,10 @@ mod tests {
         mtu: Result<(u16, String), String>,
         probes: u32,
         door_fails: bool,
+        back: Back,
         writes: Writes,
-        events: Rc<RefCell<Vec<String>>>,
+        events: Events,
         backups: Vec<Backup>,
-        /// Applied one per `sleep`, during the reconnection wait.
-        script: VecDeque<(bool, Option<String>)>,
-        sleeps: u32,
     }
 
     impl FakeWorld {
@@ -1334,33 +1142,20 @@ mod tests {
                 connected: true,
                 raw_hex: Some(OLD_HEX.into()),
                 doctor: true,
-                mtu: Ok((672, format!("akm-hid-control:   {MAC} fd 23: psm local 0x0000 peer 0x0011 cid 0x0041 state connected (hci handle 0x000b) mtu out 672 in 672\nakm-hid-control: {MAC}: inspected, nothing sent"))),
+                mtu: Ok((185, format!("akm-hid-control:   {MAC} fd 23: psm local 0x0000 peer 0x0011 cid 0x0041 state connected (hci handle 0x000b) mtu out 185 in 672\nakm-hid-control: {MAC}: inspected, nothing sent"))),
                 probes: 0,
                 door_fails: false,
+                back: Back::Echo,
                 writes: Rc::default(),
                 events: Rc::default(),
                 backups: Vec::new(),
-                script: VecDeque::new(),
-                sleeps: 0,
             }
-        }
-        /// Off after 2 s, back with `new_hex` after 7 s.
-        fn comes_back(mut self, new_hex: &str) -> Self {
-            self.script = VecDeque::from(vec![
-                (true, self.raw_hex.clone()),
-                (false, None),
-                (false, None),
-                (false, None),
-                (true, None),
-                (true, None),
-                (true, Some(new_hex.into())),
-            ]);
-            self
         }
     }
 
     impl World for FakeWorld {
         fn snapshot(&mut self) -> Result<Snapshot, (u8, String)> {
+            self.events.borrow_mut().push("snapshot".into());
             Ok(snap(self.connected, self.raw_hex.as_deref()))
         }
         fn doctor_green(&mut self, mac: Option<&str>) -> bool {
@@ -1373,42 +1168,58 @@ mod tests {
             self.events.borrow_mut().push("pkexec".into());
             self.mtu.clone()
         }
-        fn open_door(&mut self) -> Result<Box<dyn FeatureSink>, String> {
+        fn open_door(&mut self) -> Result<Box<dyn NameDoor>, String> {
             self.events.borrow_mut().push("door".into());
             if self.door_fails {
                 return Err("no Apple keyboard found (hidraw)".into());
             }
-            Ok(Box::new(Spy {
+            Ok(Box::new(FakeDoor {
                 writes: self.writes.clone(),
                 events: self.events.clone(),
+                back: self.back.clone(),
             }))
         }
         fn save_backup(&mut self, b: &Backup) -> std::io::Result<PathBuf> {
             self.events.borrow_mut().push("backup".into());
             self.backups.push(b.clone());
-            Ok(PathBuf::from("/sim/devname-backup-20260930T235959Z.json"))
+            Ok(PathBuf::from(BACKUP))
         }
         fn now_unix(&mut self) -> u64 {
             1_790_812_799
         }
-        fn sleep(&mut self, d: Duration) {
-            assert_eq!(d, Duration::from_secs(1));
-            self.sleeps += 1;
-            if let Some((c, r)) = self.script.pop_front() {
-                self.connected = c;
-                self.raw_hex = r;
-            }
+        fn reread_name(&mut self) -> Result<(), String> {
+            self.events.borrow_mut().push("RereadName".into());
+            Ok(())
         }
     }
 
-    fn write(name: &str, cfg: bool, w: &mut FakeWorld, io: &mut FakeIo) -> u8 {
+    /// The events without the D-Bus `GetState` calls (which probe nothing).
+    fn acts(w: &FakeWorld) -> Vec<String> {
+        w.events
+            .borrow()
+            .iter()
+            .filter(|e| *e != "snapshot")
+            .cloned()
+            .collect()
+    }
+
+    const YES: Opts = Opts {
+        yes: true,
+        verbose: false,
+    };
+    const ASK: Opts = Opts {
+        yes: false,
+        verbose: false,
+    };
+
+    fn write(name: &str, opts: Opts, w: &mut FakeWorld, io: &mut FakeIo) -> u8 {
         dispatch(
             Action::Rename {
                 name: name.into(),
                 mode: Mode::Write,
             },
             None,
-            cfg,
+            opts,
             Lang::En,
             w,
             io,
@@ -1418,19 +1229,19 @@ mod tests {
     #[test]
     fn preflight_from_a_snapshot() {
         let s = snap(true, Some(OLD_HEX));
-        let p = preflight_from(&s, true, true, Some(672));
+        let p = preflight_from(&s, true, Some(672));
         assert!(devname::preflight(&p).is_empty(), "{p:?}");
         assert_eq!(
             devname::name_from_raw(&cached_raw(&s).unwrap()).unwrap(),
             "Clavier de alice #1"
         );
         // MTU unknown or too small is a pre-flight failure of its own.
-        let p = preflight_from(&s, true, true, None);
+        let p = preflight_from(&s, true, None);
         assert_eq!(
             devname::preflight(&p),
             vec![PreflightFail::ControlMtuUnknown]
         );
-        let p = preflight_from(&s, true, true, Some(48));
+        let p = preflight_from(&s, true, Some(48));
         assert_eq!(
             devname::preflight(&p),
             vec![PreflightFail::ControlMtuTooSmall(48)]
@@ -1438,8 +1249,8 @@ mod tests {
         let mut s2 = s.clone();
         s2.keyboard.as_mut().unwrap().breaker_open = true;
         s2.keyboard.as_mut().unwrap().incomplete = true;
-        let f = devname::preflight(&preflight_from(&s2, false, false, Some(672)));
-        assert_eq!(f.len(), 4);
+        let f = devname::preflight(&preflight_from(&s2, false, Some(672)));
+        assert_eq!(f.len(), 3);
         assert!(cached_raw(&Snapshot::default()).is_none());
         assert_eq!(snapshot_mac(&s).as_deref(), Some(MAC));
     }
@@ -1461,109 +1272,73 @@ mod tests {
     }
 
     #[test]
-    fn no_tty_and_no_config_key_refuses_before_any_pre_flight_or_pkexec() {
-        let mut w = FakeWorld::green();
-        let mut io = FakeIo::new(false, &["ECRIRE", "Bureau"]);
-        assert_eq!(write("Bureau", false, &mut w, &mut io), EXIT_LOCK1);
-        assert_eq!(w.probes, 0, "no pkexec");
-        assert!(w.events.borrow().is_empty() && w.writes.borrow().is_empty());
-        assert!(io.out.contains("REFUSED (lock 1, consent)") && io.out.contains("TERMINAL"));
-        assert!(io.out.contains("allow_device_name_write = true"));
-        // Lines piped in are never read as a consent.
-        assert_eq!(io.lines.len(), 2);
-    }
-
-    #[test]
-    fn no_tty_with_the_config_key_is_refused_by_the_pre_flight_as_before() {
-        let mut w = FakeWorld::green();
-        let mut io = FakeIo::new(false, &["Bureau"]);
-        assert_eq!(write("Bureau", true, &mut w, &mut io), EXIT_PREFLIGHT);
-        assert_eq!(w.probes, 1);
-        assert_eq!(
-            *w.events.borrow(),
-            vec!["pkexec"],
-            "no backup, no door, no write"
-        );
-        assert!(io.out.contains("not an interactive terminal"));
-    }
-
-    #[test]
-    fn wrong_consent_word_writes_nothing_after_the_backup() {
-        for typed in [
-            "ecrire",
-            "Ecrire",
-            "ECRIRE ",
-            " ECRIRE",
-            "OUI",
-            "",
-            "ECRIRE Bureau",
-        ] {
+    fn no_tty_and_no_yes_refuses_before_any_probe() {
+        for restore in [false, true] {
             let mut w = FakeWorld::green();
-            let mut io = FakeIo::new(true, &[typed, "Bureau"]);
-            assert_eq!(
-                write("Bureau", false, &mut w, &mut io),
-                EXIT_CANCELLED,
-                "{typed:?}"
-            );
-            assert_eq!(
-                *w.events.borrow(),
-                vec!["pkexec", "backup"],
-                "{typed:?}: no door, no write"
+            let mut io = FakeIo::new(false, &["y", "y"]);
+            let code = if restore {
+                let dir =
+                    std::env::temp_dir().join(format!("akm-devnamecmd-{}", std::process::id()));
+                let _ = std::fs::remove_dir_all(&dir);
+                let b =
+                    Backup::new(MAC, &devname::unhex(OLD_HEX).unwrap(), 1, "daemon-cache").unwrap();
+                let file = devname::write_backup(&dir, &b).unwrap();
+                let c = dispatch(
+                    Action::Restore {
+                        file,
+                        mode: Mode::Write,
+                    },
+                    None,
+                    ASK,
+                    Lang::En,
+                    &mut w,
+                    &mut io,
+                );
+                std::fs::remove_dir_all(&dir).unwrap();
+                c
+            } else {
+                write("Bureau", ASK, &mut w, &mut io)
+            };
+            assert_eq!(code, EXIT_NO_CONFIRM);
+            assert_eq!(w.probes, 0, "no pkexec");
+            assert!(
+                w.events.borrow().is_empty(),
+                "no daemon call, no pre-flight, no backup, no door: {:?}",
+                w.events.borrow()
             );
             assert!(w.writes.borrow().is_empty());
-            assert!(
-                io.out.contains("cancelled: ECRIRE was not typed exactly"),
-                "{typed:?}"
-            );
-            assert!(io
-                .journal
-                .iter()
-                .any(|l| l.contains("lock 1, interactive consent not typed")));
-            // The plan was shown first: bytes, backup, rollback, risks.
-            assert!(io.out.contains("PLAN") && io.out.contains("55 42 75 72 65 61 75"));
-            assert!(io.out.contains(
-                "--restore /sim/devname-backup-20260930T235959Z.json --write-device-name"
-            ));
-            assert!(io.out.contains("U5") && io.out.contains("U3"));
-            assert!(io.out.contains("THIS run only"));
-            // The name was never asked: the second line is still there.
-            assert_eq!(io.lines.len(), 1, "{typed:?}");
+            assert!(io.out.contains("--yes") && io.out.contains("Nothing was touched"));
+            // Lines piped in are never read as an answer.
+            assert_eq!(io.lines.len(), 2);
         }
     }
 
     #[test]
-    fn consent_then_a_different_name_writes_nothing() {
-        let mut w = FakeWorld::green();
-        let mut io = FakeIo::new(true, &["ECRIRE", "bureau"]);
-        assert_eq!(write("Bureau", false, &mut w, &mut io), EXIT_CANCELLED);
-        assert_eq!(*w.events.borrow(), vec!["pkexec", "backup"]);
-        assert!(w.writes.borrow().is_empty());
-        assert!(io.out.contains("the name typed again differs"));
-        assert!(io
-            .journal
-            .iter()
-            .any(|l| l.contains("lock 1 lifted for THIS run only")));
-        // End of input at the name prompt cancels too.
-        let mut w = FakeWorld::green();
-        let mut io = FakeIo::new(true, &["ECRIRE"]);
-        assert_eq!(write("Bureau", false, &mut w, &mut io), EXIT_CANCELLED);
-        assert!(w.writes.borrow().is_empty());
-    }
-
-    #[test]
-    fn interactive_consent_sends_the_fixture_frame_once_after_the_backup_with_one_pkexec() {
+    fn yes_without_a_tty_sends_exactly_the_fixture_frame_once_after_the_backup() {
         let fx = fixture();
         for ex in fx["examples"].as_array().unwrap() {
             let name = ex["name"].as_str().unwrap();
             let want = devname::unhex(ex["report_hex"].as_str().unwrap()).unwrap();
-            let back = ex["readback_0x51_0x54_expected_hex"].as_str().unwrap();
-            let mut w = FakeWorld::green().comes_back(back);
-            let mut io = FakeIo::new(true, &["ECRIRE", name]);
-            assert_eq!(write(name, false, &mut w, &mut io), EXIT_OK, "{name}");
+            let mut w = FakeWorld::green();
+            w.back = Back::Hex(
+                ex["readback_0x51_0x54_expected_hex"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+            );
+            let mut io = FakeIo::new(false, &["never read"]);
+            assert_eq!(write(name, YES, &mut w, &mut io), EXIT_OK, "{name}");
             assert_eq!(
-                *w.events.borrow(),
-                vec!["pkexec", "backup", "door", "write 0x55"],
-                "{name}: one probe, backup, then the single write"
+                acts(&w),
+                vec![
+                    "pkexec",
+                    "backup",
+                    "door",
+                    "write 0x55",
+                    "read back",
+                    "RereadName"
+                ],
+                "{name}: one probe, the backup, then the single write and its read-back"
             );
             assert_eq!(w.probes, 1, "{name}: exactly one pkexec");
             let wr = w.writes.borrow();
@@ -1572,198 +1347,316 @@ mod tests {
             assert_eq!(wr[0].1, want, "{name}: the fixture bytes, exactly");
             assert_eq!(wr[0].1.len(), 65);
             assert_eq!(w.backups[0].name, "Clavier de alice #1");
-            assert!(io.out.contains("✓ Name written and read back identical"));
-            assert!(io.out.contains("Switch the keyboard OFF") && io.out.contains("left:"));
-            assert!(io.out.contains("reconnected, name read back"));
-            assert!(io
-                .journal
-                .iter()
-                .any(|l| l.contains("ECRIRE typed in the terminal (config.toml untouched)")));
-            assert!(
-                !io.journal
-                    .iter()
-                    .any(|l| l.contains("allow_device_name_write = true")),
-                "{name}: never claims the config lifted it"
-            );
-            assert!(w.sleeps >= 6 && w.sleeps < 180);
+            assert_eq!(io.lines.len(), 1, "{name}: nothing is asked with --yes");
+            assert!(!io.out.contains("[y/N]"), "{name}");
+            assert!(io.out.contains("read back identical"), "{name}");
         }
     }
 
     #[test]
-    fn config_key_skips_the_typed_consent_but_not_the_name() {
-        let back = &fixture()["examples"][0];
-        let name = back["name"].as_str().unwrap();
-        let mut w = FakeWorld::green()
-            .comes_back(back["readback_0x51_0x54_expected_hex"].as_str().unwrap());
-        // Only the name is typed: ECRIRE is not asked.
-        let mut io = FakeIo::new(true, &[name]);
-        assert_eq!(write(name, true, &mut w, &mut io), EXIT_OK);
-        assert_eq!(w.writes.borrow().len(), 1);
-        assert!(!io.out.contains("type exactly ECRIRE"));
-        assert!(io.out.contains("lifted by config.toml"));
-        // With the key, a wrong name still cancels.
+    fn one_question_and_a_yes_writes_a_no_writes_nothing() {
+        // Yes.
         let mut w = FakeWorld::green();
-        let mut io = FakeIo::new(true, &["ECRIRE"]);
-        assert_eq!(write(name, true, &mut w, &mut io), EXIT_CANCELLED);
-        assert!(w.writes.borrow().is_empty());
+        let mut io = FakeIo::new(true, &["y", "left"]);
+        assert_eq!(write("Bureau", ASK, &mut w, &mut io), EXIT_OK);
+        assert_eq!(io.out.matches("[y/N]").count(), 1, "ONE question");
+        assert_eq!(io.lines.len(), 1, "one line read");
+        assert_eq!(w.writes.borrow().len(), 1);
+        // The short output, in order, and nothing of the detail.
+        let want = format!(
+            "Name stored in the keyboard: « Clavier de alice #1 » → « Bureau »\n\
+             Pre-flight: ok (doctor green, battery 99 %, breaker closed, outgoing MTU 185 >= 66)\n\
+             Backup of the current name: {BACKUP}\n\
+             Write « Bureau » into the keyboard's memory? [y/N] \
+             ✓ Name written into the keyboard and read back identical: « Bureau »\n  \
+             BlueZ may show the old name until a later connection; persistence across a battery change is not measured.\n"
+        );
+        assert_eq!(io.out, want);
+        assert!(
+            io.journal.is_empty(),
+            "no journal without --verbose: {:?}",
+            io.journal
+        );
+        // No, empty, anything else, end of input: nothing written, code 12.
+        for answer in [
+            &["n"][..],
+            &[""][..],
+            &["N"][..],
+            &["o"][..],
+            &["yess"][..],
+            &[][..],
+        ] {
+            let mut w = FakeWorld::green();
+            let mut io = FakeIo::new(true, answer);
+            assert_eq!(
+                write("Bureau", ASK, &mut w, &mut io),
+                EXIT_CANCELLED,
+                "{answer:?}"
+            );
+            assert_eq!(
+                acts(&w),
+                vec!["pkexec", "backup"],
+                "{answer:?}: no door, no write"
+            );
+            assert!(w.writes.borrow().is_empty());
+            assert!(io.out.contains("Cancelled: nothing was written"));
+        }
+        // French: o / oui / O are a yes; the question is [o/N].
+        for answer in ["o", "oui", "O", "y"] {
+            let mut w = FakeWorld::green();
+            let mut io = FakeIo::new(true, &[answer]);
+            let code = dispatch(
+                Action::Rename {
+                    name: "Bureau".into(),
+                    mode: Mode::Write,
+                },
+                Some(MAC.into()),
+                ASK,
+                Lang::Fr,
+                &mut w,
+                &mut io,
+            );
+            assert_eq!(code, EXIT_OK, "{answer}");
+            assert!(io
+                .out
+                .contains("Écrire « Bureau » dans la mémoire du clavier ? [o/N]"));
+            assert!(io
+                .out
+                .contains("✓ Nom écrit dans le clavier et relu identique : « Bureau »"));
+            assert!(
+                io.out.contains("Pré-vol : ok") && io.out.contains("Sauvegarde du nom actuel :")
+            );
+            assert!(io.out.contains("changement de piles"));
+        }
+        assert!(is_yes(" Yes \n", Lang::En) && !is_yes("o", Lang::En) && !is_yes("non", Lang::Fr));
     }
 
     #[test]
-    fn mismatch_prints_the_exact_rollback_and_timeout_stops() {
-        let name = "Bureau";
-        let mut w = FakeWorld::green().comes_back(OLD_HEX);
-        let mut io = FakeIo::new(true, &["ECRIRE", name]);
-        assert_eq!(write(name, false, &mut w, &mut io), EXIT_MISMATCH);
-        assert_eq!(w.writes.borrow().len(), 1, "no retry");
-        assert!(io.out.contains("✗ The name read back differs"));
-        assert!(io.out.contains("ROLLBACK"));
-        assert!(io.out.contains("akmctl rename --device-name --restore /sim/devname-backup-20260930T235959Z.json --write-device-name"));
-        // Never comes back: 180 polls, then the distinct code.
+    fn read_back_different_is_14_with_the_exact_rollback_command() {
         let mut w = FakeWorld::green();
-        w.script = VecDeque::from(vec![(false, None)]);
-        let mut io = FakeIo::new(true, &["ECRIRE", name]);
-        assert_eq!(write(name, false, &mut w, &mut io), EXIT_NO_RECONNECT);
-        assert_eq!(w.sleeps, 180);
-        assert!(io.out.contains("did not come back in time"));
+        w.back = Back::Hex(OLD_HEX.into());
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_MISMATCH);
+        assert_eq!(w.writes.borrow().len(), 1, "no retry");
+        assert_eq!(
+            acts(&w).iter().filter(|e| *e == "read back").count(),
+            1,
+            "one read-back, no retry"
+        );
+        assert!(io
+            .out
+            .contains("the name read back differs: « Clavier de alice #1 »"));
+        assert!(io.out.contains(&format!(
+            "akmctl rename --device-name --restore {BACKUP} --yes"
+        )));
+        assert_eq!(
+            restore_command(Path::new(BACKUP)),
+            format!("akmctl rename --device-name --restore {BACKUP} --yes")
+        );
+    }
+
+    #[test]
+    fn read_back_in_error_is_13_and_says_to_check_later() {
+        let mut w = FakeWorld::green();
+        w.back = Back::Error("report 0x52: no answer".into());
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_UNVERIFIED);
+        assert_eq!(w.writes.borrow().len(), 1, "written once, never rewritten");
+        assert!(io
+            .out
+            .contains("the read-back was not possible (report 0x52: no answer)"));
+        assert!(io.out.contains("akmctl rename --device-name --show"));
+        assert!(acts(&w).contains(&"RereadName".to_string()));
     }
 
     #[test]
     fn check_runs_the_whole_pre_flight_with_one_pkexec_and_never_asks_nor_writes() {
-        let check = |w: &mut FakeWorld, io: &mut FakeIo, cfg: bool| {
+        let check = |w: &mut FakeWorld, io: &mut FakeIo, opts: Opts| {
             dispatch(
                 Action::Rename {
                     name: "Bureau".into(),
                     mode: Mode::Check,
                 },
                 None,
-                cfg,
+                opts,
                 Lang::En,
                 w,
                 io,
             )
         };
-        for (tty, cfg) in [(true, false), (true, true), (false, true)] {
+        for (tty, opts) in [(true, ASK), (false, ASK), (false, YES), (true, YES)] {
             let mut w = FakeWorld::green();
-            let mut io = FakeIo::new(tty, &["ECRIRE", "Bureau"]);
-            let code = check(&mut w, &mut io, cfg);
+            let mut io = FakeIo::new(tty, &["y", "y"]);
+            assert_eq!(check(&mut w, &mut io, opts), EXIT_OK, "tty {tty}");
             assert_eq!(w.probes, 1, "tty {tty}: exactly one pkexec");
-            assert!(w.writes.borrow().is_empty() && !w.events.borrow().iter().any(|e| e == "door"));
+            assert_eq!(
+                acts(&w),
+                vec!["pkexec", "backup"],
+                "no door, no write, no RereadName"
+            );
+            assert!(w.writes.borrow().is_empty());
             assert_eq!(io.lines.len(), 2, "nothing is read from the terminal");
-            if tty {
-                assert_eq!(code, EXIT_OK);
-                assert_eq!(*w.events.borrow(), vec!["pkexec", "backup"]);
-                assert!(
-                    io.out.contains("✓ --check")
-                        && io.out.contains("PLAN")
-                        && io.out.contains("outgoing MTU 672 >= 66")
-                );
-            } else {
-                // The missing terminal is a pre-flight fact: reported, not fatal to the check itself.
-                assert_eq!(code, EXIT_PREFLIGHT);
-                assert!(io.out.contains("would be refused here"));
-            }
+            assert!(!io.out.contains("[y/N]"), "nothing is asked");
+            assert!(io.out.contains("✓ --check") && io.out.contains("outgoing MTU 185 >= 66"));
         }
-        // MTU too small: refused at lock 2, no backup.
+        // MTU too small: refused by the pre-flight, no backup.
         let mut w = FakeWorld::green();
         w.mtu = Ok((48, String::new()));
         let mut io = FakeIo::new(true, &[]);
-        assert_eq!(check(&mut w, &mut io, false), EXIT_PREFLIGHT);
-        assert_eq!(*w.events.borrow(), vec!["pkexec"]);
-        assert!(io.out.contains("lock 2") && io.out.contains("48"));
-        // pkexec dismissed: unknown MTU, refused.
+        assert_eq!(check(&mut w, &mut io, ASK), EXIT_PREFLIGHT);
+        assert_eq!(acts(&w), vec!["pkexec"]);
+        assert!(io.out.contains("Pre-flight refused") && io.out.contains("48"));
+        // pkexec refused: unknown MTU, refused, and the reason is said.
         let mut w = FakeWorld::green();
         w.mtu = Err("authentication dismissed or not authorized (pkexec 126)".into());
         let mut io = FakeIo::new(true, &[]);
-        assert_eq!(check(&mut w, &mut io, false), EXIT_PREFLIGHT);
+        assert_eq!(check(&mut w, &mut io, ASK), EXIT_PREFLIGHT);
         assert!(io.journal.iter().any(|l| l.contains("pkexec 126")));
     }
 
     #[test]
-    fn dry_run_never_probes_and_shows_the_locks() {
+    fn pre_flight_refusals_list_every_reason_and_write_nothing() {
         let mut w = FakeWorld::green();
-        let mut io = FakeIo::new(true, &["ECRIRE", "Bureau"]);
+        w.connected = false;
+        w.doctor = false;
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_PREFLIGHT);
+        assert_eq!(acts(&w), vec!["pkexec"], "no backup, no door, no write");
+        assert!(io.out.contains("keyboard not connected") && io.out.contains("doctor"));
+        // The daemon has no name yet: no backup possible, nothing written.
+        let mut w = FakeWorld::green();
+        w.raw_hex = None;
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_ERROR);
+        assert!(w.writes.borrow().is_empty() && io.out.contains("Nothing was written"));
+        // A door that cannot open: nothing written, distinct stop.
+        let mut w = FakeWorld::green();
+        w.door_fails = true;
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_ERROR);
+        assert!(w.writes.borrow().is_empty());
+        assert!(io.out.contains("Nothing was written"));
+        assert!(!acts(&w).contains(&"RereadName".to_string()));
+    }
+
+    #[test]
+    fn dry_run_never_probes_asks_nor_writes_and_shows_the_bytes() {
+        let mut w = FakeWorld::green();
+        let mut io = FakeIo::new(true, &["y"]);
         let code = dispatch(
             Action::Rename {
                 name: "Bureau".into(),
                 mode: Mode::DryRun,
             },
             None,
-            false,
+            ASK,
             Lang::Fr,
             &mut w,
             &mut io,
         );
         assert_eq!(code, EXIT_OK);
         assert_eq!(w.probes, 0);
-        assert_eq!(*w.events.borrow(), vec!["backup"]);
-        assert_eq!(io.lines.len(), 2);
-        assert!(
-            io.out.contains("ESSAI À BLANC")
-                && io.out.contains("Trois verrous")
-                && io.out.contains("ECRIRE")
-        );
-        // A door that cannot open: nothing written, distinct stop.
-        let mut w = FakeWorld::green();
-        w.door_fails = true;
-        let mut io = FakeIo::new(true, &["ECRIRE", "Bureau"]);
-        assert_eq!(write("Bureau", false, &mut w, &mut io), EXIT_ERROR);
-        assert!(w.writes.borrow().is_empty());
-        assert!(io.out.contains("Nothing was written"));
-    }
-
-    #[test]
-    fn french_flow_end_to_end() {
-        let back = &fixture()["examples"][0];
-        let name = back["name"].as_str().unwrap();
-        let mut w = FakeWorld::green()
-            .comes_back(back["readback_0x51_0x54_expected_hex"].as_str().unwrap());
-        let mut io = FakeIo::new(true, &["ECRIRE", name]);
-        let code = dispatch(
-            Action::Rename {
-                name: name.into(),
-                mode: Mode::Write,
-            },
-            Some(MAC.into()),
-            false,
-            Lang::Fr,
-            &mut w,
-            &mut io,
-        );
-        assert_eq!(code, EXIT_OK);
+        assert_eq!(acts(&w), vec!["backup"]);
+        assert_eq!(io.lines.len(), 1);
         for s in [
-            "ÉCRITURE RÉELLE demandée",
-            "Verrou 2 : lecture de la MTU",
-            "MÉMOIRE du clavier",
-            "Sauvegarde du nom actuel",
-            "RISQUES NON MESURÉS",
-            "CETTE exécution seulement",
-            "tapez exactement ECRIRE",
-            "Verrou 3 : retapez le nom",
-            "ÉTEIGNEZ le clavier",
-            "ATTENDEZ 5 s",
-            "restant :",
-            "✓ Nom écrit et relu identique",
+            "ESSAI À BLANC",
+            "55 42 75 72 65 61 75",
+            "wire   : 53 55",
+            "U4 [mesuré le 02/10/2026]",
+            "U5 [mesuré le 02/10/2026]",
+            "U3 NOT MEASURED",
+            "Deux noms existent",
         ] {
             assert!(io.out.contains(s), "missing {s:?} in:\n{}", io.out);
         }
     }
 
     #[test]
-    fn every_outcome_has_its_exit_code() {
-        let r = |o: &Outcome, m: Mode| report(o, m, Lang::En, true).1;
-        assert_eq!(
-            r(
-                &Outcome::Verified {
-                    backup: None,
-                    bluez_name: None
+    fn verbose_adds_the_bytes_and_the_journal() {
+        let mut w = FakeWorld::green();
+        let mut io = FakeIo::new(false, &[]);
+        let opts = Opts {
+            yes: true,
+            verbose: true,
+        };
+        assert_eq!(write("Bureau", opts, &mut w, &mut io), EXIT_OK);
+        assert!(io.out.contains("wire   : 53 55 42 75 72 65 61 75"));
+        assert!(io.out.contains("Proof of the sequence"));
+        for s in [
+            "[devname] pre-flight ok",
+            "[devname] control-channel outgoing MTU = 185",
+            "[devname] backup written",
+            "[devname] write DeviceName Feature 0x55, 65 bytes",
+            "[devname] read back 0x51-0x54: 42 75 72 65 61 75 00",
+            "[devname] verified",
+        ] {
+            assert!(
+                io.journal.iter().any(|l| l.contains(s)),
+                "missing {s:?}: {:?}",
+                io.journal
+            );
+        }
+        // Without --verbose: none of it.
+        let mut w = FakeWorld::green();
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(write("Bureau", YES, &mut w, &mut io), EXIT_OK);
+        assert!(!io.out.contains("wire") && !io.out.contains("Proof"));
+        assert!(io.journal.is_empty());
+    }
+
+    #[test]
+    fn restore_writes_the_backup_back_with_the_same_flow() {
+        let dir = std::env::temp_dir().join(format!("akm-devnamecmd-r-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let old = devname::unhex(OLD_HEX).unwrap();
+        let b = Backup::new(MAC, &old, 1, "daemon-cache").unwrap();
+        let file = devname::write_backup(&dir, &b).unwrap();
+        let restore = |w: &mut FakeWorld, io: &mut FakeIo, opts: Opts| {
+            dispatch(
+                Action::Restore {
+                    file: file.clone(),
+                    mode: Mode::Write,
                 },
-                Mode::Write
-            ),
-            EXIT_OK
+                None,
+                opts,
+                Lang::En,
+                w,
+                io,
+            )
+        };
+        let bureau = devname::hex(&devname::expected_readback(
+            &devname::prepare("Bureau").unwrap(),
+        ))
+        .replace(' ', "");
+        // --yes, no terminal: written once, no new backup.
+        let mut w = FakeWorld::green();
+        w.raw_hex = Some(bureau.clone());
+        let mut io = FakeIo::new(false, &[]);
+        assert_eq!(restore(&mut w, &mut io, YES), EXIT_OK);
+        assert_eq!(
+            acts(&w),
+            vec!["pkexec", "door", "write 0x55", "read back", "RereadName"]
         );
+        assert_eq!(&w.writes.borrow()[0].1[1..33], &old[..]);
+        assert!(io
+            .out
+            .contains("read back identical: « Clavier de alice #1 »"));
+        // In a terminal: one question; "n" writes nothing.
+        let mut w = FakeWorld::green();
+        w.raw_hex = Some(bureau);
+        let mut io = FakeIo::new(true, &["n"]);
+        assert_eq!(restore(&mut w, &mut io, ASK), EXIT_CANCELLED);
+        assert_eq!(io.out.matches("[y/N]").count(), 1);
+        assert!(w.writes.borrow().is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn every_outcome_has_its_exit_code() {
+        let r = |o: &Outcome, m: Mode| report(o, m, Lang::En, "x").1;
+        assert_eq!(r(&Outcome::Verified { backup: None }, Mode::Write), EXIT_OK);
         assert_eq!(r(&Outcome::Cancelled, Mode::Check), EXIT_OK);
         assert_eq!(r(&Outcome::Cancelled, Mode::Write), EXIT_CANCELLED);
-        assert_eq!(r(&Outcome::ConfigDisabled, Mode::Write), EXIT_LOCK1);
         assert_eq!(
             r(
                 &Outcome::Preflight(vec![PreflightFail::ControlMtuUnknown]),
@@ -1778,13 +1671,21 @@ mod tests {
             ),
             EXIT_PREFLIGHT
         );
-        assert_eq!(r(&Outcome::NoReconnect, Mode::Write), EXIT_NO_RECONNECT);
+        assert_eq!(
+            r(
+                &Outcome::Unverified {
+                    backup: None,
+                    error: "e".into()
+                },
+                Mode::Write
+            ),
+            EXIT_UNVERIFIED
+        );
         assert_eq!(
             r(
                 &Outcome::Mismatch {
                     read: vec![0; 32],
                     backup: Some("/x".into()),
-                    bluez_name: Some("alex".into())
                 },
                 Mode::Write
             ),
@@ -1799,67 +1700,68 @@ mod tests {
         ] {
             assert_eq!(r(&o, Mode::Write), EXIT_ERROR, "{o:?}");
         }
-        let codes = [
-            EXIT_OK,
-            EXIT_ERROR,
-            EXIT_ABSENT,
-            EXIT_LOCK1,
-            EXIT_PREFLIGHT,
-            EXIT_CANCELLED,
-            EXIT_NO_RECONNECT,
-            EXIT_MISMATCH,
-        ];
-        let mut sorted = codes.to_vec();
-        sorted.sort_unstable();
-        sorted.dedup();
-        assert_eq!(sorted.len(), codes.len(), "distinct exit codes");
+        assert_eq!(
+            [
+                EXIT_NO_CONFIRM,
+                EXIT_PREFLIGHT,
+                EXIT_CANCELLED,
+                EXIT_UNVERIFIED,
+                EXIT_MISMATCH
+            ],
+            [10, 11, 12, 13, 14]
+        );
+        assert!(![EXIT_OK, EXIT_ERROR, EXIT_ABSENT]
+            .iter()
+            .any(|c| (10..=14).contains(c)));
         // The French and English verdicts both name the rollback command.
         for l in [Lang::Fr, Lang::En] {
             let t = report(
                 &Outcome::Mismatch {
                     read: vec![0; 32],
                     backup: Some("/b.json".into()),
-                    bluez_name: None,
                 },
                 Mode::Write,
                 l,
-                true,
+                "x",
             )
             .0;
-            assert!(t.contains("akmctl rename --device-name --restore /b.json --write-device-name"));
+            assert!(t.contains("akmctl rename --device-name --restore /b.json --yes"));
         }
     }
 
     #[test]
-    fn this_command_uses_the_production_proof_and_the_real_locks_only() {
+    fn this_command_uses_the_production_proof_and_no_leftover_of_the_old_flow() {
         let src = include_str!("devnamecmd.rs");
         let prod = src.split("#[cfg(test)]").next().unwrap();
         assert!(prod.contains("devname::SEQUENCE_PROOF,"));
         assert!(!prod.contains(&["SequenceProof", "::"].concat()));
-        // Lock 1 reaches akm-core as `allow_write`: the configuration, or a
-        // terminal where ECRIRE is demanded; --check never writes.
-        assert!(
-            prod.contains("Consent::Config => true,\n        Consent::Interactive => interactive,")
-        );
-        assert!(prod.contains(
-            "config_allows_write(),\n        lang,\n        &mut world,\n        &mut io,"
-        ));
-        // The consent is never persisted: this file never writes a file but
-        // the backup (through akm-core), never config.toml.
+        // Gone: the typed word, the name typed again, the configuration lock,
+        // the power-cycle countdown.
+        for gone in [
+            ["ECR", "IRE"].concat(),
+            ["allow_device", "_name_write"].concat(),
+            ["wait_", "reconnect"].concat(),
+            ["config", "::load"].concat(),
+            ["fn ", "sleep"].concat(),
+        ] {
+            assert!(!prod.contains(&gone), "{gone} is back");
+        }
+        // This file never writes a file but the backup (through akm-core).
         assert!(
             !prod.contains("fs::write")
                 && !prod.contains("OpenOptions")
                 && !prod.contains("config::save")
         );
-        assert!(prod.contains("config.toml untouched"));
         // The MTU comes from the read-only `inspect` verb, never from a dry run
         // of a HID_CONTROL byte; and the only pkexec call is in hid_control.rs.
         assert!(prod.contains("inspect_control_mtu("));
         assert!(!prod.contains("HidControlOp"));
         assert!(!prod.contains("pkexec\""));
         // No fixed MTU is assumed anywhere in this command.
-        assert!(!prod.contains("Some(672)") && !prod.contains("Some(66)"));
-        // The consent word is exact, upper case, no accent.
-        assert_eq!(CONSENT_WORD, "ECRIRE");
+        assert!(
+            !prod.contains("Some(672)")
+                && !prod.contains("Some(66)")
+                && !prod.contains("Some(185)")
+        );
     }
 }

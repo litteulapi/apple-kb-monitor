@@ -66,7 +66,7 @@ pub enum Command {
     /// Rename the keyboard on this computer (BlueZ alias; nothing is written
     /// into the keyboard). With --device-name: the name stored IN the keyboard
     #[command(
-        after_help = "TWO NAMES:\n  akmctl rename <name>                 alias of THIS computer (BlueZ Alias): default, no risk\n  akmctl rename --device-name <name>   name stored IN the keyboard (0x51-0x55): dry run by default;\n                                       --check runs the WHOLE pre-flight (MTU read via ONE pkexec), makes the\n                                       backup, shows the plan, writes nothing, asks nothing;\n                                       --write-device-name sends the ONE frame Lion sends (SET Feature 0x55,\n                                       65 bytes, established by disassembly) after pre-flight, backup and plan,\n                                       only if THREE locks are lifted:\n                                         1. consent: in an interactive terminal, type ECRIRE exactly (this run\n                                            only, config.toml untouched); without a terminal, only\n                                            [apple] allow_device_name_write = true in config.toml (default false)\n                                         2. outgoing MTU of the L2CAP control channel >= 66, read on the live\n                                            socket (pkexec akm-hid-control inspect --mac MAC, read-only)\n                                         3. the name typed again in the terminal\n                                       then: switch the keyboard off 3 s, wait 5 s, on; read back; verdict.\n                                       RISKS NOT MEASURED: firmware HANDSHAKE to SET 0x55, persistence across\n                                       a battery change (docs/RENOMMER-CLAVIER.md §5.3, §6)\n                                       Exit codes: 10 lock 1, 11 pre-flight (lock 2 included), 12 cancelled,\n                                       13 no reconnection, 14 read back different (rollback printed)\n  akmctl rename --device-name --show   name stored in the keyboard, from the daemon's cache\n  akmctl rename --device-name --restore <backup.json> [--check|--write-device-name]"
+        after_help = "TWO NAMES:\n  akmctl rename <name>                 alias of THIS computer (BlueZ Alias): nothing written into the keyboard\n  akmctl rename --device-name <name>   WRITES the name stored IN the keyboard (seen by every host):\n                                       pre-flight, backup of the current name, ONE confirmation [y/N]\n                                       (--yes skips it and works without a terminal), one write, immediate\n                                       read-back, verdict. No password in the active local session.\n                                       --check: whole pre-flight and backup, nothing written, nothing asked\n                                       --dry-run: shows the bytes, no pkexec, nothing written\n                                       --verbose: frames, wire bytes, proof, [devname] journal\n  akmctl rename --device-name --show   name stored in the keyboard, from the daemon's cache\n  akmctl rename --device-name --restore <backup.json> [--yes]   write a backup back (same flow)\nExit codes of --device-name: 0 written and read back identical (or --check green), 10 no terminal and\nno --yes, 11 pre-flight refused, 12 cancelled, 13 written but not read back (check with --show),\n14 read back different (rollback command printed). Persistence across a battery change is not measured\n(docs/RENOMMER-CLAVIER.md)."
     )]
     Rename {
         /// New alias (max 64 characters, no control characters)
@@ -78,29 +78,32 @@ pub enum Command {
         /// Keyboard to rename (default: the one the daemon reports)
         #[arg(long, value_name = "MAC")]
         mac: Option<String>,
-        /// Act on the name stored IN the keyboard (printable ASCII, 1-32
+        /// Write the name stored IN the keyboard (printable ASCII, 1-32
         /// characters); without a value: with --show or --restore
         #[arg(long, value_name = "NAME", num_args = 0..=1, value_parser = parse_device_name, conflicts_with = "reset")]
         device_name: Option<Option<String>>,
-        /// Show the bytes that would be sent, write nothing (the default)
+        /// Do not ask the confirmation (works without a terminal)
+        #[arg(short = 'y', long, requires = "device_name", conflicts_with_all = ["show", "name", "reset"])]
+        yes: bool,
+        /// Show the bytes that would be sent, write nothing, no pkexec
         #[arg(long, requires = "device_name", conflicts_with_all = ["write_device_name", "check", "name", "reset"])]
         dry_run: bool,
-        /// Whole pre-flight (control-channel MTU read via ONE pkexec, read-only),
-        /// backup and plan; nothing written, nothing asked
+        /// Whole pre-flight (control-channel MTU read via ONE pkexec, read-only)
+        /// and backup; nothing written, nothing asked
         #[arg(long, requires = "device_name", conflicts_with_all = ["write_device_name", "name", "reset"])]
         check: bool,
-        /// Really write: three locks (consent = config allow_device_name_write
-        /// = true, or ECRIRE typed in an interactive terminal for this run only;
-        /// control-channel MTU >= 66 read via pkexec; name typed again), after
-        /// pre-flight, backup and the plan
-        #[arg(long, requires = "device_name", conflicts_with_all = ["name", "reset"])]
+        /// Accepted for compatibility, no effect: --device-name writes by default
+        #[arg(long, hide = true, requires = "device_name", conflicts_with_all = ["name", "reset"])]
         write_device_name: bool,
         /// Show the name stored in the keyboard (daemon cache, no hardware read)
         #[arg(long, requires = "device_name", conflicts_with_all = ["restore", "dry_run", "check", "write_device_name", "name", "reset"])]
         show: bool,
-        /// Rewrite a backup made by a previous --device-name run
+        /// Write back a backup made by a previous --device-name run
         #[arg(long, value_name = "BACKUP", requires = "device_name", conflicts_with_all = ["name", "reset"])]
         restore: Option<std::path::PathBuf>,
+        /// Byte-by-byte detail (frames, wire, proof, [devname] journal)
+        #[arg(long, requires = "device_name", conflicts_with_all = ["name", "reset"])]
+        verbose: bool,
     },
     /// Follow StateChanged signals: one JSON line per change, until interrupted
     Watch,
@@ -480,7 +483,34 @@ mod tests {
             _ => panic!(),
         }
         assert!(c(&["--device-name", "x", "--dry-run"]).is_ok());
+        // --write-device-name: still accepted (compatibility), no effect, hidden.
         assert!(c(&["--device-name", "x", "--write-device-name"]).is_ok());
+        let old = ["--device-name", "--restore", "/x", "--write-device-name"];
+        assert!(c(&old).is_ok());
+        let mut help = Vec::new();
+        <Cli as clap::CommandFactory>::command()
+            .find_subcommand_mut("rename")
+            .unwrap()
+            .write_long_help(&mut help)
+            .unwrap();
+        let help = String::from_utf8(help).unwrap();
+        assert!(!help.contains("--write-device-name"), "hidden");
+        assert!(help.contains("--yes") && help.contains("--verbose") && help.contains("--check"));
+        // --yes / -y and --verbose.
+        for flag in ["--yes", "-y"] {
+            match c(&["--device-name", "x", flag]).unwrap().command {
+                Command::Rename { yes, verbose, .. } => assert!(yes && !verbose),
+                _ => panic!(),
+            }
+        }
+        let all = ["--device-name", "--restore", "/x", "--yes", "--verbose"];
+        match c(&all).unwrap().command {
+            Command::Rename { yes, verbose, .. } => assert!(yes && verbose),
+            _ => panic!(),
+        }
+        assert!(c(&["--device-name", "--show", "--yes"]).is_err());
+        assert!(c(&["x", "--yes"]).is_err() && c(&["x", "--verbose"]).is_err());
+        assert!(c(&["--reset", "--yes"]).is_err());
         assert!(c(&["--device-name", "x", "--dry-run", "--write-device-name"]).is_err());
         // --check: whole pre-flight, nothing written; exclusive with the others.
         assert!(matches!(

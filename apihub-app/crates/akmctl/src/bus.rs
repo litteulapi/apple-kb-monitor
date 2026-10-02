@@ -83,6 +83,19 @@ pub fn expect_disconnect(conn: &Connection) -> Result<bool, BusError> {
         .map_err(|e| BusError::Failed(format!("ExpectDisconnect: {e}")))
 }
 
+/// `RereadName()`: after a write of the name stored in the keyboard, the
+/// daemon forgets `0x51`-`0x54` and reads them again (at most once per 30 s).
+pub fn reread_name(conn: &Connection) -> Result<(), BusError> {
+    if !daemon_present(conn) {
+        return Err(BusError::Absent(format!(
+            "daemon not running ({BUS_NAME} absent on the session bus)"
+        )));
+    }
+    proxy(conn)?
+        .call("RereadName", &())
+        .map_err(|e| BusError::Failed(format!("RereadName: {e}")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

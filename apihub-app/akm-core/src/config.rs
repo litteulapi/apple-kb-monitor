@@ -21,7 +21,7 @@
 //! [apple]
 //! will_shutdown = true       # tell the keyboard once, at shutdown / restart, what macOS tells it (#191)
 //! disconnect_on_breaker = true  # after 3 unanswered requests, have BlueZ disconnect it, as macOS (#251)
-//! allow_device_name_write = false  # lock 1 of `akmctl rename --device-name --write-device-name` (#248); default false
+//! allow_device_name_write = false  # OBSOLETE: read, ignored (was a lock of `akmctl rename --device-name`, #248)
 //! ```
 //!
 //! Only this small TOML subset is read (sections, integers, floats, booleans,
@@ -60,11 +60,9 @@ pub struct Config {
     /// once to disconnect the keyboard (`Device1.Disconnect`), as macOS asks
     /// bluetoothd (#251). Default **on**; `false` only stops the requests.
     pub disconnect_on_breaker: bool,
-    /// First of the three locks of the write of the name stored IN the
-    /// keyboard (`akmctl rename --device-name <nom> --write-device-name`,
-    /// SET Feature `0x55`, #248): nothing is written, probed or confirmed
-    /// unless this is explicitly `true`. Default **false**. The two other
-    /// locks (control-channel MTU read ≥ 66, name typed again) stay.
+    /// OBSOLETE (#248): was a lock of `akmctl rename --device-name`. Still
+    /// read so that an existing `config.toml` raises no warning; nothing uses
+    /// it any more (the write asks one confirmation, or takes `--yes`).
     pub allow_device_name_write: bool,
 }
 
@@ -344,12 +342,12 @@ mod tests {
     }
 
     #[test]
-    fn allow_device_name_write_defaults_to_off_and_needs_an_explicit_true() {
-        // #248, lock 1 of the write of the name stored in the keyboard.
+    fn the_obsolete_allow_device_name_write_key_is_still_read_without_a_warning() {
+        // #248: obsolete, ignored by every command; a boolean raises no warning.
         assert!(!Config::default().allow_device_name_write);
         assert!(!parse("").0.allow_device_name_write);
         assert!(!parse("[apple]\nwill_shutdown = true\n").0.allow_device_name_write);
-        let (c, w) = parse("[apple]\nallow_device_name_write = true  # I accept the unmeasured risks\n");
+        let (c, w) = parse("[apple]\nallow_device_name_write = true  # left over from an older version\n");
         assert!(w.is_empty(), "{w:?}");
         assert!(c.allow_device_name_write);
         let (c, w) = parse("[apple]\nallow_device_name_write = false\n");

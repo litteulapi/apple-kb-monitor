@@ -100,8 +100,8 @@ pub fn parse_control_mtu(text: &str, mac: &str) -> Result<u16, String> {
 }
 
 /// Read the outgoing MTU of the control channel to `mac` on the live socket
-/// (`pkexec akm-hid-control inspect --mac MAC`: administrator authentication,
-/// read-only `getsockopt`, nothing sent). The combined output is returned
+/// (`pkexec akm-hid-control inspect --mac MAC`: no password in the active
+/// local session, read-only `getsockopt`, nothing sent). The combined output is returned
 /// with the value so the caller can journal it.
 pub fn inspect_control_mtu(mac: &str) -> Result<(u16, String), String> {
     let args = inspect_args(mac)?;
