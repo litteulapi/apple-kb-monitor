@@ -614,6 +614,10 @@ fn spawn_event_forwarder(conn: Connection, shared: Arc<Shared>, hub: &EventHub) 
 }
 
 fn forward(conn: &Connection, shared: &Arc<Shared>, ev: &DeviceEvent) -> zbus::Result<()> {
+    if let DeviceEvent::Forgotten { mac } = ev {
+        devices::remove_device(conn, shared, mac);
+        return Ok(());
+    }
     let snap = shared.watch.get();
     let (model, name) = (
         snap.model().unwrap_or_default(),
@@ -648,7 +652,7 @@ fn forward(conn: &Connection, shared: &Arc<Shared>, ev: &DeviceEvent) -> zbus::R
                 .await
             }
             // ConnectionChanged follows the published state (sync_devices).
-            DeviceEvent::Link(_) => Ok(()),
+            DeviceEvent::Link(_) | DeviceEvent::Forgotten { .. } => Ok(()),
         }
     })
 }

@@ -484,6 +484,32 @@ fn inner() {
         .unwrap_err();
     assert!(e.to_string().contains("NotSupported"), "{e}");
 
+    // C12: a forgotten keyboard's object is withdrawn.
+    events.publish(DeviceEvent::Forgotten { mac: MAC.into() });
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let paths: Vec<OwnedObjectPath> = c
+            .call_method(
+                Some(service::BUS_NAME),
+                service::OBJECT_PATH,
+                Some(service::INTERFACE),
+                "GetDevices",
+                &(),
+            )
+            .unwrap()
+            .body()
+            .deserialize()
+            .unwrap();
+        if paths.is_empty() {
+            break;
+        }
+        assert!(Instant::now() < deadline, "still exported: {paths:?}");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(c
+        .call_method(Some(service::BUS_NAME), DEV, Some(DEVICE_INTERFACE), "Refresh", &())
+        .is_err());
+
     let _ = std::fs::remove_dir_all(&dir);
 }
 

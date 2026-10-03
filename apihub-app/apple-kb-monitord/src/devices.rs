@@ -500,6 +500,20 @@ pub fn ensure_device(
     Ok(Some(path))
 }
 
+/// Withdraw the object of a keyboard no longer known (forgotten, C12).
+pub fn remove_device(conn: &zbus::blocking::Connection, shared: &Arc<Shared>, mac: &str) {
+    let Some(path) = device_path(mac) else { return };
+    shared
+        .devices
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .retain(|m| !m.eq_ignore_ascii_case(mac));
+    match conn.object_server().remove::<Device, _>(&path) {
+        Ok(_) => tracing::info!("D-Bus device object {path} withdrawn"),
+        Err(e) => tracing::warn!("cannot withdraw {path}: {e}"),
+    }
+}
+
 /// Run a blocking closure on its own thread and await its result without
 /// blocking the D-Bus executor (polkit can take a minute).
 pub fn unblock<T: Send + 'static>(

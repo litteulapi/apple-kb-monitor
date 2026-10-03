@@ -114,6 +114,9 @@ pub trait LinkBus {
     /// The keyboard `name` was removed from the computer from outside; tell
     /// the user once what to do next (#252).
     fn removed(&mut self, _name: &str) {}
+    /// The pairing of `mac` is gone from BlueZ: the rest of the daemon stops
+    /// presenting it (C12). Must not block.
+    fn forgotten(&mut self, _mac: &str) {}
     /// Start `Device1.Disconnect` on `path`. Must not block.
     fn disconnect(&mut self, _path: &str, _mac: &str) {}
     /// Start `Adapter1.RemoveDevice(path)`: the pairing is removed from this
@@ -416,7 +419,11 @@ impl<B: LinkBus> Keeper<B> {
             self.note_down(&mac, DisconnectReason::Unknown, now);
         }
         // Removed from BlueZ (forgotten by the user): stop following, silently.
+        let gone: Vec<String> = self.devs.keys().filter(|m| !seen.contains(m)).cloned().collect();
         self.devs.retain(|m, _| seen.contains(m));
+        for mac in gone {
+            self.bus.forgotten(&mac);
+        }
         let connected = list
             .iter()
             .filter(|d| d.connected)
@@ -479,11 +486,12 @@ impl<B: LinkBus> Keeper<B> {
             KMsg::Removed(path) => {
                 if let Some(mac) = self.mac_of(&path) {
                     if let Some(d) = self.devs.remove(&mac) {
-                        tracing::info!("link: {mac} removed from BlueZ from outside");
+                        tracing::info!("link: {mac} removed from BlueZ");
                         if self.notify {
                             self.bus.removed(&d.name);
                         }
                     }
+                    self.bus.forgotten(&mac);
                     let connected = self
                         .devs
                         .iter()
@@ -895,6 +903,10 @@ impl LinkBus for SystemBus {
 
     fn removed(&mut self, name: &str) {
         crate::notify::keyboard_removed(name);
+    }
+
+    fn forgotten(&mut self, mac: &str) {
+        self.mailbox.send(Msg::Forgotten(mac.to_string()));
     }
 
     fn notify_unstable(&mut self, name: &str, count: usize) {
@@ -1419,6 +1431,7 @@ mod tests {
         connects: Vec<Instant>,
         notes: Vec<(String, Urgency)>,
         removed: Vec<String>,
+        forgotten: Vec<String>,
         unstable: Vec<(String, usize)>,
         disconnects: Vec<String>,
         forgets: Vec<String>,
@@ -1436,6 +1449,9 @@ mod tests {
         }
         fn removed(&mut self, name: &str) {
             self.removed.push(name.to_string());
+        }
+        fn forgotten(&mut self, mac: &str) {
+            self.forgotten.push(mac.to_string());
         }
         fn notify_unstable(&mut self, name: &str, count: usize) {
             self.unstable.push((name.to_string(), count));
@@ -1571,6 +1587,7 @@ mod tests {
             connects: Vec::new(),
             notes: Vec::new(),
             removed: Vec::new(),
+            forgotten: Vec::new(),
             unstable: Vec::new(),
             disconnects: Vec::new(),
             forgets: Vec::new(),
@@ -1778,6 +1795,8 @@ mod tests {
         k.handle(KMsg::Removed(PATH.into()), t1);
         assert!(k.status(t1).is_empty(), "ghost keyboard gone immediately");
         assert_eq!(k.bus().removed, ["Clavier de alice #1"]);
+        // C12: the rest of the daemon is told, so it stops presenting it.
+        assert_eq!(k.bus().forgotten.len(), 1);
         let t = run_for(&mut k, t1, 3600);
         assert!(k.bus().connects.is_empty(), "no reconnection to a forgotten device");
         assert!(k.bus().notes.is_empty(), "no re-pairing notice: {:?}", k.bus().notes);

@@ -42,6 +42,9 @@ pub enum Msg {
     /// The name stored in the keyboard was rewritten (D-Bus `RereadName()`);
     /// the answer of the machine goes back through the reply slot.
     RereadName(NameReply),
+    /// The pairing of this keyboard (MAC) was removed from BlueZ ("Forget",
+    /// `bluetoothctl remove`): it is no longer the keyboard followed (C12).
+    Forgotten(String),
     /// The BlueZ alias of a keyboard is now this (`None` = unknown).
     Alias(String, Option<String>),
     /// Stop the actor.
@@ -713,6 +716,30 @@ impl Actor {
         self.clear();
     }
 
+    /// The keyboard `mac` is no longer paired (C12): its last report is not
+    /// kept as a stale value (that is for a keyboard switched off), its alert
+    /// state goes; the published state, its D-Bus object and the menu no
+    /// longer show it.
+    fn forget(&mut self, mac: &str) {
+        self.alerts.remove(&mac.to_ascii_uppercase());
+        let ours = self
+            .kb
+            .as_ref()
+            .and_then(|k| k.device.mac.as_deref())
+            .is_some_and(|m| m.eq_ignore_ascii_case(mac));
+        self.opts.events.publish(DeviceEvent::Forgotten {
+            mac: mac.to_ascii_uppercase(),
+        });
+        if ours {
+            tracing::info!("{mac} forgotten: no longer followed");
+            if self.linked {
+                self.clear();
+            }
+            self.kb = None;
+            self.reconnected = false;
+        }
+    }
+
     fn link_event(&mut self, ev: akm_core::link::LinkEvent) {
         tracing::info!("{ev:?}");
         if self.opts.notify && self.opts.notify_connection {
@@ -1366,6 +1393,14 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
                 }));
             }
             Ok(Msg::Alias(mac, alias)) => actor.set_alias(&mac, alias),
+            Ok(Msg::Forgotten(mac)) => {
+                if machine.on_event(&Event::Disconnected(mac.to_ascii_uppercase()), Instant::now())
+                    == Some(Action::Clear)
+                {
+                    actor.clear();
+                }
+                actor.forget(&mac);
+            }
             Ok(Msg::Quit) => break,
             Err(mpsc::RecvTimeoutError::Timeout) => {}
             Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -2120,6 +2155,24 @@ mod tests {
         a.kb = Some(report(14.0, None));
         a.after_battery_update(false);
         assert_eq!(crossings(&rx), vec![15]);
+    }
+
+    /// C12: after "Forget this keyboard", the state, the device object (via
+    /// the event) and therefore the menu no longer present it.
+    #[test]
+    fn a_forgotten_keyboard_is_no_longer_presented() {
+        let mut a = quiet_actor();
+        let rx = a.opts.events.subscribe();
+        a.kb = Some(report(55.0, None));
+        a.linked = true;
+        a.forget("AA:BB:CC:DD:EE:99");
+        assert!(a.snapshot().keyboard.is_some(), "another keyboard: unchanged");
+        a.forget("aa:bb:cc:dd:ee:f1");
+        let s = a.snapshot();
+        assert!(s.keyboard.is_none() && !s.connected, "{s:?}");
+        assert!(s.devices.is_empty());
+        assert!(rx.try_iter().any(|e| matches!(e,
+            DeviceEvent::Forgotten { ref mac } if mac == "AA:BB:CC:DD:EE:F1")));
     }
 
     #[test]
