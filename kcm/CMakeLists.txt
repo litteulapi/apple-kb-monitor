@@ -41,6 +41,31 @@ if(BUILD_TESTING)
     add_executable(test_devicename tests/test_devicename.cpp src/devicename.cpp src/devicename.h)
     target_link_libraries(test_devicename PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME kcm_devicename COMMAND test_devicename)
+
+    # Every string of the pages is translated (kcm/Messages.sh --check).
+    find_program(XGETTEXT_EXE xgettext)
+    if(XGETTEXT_EXE)
+        add_test(NAME kcm_translations COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/Messages.sh --check)
+    endif()
+
+    # The real module on a sealed bench (audit of 2026-10-03): loaded with
+    # KCModuleLoader as System Settings does, private session bus without any
+    # activation directory, temporary HOME/XDG, fake akmctl (tests/private_bus.sh).
+    find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Widgets QuickWidgets)
+    find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS KCMUtils)
+    find_program(DBUS_RUN_SESSION dbus-run-session)
+    if(DBUS_RUN_SESSION)
+        add_executable(test_kcm_module tests/test_kcm_module.cpp)
+        target_link_libraries(test_kcm_module PRIVATE
+            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Quick Qt6::QuickWidgets Qt6::Test
+            KF6::KCMUtils KF6::I18n KF6::CoreAddons)
+        target_compile_definitions(test_kcm_module PRIVATE
+            KCM_PLUGIN_FILE="$<TARGET_FILE:kcm_applekeyboard>"
+            KCM_GMO_FILE="${CMAKE_CURRENT_BINARY_DIR}/kcm_applekeyboard.gmo")
+        add_dependencies(test_kcm_module kcm_applekeyboard)
+        add_test(NAME kcm_module COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/tests/private_bus.sh $<TARGET_FILE:test_kcm_module>)
+        set_tests_properties(kcm_module PROPERTIES TIMEOUT 180 SKIP_RETURN_CODE 77)
+    endif()
 endif()
 
 # Translations: po/<lang>/kcm_applekeyboard.po -> <lang>/LC_MESSAGES/*.mo

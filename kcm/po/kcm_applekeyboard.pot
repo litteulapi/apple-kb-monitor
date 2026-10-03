@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: kcm_applekeyboard\n"
 "Report-Msgid-Bugs-To: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-"
 "monitor/issues\n"
-"POT-Creation-Date: 2026-10-02 04:46+0200\n"
+"POT-Creation-Date: 2026-10-03 09:03+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -19,191 +19,229 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/AlertsPage.qml:116
+#: ui/AlertsPage.qml:234
 msgid ""
-"Not saved: the thresholds must be whole numbers between 1 and 95, separated "
+"Not saved: the settings file could not be read (%1), so it is not written "
+"over. Fix the file or move it away, then reopen this page."
+msgstr ""
+
+#: ui/AlertsPage.qml:240
+msgid ""
+"Not saved: the thresholds must be whole numbers between 1 and 99, separated "
 "by commas."
 msgstr ""
 
-#: ui/AlertsPage.qml:132
+#: ui/AlertsPage.qml:244
+msgid "Not saved: the critical level must be a whole number between 0 and 99."
+msgstr ""
+
+#: ui/AlertsPage.qml:248
+msgid ""
+"Not saved: the re-arm margin must be a number between 1 and 20 (for example "
+"3 or 2.5)."
+msgstr ""
+
+#: ui/AlertsPage.qml:264
 msgid ""
 "Not saved: config.toml uses a form this page cannot edit safely (%1). Edit "
 "the file by hand."
 msgstr ""
 
-#: ui/AlertsPage.qml:145
+#: ui/AlertsPage.qml:285
 msgid ""
 "Saved. The service reads these settings when it starts: restart it to use "
 "them now."
 msgstr ""
 
-#: ui/AlertsPage.qml:146
+#: ui/AlertsPage.qml:286
 msgid "Saved. They will be used when the service starts."
 msgstr ""
 
-#: ui/AlertsPage.qml:149
+#: ui/AlertsPage.qml:290
+msgid ""
+"Not saved: the settings file was changed by another program since this page "
+"read it. Nothing was written; use Reset to read it again."
+msgstr ""
+
+#: ui/AlertsPage.qml:291
 msgid "Not saved: %1"
 msgstr ""
 
-#: ui/AlertsPage.qml:169
+#: ui/AlertsPage.qml:315
 msgid "Restart the service"
 msgstr ""
 
-#: ui/AlertsPage.qml:174
+#: ui/AlertsPage.qml:320
 msgid "Service restarted with the new settings."
 msgstr ""
 
-#: ui/AlertsPage.qml:174
+#: ui/AlertsPage.qml:320
 msgid "The service could not be restarted: %1"
 msgstr ""
 
-#: ui/AlertsPage.qml:187
-msgid "The settings file could not be read (%1): the defaults are shown."
+#: ui/AlertsPage.qml:334
+msgid ""
+"The settings file could not be read (%1): the defaults are shown and nothing "
+"can be saved, so that the file is never written over."
 msgstr ""
 
-#: ui/AlertsPage.qml:188
+#: ui/AlertsPage.qml:335
 msgid ""
 "Some lines of the settings file are not understood (%1); they are kept as "
 "they are."
 msgstr ""
 
-#: ui/AlertsPage.qml:197
+#: ui/AlertsPage.qml:344
+msgid ""
+"The service does not take these values of the settings file as they are "
+"written: %1. They are shown as written and kept unless you change them."
+msgstr ""
+
+#: ui/AlertsPage.qml:354
 msgctxt "@title:group"
 msgid "Low battery"
 msgstr ""
 
-#: ui/AlertsPage.qml:201
+#: ui/AlertsPage.qml:359
 msgid "Alerts:"
 msgstr ""
 
-#: ui/AlertsPage.qml:202
+#: ui/AlertsPage.qml:360
 msgid "Notify when the battery is low"
 msgstr ""
 
-#: ui/AlertsPage.qml:207
+#: ui/AlertsPage.qml:366
 msgid "Thresholds (%):"
 msgstr ""
 
-#: ui/AlertsPage.qml:211
+#: ui/AlertsPage.qml:370
 msgid "Alert thresholds in percent, separated by commas"
 msgstr ""
 
-#: ui/AlertsPage.qml:220
+#: ui/AlertsPage.qml:373
+msgid "Whole numbers from 1 to 99"
+msgstr ""
+
+#: ui/AlertsPage.qml:380
 msgid "One notification per threshold crossed, on the estimated charge."
 msgstr ""
 
-#: ui/AlertsPage.qml:224
+#: ui/AlertsPage.qml:385
 msgid "With KDE:"
 msgstr ""
 
-#: ui/AlertsPage.qml:226
+#: ui/AlertsPage.qml:387
 msgid "When KDE already warns about this keyboard, send only one reminder"
 msgstr ""
 
-#: ui/AlertsPage.qml:231
+#: ui/AlertsPage.qml:393
 msgid "Critical at or below (%):"
 msgstr ""
 
-#: ui/AlertsPage.qml:235
+#: ui/AlertsPage.qml:398
 msgid "Critical threshold in percent"
 msgstr ""
 
-#: ui/AlertsPage.qml:240
+#: ui/AlertsPage.qml:404
 msgid "Re-arm after (points):"
 msgstr ""
 
-#: ui/AlertsPage.qml:244
+#: ui/AlertsPage.qml:409
 msgid "Points above a threshold before it can notify again"
 msgstr ""
 
-#: ui/AlertsPage.qml:250
+#: ui/AlertsPage.qml:410
+msgid "A number from 1 to 20, decimals allowed"
+msgstr ""
+
+#: ui/AlertsPage.qml:417
 msgctxt "@title:group"
 msgid "Batteries"
 msgstr ""
 
-#: ui/AlertsPage.qml:254
+#: ui/AlertsPage.qml:422
 msgid "Battery type:"
 msgstr ""
 
-#: ui/AlertsPage.qml:255 ui/StatePage.qml:47
+#: ui/AlertsPage.qml:423 ui/StatePage.qml:47
 msgctxt "battery chemistry"
 msgid "alkaline"
 msgstr ""
 
-#: ui/AlertsPage.qml:255 ui/StatePage.qml:48
+#: ui/AlertsPage.qml:423 ui/StatePage.qml:48
 msgctxt "battery chemistry"
 msgid "NiMH (rechargeable)"
 msgstr ""
 
-#: ui/AlertsPage.qml:255 ui/StatePage.qml:49
+#: ui/AlertsPage.qml:423 ui/StatePage.qml:49
 msgctxt "battery chemistry"
 msgid "lithium"
 msgstr ""
 
-#: ui/AlertsPage.qml:255 ui/StatePage.qml:50
+#: ui/AlertsPage.qml:423 ui/StatePage.qml:50
 msgctxt "battery chemistry"
 msgid "unknown"
 msgstr ""
 
-#: ui/AlertsPage.qml:256
+#: ui/AlertsPage.qml:424
 msgid "Battery type"
 msgstr ""
 
-#: ui/AlertsPage.qml:264
+#: ui/AlertsPage.qml:432
 msgid ""
 "Used for the estimated charge and its range; the keyboard's own indication "
 "does not depend on it."
 msgstr ""
 
-#: ui/AlertsPage.qml:268
+#: ui/AlertsPage.qml:437
 msgid "Display:"
 msgstr ""
 
-#: ui/AlertsPage.qml:269
+#: ui/AlertsPage.qml:438
 msgid "Also show the percentage as macOS shows it"
 msgstr ""
 
-#: ui/AlertsPage.qml:275
+#: ui/AlertsPage.qml:444
 msgctxt "@title:group"
 msgid "Other notifications"
 msgstr ""
 
-#: ui/AlertsPage.qml:279 ui/StatePage.qml:134
+#: ui/AlertsPage.qml:449 ui/StatePage.qml:134
 msgid "Connection:"
 msgstr ""
 
-#: ui/AlertsPage.qml:280
+#: ui/AlertsPage.qml:450
 msgid "Notify on disconnection and reconnection"
 msgstr ""
 
-#: ui/AlertsPage.qml:285
+#: ui/AlertsPage.qml:456
 msgid "New batteries:"
 msgstr ""
 
-#: ui/AlertsPage.qml:286
+#: ui/AlertsPage.qml:457
 msgid "Notify when new batteries are detected"
 msgstr ""
 
-#: ui/AlertsPage.qml:292
+#: ui/AlertsPage.qml:463
 msgctxt "@title:group"
 msgid "Shutdown"
 msgstr ""
 
-#: ui/AlertsPage.qml:296
+#: ui/AlertsPage.qml:468
 msgid "WillShutdown:"
 msgstr ""
 
-#: ui/AlertsPage.qml:297
+#: ui/AlertsPage.qml:469
 msgid "Tell the keyboard when the computer shuts down or restarts"
 msgstr ""
 
-#: ui/AlertsPage.qml:305
+#: ui/AlertsPage.qml:477
 msgid ""
 "What macOS sends at every shutdown (one message, nothing else is written). "
 "Off = the keyboard is left untouched."
 msgstr ""
 
-#: ui/AlertsPage.qml:312
+#: ui/AlertsPage.qml:484
 msgid "File:"
 msgstr ""
 
@@ -227,94 +265,181 @@ msgctxt "diagnosis level"
 msgid "problem"
 msgstr ""
 
-#: ui/DiagPage.qml:49 ui/DiagPage.qml:64
+#: ui/DiagPage.qml:50
+msgctxt "doctor topic"
+msgid "adapter"
+msgstr ""
+
+#: ui/DiagPage.qml:51
+msgctxt "doctor topic"
+msgid "adapter power"
+msgstr ""
+
+#: ui/DiagPage.qml:52
+msgctxt "doctor topic"
+msgid "BlueZ settings"
+msgstr ""
+
+#: ui/DiagPage.qml:53
+msgctxt "doctor topic"
+msgid "service"
+msgstr ""
+
+#: ui/DiagPage.qml:54
+msgctxt "doctor topic"
+msgid "HID access"
+msgstr ""
+
+#: ui/DiagPage.qml:55
+msgctxt "doctor topic"
+msgid "journal"
+msgstr ""
+
+#: ui/DiagPage.qml:56
+msgctxt "doctor topic"
+msgid "link"
+msgstr ""
+
+#: ui/DiagPage.qml:57
+msgctxt "doctor topic"
+msgid "link key"
+msgstr ""
+
+#: ui/DiagPage.qml:58
+msgctxt "doctor topic"
+msgid "link quality"
+msgstr ""
+
+#: ui/DiagPage.qml:59
+msgctxt "doctor topic"
+msgid "pairing"
+msgstr ""
+
+#: ui/DiagPage.qml:60
+msgctxt "doctor topic"
+msgid "signal"
+msgstr ""
+
+#: ui/DiagPage.qml:61
+msgctxt "doctor topic"
+msgid "UPower"
+msgstr ""
+
+#: ui/DiagPage.qml:68
+msgctxt "doctor verdict"
+msgid "the pairing is refused or missing: run `akmctl repair`"
+msgstr ""
+
+#: ui/DiagPage.qml:70
+msgctxt "doctor verdict"
+msgid "no usable pairing: run `akmctl repair`"
+msgstr ""
+
+#: ui/DiagPage.qml:72
+msgctxt "doctor verdict"
+msgid "link up; apply the fixes above to keep it reliable"
+msgstr ""
+
+#: ui/DiagPage.qml:74
+msgctxt "doctor verdict"
+msgid "link up and configuration sound"
+msgstr ""
+
+#: ui/DiagPage.qml:76
+msgctxt "doctor verdict"
+msgid ""
+"keyboard not connected: press a key and wait 10 s; the service pages it on "
+"its own. Pair it again only if `akmctl doctor` reports auth-failed"
+msgstr ""
+
+#: ui/DiagPage.qml:86 ui/DiagPage.qml:101
 msgid "no answer within 60 seconds"
 msgstr ""
 
-#: ui/DiagPage.qml:99
+#: ui/DiagPage.qml:137
 msgid "Check the link"
 msgstr ""
 
-#: ui/DiagPage.qml:102
+#: ui/DiagPage.qml:140
 msgid ""
 "Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. "
 "Reads only."
 msgstr ""
 
-#: ui/DiagPage.qml:106
+#: ui/DiagPage.qml:144
 msgid "Self-check"
 msgstr ""
 
-#: ui/DiagPage.qml:108
+#: ui/DiagPage.qml:146
 msgid ""
 "Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
 msgstr ""
 
-#: ui/DiagPage.qml:113
+#: ui/DiagPage.qml:151
 msgid "Reconnect"
 msgstr ""
 
-#: ui/DiagPage.qml:116
+#: ui/DiagPage.qml:154
 msgid ""
 "Asks the service to page the keyboard now (at most once every 20 seconds)"
 msgstr ""
 
-#: ui/DiagPage.qml:122
+#: ui/DiagPage.qml:160
 msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
 msgstr ""
 
-#: ui/DiagPage.qml:123
+#: ui/DiagPage.qml:161
 msgid "refused by the service (asleep, too soon, or pairing refused)"
 msgstr ""
 
-#: ui/DiagPage.qml:123
+#: ui/DiagPage.qml:161
 msgid "Reconnection not requested: %1"
 msgstr ""
 
-#: ui/DiagPage.qml:129
+#: ui/DiagPage.qml:167
 msgid "Copy the diagnosis"
 msgstr ""
 
-#: ui/DiagPage.qml:134
+#: ui/DiagPage.qml:172
 msgid "Diagnosis copied: paste it into a bug report."
 msgstr ""
 
-#: ui/DiagPage.qml:139
+#: ui/DiagPage.qml:177
 msgid "Documentation"
 msgstr ""
 
-#: ui/DiagPage.qml:150
+#: ui/DiagPage.qml:188
 msgctxt "@title:group"
 msgid "Link check (akmctl doctor)"
 msgstr ""
 
-#: ui/DiagPage.qml:156
+#: ui/DiagPage.qml:194
 msgid "Link check running"
 msgstr ""
 
-#: ui/DiagPage.qml:165
+#: ui/DiagPage.qml:204
 msgctxt "level, advice"
 msgid "Verdict: %1 — %2"
 msgstr ""
 
-#: ui/DiagPage.qml:166 ui/DiagPage.qml:213 ui/KeysPage.qml:33
+#: ui/DiagPage.qml:205 ui/DiagPage.qml:254 ui/KeysPage.qml:33
 msgid "Failed: %1"
 msgstr ""
 
-#: ui/DiagPage.qml:166 ui/DiagPage.qml:213
+#: ui/DiagPage.qml:205 ui/DiagPage.qml:254
 msgid "Not run yet."
 msgstr ""
 
-#: ui/DiagPage.qml:199
+#: ui/DiagPage.qml:240
 msgctxt "@title:group"
 msgid "Self-check (akmctl selftest)"
 msgstr ""
 
-#: ui/DiagPage.qml:205
+#: ui/DiagPage.qml:246
 msgid "Self-check running"
 msgstr ""
 
-#: ui/DiagPage.qml:212
+#: ui/DiagPage.qml:253
 msgid "Verdict: %1"
 msgstr ""
 
@@ -642,235 +767,238 @@ msgstr ""
 msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
 msgstr ""
 
-#: ui/NamePage.qml:45
-msgctxt "placeholder in a command"
-msgid "NAME"
+#: ui/NamePage.qml:67
+msgid "akmctl stopped abruptly before giving its verdict (crash or signal)."
 msgstr ""
 
-#: ui/NamePage.qml:64
+#: ui/NamePage.qml:70
 msgid ""
 "No answer in time. Nothing more is attempted; look at the stored name above "
 "in a moment."
 msgstr ""
 
-#: ui/NamePage.qml:67
+#: ui/NamePage.qml:73
 msgid "Check passed: “%1” can be written. Nothing was written."
 msgstr ""
 
-#: ui/NamePage.qml:70
+#: ui/NamePage.qml:76
 msgid ""
 "“%1” is now stored in the keyboard: written, then read back identical. This "
 "computer may show the old name until a later connection."
 msgstr ""
 
-#: ui/NamePage.qml:73
+#: ui/NamePage.qml:79
 msgid ""
 "The name was written, but it could not be read back. Look at the stored name "
 "above in a moment.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:76
+#: ui/NamePage.qml:82
 msgid ""
 "The name was written, but the keyboard reads back another one.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:79
+#: ui/NamePage.qml:85
 msgid ""
 "The write failed on its way: the name may or may not have been written. Look "
 "at the stored name above in a moment.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:82
+#: ui/NamePage.qml:88
 msgid ""
 "Check failed, nothing was written.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:85
+#: ui/NamePage.qml:91
 msgid ""
 "Not written.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:95
+#: ui/NamePage.qml:102
 msgctxt "@title:window"
 msgid "Write the name into the keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:96
+#: ui/NamePage.qml:103
 msgid "Write “%1” into the keyboard's memory?"
 msgstr ""
 
-#: ui/NamePage.qml:114
+#: ui/NamePage.qml:121
 msgctxt "@title:group"
 msgid "Name on this computer"
 msgstr ""
 
-#: ui/NamePage.qml:117
+#: ui/NamePage.qml:124
 msgid "Shown as:"
 msgstr ""
 
-#: ui/NamePage.qml:123
+#: ui/NamePage.qml:130
 msgid "Keyboard's own name:"
 msgstr ""
 
-#: ui/NamePage.qml:131
+#: ui/NamePage.qml:138
 msgid "New name:"
 msgstr ""
 
-#: ui/NamePage.qml:135
+#: ui/NamePage.qml:142
 msgid "e.g. Office keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:137
+#: ui/NamePage.qml:144
 msgid "New name of the keyboard on this computer"
 msgstr ""
 
-#: ui/NamePage.qml:143
+#: ui/NamePage.qml:150
 msgid "Rename"
 msgstr ""
 
-#: ui/NamePage.qml:151
+#: ui/NamePage.qml:158
 msgid "Renamed to “%1” on this computer."
 msgstr ""
 
-#: ui/NamePage.qml:151
+#: ui/NamePage.qml:158
 msgid "no answer in time"
 msgstr ""
 
-#: ui/NamePage.qml:151 ui/NamePage.qml:166
+#: ui/NamePage.qml:158 ui/NamePage.qml:173
 msgid "Not renamed: %1"
 msgstr ""
 
-#: ui/NamePage.qml:158
+#: ui/NamePage.qml:165
 msgid "Use the keyboard's own name"
 msgstr ""
 
-#: ui/NamePage.qml:166
+#: ui/NamePage.qml:173
 msgid "The keyboard's own name is used again."
 msgstr ""
 
-#: ui/NamePage.qml:177
+#: ui/NamePage.qml:184
 msgid "Renaming needs the keyboard service."
 msgstr ""
 
-#: ui/NamePage.qml:178
+#: ui/NamePage.qml:185
 msgid "No keyboard is known yet."
 msgstr ""
 
-#: ui/NamePage.qml:179
+#: ui/NamePage.qml:186
 msgid ""
 "Only this computer sees this name (Bluetooth alias); the keyboard itself is "
 "not changed."
 msgstr ""
 
-#: ui/NamePage.qml:184
+#: ui/NamePage.qml:191
 msgctxt "@title:group"
 msgid "Name stored inside the keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:187
+#: ui/NamePage.qml:194
 msgid "Stored now:"
 msgstr ""
 
-#: ui/NamePage.qml:188
+#: ui/NamePage.qml:195
 msgid "not read yet (the service reads it once per connection)"
 msgstr ""
 
-#: ui/NamePage.qml:194
+#: ui/NamePage.qml:202
 msgid "Name to write:"
 msgstr ""
 
-#: ui/NamePage.qml:198
+#: ui/NamePage.qml:206
 msgid "1 to 32 ASCII characters"
 msgstr ""
 
-#: ui/NamePage.qml:200
+#: ui/NamePage.qml:208
 msgid "Name to write into the keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:201
+#: ui/NamePage.qml:209
 msgid ""
 "1 to 32 printable ASCII characters, no leading or trailing space, no "
 "backslash"
 msgstr ""
 
-#: ui/NamePage.qml:207
+#: ui/NamePage.qml:215
 msgid "Check (nothing written)"
 msgstr ""
 
-#: ui/NamePage.qml:210
+#: ui/NamePage.qml:218
 msgid ""
 "Runs every check that precedes the write and saves the current name; nothing "
 "is written"
 msgstr ""
 
-#: ui/NamePage.qml:215
+#: ui/NamePage.qml:224
 msgid "Write the name into the keyboard…"
 msgstr ""
 
-#: ui/NamePage.qml:218
+#: ui/NamePage.qml:227
 msgid ""
 "Asks for a confirmation, then writes the name into the keyboard and reads it "
 "back"
 msgstr ""
 
-#: ui/NamePage.qml:237
+#: ui/NamePage.qml:246
 msgid ""
 "Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
 "no backslash."
 msgstr ""
 
-#: ui/NamePage.qml:238
+#: ui/NamePage.qml:247
 msgid ""
 "Every computer and phone sees this name. The current name is saved first, "
 "the keyboard is checked, the name is written once and read back at once. Not "
 "measured: whether the name survives a battery change."
 msgstr ""
 
-#: ui/NamePage.qml:256
+#: ui/NamePage.qml:266
 msgctxt "@title:group"
 msgid "Same operations, to copy into a terminal"
 msgstr ""
 
-#: ui/NamePage.qml:261
+#: ui/NamePage.qml:271
 msgid ""
 "Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
 "authentication):"
 msgstr ""
 
-#: ui/NamePage.qml:263
+#: ui/NamePage.qml:273
 msgid "Every check and the backup of the current name (writes nothing):"
 msgstr ""
 
-#: ui/NamePage.qml:265
+#: ui/NamePage.qml:275
 msgid ""
 "The write itself (checks, backup, one confirmation, one write, read back; "
 "issue #248):"
 msgstr ""
 
-#: ui/NamePage.qml:267
+#: ui/NamePage.qml:277
 msgid ""
 "Forget the keyboard cleanly, as macOS does, then pair it again (only after "
 "typing the confirmation word, issue #217):"
 msgstr ""
 
-#: ui/NamePage.qml:288
+#: ui/NamePage.qml:299
+msgid "Type a valid name to write above first"
+msgstr ""
+
+#: ui/NamePage.qml:301
 msgid "Command: %1"
 msgstr ""
 
-#: ui/NamePage.qml:291
+#: ui/NamePage.qml:305
 msgid "Copy"
 msgstr ""
 
-#: ui/NamePage.qml:293
+#: ui/NamePage.qml:307
 msgid "Copy the command"
 msgstr ""
 
-#: ui/NamePage.qml:297
+#: ui/NamePage.qml:312
 msgid "Command copied."
 msgstr ""
 

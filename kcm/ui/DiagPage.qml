@@ -41,6 +41,43 @@ ColumnLayout {
         default: return i18nc("diagnosis level", "problem");
         }
     }
+    // #291: `akmctl doctor --json` writes its texts in English. What it
+    // identifies is translated here: the topic of each finding, and the
+    // verdict's advice (a fixed set, doctor.rs verdict()). Anything else is
+    // shown as akmctl wrote it.
+    function topicName(t) {
+        switch (String(t)) {
+        case "adapter": return i18nc("doctor topic", "adapter");
+        case "adapter-pm": return i18nc("doctor topic", "adapter power");
+        case "bluez-conf": return i18nc("doctor topic", "BlueZ settings");
+        case "daemon": return i18nc("doctor topic", "service");
+        case "hidraw": return i18nc("doctor topic", "HID access");
+        case "journal": return i18nc("doctor topic", "journal");
+        case "link": return i18nc("doctor topic", "link");
+        case "link-key": return i18nc("doctor topic", "link key");
+        case "link-quality": return i18nc("doctor topic", "link quality");
+        case "pairing": return i18nc("doctor topic", "pairing");
+        case "signal": return i18nc("doctor topic", "signal");
+        case "upower": return i18nc("doctor topic", "UPower");
+        default: return String(t);
+        }
+    }
+    function adviceText(a) {
+        switch (String(a)) {
+        case "the pairing is refused or missing: run `akmctl repair`":
+            return i18nc("doctor verdict", "the pairing is refused or missing: run `akmctl repair`");
+        case "no usable pairing: run `akmctl repair`":
+            return i18nc("doctor verdict", "no usable pairing: run `akmctl repair`");
+        case "link up; apply the fixes above to keep it reliable":
+            return i18nc("doctor verdict", "link up; apply the fixes above to keep it reliable");
+        case "link up and configuration sound":
+            return i18nc("doctor verdict", "link up and configuration sound");
+        case "keyboard not connected: press a key and wait 10 s; the daemon pages it on its own. Re-pair only if `akmctl doctor` reports auth-failed":
+            return i18nc("doctor verdict", "keyboard not connected: press a key and wait 10 s; the service pages it on its own. Pair it again only if `akmctl doctor` reports auth-failed");
+        default:
+            return String(a || "");
+        }
+    }
     function runDoctor() {
         doctorBusy = true;
         root.store.cmd("akmctl", ["doctor", "--json"], root.store.longCmdTimeout, function (code, out, err, timedOut) {
@@ -96,6 +133,7 @@ ColumnLayout {
         Layout.margins: Kirigami.Units.largeSpacing
         spacing: Kirigami.Units.smallSpacing
         QQC2.Button {
+            objectName: "diagDoctorBtn"
             text: i18n("Check the link")
             icon.name: "system-search"
             // stays enabled while running so that the keyboard focus is kept
@@ -156,13 +194,14 @@ ColumnLayout {
         Accessible.name: i18n("Link check running")
     }
     QQC2.Label {
+        objectName: "diagDoctorVerdict"
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
         wrapMode: Text.Wrap
         visible: !root.doctorBusy
         text: root.doctor && root.doctor.verdict
-            ? i18nc("level, advice", "Verdict: %1 — %2", root.levelName(root.doctor.verdict.level), root.doctor.verdict.advice || "")
+            ? i18nc("level, advice", "Verdict: %1 — %2", root.levelName(root.doctor.verdict.level), root.adviceText(root.doctor.verdict.advice))
             : (root.doctorError !== "" ? i18n("Failed: %1", root.doctorError) : i18n("Not run yet."))
     }
     Repeater {
@@ -170,6 +209,7 @@ ColumnLayout {
         delegate: RowLayout {
             id: finding
             required property var modelData
+            required property int index
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -183,9 +223,10 @@ ColumnLayout {
                 Accessible.ignored: true
             }
             QQC2.Label {
+                objectName: "diagFinding" + finding.index
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
-                text: (finding.modelData.topic ? "[" + finding.modelData.topic + "] " : "") + finding.modelData.text
+                text: (finding.modelData.topic ? "[" + root.topicName(finding.modelData.topic) + "] " : "") + finding.modelData.text
                       + (finding.modelData.fix ? "\n→ " + finding.modelData.fix : "")
             }
         }

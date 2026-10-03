@@ -56,7 +56,7 @@ cmake --build /tmp/kcm-build
 |---|---|---|
 | **État** | nom (alias), modèle, adresse, connexion ; batterie : indication du clavier, affichage Apple, charge estimée avec fourchette et chimie, tension, autonomie, date des piles ; signal (qualité + écart en dB), âge de la dernière mesure (mis à jour chaque seconde sans relire), firmware (version, dernière connue, statut), version du démon | D-Bus `GetState` (JSON schéma 1), propriété `DaemonVersion`, signal `StateChanged` |
 | **Touches** | table effective F1-F12 / Éjecter pour le mode Fn courant (code evdev, touche Qt, action KDE liée) ; mode Fn 0-4, `swap_opt_cmd`, `swap_ctrl_cmd`, `swap_fn_leftctrl`, `iso_layout` avec l'avertissement « TOUS les claviers Apple » ; mapping manuel (préréglages apple / fkeys / linux-pc, ajout et retrait de touches, installation, retour au noyau) ; « Lier F4 au lanceur d'applications » | `akmctl keys --json` (avec actions KDE) et D-Bus `.Keymap.KeyTable` en parallèle ; `.Keymap.Keymap/SetKey/SetPreset/Apply/Reset` (sinon `akmctl keymap …`) ; `akmctl set param NOM VALEUR --persist` ; `akmctl keymap kde-apply` |
-| **Notifications** | alertes de batterie (activées, seuils, critique, réarmement, un seul rappel quand PowerDevil prévient déjà), chimie des piles, affichage Apple, notifications de connexion et de piles neuves, **WillShutdown** | `~/.config/apple-kb-monitor/config.toml`, enregistré par le bouton **Appliquer** des Paramètres système |
+| **Notifications** | alertes de batterie (activées, seuils, critique, réarmement, un seul rappel quand PowerDevil prévient déjà), chimie des piles, affichage Apple, notifications de connexion et de piles neuves, **WillShutdown** ; valeurs montrées telles que le fichier les écrit, bornes et types du démon (seuils 1-99, critique 0-99, réarmement décimal 1-20), avertissement pour une valeur que le démon ne prend pas telle quelle | `~/.config/apple-kb-monitor/config.toml`, enregistré par le bouton **Appliquer** des Paramètres système |
 | **Nom** | alias sur cet ordinateur (renommer, reprendre le nom propre) ; nom stocké dans le clavier : affiché, et **écrit** par « Écrire le nom dans le clavier… » (boîte de confirmation « Écrire « X » dans la mémoire du clavier ? », puis `akmctl rename --device-name=<nom> --yes`) ; « Vérifier (sans écrire) » lance la même commande avec `--check` ; le résultat s'affiche dans la page ; l'oubli propre reste une commande à copier (`akmctl repair --force`) | D-Bus `SetAlias(mac, nom)`, `keyboard.device.name_on_keyboard` de `GetState`, `akmctl` par `QProcess` (liste d'arguments, jamais de shell, 90 s au plus) |
 | **Diagnostic** | `akmctl doctor --json` (verdict + constats), `akmctl selftest --json --no-save`, « Reconnecter », « Copier le diagnostic » (état + table + résultats, pour un ticket), lien vers TROUBLESHOOTING.md | `akmctl`, D-Bus `.Link.Reconnect` |
 
@@ -69,7 +69,8 @@ cmake --build /tmp/kcm-build
 
 ### Écritures et authentification
 
-Aucune écriture sans clic explicite, aucune écriture dans le clavier.
+Aucune écriture sans clic explicite. **Une seule écriture va dans le clavier lui-même** : le nom
+stocké, par l'onglet Nom (ligne « Nom dans le clavier » ci-dessous).
 
 | Action | Chemin | Authentification |
 |---|---|---|
@@ -78,7 +79,8 @@ Aucune écriture sans clic explicite, aucune écriture dans le clavier.
 | Préréglage, touches du profil | D-Bus `.Keymap.SetPreset` / `.SetKey` (fichier `keymap.toml` de l'utilisateur) | aucune |
 | Lier F4 | `akmctl keymap kde-apply` (raccourcis KDE de l'utilisateur, jamais un raccourci existant remplacé ; annulation : `akmctl keymap kde-apply --undo`) | aucune |
 | Alias | D-Bus `SetAlias` (BlueZ `Alias`) | aucune |
-| Notifications | écriture atomique (`QSaveFile`) de `config.toml` : seules les clés modifiées sont réécrites, commentaires et clés inconnues conservés | aucune |
+| **Nom dans le clavier** (#248) | « Écrire le nom dans le clavier… » → une confirmation → `akmctl rename --device-name=<nom> --yes` : pré-vol, sauvegarde du nom actuel, **une trame écrite dans le clavier** (registre `0x55`) par le nœud hidraw sous le verrou HID du démon, relecture. « Vérifier (sans écrire) » = même commande avec `--check` (rien n'est écrit). Voir [RENOMMER-CLAVIER.md](RENOMMER-CLAVIER.md) | lecture de la MTU par `pkexec akm-hid-inspect --mac <MAC>` (action `com.agenceapi.AppleKbMonitor.hid-inspect`, `allow_active = yes` : pas de mot de passe dans la session locale active), pour l'écriture comme pour la vérification |
+| Notifications | écriture atomique (`QSaveFile`) de `config.toml` : seules les clés **que l'utilisateur a changées** sont réécrites ; toute autre ligne garde ses octets (sections d'autres programmes, commentaires, fins de ligne LF/CRLF, absence de fin de ligne finale). Les commentaires *à l'intérieur* d'une valeur réécrite sur plusieurs lignes (tableau) ne sont pas conservés. Refus, fichier intact : fichier illisible (trop gros, droits, E/S, UTF-8 invalide), modifié depuis sa lecture, ou forme que l'éditeur ne réécrit pas (`[[table]]`, table en ligne, clé entre guillemets, chaîne sur plusieurs lignes) | aucune |
 | Lancer / redémarrer le démon | `systemctl --user start` / `try-restart apple-kb-monitord.service` | aucune |
 
 Le mode Fn passe par `akmctl set param fnmode N --persist` et non par la méthode D-Bus
@@ -114,7 +116,11 @@ service** ; les onglets Touches (par `akmctl`) et Notifications restent utilisab
 
 * Chaînes sources en anglais, `i18n()/i18nc()/i18np()` (domaine `kcm_applekeyboard`, le
   même que l'identifiant du plugin : c'est ce que kcmutils donne au contexte QML) ; catalogue
-  français complet `kcm/po/fr/kcm_applekeyboard.po` (231 messages, 0 non traduit).
+  français complet `kcm/po/fr/kcm_applekeyboard.po` (278 messages, 0 non traduit ; `ctest`
+  le vérifie, test `kcm_translations`).
+  Les textes des constats d'`akmctl doctor` et de `akmctl selftest` restent en anglais : le JSON
+  d'akmctl ne donne que des phrases anglaises sans identifiant ; le module traduit ce qu'il
+  identifie (sujet de chaque constat, conseil du verdict, niveaux).
   Mise à jour : `kcm/Messages.sh` ; vérification sans rien modifier : `kcm/Messages.sh --check`.
 * Couleurs et polices du thème (Kirigami, `org.kde.desktop`) : clair et sombre sans code
   spécifique ; tailles en `Kirigami.Units` (HiDPI) ; vérifié à `QT_SCALE_FACTOR=2`.
@@ -132,6 +138,10 @@ service** ; les onglets Touches (par `akmctl`) et Notifications restent utilisab
 |---|---|
 | `kcm/lint/qmllint.sh` | `qmllint` de toutes les pages : **0 avertissement**. Seuls `kcm` et `i18n*()` (propriétés de contexte injectées par kcmutils/ki18n, invisibles pour qmllint) sont admis non qualifiés |
 | `kcm/Messages.sh --check` | toute chaîne des pages est traduite en français |
+| `ctest` : `kcm_devicename` | le nom à écrire ne passe jamais par un shell ; sens des codes de sortie d'`akmctl rename`, fin brutale (signal, plantage, panique 101) = « écriture incertaine », jamais « Non écrit » |
+| `ctest` : `kcm_module` | **banc réel** (`kcm/tests/test_kcm_module.cpp` par `kcm/tests/private_bus.sh`) : le `.so` construit chargé par `KCModuleLoader` comme dans les Paramètres système, vrais clics et vraies frappes, interface en français ; bus de session privé **sans répertoire d'activation**, `HOME`/`XDG_*` temporaires, faux `akmctl` (dont un qui se tue pendant `rename`), faux `pkexec` et `systemctl`. Vérifie : fichier illisible jamais réécrit, octet pour octet, fichier valide ouvert non modifié, valeurs hors bornes affichées et conservées, Appliquer reste actif après un refus (`KCModule::needsSave`), chaîne multiligne refusée, commandes à copier sans nom de remplacement, verdict de `doctor` traduit |
+| `ctest` : `kcm_translations` | `kcm/Messages.sh --check` |
+| `kcm/tests/toml_js_test.py` | `Toml.js` contre `tomllib` (node) : chaque sortie de `set()` est du TOML valide et tient la valeur, les formes non sûres sont refusées, et des cas exacts octet pour octet (CRLF, sans fin de ligne, BOM, en-tête dans une chaîne, sections étrangères) |
 | `tests/e2e/kcm.py` | construit `kcm/`, charge le module dans `kcmshell6` (et `systemsettings`) sous Xvfb, bus de session **privé sans aucun répertoire d'activation** (le vrai démon ne peut pas être lancé), faux démon (interfaces racine, `.Keymap`, `.Link`), faux `akmctl` et `systemctl` en tête du `PATH` qui enregistrent leurs arguments, `HOME`/`XDG_*` jetables |
 
 Scénarios de `tests/e2e/kcm.py` : `screens` (5 onglets en français, État en anglais, thème
@@ -159,14 +169,11 @@ deux pulsations 513-516 ms (pour 500). Sur sept passages du scénario « démon 
 ensemble et où les bandeaux d'erreur apparaissent (premier dessin de ces éléments en rendu
 logiciel) : à surveiller ; le seuil du test reste à 100 ms.
 
-### Ligne pour `scripts/ci-local.sh`
+### Dans `scripts/ci-local.sh`
 
-Non ajoutée (d'autres agents modifient ce script) ; à insérer avec les autres étapes :
-
-```sh
-s_kcm() { bash kcm/lint/qmllint.sh && bash kcm/Messages.sh --check && timeout --kill-after=20 900 python3 tests/e2e/kcm.py --out "$out/kcm"; }
-if [ $e2e = 1 ] || [[ $only == *",kcm,"* ]]; then step kcm 1 "" -- s_kcm; fi
-```
+Étape `qml` : `kcm/lint/qmllint.sh`. Étape `kcm` : construit `kcm/` (Debug, `BUILD_TESTING=ON`),
+lance `ctest` (les quatre tests ci-dessous) puis `kcm/tests/toml_js_test.py`.
+`tests/e2e/kcm.py` (Xvfb, captures) n'y est pas.
 
 Et dans `scripts/package-expected.txt` :
 

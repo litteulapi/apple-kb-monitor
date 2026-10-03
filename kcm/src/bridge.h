@@ -59,9 +59,13 @@ public:
 
     // config.toml of the daemon, read / written atomically (QSaveFile) on a
     // worker thread. Answer: fileFinished(id, ok, text, error); a missing file
-    // reads as ok with an empty text.
+    // reads as ok with an empty text. A file that cannot be read whole and
+    // exactly (too large, no access, I/O error, not UTF-8) is an error (#284).
     Q_INVOKABLE int readConfig();
-    Q_INVOKABLE int writeConfig(const QString &text);
+    // Writes `text` only if the file still holds exactly `expected` (what
+    // readConfig gave; "" for a missing file): a file changed or made
+    // unreadable since it was read is never written over (#284).
+    Q_INVOKABLE int writeConfig(const QString &text, const QString &expected);
 
     Q_INVOKABLE void copyText(const QString &text);
     // "Name" tab (#248): run `akmctl rename --device-name=<name> --yes`
@@ -77,7 +81,7 @@ public:
     // What that exit code means for the page (AkmDeviceName::verdict), and
     // the same command to copy into a terminal (AkmDeviceName::copyCommand:
     // the name glued to `--device-name=`).
-    Q_INVOKABLE QString deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut) const;
+    Q_INVOKABLE QString deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut, bool crashed) const;
     Q_INVOKABLE QString deviceNameCommand(const QString &name, const QString &flag) const;
     // Ask the bus again whether the daemon is there (asynchronous).
     Q_INVOKABLE void checkDaemon();
@@ -85,7 +89,9 @@ public:
 Q_SIGNALS:
     void daemonPresentChanged();
     void callFinished(int id, bool ok, const QVariant &value, const QString &error);
-    void runFinished(int id, int exitCode, const QString &out, const QString &err, bool timedOut);
+    // crashed: the program did not exit by itself (killed by a signal or
+    // crashed, QProcess::CrashExit); exitCode is then -1 (#288).
+    void runFinished(int id, int exitCode, const QString &out, const QString &err, bool timedOut, bool crashed);
     void fileFinished(int id, bool ok, const QString &text, const QString &error);
     // StateChanged(t revision, s json) of the daemon (root object).
     void daemonStateChanged(qulonglong revision);

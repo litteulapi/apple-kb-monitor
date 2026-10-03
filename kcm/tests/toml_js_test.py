@@ -44,6 +44,32 @@ CASES = [
     ("quoted-header", "[\"alerts\"]\nlow = 1\n", "alerts", "low", 5, "refuse"),
     ("other-quoted-key-is-fine", "[alerts]\n\"other\" = 1\nlow = 2\n", "alerts", "low", 5, "ok"),
     ("other-array-of-tables-is-fine", "[[x]]\na = 1\n\n[alerts]\nlow = 2\n", "alerts", "low", 5, "ok"),
+    # #287 (K4): a string written on several lines is never rewritten
+    ("multiline-basic-string", "[notifications]\nconnection = \"\"\"\ntrue\"\"\"\n", "notifications", "connection", False, "refuse"),
+    ("multiline-literal-string", "[battery]\nchemistry = \'\'\'\nnimh\'\'\'\n", "battery", "chemistry", "lithium", "refuse"),
+]
+
+# #284 (K3): byte for byte, only the statement of the key changes; every
+# other line keeps its bytes (CRLF, no final newline, BOM, foreign sections,
+# a multi-line string elsewhere that looks like a table header).
+EXACT = [  # (name, input, section, key, value, expected text)
+    ("no-final-newline", "[alerts]\nenabled = true", "alerts", "enabled", False, "[alerts]\nenabled = false"),
+    ("no-final-newline-new-key", "[alerts]\nenabled = true", "alerts", "critical", 9,
+     "[alerts]\nenabled = true\ncritical = 9"),
+    ("no-final-newline-new-table", "[ddc]\nbrightness = 40", "alerts", "critical", 9,
+     "[ddc]\nbrightness = 40\n\n[alerts]\ncritical = 9"),
+    ("mixed-endings", "[mqtt]\r\npassword = \"p\"\n[alerts]\r\nenabled = true\n# end\r\n", "alerts", "enabled", False,
+     "[mqtt]\r\npassword = \"p\"\n[alerts]\r\nenabled = false\n# end\r\n"),
+    ("bom", "\ufeff[alerts]\nenabled = true\n", "alerts", "enabled", False, "\ufeff[alerts]\nenabled = false\n"),
+    ("foreign-sections-kept", "[ddc]\nbrightness = 40\n[mqtt]\nhost = \"h\" # c\n[alerts]\ncritical = 5\n[monitor]\nx = [\n 1,\n]\n",
+     "alerts", "critical", 7,
+     "[ddc]\nbrightness = 40\n[mqtt]\nhost = \"h\" # c\n[alerts]\ncritical = 7\n[monitor]\nx = [\n 1,\n]\n"),
+    ("header-inside-string", "[ddc]\nnote = \"\"\"\n[alerts]\ncritical = 1\n\"\"\"\n[alerts]\ncritical = 5\n", "alerts", "critical", 7,
+     "[ddc]\nnote = \"\"\"\n[alerts]\ncritical = 1\n\"\"\"\n[alerts]\ncritical = 7\n"),
+    ("key-inside-string-not-taken", "[alerts]\nnote = \"\"\"\ncritical = 1\n\"\"\"\n", "alerts", "critical", 7,
+     "[alerts]\nnote = \"\"\"\ncritical = 1\n\"\"\"\ncritical = 7\n"),
+    ("other-key-untouched", "[alerts]\ncritical = 99\nhysteresis = 2.5 # h\nenabled = true\n", "alerts", "enabled", False,
+     "[alerts]\ncritical = 99\nhysteresis = 2.5 # h\nenabled = false\n"),
 ]
 
 # Toml.parse() must read what tomllib reads (#12): every scalar by
@@ -182,6 +208,24 @@ process.stdout.write(JSON.stringify(out));
 """
 
 
+def exact_cases() -> int:
+    r = subprocess.run(
+        ["node", "-e", DRIVER, str(TOML_JS)],
+        input=json.dumps([c[:5] + ("ok",) for c in EXACT]), capture_output=True, text=True, timeout=60,
+    )
+    if r.returncode != 0:
+        print(r.stderr.strip()[-2000:])
+        return 1
+    bad = 0
+    for (name, src, section, key, value, want), res in zip(EXACT, json.loads(r.stdout)):
+        got = res.get("text", res.get("error"))
+        why = None if got == want else "got %r, expected %r" % (got, want)
+        print("%-32s %s" % ("exact-" + name, "ok" if why is None else "FAIL: " + why))
+        bad += why is not None
+    print("toml-js exact: %d cases, %d failing" % (len(EXACT), bad))
+    return bad
+
+
 def main() -> int:
     r = subprocess.run(
         ["node", "-e", DRIVER, str(TOML_JS)],
@@ -218,6 +262,7 @@ def main() -> int:
         print("%-32s %s" % (name, "ok" if why is None else "FAIL: " + why))
         bad += why is not None
     print("toml-js: %d cases, %d failing" % (len(CASES), bad))
+    bad += exact_cases()
     bad += parse_cases()
     return 1 if bad else 0
 

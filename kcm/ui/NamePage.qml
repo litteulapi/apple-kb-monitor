@@ -39,10 +39,12 @@ ColumnLayout {
         return root.deviceNameRe.test(t);
     }
 
-    // Name for the copied commands, else a placeholder.
-    function deviceName() {
+    // #290: a command holding the name is shown (and can be copied) only
+    // once a valid name is typed: never a stand-in such as "NAME", which
+    // pasted and confirmed would be written into the keyboard.
+    function nameCommand(flag) {
         const t = deviceNameField.text;
-        return root.validDeviceName(t) ? t : i18nc("placeholder in a command", "NAME");
+        return root.validDeviceName(t) ? root.store.deviceNameCommand(t, flag) : "";
     }
 
     // Run akmctl on the name stored in the keyboard (C++: QProcess with an
@@ -50,15 +52,19 @@ ColumnLayout {
     // its verdict in the page. Exit codes of akmctl: 0 done, 11 pre-flight
     // refused, 13 written but not read back, 14 read back different, 15 the
     // write failed on its way (a frame may have been sent: never "not
-    // written"). Their meaning is decided in C++ (Store.deviceNameVerdict).
+    // written"); akmctl killed or crashed meanwhile is the same (#288).
+    // Their meaning is decided in C++ (Store.deviceNameVerdict).
     function runDeviceName(checkOnly) {
         const name = deviceNameField.text;
         root.deviceBusy = true;
         deviceResult.visible = false;
-        root.store.deviceName(name, checkOnly, function (code, out, err, timedOut) {
+        root.store.deviceName(name, checkOnly, function (code, out, err, timedOut, crashed) {
             root.deviceBusy = false;
-            const detail = (String(out || "").trim() || String(err || "").trim());
-            const verdict = root.store.deviceNameVerdict(code, checkOnly, timedOut);
+            let detail = (String(out || "").trim() || String(err || "").trim());
+            const verdict = root.store.deviceNameVerdict(code, checkOnly, timedOut, !!crashed);
+            // #288: akmctl ended abruptly (signal, crash, panic): say so
+            if (crashed || code === 101)
+                detail = i18n("akmctl stopped abruptly before giving its verdict (crash or signal).") + (detail !== "" ? "\n" + detail : "");
             if (verdict === "timeout") {
                 deviceResult.type = Kirigami.MessageType.Error;
                 deviceResult.text = i18n("No answer in time. Nothing more is attempted; look at the stored name above in a moment.");
@@ -91,6 +97,7 @@ ColumnLayout {
 
     Kirigami.PromptDialog {
         id: confirmDialog
+        objectName: "nameConfirmDialog"
         property string name: ""
         title: i18nc("@title:window", "Write the name into the keyboard")
         subtitle: i18n("Write “%1” into the keyboard's memory?", name)
@@ -191,6 +198,7 @@ ColumnLayout {
         }
         QQC2.TextField {
             id: deviceNameField
+            objectName: "nameDeviceField"
             Kirigami.FormData.label: i18n("Name to write:")
             Layout.fillWidth: true
             Layout.maximumWidth: Kirigami.Units.gridUnit * 20
@@ -212,6 +220,7 @@ ColumnLayout {
             }
             QQC2.Button {
                 id: writeBtn
+                objectName: "nameWriteBtn"
                 text: i18n("Write the name into the keyboard…")
                 icon.name: "document-edit-sign"
                 enabled: !root.deviceBusy && root.validDeviceName(deviceNameField.text)
@@ -241,6 +250,7 @@ ColumnLayout {
 
     Kirigami.InlineMessage {
         id: deviceResult
+        objectName: "nameDeviceResult"
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -259,17 +269,18 @@ ColumnLayout {
     Repeater {
         model: [
             { title: i18n("Name stored in the keyboard, preview (shows the bytes, writes nothing, no authentication):"),
-              cmd: root.store.deviceNameCommand(root.deviceName(), "--dry-run") },
+              cmd: root.nameCommand("--dry-run") },
             { title: i18n("Every check and the backup of the current name (writes nothing):"),
-              cmd: root.store.deviceNameCommand(root.deviceName(), "--check") },
+              cmd: root.nameCommand("--check") },
             { title: i18n("The write itself (checks, backup, one confirmation, one write, read back; issue #248):"),
-              cmd: root.store.deviceNameCommand(root.deviceName(), "") },
+              cmd: root.nameCommand("") },
             { title: i18n("Forget the keyboard cleanly, as macOS does, then pair it again (only after typing the confirmation word, issue #217):"),
               cmd: "akmctl repair --force" }
         ]
         delegate: ColumnLayout {
             id: cmdItem
             required property var modelData
+            required property int index
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -282,15 +293,19 @@ ColumnLayout {
                 Layout.fillWidth: true
                 QQC2.TextField {
                     Layout.fillWidth: true
+                    objectName: "nameCmd" + cmdItem.index
                     readOnly: true
                     text: cmdItem.modelData.cmd
+                    placeholderText: i18n("Type a valid name to write above first")
                     font.family: "monospace"
                     Accessible.name: i18n("Command: %1", text)
                 }
                 QQC2.Button {
+                    objectName: "nameCopy" + cmdItem.index
                     text: i18n("Copy")
                     icon.name: "edit-copy"
                     Accessible.name: i18n("Copy the command")
+                    enabled: cmdItem.modelData.cmd !== ""
                     onClicked: {
                         root.store.bridge.copyText(cmdItem.modelData.cmd);
                         result.type = Kirigami.MessageType.Information;

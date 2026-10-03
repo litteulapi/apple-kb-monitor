@@ -46,10 +46,18 @@ QString copyCommand(const QString &name, const QString &flag)
     return cmd;
 }
 
-QString verdict(int exitCode, bool checkOnly, bool timedOut)
+QString verdict(int exitCode, bool checkOnly, bool timedOut, bool crashed)
 {
     if (timedOut) {
         return QStringLiteral("timeout");
+    }
+    if (checkOnly && (crashed || exitCode != 0)) {
+        return QStringLiteral("check-failed"); // --check never writes
+    }
+    if (crashed || exitCode == kPanicExitCode) {
+        // #288: akmctl ended abruptly while it wrote the name: its frame may
+        // have been sent, so this is never "not written".
+        return QStringLiteral("uncertain");
     }
     if (exitCode == 0) {
         return checkOnly ? QStringLiteral("check-ok") : QStringLiteral("written");

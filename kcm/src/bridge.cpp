@@ -21,6 +21,7 @@
 #include <QProcess>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QStringDecoder>
 #include <QTimer>
 #include <QtConcurrentRun>
 
@@ -160,6 +161,56 @@ struct FileResult {
     QString text;
     QString error;
 };
+
+// The whole file, exactly: ok = false when it cannot be read whole (too
+// large, no access, I/O error) or is not valid UTF-8. A missing file reads as
+// an empty text (#284: a file read partly or with replaced bytes would be
+// written back damaged).
+struct FileRead {
+    bool ok = false;
+    bool exists = false;
+    QByteArray bytes;
+    QString text;
+    QString error;
+};
+FileRead readWhole(const QString &path)
+{
+    FileRead r;
+    QFile f(path);
+    if (!f.exists()) {
+        r.ok = true;
+        return r;
+    }
+    r.exists = true;
+    if (f.size() > kMaxConfig) {
+        r.error = QStringLiteral("%1: file too large (%2 bytes, at most %3)").arg(path).arg(f.size()).arg(kMaxConfig);
+        return r;
+    }
+    if (!f.open(QIODevice::ReadOnly)) {
+        r.error = QStringLiteral("%1: %2").arg(path, f.errorString());
+        return r;
+    }
+    r.bytes = f.read(kMaxConfig + 1);
+    if (f.error() != QFileDevice::NoError) {
+        r.error = QStringLiteral("%1: %2").arg(path, f.errorString());
+        return r;
+    }
+    if (r.bytes.size() > kMaxConfig) {
+        r.error = QStringLiteral("%1: file too large").arg(path);
+        return r;
+    }
+    // The BOM is kept as U+FEFF, so that the text written back starts with it.
+    QStringDecoder utf8(QStringDecoder::Utf8, QStringDecoder::Flag::Stateless | QStringDecoder::Flag::ConvertInitialBom);
+    r.text = utf8.decode(r.bytes);
+    if (utf8.hasError()) {
+        r.error = QStringLiteral("%1: not valid UTF-8").arg(path);
+        r.text.clear();
+        return r;
+    }
+    r.ok = true;
+    return r;
+}
+
 } // namespace
 
 AkmBridge::AkmBridge(QObject *parent)
@@ -339,7 +390,7 @@ int AkmBridge::run(const QString &program, const QStringList &args, int timeoutM
         const QString why = allowed(program, args) ? QStringLiteral("%1: not found").arg(program)
                                                    : QStringLiteral("%1: not allowed").arg(program);
         QTimer::singleShot(0, this, [this, id, why] {
-            Q_EMIT runFinished(id, -1, QString(), why, false);
+            Q_EMIT runFinished(id, -1, QString(), why, false, false);
         });
         return id;
     }
@@ -360,12 +411,12 @@ int AkmBridge::run(const QString &program, const QStringList &args, int timeoutM
     connect(p, &QProcess::finished, this, [this, id, p, timedOut](int code, QProcess::ExitStatus st) {
         const QString out = QString::fromUtf8(p->readAllStandardOutput().left(kMaxOutput));
         const QString err = QString::fromUtf8(p->readAllStandardError().left(kMaxOutput));
-        Q_EMIT runFinished(id, st == QProcess::NormalExit ? code : -1, out, err, *timedOut);
+        Q_EMIT runFinished(id, st == QProcess::NormalExit ? code : -1, out, err, *timedOut, st == QProcess::CrashExit);
         p->deleteLater();
     });
     connect(p, &QProcess::errorOccurred, this, [this, id, p](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
-            Q_EMIT runFinished(id, -1, QString(), p->errorString(), false);
+            Q_EMIT runFinished(id, -1, QString(), p->errorString(), false, false);
             p->deleteLater();
         }
     });
@@ -385,28 +436,17 @@ int AkmBridge::readConfig()
         w->deleteLater();
     });
     w->setFuture(QtConcurrent::run([path] {
+        const FileRead in = readWhole(path);
         FileResult r;
-        QFile f(path);
-        if (!f.exists()) {
-            r.ok = true;
-            return r;
-        }
-        if (f.size() > kMaxConfig) {
-            r.error = QStringLiteral("%1: file too large").arg(path);
-            return r;
-        }
-        if (!f.open(QIODevice::ReadOnly)) {
-            r.error = f.errorString();
-            return r;
-        }
-        r.text = QString::fromUtf8(f.readAll());
-        r.ok = true;
+        r.ok = in.ok;
+        r.text = in.text;
+        r.error = in.error;
         return r;
     }));
     return id;
 }
 
-int AkmBridge::writeConfig(const QString &text)
+int AkmBridge::writeConfig(const QString &text, const QString &expected)
 {
     const int id = nextId();
     const QString path = configPath();
@@ -416,11 +456,21 @@ int AkmBridge::writeConfig(const QString &text)
         Q_EMIT fileFinished(id, r.ok, r.text, r.error);
         w->deleteLater();
     });
-    w->setFuture(QtConcurrent::run([path, text] {
+    w->setFuture(QtConcurrent::run([path, text, expected] {
         FileResult r;
         const QByteArray data = text.toUtf8();
         if (data.size() > kMaxConfig) {
             r.error = QStringLiteral("text too large");
+            return r;
+        }
+        // #284: the file must still be the one the page read and edited.
+        const FileRead now = readWhole(path);
+        if (!now.ok) {
+            r.error = now.error;
+            return r;
+        }
+        if (now.bytes != expected.toUtf8()) {
+            r.error = QStringLiteral("changed");
             return r;
         }
         if (!QDir().mkpath(QFileInfo(path).absolutePath())) {
@@ -453,16 +503,16 @@ int AkmBridge::runDeviceName(const QString &name, bool checkOnly)
         const int id = nextId();
         QTimer::singleShot(0, this, [this, id] {
             Q_EMIT runFinished(id, -1, QString(),
-                               QStringLiteral("name refused: 1 to 32 printable ASCII characters, no leading or trailing space, no backslash"), false);
+                               QStringLiteral("name refused: 1 to 32 printable ASCII characters, no leading or trailing space, no backslash"), false, false);
         });
         return id;
     }
     return run(QStringLiteral("akmctl"), args, kDeviceNameTimeout);
 }
 
-QString AkmBridge::deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut) const
+QString AkmBridge::deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut, bool crashed) const
 {
-    return AkmDeviceName::verdict(exitCode, checkOnly, timedOut);
+    return AkmDeviceName::verdict(exitCode, checkOnly, timedOut, crashed);
 }
 
 QString AkmBridge::deviceNameCommand(const QString &name, const QString &flag) const

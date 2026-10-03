@@ -116,6 +116,7 @@ KCM.SimpleKCM {
         target: kcm
         function onLoadRequested() { alerts.load(); }
         function onSaveRequested() { alerts.save(); }
+        function onSaveReturned() { alerts.update(); }
         function onDefaultsRequested() { alerts.defaults(); }
     }
 
