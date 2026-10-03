@@ -96,6 +96,7 @@ ColumnLayout {
         Layout.margins: Kirigami.Units.largeSpacing
         spacing: Kirigami.Units.smallSpacing
         QQC2.Button {
+            objectName: "diagDoctorBtn"
             text: i18n("Check the link")
             icon.name: "system-search"
             // stays enabled while running so that the keyboard focus is kept
@@ -156,6 +157,7 @@ ColumnLayout {
         Accessible.name: i18n("Link check running")
     }
     QQC2.Label {
+        objectName: "diagDoctorVerdict"
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -170,6 +172,7 @@ ColumnLayout {
         delegate: RowLayout {
             id: finding
             required property var modelData
+            required property int index
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -183,6 +186,7 @@ ColumnLayout {
                 Accessible.ignored: true
             }
             QQC2.Label {
+                objectName: "diagFinding" + finding.index
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 text: (finding.modelData.topic ? "[" + finding.modelData.topic + "] " : "") + finding.modelData.text

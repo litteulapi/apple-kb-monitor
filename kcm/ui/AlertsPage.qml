@@ -10,6 +10,7 @@ import "Toml.js" as Toml
 
 ColumnLayout {
     id: root
+    objectName: "alertsPage"
 
     required property Store store
 
@@ -182,6 +183,7 @@ ColumnLayout {
 
     Kirigami.InlineMessage {
         id: result
+        objectName: "alertsResult"
         Layout.fillWidth: true
         Layout.margins: Kirigami.Units.smallSpacing
         visible: false
@@ -203,6 +205,7 @@ ColumnLayout {
         ]
     }
     Kirigami.InlineMessage {
+        objectName: "alertsFileWarning"
         Layout.fillWidth: true
         Layout.margins: Kirigami.Units.smallSpacing
         visible: root.store.configError !== "" || root.parseWarnings.length > 0
@@ -222,12 +225,14 @@ ColumnLayout {
         }
         QQC2.Switch {
             id: enabled
+            objectName: "alerts_enabled"
             Kirigami.FormData.label: i18n("Alerts:")
             text: i18n("Notify when the battery is low")
             onToggled: root.update()
         }
         QQC2.TextField {
             id: thresholds
+            objectName: "alerts_thresholds"
             Kirigami.FormData.label: i18n("Thresholds (%):")
             enabled: enabled.checked
             placeholderText: "30, 15, 5"
@@ -245,6 +250,7 @@ ColumnLayout {
         }
         QQC2.Switch {
             id: powerdevil
+            objectName: "alerts_powerdevil"
             Kirigami.FormData.label: i18n("With KDE:")
             enabled: enabled.checked
             text: i18n("When KDE already warns about this keyboard, send only one reminder")
@@ -252,6 +258,7 @@ ColumnLayout {
         }
         QQC2.SpinBox {
             id: critical
+            objectName: "alerts_critical"
             Kirigami.FormData.label: i18n("Critical at or below (%):")
             enabled: enabled.checked
             from: 0
@@ -261,6 +268,7 @@ ColumnLayout {
         }
         QQC2.SpinBox {
             id: hysteresis
+            objectName: "alerts_hysteresis"
             Kirigami.FormData.label: i18n("Re-arm after (points):")
             enabled: enabled.checked
             from: 1
@@ -275,6 +283,7 @@ ColumnLayout {
         }
         QQC2.ComboBox {
             id: chemistry
+            objectName: "alerts_chemistry"
             Kirigami.FormData.label: i18n("Battery type:")
             model: [i18nc("battery chemistry", "alkaline"), i18nc("battery chemistry", "NiMH (rechargeable)"), i18nc("battery chemistry", "lithium"), i18nc("battery chemistry", "unknown")]
             Accessible.name: i18n("Battery type")
@@ -289,6 +298,7 @@ ColumnLayout {
         }
         QQC2.Switch {
             id: applePct
+            objectName: "alerts_applePct"
             Kirigami.FormData.label: i18n("Display:")
             text: i18n("Also show the percentage as macOS shows it")
             onToggled: root.update()
@@ -300,12 +310,14 @@ ColumnLayout {
         }
         QQC2.Switch {
             id: connection
+            objectName: "alerts_connection"
             Kirigami.FormData.label: i18n("Connection:")
             text: i18n("Notify on disconnection and reconnection")
             onToggled: root.update()
         }
         QQC2.Switch {
             id: replaced
+            objectName: "alerts_replaced"
             Kirigami.FormData.label: i18n("New batteries:")
             text: i18n("Notify when new batteries are detected")
             onToggled: root.update()
@@ -317,6 +329,7 @@ ColumnLayout {
         }
         QQC2.Switch {
             id: willShutdown
+            objectName: "alerts_willShutdown"
             Kirigami.FormData.label: i18n("WillShutdown:")
             text: i18n("Tell the keyboard when the computer shuts down or restarts")
             onToggled: root.update()

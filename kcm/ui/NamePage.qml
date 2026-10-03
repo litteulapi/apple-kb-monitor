@@ -91,6 +91,7 @@ ColumnLayout {
 
     Kirigami.PromptDialog {
         id: confirmDialog
+        objectName: "nameConfirmDialog"
         property string name: ""
         title: i18nc("@title:window", "Write the name into the keyboard")
         subtitle: i18n("Write “%1” into the keyboard's memory?", name)
@@ -191,6 +192,7 @@ ColumnLayout {
         }
         QQC2.TextField {
             id: deviceNameField
+            objectName: "nameDeviceField"
             Kirigami.FormData.label: i18n("Name to write:")
             Layout.fillWidth: true
             Layout.maximumWidth: Kirigami.Units.gridUnit * 20
@@ -212,6 +214,7 @@ ColumnLayout {
             }
             QQC2.Button {
                 id: writeBtn
+                objectName: "nameWriteBtn"
                 text: i18n("Write the name into the keyboard…")
                 icon.name: "document-edit-sign"
                 enabled: !root.deviceBusy && root.validDeviceName(deviceNameField.text)
@@ -241,6 +244,7 @@ ColumnLayout {
 
     Kirigami.InlineMessage {
         id: deviceResult
+        objectName: "nameDeviceResult"
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
         Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -270,6 +274,7 @@ ColumnLayout {
         delegate: ColumnLayout {
             id: cmdItem
             required property var modelData
+            required property int index
             Layout.fillWidth: true
             Layout.leftMargin: Kirigami.Units.largeSpacing
             Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -282,12 +287,14 @@ ColumnLayout {
                 Layout.fillWidth: true
                 QQC2.TextField {
                     Layout.fillWidth: true
+                    objectName: "nameCmd" + cmdItem.index
                     readOnly: true
                     text: cmdItem.modelData.cmd
                     font.family: "monospace"
                     Accessible.name: i18n("Command: %1", text)
                 }
                 QQC2.Button {
+                    objectName: "nameCopy" + cmdItem.index
                     text: i18n("Copy")
                     icon.name: "edit-copy"
                     Accessible.name: i18n("Copy the command")
