@@ -866,7 +866,7 @@ impl Tray {
                             tracing::warn!("tray: Fn mode not changed: {e}");
                             apple_kb_monitord::notify::send(
                                 lang.t("Mode Fn non modifié", "Fn mode not changed"),
-                                &e.to_string(),
+                                &fn_mode_error_text(&e, lang),
                                 "dialog-error",
                             );
                         }
@@ -945,9 +945,56 @@ fn emit(
     })
 }
 
+/// What the user reads when the Fn mode was not changed (C11): the daemon's
+/// sentence, never a raw D-Bus error name; the cooldown in the user's words.
+fn fn_mode_error_text(e: &zbus::Error, lang: Lang) -> String {
+    match e {
+        zbus::Error::MethodError(name, msg, _) => {
+            let msg = msg.clone().unwrap_or_default();
+            if name.as_str().ends_with(".LimitsExceeded") {
+                let wait = msg
+                    .rsplit("retry in ")
+                    .next()
+                    .filter(|_| msg.contains("retry in "))
+                    .map(str::to_string);
+                match (lang, wait) {
+                    (Lang::Fr, Some(w)) => format!(
+                        "Un changement du mode Fn vient de se terminer : réessayez dans {w}."
+                    ),
+                    (Lang::Fr, None) => {
+                        "Un changement du mode Fn attend déjà l'authentification.".into()
+                    }
+                    (Lang::En, _) => msg,
+                }
+            } else {
+                msg
+            }
+        }
+        other => other.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fn_mode_refusal_is_said_in_words_not_as_a_dbus_name() {
+        // C11: the notification body was
+        // "org.freedesktop.DBus.Error.LimitsExceeded: too many requests...".
+        let e = zbus::Error::MethodError(
+            zbus::names::OwnedErrorName::try_from("org.freedesktop.DBus.Error.LimitsExceeded")
+                .unwrap(),
+            Some("a change of the Fn mode just ended, retry in 3 s".into()),
+            zbus::Message::method("/", "x").unwrap().build(&()).unwrap(),
+        );
+        let fr = fn_mode_error_text(&e, Lang::Fr);
+        assert_eq!(
+            fr,
+            "Un changement du mode Fn vient de se terminer : réessayez dans 3 s."
+        );
+        assert!(!fn_mode_error_text(&e, Lang::En).contains("org.freedesktop"));
+    }
 
     #[test]
     fn modes() {
