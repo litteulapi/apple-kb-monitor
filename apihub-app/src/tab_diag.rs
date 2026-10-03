@@ -21,6 +21,11 @@ struct DiagResult {
 pub struct DiagTab {
     results: Arc<Mutex<Vec<DiagResult>>>,
     running: Arc<AtomicBool>,
+    /// Why the daemon does not measure the signal (`radio.rssi_error` of
+    /// the last snapshot, #269), set by the window before each run.
+    pub signal: Option<akm_core::rssi::RssiIssue>,
+    /// The daemon's last acquisition error (`last_error`, #280).
+    pub last_error: Option<String>,
 }
 
 impl DiagTab {
@@ -28,6 +33,8 @@ impl DiagTab {
         Self {
             results: Arc::new(Mutex::new(Vec::new())),
             running: Arc::new(AtomicBool::new(false)),
+            signal: None,
+            last_error: None,
         }
     }
 
@@ -43,6 +50,8 @@ impl DiagTab {
 
         let results = self.results.clone();
         let running = self.running.clone();
+        let signal = self.signal.clone();
+        let last_error = self.last_error.clone();
 
         /// Clears the "running" flag even if the diagnostics thread panics.
         struct RunningGuard(Arc<AtomicBool>);
@@ -220,17 +229,10 @@ impl DiagTab {
                 detail: fn_detail,
             });
 
-            // rssi-helper caps
-            let rssi_ok = std::path::Path::new("/usr/lib/apple-kb-monitor/rssi-helper").exists();
-            out.push(DiagResult {
-                label: tr("RSSI helper").into(),
-                ok: rssi_ok,
-                detail: if rssi_ok {
-                    tr("rssi-helper installed (needs CAP_NET_ADMIN)").into()
-                } else {
-                    tr("NOT FOUND").into()
-                },
-            });
+            // Signal (#269): the daemon's last real attempt first, else can
+            // this account run the helper at all (`root:akm 0750`).
+            out.push(signal_row(&HelperProbe::system(), signal.as_ref()));
+            out.push(acquisition_row(last_error.as_deref()));
 
             // Store results (the guard clears the running flag on drop)
             if let Ok(mut r) = results.lock() {
@@ -313,6 +315,72 @@ impl DiagTab {
     }
 }
 
+const RSSI_HELPER: &str = "/usr/lib/apple-kb-monitor/rssi-helper";
+
+/// What the signal row looks at (a fixture in tests).
+struct HelperProbe {
+    exists: bool,
+    executable: bool,
+    listed_in_akm: bool,
+}
+
+impl HelperProbe {
+    fn system() -> Self {
+        let c = std::ffi::CString::new(RSSI_HELPER).unwrap_or_default();
+        Self {
+            exists: std::path::Path::new(RSSI_HELPER).exists(),
+            // SAFETY: access(2) on a NUL-terminated constant path, no effect.
+            executable: unsafe { libc::access(c.as_ptr(), libc::X_OK) } == 0,
+            listed_in_akm: akm_core::rssi::user_listed_in_akm(),
+        }
+    }
+}
+
+/// The daemon's last acquisition error (#280): never hidden any more.
+fn acquisition_row(err: Option<&str>) -> DiagResult {
+    match err.map(str::trim).filter(|e| !e.is_empty()) {
+        None => DiagResult {
+            label: tr("Keyboard reading").into(),
+            ok: true,
+            detail: tr("no error reported by the service").into(),
+        },
+        Some(e) => DiagResult {
+            label: tr("Keyboard reading").into(),
+            ok: false,
+            detail: crate::i18n::trf("last error of the service: {}", &[&e]),
+        },
+    }
+}
+
+/// The "signal" row of DIAG: OK only when the signal can really be measured.
+fn signal_row(p: &HelperProbe, daemon: Option<&akm_core::rssi::RssiIssue>) -> DiagResult {
+    use akm_core::rssi;
+    let code = if !p.exists {
+        Some(rssi::CODE_HELPER_MISSING.to_string())
+    } else if let Some(i) = daemon {
+        Some(i.code.clone())
+    } else if !p.executable {
+        Some(rssi::classify(&rssi::RssiError::Denied, || p.listed_in_akm).code)
+    } else {
+        None
+    };
+    match code {
+        None => DiagResult {
+            label: tr("Signal measure").into(),
+            ok: true,
+            detail: tr("rssi-helper runnable by this account (group akm)").into(),
+        },
+        Some(c) => {
+            let (why, fix) = rssi::explain(&c, crate::i18n::is_french());
+            DiagResult {
+                label: tr("Signal measure").into(),
+                ok: false,
+                detail: format!("{}. {} {fix}", crate::view::capitalize(why), tr("Fix:")),
+            }
+        }
+    }
+}
+
 /// Width of the `[ OK ]` / `[FAIL]` column, sized for the longest tag.
 fn tag_column() -> f32 {
     let longest = [tr("OK"), tr("FAIL")]
@@ -384,6 +452,47 @@ fn entry(ui: &mut egui::Ui, th: &Theme, r: &DiagResult) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn probe(exists: bool, executable: bool, listed_in_akm: bool) -> HelperProbe {
+        HelperProbe {
+            exists,
+            executable,
+            listed_in_akm,
+        }
+    }
+
+    /// #269: the helper exists but this account may not run it — the very
+    /// failure of the user — is a FAILED row with the command to type.
+    #[test]
+    fn signal_row_detects_a_helper_this_account_cannot_run() {
+        let r = signal_row(&probe(true, false, false), None);
+        assert!(!r.ok);
+        assert!(r.detail.contains("not in the group akm"), "{}", r.detail);
+        assert!(r.detail.contains("sudo usermod -aG akm $USER"));
+        let r = signal_row(&probe(true, false, true), None);
+        assert!(!r.ok);
+        assert!(r.detail.contains("restart the computer"), "{}", r.detail);
+        assert!(signal_row(&probe(true, true, false), None).ok);
+        let r = signal_row(&probe(false, false, false), None);
+        assert!(!r.ok && r.detail.contains("not installed"));
+    }
+
+    #[test]
+    fn the_last_acquisition_error_is_a_row() {
+        assert!(acquisition_row(None).ok);
+        assert!(acquisition_row(Some("  ")).ok);
+        let r = acquisition_row(Some("HID diagnostics unavailable (stale)"));
+        assert!(!r.ok && r.detail.contains("HID diagnostics unavailable"));
+    }
+
+    /// The daemon's own failure wins: its groups are not the window's.
+    #[test]
+    fn signal_row_trusts_the_daemon_reason() {
+        let issue = akm_core::rssi::classify(&akm_core::rssi::RssiError::Denied, || true);
+        let r = signal_row(&probe(true, true, true), Some(&issue));
+        assert!(!r.ok, "the window may run it, the daemon may not");
+        assert!(r.detail.contains("service started before"), "{}", r.detail);
+    }
 
     #[test]
     fn tags_have_one_width() {

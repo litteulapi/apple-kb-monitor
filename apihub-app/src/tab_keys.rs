@@ -487,7 +487,7 @@ fn table(ui: &mut egui::Ui, th: &Theme, s: &TabState) {
                     &legend,
                     &side_text(s, &r["plain"]),
                     &side_text(s, &r["fn"]),
-                    r["note"].as_str().unwrap_or(""),
+                    &crate::view::key_note_text(r["note"].as_str().unwrap_or("")),
                 ],
                 theme::PHOSPHOR,
             );
@@ -511,7 +511,8 @@ fn table(ui: &mut egui::Ui, th: &Theme, s: &TabState) {
                 &side_text(s, &r["fn"]),
                 crate::view::Level::Unknown,
             );
-            let note = r["note"].as_str().unwrap_or("");
+            let note = crate::view::key_note_text(r["note"].as_str().unwrap_or(""));
+            let note = note.as_str();
             if !note.is_empty() {
                 theme::text(ui, note, theme::SMALL, theme::GREEN_MID);
             }

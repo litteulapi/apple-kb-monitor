@@ -16,8 +16,8 @@ pub fn rssi_valid(r: Option<i32>) -> Option<i32> {
     akm_core::signal::valid_rel(r)
 }
 
-/// `"excellent (0)"`, `"good (−3)"`, `"weak (−12)"`: words first, the raw
-/// value in parentheses, no unit.
+/// `"excellent (0 dB)"`, `"good (−3 dB)"`: words first, then the gap in dB
+/// to the ideal reception range (#281: a bare number meant nothing).
 pub fn rssi_text(r: Option<i32>) -> String {
     match rssi_valid(r) {
         Some(v) => {
@@ -27,10 +27,58 @@ pub fn rssi_text(r: Option<i32>) -> String {
                 Q::Good => tr("good"),
                 Q::Weak => tr("weak"),
             };
-            format!("{} ({})", word, akm_core::signal::raw_text(v))
+            format!("{} ({}\u{a0}dB)", word, akm_core::signal::raw_text(v))
         }
         None => DASH.to_string(),
     }
+}
+
+/// Why the signal of a connected keyboard is not measured, and what to do
+/// (#269): `(reason, fix, command to copy)`. `None` when there is a value or
+/// no connected keyboard (nothing to measure).
+pub fn signal_problem(snap: &akm_core::Snapshot) -> Option<SignalProblem> {
+    signal_problem_in(is_french(), snap)
+}
+
+/// First letter in capital: a reason shown as a sentence.
+pub fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SignalProblem {
+    pub reason: String,
+    pub fix: String,
+    /// The command line of the fix, when there is one to type.
+    pub command: Option<&'static str>,
+}
+
+pub fn signal_problem_in(fr: bool, snap: &akm_core::Snapshot) -> Option<SignalProblem> {
+    use akm_core::rssi;
+    let kb = snap.keyboard.as_ref().filter(|_| snap.connected)?;
+    if rssi_valid(kb.radio.rel_db()).is_some() {
+        return None;
+    }
+    Some(match kb.radio.rssi_error.as_ref() {
+        Some(i) => {
+            let (reason, fix) = rssi::explain(&i.code, fr);
+            SignalProblem {
+                reason: reason.to_string(),
+                fix: fix.to_string(),
+                command: (i.code == rssi::CODE_NOT_IN_GROUP)
+                    .then_some("sudo usermod -aG akm $USER"),
+            }
+        }
+        // A daemon that does not publish the reason (older than #269).
+        None => SignalProblem {
+            reason: tr_in(fr, "the signal is not measured").to_string(),
+            fix: tr_in(fr, "the DIAG tab tells why").to_string(),
+            command: None,
+        },
+    })
 }
 
 /// Estimated charge by chemistry, always marked as an estimate (#178).
@@ -266,14 +314,61 @@ impl PctSource {
 /// estimate, else a guess from the voltage, always marked as such.
 pub fn chemistry_text(b: &akm_core::report::KbBattery) -> Option<String> {
     if let Some(e) = &b.charge_estimate {
-        return Some(trf("{} (declared)", &[&e.chemistry.as_str()]));
+        return Some(trf(
+            "{} (declared)",
+            &[&chemistry_word(e.chemistry.as_str())],
+        ));
     }
     b.voltage.filter(|v| v.is_finite() && *v > 0.0).map(|v| {
         trf(
             "{} (guess from the voltage)",
-            &[&akm_core::calibration::detect_battery_type(v)],
+            &[&chemistry_word(akm_core::calibration::detect_battery_type(
+                v,
+            ))],
         )
     })
+}
+
+/// The voltage of DATA: value and level, marked "(doubtful)" in amber when
+/// the daemon's two readings disagree (#280).
+pub fn voltage_cell(b: &akm_core::report::KbBattery) -> (String, Level) {
+    match b.voltage.filter(|v| v.is_finite() && *v > 0.0) {
+        None => (DASH.to_string(), Level::Unknown),
+        Some(v) if b.voltage_doubtful => (
+            format!("{} ({})", volts_text(v), tr("doubtful")),
+            Level::Warn,
+        ),
+        Some(v) => (volts_text(v), voltage_level(v)),
+    }
+}
+
+/// The chemistry words of akm-core, translated (#273); others unchanged.
+pub fn chemistry_word(w: &str) -> String {
+    match w {
+        "alkaline" => tr("alkaline").into(),
+        "nimh" => tr("NiMH").into(),
+        "lithium" => tr("lithium").into(),
+        "unknown" => tr("unknown").into(),
+        "Lithium (fresh)" => tr("Lithium (fresh)").into(),
+        "Alkaline (fresh)" => tr("Alkaline (fresh)").into(),
+        "Alkaline or NiMH" => tr("Alkaline or NiMH").into(),
+        "NiMH (likely)" => tr("NiMH (likely)").into(),
+        "Depleted" => tr("Depleted").into(),
+        "Critical \u{2014} replace" => tr("Critical \u{2014} replace").into(),
+        other => other.to_string(),
+    }
+}
+
+/// The notes of the key table (`akm_core::keymap::row_note`), translated
+/// (#273); an unknown note is shown as received.
+pub fn key_note_text(n: &str) -> String {
+    match n {
+        "NumLock: with the NumLock LED on, hid_apple turns J K L U I O 7 8 9 M 0 ; / P - into keypad keys (APPLE_NUMLOCK_EMULATION); press again to leave" => tr("NumLock: with the NumLock LED on, hid_apple turns J K L U I O 7 8 9 M 0 ; / P - into keypad keys (APPLE_NUMLOCK_EMULATION); press again to leave").into(),
+        "Fn remapped: the Fn layer of hid_apple is lost" => tr("Fn remapped: the Fn layer of hid_apple is lost").into(),
+        "remapped before hid_apple: no Fn layer on this key any more" => tr("remapped before hid_apple: no Fn layer on this key any more").into(),
+        "iso_layout=-1: hid_apple swaps these two keys when the keyboard reports the ISO country code" => tr("iso_layout=-1: hid_apple swaps these two keys when the keyboard reports the ISO country code").into(),
+        other => other.to_string(),
+    }
 }
 
 /// Paired state. The daemon never fills `bluetooth.paired` (always false
@@ -630,11 +725,11 @@ pub fn alerts(s: &akm_core::Snapshot, feed: Feed) -> Vec<Alert> {
     if feed == Feed::Local {
         push(
             Level::Warn,
-            tr("Daemon absent: this window reads the keyboard itself").into(),
+            tr("Service absent: this window reads the keyboard itself (start it: systemctl --user start apple-kb-monitord)").into(),
         );
     }
     if let Some(e) = s.kb_error.as_deref().filter(|e| !e.trim().is_empty()) {
-        push(Level::Bad, e.to_string());
+        push(Level::Bad, kb_error_text(e));
     }
     match &s.keyboard {
         None => push(Level::Unknown, tr("Waiting for keyboard data...").into()),
@@ -661,6 +756,16 @@ pub fn alerts(s: &akm_core::Snapshot, feed: Feed) -> Vec<Alert> {
     out
 }
 
+/// The daemon's fixed `kb_error` texts, translated (#279); any other text
+/// is shown as received.
+pub fn kb_error_text(e: &str) -> String {
+    match e {
+        "Keyboard: not found" => tr("No Apple keyboard found: turn it on, or pair it").into(),
+        "Keyboard disconnected" => tr("Keyboard disconnected").into(),
+        other => other.to_string(),
+    }
+}
+
 /// Bluetooth address with its middle hidden (`AA:BB:XX:XX:XX:F1`), for the
 /// status bar; the full address stays in the DATA tab.
 pub fn mask_mac(mac: Option<&str>) -> String {
@@ -672,11 +777,15 @@ pub fn mask_mac(mac: Option<&str>) -> String {
     format!("{}:{}:XX:XX:XX:{}", parts[0], parts[1], parts[5]).to_uppercase()
 }
 
-/// `HH:MM:SS`, or dashes for a time not known yet.
-pub fn clock_text(hms: Option<(u32, u32, u32)>) -> String {
-    match hms {
-        Some((h, m, s)) if h < 24 && m < 60 && s < 61 => format!("{h:02}:{m:02}:{s:02}"),
-        _ => "--:--:--".into(),
+/// Status bar "read" item (#281): the age first, the clock time after, so
+/// that an old value is seen as old ("1 h ago (08:22)").
+pub fn read_text(age_s: Option<u64>, hms: Option<(u32, u32, u32)>) -> String {
+    match (age_s, hms) {
+        (Some(a), Some((h, m, _))) if h < 24 && m < 60 => {
+            format!("{} ({h:02}:{m:02})", age_text(Some(a)))
+        }
+        (Some(a), _) => age_text(Some(a)),
+        _ => DASH.to_string(),
     }
 }
 
@@ -713,11 +822,12 @@ mod tests {
         assert_eq!(rssi_text(None), "---");
         assert_eq!(rssi_text(Some(127)), "---");
         assert_eq!(rssi_text(Some(-200)), "---");
-        // #174: 0 is the ideal range, a real value; no dBm unit.
-        assert_eq!(rssi_text(Some(0)), "excellent (0)");
-        assert_eq!(rssi_text(Some(-3)), "good (\u{2212}3)");
-        assert_eq!(rssi_text(Some(-12)), "weak (\u{2212}12)");
-        assert_eq!(rssi_text(Some(2)), "excellent (+2)");
+        // #174: 0 is the ideal range, a real value; relative dB, never dBm.
+        assert_eq!(rssi_text(Some(0)), "excellent (0\u{a0}dB)");
+        assert_eq!(rssi_text(Some(-3)), "good (\u{2212}3\u{a0}dB)");
+        assert_eq!(rssi_text(Some(-12)), "weak (\u{2212}12\u{a0}dB)");
+        assert_eq!(rssi_text(Some(2)), "excellent (+2\u{a0}dB)");
+        assert!(rssi_text(Some(-3)).ends_with("3\u{a0}dB)"));
         assert_eq!(rssi_level(Some(127)), Level::Unknown);
         assert_eq!(rssi_bar_count(Some(127)), 0);
         assert_eq!(rssi_bar_count(None), 0);
@@ -807,7 +917,7 @@ mod tests {
         b.charge_estimate =
             akm_core::chemistry::estimate_charge(2460, akm_core::chemistry::Chemistry::Nimh);
         if b.charge_estimate.is_some() {
-            assert_eq!(chemistry_text(&b).unwrap(), "nimh (declared)");
+            assert_eq!(chemistry_text(&b).unwrap(), "NiMH (declared)");
         }
     }
 
@@ -1131,10 +1241,6 @@ mod tests {
         ] {
             assert_eq!(mask_mac(bad), "--:--:--:--:--:--");
         }
-        assert_eq!(clock_text(Some((7, 5, 9))), "07:05:09");
-        assert_eq!(clock_text(Some((23, 59, 60))), "23:59:60");
-        assert_eq!(clock_text(Some((24, 0, 0))), "--:--:--");
-        assert_eq!(clock_text(None), "--:--:--");
     }
 
     #[test]
@@ -1247,5 +1353,83 @@ mod tests {
         assert!(thresholds_text(&b)
             .unwrap()
             .ends_with("+480 mV to Low, +582 mV to Critical"));
+    }
+
+    /// #269: connected, no signal: the daemon's reason and the command,
+    /// never a bare "---".
+    #[test]
+    fn missing_signal_says_why_and_what_to_type() {
+        use akm_core::report::KbReport;
+        use akm_core::rssi;
+        let mut snap = akm_core::Snapshot {
+            connected: true,
+            keyboard: Some(KbReport::default()),
+            ..Default::default()
+        };
+        let pb = signal_problem_in(true, &snap).expect("no value while connected");
+        assert!(pb.fix.contains("DIAG"), "older daemon: points to DIAG");
+        snap.keyboard.as_mut().unwrap().radio.rssi_error =
+            Some(rssi::classify(&rssi::RssiError::Denied, || false));
+        let pb = signal_problem_in(true, &snap).unwrap();
+        assert!(pb.reason.contains("groupe akm"), "{pb:?}");
+        assert_eq!(pb.command, Some("sudo usermod -aG akm $USER"));
+        snap.keyboard.as_mut().unwrap().radio.rssi_error =
+            Some(rssi::classify(&rssi::RssiError::Denied, || true));
+        let pb = signal_problem_in(true, &snap).unwrap();
+        assert!(pb.fix.contains("redémarrez"), "{pb:?}");
+        assert_eq!(pb.command, None);
+        // A value, or nothing connected: nothing to explain.
+        snap.keyboard.as_mut().unwrap().radio.set_rssi_rel(Some(-2));
+        assert_eq!(signal_problem_in(true, &snap), None);
+        snap.connected = false;
+        snap.keyboard.as_mut().unwrap().radio.set_rssi_rel(None);
+        assert_eq!(signal_problem_in(true, &snap), None);
+    }
+
+    #[test]
+    fn daemon_errors_of_the_keyboard_are_translated() {
+        assert_eq!(
+            kb_error_text("Keyboard: not found"),
+            "No Apple keyboard found: turn it on, or pair it"
+        );
+        assert_eq!(kb_error_text("something else"), "something else");
+        let fr = crate::i18n::parse_po(include_str!("../i18n/fr.po"));
+        assert!(fr.contains_key("No Apple keyboard found: turn it on, or pair it"));
+    }
+
+    /// #273: every text akm-core gives for the chemistry has a translation.
+    #[test]
+    fn chemistry_words_of_akm_core_are_all_translated() {
+        let fr = crate::i18n::parse_po(include_str!("../i18n/fr.po"));
+        for v in [
+            0.5, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2.0, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4,
+        ] {
+            let w = akm_core::calibration::detect_battery_type(v);
+            assert!(fr.contains_key(w), "untranslated chemistry {w:?} ({v} V)");
+        }
+        use akm_core::chemistry::Chemistry as C;
+        for c in [C::Alkaline, C::Nimh, C::Lithium, C::Unknown] {
+            assert_ne!(chemistry_word(c.as_str()), "", "{c:?}");
+        }
+    }
+
+    #[test]
+    fn a_doubtful_voltage_is_marked() {
+        let mut b = akm_core::report::KbBattery {
+            voltage: Some(2.91),
+            ..Default::default()
+        };
+        assert!(!voltage_cell(&b).0.contains("doubtful"));
+        b.voltage_doubtful = true;
+        let (t, l) = voltage_cell(&b);
+        assert!(t.contains("doubtful"), "{t}");
+        assert_eq!(l, Level::Warn);
+    }
+
+    #[test]
+    fn the_read_time_says_its_age() {
+        assert_eq!(read_text(Some(5400), Some((8, 22, 7))), "1 h ago (08:22)");
+        assert_eq!(read_text(None, Some((8, 22, 7))), DASH);
+        assert_eq!(read_text(Some(30), None), "30 s ago");
     }
 }

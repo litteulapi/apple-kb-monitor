@@ -377,7 +377,13 @@ pub fn status_bar(ui: &mut Ui, snap: &Snapshot) {
         item("", &name),
         item("", &view::mask_mac(snap.mac())),
         item("FW", &fw),
-        item(tr("READ"), &view::clock_text(local_hms(snap.last_update))),
+        item(
+            tr("READ"),
+            &view::read_text(
+                snap.update_age_s(crate::unix_now()),
+                local_hms(snap.last_update),
+            ),
+        ),
     ];
     let sep = 2.0 * theme::GAP + 1.0;
     let widths: Vec<f32> = galleys.iter().map(|g| g.size().x).collect();
@@ -441,19 +447,74 @@ pub fn command_line(ui: &mut Ui, cmd: &str) {
             .show(ui, |ui| {
                 theme::text(ui, &format!("$ {cmd}"), theme::BODY, theme::PHOSPHOR);
             });
+        // Feedback (#277): the copy used to be silent, so a lost copy went
+        // unnoticed.
+        let id = egui::Id::new(("copied", cmd));
+        let now = ui.input(|i| i.time);
         if theme::action(ui, tr("Copy"), true)
             .on_hover_text(tr("Copy the command to the clipboard"))
             .clicked()
         {
             ui.ctx().copy_text(cmd.to_string());
+            ui.ctx().data_mut(|d| d.insert_temp(id, now));
+        }
+        let at = ui.ctx().data(|d| d.get_temp::<f64>(id));
+        if let Some(left) = copied_left(at, now) {
+            theme::text(
+                ui,
+                tr("Copied: paste it in a terminal"),
+                theme::BODY,
+                theme::PHOSPHOR,
+            );
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_secs_f64(left));
         }
     });
 }
 
+/// How long the "Copied" note stays (seconds).
+const COPIED_FOR: f64 = 4.0;
+
+/// Seconds left to show "Copied", `None` once gone (or never copied).
+pub fn copied_left(at: Option<f64>, now: f64) -> Option<f64> {
+    let left = COPIED_FOR - (now - at?);
+    (left > 0.0).then_some(left)
+}
+
+const DAEMON_ONLINE: &str = "akm-daemon-online";
+
+/// Published once per frame by the window: the daemon is the source (#279).
+pub fn set_daemon_online(ctx: &egui::Context, online: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new(DAEMON_ONLINE), online));
+}
+
+/// Actions that go through the daemon are greyed out while it is absent.
+pub fn daemon_online(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp(egui::Id::new(DAEMON_ONLINE)))
+        .unwrap_or(true)
+}
+
+/// Hover text of an action that needs the daemon.
+pub fn needs_daemon(online: bool, what: &'static str) -> &'static str {
+    if online {
+        what
+    } else {
+        tr("Unavailable: the apple-kb-monitord service is not running")
+    }
+}
+
 /// The Reconnect button of STAT and RADIO.
 pub fn reconnect_button(ui: &mut Ui, link: &crate::actions::Job) {
-    if theme::action(ui, tr("Reconnect"), !link.busy())
-        .on_hover_text(tr("Ask the daemon to page the keyboard now"))
+    let online = daemon_online(ui.ctx());
+    if theme::action(ui, tr("Reconnect"), online && !link.busy())
+        .on_hover_text(needs_daemon(
+            online,
+            tr("Ask the daemon to page the keyboard now"),
+        ))
+        .on_disabled_hover_text(needs_daemon(
+            online,
+            tr("Ask the daemon to page the keyboard now"),
+        ))
         .clicked()
     {
         let ctx = ui.ctx().clone();
@@ -469,6 +530,14 @@ pub fn reconnect_button(ui: &mut Ui, link: &crate::actions::Job) {
 mod tests {
     use super::*;
     use egui::{Key, Modifiers};
+
+    #[test]
+    fn a_copy_is_confirmed_for_a_few_seconds() {
+        assert_eq!(copied_left(None, 10.0), None);
+        assert_eq!(copied_left(Some(10.0), 10.0), Some(COPIED_FOR));
+        assert!(copied_left(Some(10.0), 12.0).is_some());
+        assert_eq!(copied_left(Some(10.0), 10.0 + COPIED_FOR), None);
+    }
 
     #[test]
     fn tabs_are_five_short_capital_words() {

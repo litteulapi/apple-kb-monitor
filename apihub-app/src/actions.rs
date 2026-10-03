@@ -29,7 +29,21 @@ pub type Outcome = Option<(bool, String)>;
 #[derive(Clone, Default)]
 pub struct Job {
     busy: Arc<AtomicBool>,
-    outcome: Arc<Mutex<Outcome>>,
+    outcome: Arc<Mutex<(Outcome, Option<std::time::Instant>)>>,
+}
+
+/// How long a result stays on screen (#275): a success is a short
+/// acknowledgement, a failure stays longer, both go at the next action.
+pub const SHOW_SUCCESS: Duration = Duration::from_secs(10);
+pub const SHOW_FAILURE: Duration = Duration::from_secs(60);
+
+/// The result still worth showing `age` after it arrived.
+pub fn still_shown(o: &Outcome, age: Duration) -> bool {
+    match o {
+        Some((true, _)) => age < SHOW_SUCCESS,
+        Some((false, _)) => age < SHOW_FAILURE,
+        None => false,
+    }
 }
 
 impl Job {
@@ -38,14 +52,14 @@ impl Job {
     }
 
     pub fn outcome(&self) -> Outcome {
-        self.outcome
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        let g = self.outcome.lock().unwrap_or_else(|e| e.into_inner());
+        let age = g.1.map_or(Duration::ZERO, |t| t.elapsed());
+        still_shown(&g.0, age).then(|| g.0.clone()).flatten()
     }
 
     fn set(&self, o: Outcome) {
-        *self.outcome.lock().unwrap_or_else(|e| e.into_inner()) = o;
+        *self.outcome.lock().unwrap_or_else(|e| e.into_inner()) =
+            (o, Some(std::time::Instant::now()));
     }
 
     /// Run `work` on a worker thread, waited for at most `timeout`; `done`
@@ -97,6 +111,24 @@ fn session() -> Result<Connection, String> {
 }
 
 /// Ask the daemon to page the keyboard now (`Link.Reconnect`).
+/// A D-Bus failure toward the daemon, in words (#279): a service that is
+/// not running says what to type; anything else keeps one line of detail.
+pub fn daemon_error(e: &zbus::Error) -> String {
+    daemon_error_text(&e.to_string())
+}
+
+pub fn daemon_error_text(raw: &str) -> String {
+    const DOWN: [&str; 4] = ["ServiceUnknown", "NameHasNoOwner", "NoReply", "Timeout"];
+    if DOWN.iter().any(|k| raw.contains(k)) {
+        return tr(
+            "The apple-kb-monitord service does not answer. Start it: systemctl --user start apple-kb-monitord",
+        )
+        .into();
+    }
+    let line = raw.lines().next().unwrap_or("").trim();
+    trf("The service refused the request: {}", &[&line])
+}
+
 pub fn reconnect_on(conn: &Connection) -> Result<String, String> {
     let asked: bool = conn
         .call_method(
@@ -107,7 +139,7 @@ pub fn reconnect_on(conn: &Connection) -> Result<String, String> {
             &(),
         )
         .and_then(|m| m.body().deserialize())
-        .map_err(|e| trf("daemon unreachable: {}", &[&e]))?;
+        .map_err(|e| daemon_error(&e))?;
     if asked {
         Ok(tr("Reconnection requested: press a key on the keyboard").into())
     } else {
@@ -205,6 +237,34 @@ mod tests {
     use crate::testbus::FakeDaemon;
     use std::time::Instant;
 
+    /// #279: no raw D-Bus name, and the way out when the service is down.
+    #[test]
+    fn daemon_errors_are_said_in_words() {
+        let m = daemon_error_text(
+            "org.freedesktop.DBus.Error.ServiceUnknown: The name com.agenceapi.AppleKbMonitor1 was not provided",
+        );
+        assert!(
+            m.contains("systemctl --user start apple-kb-monitord"),
+            "{m}"
+        );
+        assert!(!m.contains("org.freedesktop"));
+        let m = daemon_error_text("org.freedesktop.DBus.Error.AccessDenied: no\nmore");
+        assert!(m.starts_with("The service refused the request"), "{m}");
+        assert!(!m.contains('\n'));
+    }
+
+    /// #275: a result does not stay for minutes.
+    #[test]
+    fn results_expire() {
+        let ok: Outcome = Some((true, "done".into()));
+        let ko: Outcome = Some((false, "failed".into()));
+        assert!(still_shown(&ok, Duration::from_secs(1)));
+        assert!(!still_shown(&ok, SHOW_SUCCESS));
+        assert!(still_shown(&ko, SHOW_SUCCESS));
+        assert!(!still_shown(&ko, SHOW_FAILURE));
+        assert!(!still_shown(&None, Duration::ZERO));
+    }
+
     fn wait(job: &Job) -> Outcome {
         let t = Instant::now();
         while job.busy() {
@@ -279,7 +339,10 @@ mod tests {
         };
         let conn = crate::testbus::connect(&bus.addr).unwrap();
         let err = reconnect_on(&conn).unwrap_err();
-        assert!(err.starts_with("daemon unreachable"), "{err}");
+        assert!(
+            err.contains("systemctl --user start apple-kb-monitord"),
+            "{err}"
+        );
     }
 
     #[test]

@@ -2,6 +2,8 @@
 members = [".", "akm-core", "apple-kb-monitord", "crates/akmctl", "crates/akm-helper"]
 default-members = [".", "akm-core", "apple-kb-monitord", "crates/akmctl", "crates/akm-helper"]
 resolver = "2"
+# Vendored crates patched below are not members.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "3.1.0"
@@ -20,10 +22,23 @@ akm-core = { path = "akm-core" }
 apple-kb-monitord = { path = "apple-kb-monitord" }
 eframe = "0.32"
 libc = "0.2"
+raw-window-handle = "0.6"
 serde_json = "1"
 zbus = "4"
+
+# xdg_activation_v1 on the window's own Wayland connection (#270): the very
+# versions winit already links, no new crate in the tree.
+[target.'cfg(target_os = "linux")'.dependencies]
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
 
 [profile.release]
 strip = true
 lto = true
 opt-level = "s"
+
+# smithay-clipboard 0.7.3 panics when a pointer appears/disappears while the
+# window is open, and the copy is then lost for good (#277): patched copy.
+[patch.crates-io]
+smithay-clipboard = { path = "vendor/smithay-clipboard" }

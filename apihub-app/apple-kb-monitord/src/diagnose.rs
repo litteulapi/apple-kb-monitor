@@ -58,6 +58,11 @@ pub trait Probe: Send + Sync {
     fn apple_hidraw(&self) -> Option<String>;
     /// Can this user read `path`? (`access(2)`: the node is never opened.)
     fn readable(&self, path: &str) -> Result<(), String>;
+    /// May this process run `path`? (`access(2)` with `X_OK`.)
+    fn executable(&self, path: &str) -> bool;
+    /// Why this daemon's last real RSSI read failed (#269), `None` after a
+    /// success or before the first read.
+    fn rssi_issue(&self) -> Option<akm_core::rssi::RssiIssue>;
 }
 
 /// The real system.
@@ -113,6 +118,16 @@ impl Probe for SystemProbe {
     }
     fn apple_hidraw(&self) -> Option<String> {
         akm_core::hidraw::find_apple_hidraw()
+    }
+    fn executable(&self, path: &str) -> bool {
+        let Ok(c) = std::ffi::CString::new(path) else {
+            return false;
+        };
+        // SAFETY: `c` is a valid NUL-terminated string for the whole call.
+        unsafe { libc::access(c.as_ptr(), libc::X_OK) == 0 }
+    }
+    fn rssi_issue(&self) -> Option<akm_core::rssi::RssiIssue> {
+        akm_core::rssi::last_issue()
     }
     fn readable(&self, path: &str) -> Result<(), String> {
         let c = std::ffi::CString::new(path).map_err(|e| e.to_string())?;
@@ -414,18 +429,44 @@ pub fn run_checks(p: &dyn Probe, lang: Lang, on_bus: bool) -> Vec<Check> {
         ok: fn_ok,
         detail: fn_detail,
     });
-    out.push(file_check(
-        p,
-        lang,
-        "rssi_helper",
-        lang.t("RSSI helper", "Assistant RSSI"),
-        "/usr/lib/apple-kb-monitor/rssi-helper",
-        lang.t(
-            "rssi-helper installed (needs CAP_NET_ADMIN)",
-            "rssi-helper install\u{e9} (demande CAP_NET_ADMIN)",
-        ),
-    ));
+    out.push(rssi_check(p, lang));
     out
+}
+
+/// The signal (#269): OK only when this daemon can really measure it. The
+/// last real read decides (the daemon's groups are not the caller's); before
+/// any read, can this process run the helper at all (`root:akm 0750`).
+fn rssi_check(p: &dyn Probe, lang: Lang) -> Check {
+    use akm_core::rssi;
+    const HELPER: &str = "/usr/lib/apple-kb-monitor/rssi-helper";
+    let path = p.path(HELPER);
+    let code = if !path.exists() {
+        Some(rssi::CODE_HELPER_MISSING.to_string())
+    } else if let Some(i) = p.rssi_issue() {
+        Some(i.code)
+    } else if !p.executable(&path.to_string_lossy()) {
+        Some(rssi::classify(&rssi::RssiError::Denied, rssi::user_listed_in_akm).code)
+    } else {
+        None
+    };
+    let fr = lang == Lang::Fr;
+    Check {
+        id: "rssi_helper",
+        label: lang.t("Signal measure", "Mesure du signal").into(),
+        ok: code.is_none(),
+        detail: match code {
+            None => lang
+                .t(
+                    "rssi-helper runnable by the service (group akm)",
+                    "rssi-helper utilisable par le service (groupe akm)",
+                )
+                .into(),
+            Some(c) => {
+                let (why, fix) = rssi::explain(&c, fr);
+                format!("{why}. {} {fix}", lang.t("Fix:", "Correction\u{a0}:"))
+            }
+        },
+    }
 }
 
 /// The JSON document of `Diagnose()`.
@@ -457,6 +498,8 @@ mod tests {
         pub runs: Mutex<Vec<String>>,
         pub service_active: bool,
         pub bluetoothctl: Run,
+        pub helper_exec: bool,
+        pub rssi_issue: Option<akm_core::rssi::RssiIssue>,
     }
 
     impl Fake {
@@ -471,6 +514,8 @@ mod tests {
                 runs: Mutex::new(Vec::new()),
                 service_active: false,
                 bluetoothctl: Run::NotFound,
+                helper_exec: true,
+                rssi_issue: None,
             }
         }
         fn write(&self, path: &str, content: &str) {
@@ -507,6 +552,33 @@ mod tests {
         fn readable(&self, _path: &str) -> Result<(), String> {
             self.readable.clone()
         }
+        fn executable(&self, _path: &str) -> bool {
+            self.helper_exec
+        }
+        fn rssi_issue(&self) -> Option<akm_core::rssi::RssiIssue> {
+            self.rssi_issue.clone()
+        }
+    }
+
+    /// #269 / audit C8: a helper the service may not run, or a refused last
+    /// read, is a failed check with its fix — not a green "installed".
+    #[test]
+    fn the_signal_check_follows_the_real_read() {
+        use akm_core::rssi;
+        let mut f = Fake::new("rssi");
+        f.write("/usr/lib/apple-kb-monitor/rssi-helper", "");
+        let ok = |f: &Fake| by_id(&run_checks(f, Lang::Fr, true), "rssi_helper").clone();
+        assert!(ok(&f).ok, "{:?}", ok(&f));
+        f.rssi_issue = Some(rssi::classify(&rssi::RssiError::Denied, || true));
+        let c = ok(&f);
+        assert!(!c.ok);
+        assert!(c.detail.contains("redémarrez l'ordinateur"), "{}", c.detail);
+        f.rssi_issue = Some(rssi::classify(&rssi::RssiError::Denied, || false));
+        assert!(ok(&f).detail.contains("sudo usermod -aG akm $USER"));
+        // Never read yet, but this process may not run the helper.
+        f.rssi_issue = None;
+        f.helper_exec = false;
+        assert!(!ok(&f).ok);
     }
 
     fn by_id<'a>(c: &'a [Check], id: &str) -> &'a Check {

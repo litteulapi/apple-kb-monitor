@@ -70,7 +70,7 @@ pub fn keyboard_path(conn: &Connection) -> Result<OwnedObjectPath, String> {
             &(),
         )
         .and_then(|m| m.body().deserialize())
-        .map_err(|e| trf("daemon unreachable: {}", &[&e]))?;
+        .map_err(|e| crate::actions::daemon_error(&e))?;
     let connected = |p: &&OwnedObjectPath| {
         device_prop(conn, p, "Connected")
             .ok()
@@ -189,7 +189,10 @@ mod tests {
         };
         let conn = crate::testbus::connect(&bus.addr).unwrap();
         let err = toggle(&conn).unwrap_err();
-        assert!(err.starts_with("daemon unreachable"), "{err}");
+        assert!(
+            err.contains("systemctl --user start apple-kb-monitord"),
+            "{err}"
+        );
     }
 
     /// #99: the shortcut is visible in System Settings > Shortcuts and has

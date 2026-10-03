@@ -24,7 +24,12 @@ pub struct Data {
     pub loading: bool,
     /// Where the last load came from, or why the daemon was skipped.
     pub note: Option<String>,
+    /// When the last load ended (`Instant`), to reload stale data (#272).
+    pub loaded_at: Option<std::time::Instant>,
 }
+
+/// Outcome of the daemon's `History()`: `Ok(None)` = no daemon on the bus.
+pub type DaemonHistory = Result<Option<Vec<HistoryEntry>>, String>;
 
 pub type Shared = Arc<Mutex<Data>>;
 
@@ -59,6 +64,13 @@ impl Loader {
         self.data.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
+    /// `(loading, loaded_at)` without copying the series: read at every
+    /// frame (a 50 000-point history must not be cloned 1/s, #272).
+    pub fn status(&self) -> (bool, Option<std::time::Instant>) {
+        let d = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        (d.loading, d.loaded_at)
+    }
+
     /// Start a load unless one is running; `repaint` is called when done.
     pub fn request(&self, repaint: impl Fn() + Send + 'static) {
         self.request_with(
@@ -71,7 +83,7 @@ impl Loader {
     pub fn request_with(
         &self,
         repaint: impl Fn() + Send + 'static,
-        daemon: impl FnOnce() -> Option<Vec<HistoryEntry>> + Send + 'static,
+        daemon: impl FnOnce() -> DaemonHistory + Send + 'static,
         file: impl FnOnce() -> Vec<HistoryEntry> + Send + 'static,
     ) {
         if self.busy.swap(true, Ordering::AcqRel) {
@@ -93,6 +105,7 @@ impl Loader {
                     voltage,
                     loading: false,
                     note,
+                    loaded_at: Some(std::time::Instant::now()),
                 };
                 busy.store(false, Ordering::Release);
                 repaint();
@@ -104,10 +117,19 @@ impl Loader {
     }
 }
 
+/// Data on the DATA tab older than this is reloaded when the tab is shown.
+pub const STALE_AFTER: Duration = Duration::from_secs(10 * 60);
+
+/// Reload the history by itself (#272): the daemon came back on the bus, or
+/// the DATA tab shows data older than [`STALE_AFTER`] (or none loaded yet).
+pub fn reload_due(daemon_came_back: bool, on_data: bool, age: Option<Duration>) -> bool {
+    daemon_came_back || (on_data && age.is_none_or(|a| a >= STALE_AFTER))
+}
+
 /// Daemon first (bounded wait, never two calls in flight), file otherwise.
 fn load_bounded(
     daemon_call: &Arc<AtomicBool>,
-    daemon: impl FnOnce() -> Option<Vec<HistoryEntry>> + Send + 'static,
+    daemon: impl FnOnce() -> DaemonHistory + Send + 'static,
     file: impl FnOnce() -> Vec<HistoryEntry>,
 ) -> (Vec<HistoryEntry>, Option<String>) {
     if daemon_call.swap(true, Ordering::AcqRel) {
@@ -130,8 +152,19 @@ fn load_bounded(
         return (file(), None);
     }
     match rx.recv_timeout(DAEMON_TIMEOUT) {
-        Ok(Some(h)) => (h, None),
-        Ok(None) => (file(), None),
+        Ok(Ok(Some(h))) => (h, None),
+        Ok(Ok(None)) => (file(), None),
+        // A failed History() is said, never shown as "no data yet" (#272).
+        Ok(Err(e)) => {
+            eprintln!("[history] History() failed: {e}");
+            (
+                file(),
+                Some(crate::i18n::tr(
+                    "the service could not give the history: read from the local file (F5 to retry)",
+                )
+                .into()),
+            )
+        }
         Err(_) => (
             file(),
             Some(crate::i18n::trf(
@@ -173,7 +206,7 @@ mod tests {
             || {},
             || {
                 std::thread::sleep(Duration::from_secs(3600));
-                None
+                Ok(None)
             },
             || vec![entry(1, 50.0), entry(2, 51.0)],
         );
@@ -206,7 +239,7 @@ mod tests {
             || {},
             || {
                 std::thread::sleep(Duration::from_millis(200));
-                Some(vec![entry(5, 70.0)])
+                Ok(Some(vec![entry(5, 70.0)]))
             },
             Vec::new,
         );
@@ -219,5 +252,26 @@ mod tests {
         let d = wait_loaded(&l);
         assert_eq!(d.battery, vec![(5.0, 70.0)]);
         assert_eq!(d.note, None);
+        assert!(d.loaded_at.is_some());
+    }
+
+    #[test]
+    fn history_reloads_when_the_daemon_returns_or_data_is_old() {
+        let min = Duration::from_secs(60);
+        assert!(reload_due(true, false, Some(min)));
+        assert!(!reload_due(false, false, None), "not shown, nothing new");
+        assert!(!reload_due(false, true, Some(min)));
+        assert!(reload_due(false, true, Some(STALE_AFTER)));
+        assert!(reload_due(false, true, None));
+    }
+
+    /// #272: a History() error is reported, not shown as an empty history.
+    #[test]
+    fn a_failed_history_call_is_reported() {
+        let l = Loader::new();
+        l.request_with(|| {}, || Err("bad History reply".into()), Vec::new);
+        let d = wait_loaded(&l);
+        assert!(d.battery.is_empty());
+        assert!(d.note.unwrap().contains("could not give the history"));
     }
 }

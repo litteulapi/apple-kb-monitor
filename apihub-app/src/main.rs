@@ -1,4 +1,6 @@
 mod actions;
+mod activation;
+mod cli;
 mod diag;
 mod fn_toggle;
 mod fnmode_diag;
@@ -46,12 +48,14 @@ struct ApiHubApp {
     state: State,
     // Daemon or local fallback (alert of the shell).
     feed: source::FeedCell,
+    // Arrivals of the daemon seen so far: a new one reloads the history (#272).
+    daemon_arrivals: u64,
     tab: Tab,
     theme: Theme,
     style_initialized: bool,
     diag: tab_diag::DiagTab,
-    // Set by a second launch / D-Bus Activate: bring the window to front
-    raise: Arc<AtomicBool>,
+    // Set by a second launch / D-Bus Activate: bring the window to front (#270)
+    raise: activation::Request,
     // Battery history graph: loaded by a worker thread, only read here.
     history: history_view::Loader,
     // Period of the history chart (#96): 24 h, 7, 30 or 90 days.
@@ -73,7 +77,7 @@ impl ApiHubApp {
         cc: &eframe::CreationContext<'_>,
         state: State,
         feed: source::FeedCell,
-        raise: Arc<AtomicBool>,
+        raise: activation::Request,
         ui: settings::UiSettings,
     ) -> Self {
         // Battery history: loaded off the UI thread (D-Bus + disk, #230).
@@ -86,6 +90,7 @@ impl ApiHubApp {
         Self {
             state,
             feed,
+            daemon_arrivals: 0,
             tab: Tab::Stat,
             theme: Theme {
                 crt: ui.crt_effects,
@@ -107,6 +112,14 @@ impl ApiHubApp {
 impl eframe::App for ApiHubApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let t0 = std::time::Instant::now();
+        // A second launch or Activate asked for the window: use its
+        // activation token on this thread, where the surface is known (#270).
+        if let Some(token) = self.raise.take() {
+            eprintln!(
+                "[apihub] activate: {}",
+                activation::raise(ctx, frame, token)
+            );
+        }
         self.update_ui(ctx);
         let took = t0.elapsed();
         self.frame_stats.record(took, frame.info().cpu_usage);
@@ -129,13 +142,6 @@ impl ApiHubApp {
             self.style_initialized = true;
         }
 
-        // A second launch or Activate asked for the window
-        if self.raise.swap(false, Ordering::Relaxed) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-        }
-
         // Next repaint in 1 s (also minimised/hidden): drives the UI heartbeat
         // (#240); egui sleeps until then or until user interaction. The CRT
         // effects are static: they never ask for a frame.
@@ -143,6 +149,16 @@ impl ApiHubApp {
 
         let snap = self.state.get();
         let feed = self.feed.get();
+        // History reloaded by itself (#272): daemon back, or stale on DATA.
+        shell::set_daemon_online(ctx, feed != view::Feed::Local);
+        let arrivals = self.feed.arrivals();
+        let came_back = arrivals != self.daemon_arrivals;
+        self.daemon_arrivals = arrivals;
+        let (loading, loaded_at) = self.history.status();
+        let age = loaded_at.map(|t| t.elapsed());
+        if !loading && history_view::reload_due(came_back, self.tab == Tab::Data, age) {
+            history_chart::reload(ctx, &self.history);
+        }
         let now = unix_now();
         self.navigate(ctx);
 
@@ -160,25 +176,22 @@ impl ApiHubApp {
             .frame(frame(12, 4))
             .show_separator_line(false)
             .show(ctx, |ui| {
-                shell::header(ui, &self.theme, &snap);
-                if let Some(tab) = shell::tab_bar(ui, &self.theme, self.tab) {
-                    self.tab = tab;
-                }
-                shell::alerts(ui, &self.theme, &snap, feed);
+                centred(ui, |ui| {
+                    shell::header(ui, &self.theme, &snap);
+                    if let Some(tab) = shell::tab_bar(ui, &self.theme, self.tab) {
+                        self.tab = tab;
+                    }
+                    shell::alerts(ui, &self.theme, &snap, feed);
+                });
             });
         egui::TopBottomPanel::bottom("status")
             .frame(frame(2, 10))
             .show_separator_line(false)
-            .show(ctx, |ui| shell::status_bar(ui, &snap));
+            .show(ctx, |ui| centred(ui, |ui| shell::status_bar(ui, &snap)));
         egui::CentralPanel::default()
             .frame(frame(4, 4))
             .show(ctx, |ui| {
-                // Very wide windows: the tabs stay centred, not stretched.
-                let spare = (ui.available_width() - theme::MAX_CONTENT).max(0.0) / 2.0;
-                let rect = ui.max_rect().shrink2(egui::Vec2::new(spare, 0.0));
-                ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                    self.body(ui, &snap, now);
-                });
+                centred(ui, |ui| self.body(ui, &snap, now));
             });
         self.theme.overlay(ctx);
     }
@@ -204,7 +217,11 @@ impl ApiHubApp {
                 &mut self.history_range,
                 &mut self.rename,
             ),
-            Tab::Diag => self.diag.show(ui, &self.theme),
+            Tab::Diag => {
+                self.diag.signal = signal_issue(snap);
+                self.diag.last_error = snap.last_error.clone();
+                self.diag.show(ui, &self.theme)
+            }
         }
     }
 
@@ -238,9 +255,30 @@ impl ApiHubApp {
                 tab_keys::reload(ctx);
             }
             Tab::Data => history_chart::reload(ctx, &self.history),
-            Tab::Diag => self.diag.run(),
+            Tab::Diag => {
+                let snap = self.state.get();
+                self.diag.signal = signal_issue(&snap);
+                self.diag.last_error = snap.last_error.clone();
+                self.diag.run()
+            }
         }
     }
+}
+
+/// Very wide windows: header, tabs, body and status bar share one centred
+/// column of at most `MAX_CONTENT`, never stretched apart (#282).
+fn centred<R>(ui: &mut egui::Ui, f: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let spare = (ui.available_width() - theme::MAX_CONTENT).max(0.0) / 2.0;
+    let rect = ui.max_rect().shrink2(egui::Vec2::new(spare, 0.0));
+    ui.scope_builder(egui::UiBuilder::new().max_rect(rect), f)
+        .inner
+}
+
+/// Why the daemon does not measure the signal of the connected keyboard (#269).
+fn signal_issue(snap: &akm_core::Snapshot) -> Option<akm_core::rssi::RssiIssue> {
+    snap.connected
+        .then(|| snap.keyboard.as_ref()?.radio.rssi_error.clone())
+        .flatten()
 }
 
 // ── Entrypoint ──────────────────────────────────────────────────────────────
@@ -251,7 +289,7 @@ impl ApiHubApp {
 fn open_window(
     state: &State,
     feed: &source::FeedCell,
-    raise: &Arc<AtomicBool>,
+    raise: &activation::Request,
     open: &Arc<AtomicBool>,
 ) -> bool {
     // `[ui]` of config.toml, read once before the window exists.
@@ -273,7 +311,7 @@ fn open_window(
         ..Default::default()
     };
     let (st, fd, sw) = (state.clone(), feed.clone(), raise.clone());
-    raise.store(false, Ordering::Relaxed);
+    raise.reset();
     open.store(true, Ordering::Relaxed);
     let r = eframe::run_native(
         instance::APP_ID,
@@ -290,10 +328,26 @@ fn open_window(
 fn main() {
     // Windowless modes, thin D-Bus clients of the daemon: the command of the
     // global shortcut (#99) and the KRunner runner (#98).
-    match std::env::args().nth(1).as_deref() {
-        Some(fn_toggle::FLAG) => std::process::exit(fn_toggle::run()),
-        Some(krunner::FLAG) => std::process::exit(krunner::run()),
-        _ => {}
+    // Every argument is handled here, before the single-instance claim:
+    // `--help` must never activate a running window (#271).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match cli::parse(&args) {
+        cli::Cli::Window => {}
+        cli::Cli::ToggleFn => std::process::exit(fn_toggle::run()),
+        cli::Cli::Krunner => std::process::exit(krunner::run()),
+        cli::Cli::Help => {
+            print!("{}", cli::help());
+            return;
+        }
+        cli::Cli::Version => {
+            println!("{}", cli::version());
+            return;
+        }
+        cli::Cli::Bad(a) => {
+            eprintln!("apihub-app: {}", i18n::trf("unknown argument: {}", &[&a]));
+            eprintln!("{}", i18n::tr("Try 'apihub-app --help'."));
+            std::process::exit(2);
+        }
     }
     // One window = one process (#226): `apihub-app` or D-Bus
     // `org.freedesktop.Application` Activate opens the window; a second launch
@@ -301,21 +355,17 @@ fn main() {
     // the D-Bus name. Nothing ever reopens a window by itself. The tray icon
     // belongs to the daemon alone (#62): this process never registers one.
     let window_open = Arc::new(AtomicBool::new(false));
-    let raise = Arc::new(AtomicBool::new(false));
+    let raise = activation::Request::default();
     let activate = {
         let raise = raise.clone();
-        move |token: Option<String>| {
-            // The window is (being) opened by this process: just raise it.
-            // The token cannot be used any more (the window is already
-            // mapped) and `set_var` from this D-Bus thread would be
-            // undefined behaviour (#197).
-            let _ = token;
-            raise.store(true, Ordering::Relaxed);
-        }
+        // The window is (being) opened by this process: hand the token to
+        // the UI thread, which activates its surface with it (#270). Never
+        // `set_var` from this D-Bus thread: undefined behaviour (#197).
+        move |token: Option<String>| raise.ask(token)
     };
     let conn = match instance::claim(activate) {
         instance::Claim::Existing => {
-            eprintln!("[apihub] already running: window raised");
+            eprintln!("[apihub] already running: activation sent to the open window");
             return;
         }
         instance::Claim::Unreachable => std::process::exit(1),

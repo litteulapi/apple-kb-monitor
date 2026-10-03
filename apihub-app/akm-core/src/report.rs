@@ -112,6 +112,10 @@ pub struct KbRadio {
     /// `"excellent"`, `"good"` or `"weak"`.
     pub rssi_quality: Option<String>,
     pub tx_power_dbm: Option<i32>,
+    /// Why the signal is not measured while the keyboard is connected
+    /// (#269): `{code, detail}`, codes in `rssi::CODE_*`. `null` when it is
+    /// measured, or when the keyboard is not connected.
+    pub rssi_error: Option<crate::rssi::RssiIssue>,
 }
 
 impl KbRadio {

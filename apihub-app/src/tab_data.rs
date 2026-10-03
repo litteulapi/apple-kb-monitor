@@ -44,10 +44,16 @@ pub fn device_name_command(name: &str) -> String {
     } else {
         name.trim()
     };
-    format!(
-        "akmctl rename --device-name \"{}\"",
-        name.replace(['\\', '"'], "")
-    )
+    format!("akmctl rename --device-name {}", shell_quote(name))
+}
+
+/// One shell word that a POSIX shell never expands (#276): single quotes,
+/// in which `$( )`, backquotes, `!` and `\` are plain characters; a `'` is
+/// written `'\''`. Control characters (a pasted newline would run the line)
+/// are dropped.
+pub fn shell_quote(s: &str) -> String {
+    let clean: String = s.chars().filter(|c| !c.is_control()).collect();
+    format!("'{}'", clean.replace('\'', "'\\''"))
 }
 
 pub fn show(
@@ -90,14 +96,9 @@ fn batteries(ui: &mut Ui, th: &Theme, snap: &Snapshot, kb: &KbReport, now: u64) 
     th.panel(ui, tr("Batteries"), 0.0, |ui| {
         let b = &kb.battery;
         let dash = || view::DASH.to_string();
-        // Measured: reports 0x46 / 0xFF, in mV (#139).
-        let volts = b.voltage.filter(|v| v.is_finite() && *v > 0.0);
-        th.kv(
-            ui,
-            tr("Voltage"),
-            &volts.map_or_else(dash, view::volts_text),
-            volts.map_or(Level::Unknown, view::voltage_level),
-        );
+        // Measured: reports 0x46 / 0xFF, in mV (#139). The daemon flags a voltage its two readings disagree on (#280).
+        let (volt_text, volt_level) = view::voltage_cell(b);
+        th.kv(ui, tr("Voltage"), &volt_text, volt_level);
         threshold_scale(ui, th, b);
         // Thresholds the keyboard reports (0x60, read once per connection).
         th.kv(
@@ -124,6 +125,17 @@ fn batteries(ui: &mut Ui, th: &Theme, snap: &Snapshot, kb: &KbReport, now: u64) 
             ui,
             tr("Chemistry"),
             &view::chemistry_text(b).unwrap_or_else(dash),
+            Level::Unknown,
+        );
+        // Age of the set of batteries (#280).
+        th.kv(
+            ui,
+            tr("Batteries installed"),
+            &view::age_text(
+                snap.batteries_installed_at
+                    .filter(|t| *t > 0 && *t <= now)
+                    .map(|t| now - t),
+            ),
             Level::Unknown,
         );
         // The kernel % steps down only at reconnections (#179).
@@ -266,6 +278,10 @@ fn rename_row(ui: &mut Ui, th: &Theme, mac: &str, current: Option<&str>, st: &mu
             .char_limit(akm_core::alias::MAX_CHARS)
             .hint_text(tr("Keyboard name")),
     );
+    // A current name longer than the limit blocks typing: say so (#278).
+    if let Some(note) = length_note(&st.buf) {
+        theme::text(ui, &note, theme::BODY, theme::AMBER);
+    }
     if std::mem::take(&mut st.focus) {
         edit.request_focus();
         edit.scroll_to_me(Some(egui::Align::Center));
@@ -298,6 +314,13 @@ fn rename_row(ui: &mut Ui, th: &Theme, mac: &str, current: Option<&str>, st: &mu
     }
     let status = st.status.lock().unwrap_or_else(|e| e.into_inner()).clone();
     shell::outcome(ui, th, &status);
+}
+
+/// "68/64 characters: shorten the name" when the field holds more than the
+/// limit (the field then refuses every new character).
+pub fn length_note(buf: &str) -> Option<String> {
+    let (n, max) = (buf.chars().count(), akm_core::alias::MAX_CHARS);
+    (n > max).then(|| trf("{}/{} characters: shorten the name", &[&n, &max]))
 }
 
 fn firmware(ui: &mut Ui, th: &Theme, kb: &KbReport) {
@@ -345,16 +368,60 @@ mod tests {
     fn device_name_command_is_shown_never_run() {
         assert_eq!(
             device_name_command("Bureau"),
-            "akmctl rename --device-name \"Bureau\""
+            "akmctl rename --device-name 'Bureau'"
         );
         assert_eq!(
             device_name_command("  "),
-            "akmctl rename --device-name \"NAME\""
+            "akmctl rename --device-name 'NAME'"
         );
         // Nothing that would end the quoted argument.
         assert_eq!(
             device_name_command("a\"; rm -rf \\"),
-            "akmctl rename --device-name \"a; rm -rf \""
+            "akmctl rename --device-name 'a\"; rm -rf \\'"
         );
+    }
+
+    /// #278: a name over the limit is reported, not silently frozen.
+    #[test]
+    fn a_name_over_the_limit_is_reported() {
+        let max = akm_core::alias::MAX_CHARS;
+        assert_eq!(length_note(&"é".repeat(max)), None);
+        assert_eq!(
+            length_note(&"x".repeat(max + 4)).as_deref(),
+            Some(format!("{}/{max} characters: shorten the name", max + 4).as_str())
+        );
+    }
+
+    /// #276: the name comes from the keyboard itself (its announced name);
+    /// pasted in a terminal, the command must run nothing else.
+    #[test]
+    fn device_name_command_never_expands_in_a_shell() {
+        for evil in [
+            "$(touch PWNED)",
+            "`touch PWNED`",
+            "x'; touch PWNED; echo '",
+            "!! ${HOME} \\$(id)",
+            "a\ntouch PWNED",
+        ] {
+            let cmd = device_name_command(evil);
+            assert!(!cmd.contains('\n'), "{cmd}");
+            // What a real shell sees: exactly 4 words, the name intact.
+            // Run in a private temporary directory: a regression must never
+            // leave a file in the repository.
+            let dir = std::env::temp_dir().join(format!("akm-quote-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let out = std::process::Command::new("sh")
+                .current_dir(&dir)
+                .arg("-c")
+                .arg(format!("set -- {cmd}; printf '%s\\n' \"$#\" \"$4\""))
+                .output()
+                .unwrap();
+            let out = String::from_utf8_lossy(&out.stdout);
+            let want: String = evil.trim().chars().filter(|c| !c.is_control()).collect();
+            let pwned = dir.join("PWNED").exists();
+            let _ = std::fs::remove_dir_all(&dir);
+            assert!(!pwned, "the name ran a command: {cmd}");
+            assert_eq!(out, format!("4\n{want}\n"), "{cmd}");
+        }
     }
 }

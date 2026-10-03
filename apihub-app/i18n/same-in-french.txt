@@ -10,3 +10,5 @@ Firmware
 hid_apple fnmode
 OK
 Actions
+NiMH
+lithium

@@ -282,7 +282,7 @@ msgid "Model"
 msgstr "Modèle"
 
 msgid "Own name"
-msgstr "Nom propre"
+msgstr "Nom dans le clavier"
 
 msgid "MAC"
 msgstr "MAC"
@@ -413,12 +413,6 @@ msgstr "INTROUVABLE"
 msgid "hid_apple fnmode"
 msgstr "hid_apple fnmode"
 
-msgid "RSSI helper"
-msgstr "Utilitaire RSSI"
-
-msgid "rssi-helper installed (needs CAP_NET_ADMIN)"
-msgstr "rssi-helper installé (nécessite CAP_NET_ADMIN)"
-
 msgid "System Diagnostics"
 msgstr "Diagnostic du système"
 
@@ -466,9 +460,6 @@ msgstr "aucun clavier connu du démon"
 
 msgid "unknown mode {}"
 msgstr "mode inconnu {}"
-
-msgid "daemon unreachable: {}"
-msgstr "démon injoignable : {}"
 
 msgid "Fn mode unknown ({}): is hid_apple loaded?"
 msgstr "mode Fn inconnu ({}) : hid_apple est-il chargé ?"
@@ -548,7 +539,7 @@ msgid "NO DATA"
 msgstr "SANS DONNÉES"
 
 msgid "READ"
-msgstr "LU"
+msgstr "LECTURE"
 
 msgid "Copy"
 msgstr "Copier"
@@ -598,8 +589,8 @@ msgstr "CRITIQUE"
 msgid "EMPTY"
 msgstr "VIDE"
 
-msgid "Daemon absent: this window reads the keyboard itself"
-msgstr "Démon absent : cette fenêtre lit elle-même le clavier"
+msgid "Service absent: this window reads the keyboard itself (start it: systemctl --user start apple-kb-monitord)"
+msgstr "Service absent : cette fenêtre lit elle-même le clavier (démarrez-le : systemctl --user start apple-kb-monitord)"
 
 msgid "Keyboard disconnected: press a key, or use Reconnect"
 msgstr "Clavier déconnecté : appuyez sur une touche, ou utilisez Reconnecter"
@@ -642,3 +633,135 @@ msgstr "Nom sur cet ordinateur"
 
 msgid "The name stored in the keyboard is changed from a terminal:"
 msgstr "Le nom enregistré dans le clavier se change depuis un terminal :"
+
+msgid "Usage: apihub-app [OPTION]"
+msgstr "Usage : apihub-app [OPTION]"
+
+msgid "Opens the Apple keyboard monitor window; if it is already open, brings it to the front."
+msgstr "Ouvre la fenêtre du moniteur de clavier Apple ; si elle est déjà ouverte, la ramène au premier plan."
+
+msgid "Options:"
+msgstr "Options :"
+
+msgid "show this help and exit"
+msgstr "affiche cette aide et quitte"
+
+msgid "show the version and exit"
+msgstr "affiche la version et quitte"
+
+msgid "toggle the Fn mode through the service, without a window"
+msgstr "bascule le mode Fn via le service, sans fenêtre"
+
+msgid "KRunner runner (started by KRunner itself)"
+msgstr "module KRunner (lancé par KRunner lui-même)"
+
+msgid "unknown argument: {}"
+msgstr "argument inconnu : {}"
+
+msgid "Try 'apihub-app --help'."
+msgstr "Essayez « apihub-app --help »."
+
+msgid "Signal measure"
+msgstr "Mesure du signal"
+
+msgid "rssi-helper runnable by this account (group akm)"
+msgstr "rssi-helper utilisable par ce compte (groupe akm)"
+
+msgid "Fix:"
+msgstr "Correction :"
+
+msgid "the signal is not measured"
+msgstr "le signal n'est pas mesuré"
+
+msgid "the DIAG tab tells why"
+msgstr "l'onglet DIAG en donne la raison"
+
+msgid "not measured"
+msgstr "non mesuré"
+
+msgid "{}/{} characters: shorten the name"
+msgstr "{}/{} caractères : raccourcissez le nom"
+
+msgid "Copied: paste it in a terminal"
+msgstr "Copié : collez-la dans un terminal"
+
+msgid "the service could not give the history: read from the local file (F5 to retry)"
+msgstr "le service n'a pas pu fournir l'historique : lu depuis le fichier local (F5 pour réessayer)"
+
+msgid "The apple-kb-monitord service does not answer. Start it: systemctl --user start apple-kb-monitord"
+msgstr "Le service apple-kb-monitord ne répond pas. Démarrez-le : systemctl --user start apple-kb-monitord"
+
+msgid "The service refused the request: {}"
+msgstr "Le service a refusé la demande : {}"
+
+msgid "Unavailable: the apple-kb-monitord service is not running"
+msgstr "Indisponible : le service apple-kb-monitord ne tourne pas"
+
+msgid "No Apple keyboard found: turn it on, or pair it"
+msgstr "Aucun clavier Apple trouvé : allumez-le, ou appairez-le"
+
+msgid "Keyboard disconnected"
+msgstr "Clavier déconnecté"
+
+msgid "alkaline"
+msgstr "alcaline"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "lithium"
+
+msgid "unknown"
+msgstr "inconnue"
+
+msgid "Lithium (fresh)"
+msgstr "Lithium (neuves)"
+
+msgid "Alkaline (fresh)"
+msgstr "Alcalines (neuves)"
+
+msgid "Alkaline or NiMH"
+msgstr "Alcalines ou NiMH"
+
+msgid "NiMH (likely)"
+msgstr "NiMH (probable)"
+
+msgid "Depleted"
+msgstr "Épuisées"
+
+msgid "Critical — replace"
+msgstr "Critique — à remplacer"
+
+msgid "NumLock: with the NumLock LED on, hid_apple turns J K L U I O 7 8 9 M 0 ; / P - into keypad keys (APPLE_NUMLOCK_EMULATION); press again to leave"
+msgstr "Verr. num. : voyant allumé, hid_apple transforme J K L U I O 7 8 9 M 0 ; / P - en touches du pavé numérique (APPLE_NUMLOCK_EMULATION) ; rappuyez pour en sortir"
+
+msgid "Fn remapped: the Fn layer of hid_apple is lost"
+msgstr "Fn réaffectée : la couche Fn de hid_apple est perdue"
+
+msgid "remapped before hid_apple: no Fn layer on this key any more"
+msgstr "réaffectée avant hid_apple : plus de couche Fn sur cette touche"
+
+msgid "iso_layout=-1: hid_apple swaps these two keys when the keyboard reports the ISO country code"
+msgstr "iso_layout=-1 : hid_apple échange ces deux touches quand le clavier annonce le code pays ISO"
+
+msgid "doubtful"
+msgstr "douteuse"
+
+msgid "Batteries installed"
+msgstr "Piles installées"
+
+msgid "Keyboard reading"
+msgstr "Lecture du clavier"
+
+msgid "no error reported by the service"
+msgstr "aucune erreur signalée par le service"
+
+msgid "last error of the service: {}"
+msgstr "dernière erreur du service : {}"
+
+msgid "Fn: switch to {}"
+msgstr "Fn : passer à {}"
+
+msgid "Now: {}. Toggle the function keys"
+msgstr "Actuellement : {}. Bascule les touches de fonction"
