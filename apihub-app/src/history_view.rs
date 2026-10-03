@@ -64,6 +64,13 @@ impl Loader {
         self.data.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
+    /// `(loading, loaded_at)` without copying the series: read at every
+    /// frame (a 50 000-point history must not be cloned 1/s, #272).
+    pub fn status(&self) -> (bool, Option<std::time::Instant>) {
+        let d = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        (d.loading, d.loaded_at)
+    }
+
     /// Start a load unless one is running; `repaint` is called when done.
     pub fn request(&self, repaint: impl Fn() + Send + 'static) {
         self.request_with(

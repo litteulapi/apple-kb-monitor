@@ -154,9 +154,9 @@ impl ApiHubApp {
         let arrivals = self.feed.arrivals();
         let came_back = arrivals != self.daemon_arrivals;
         self.daemon_arrivals = arrivals;
-        let data = self.history.data();
-        let age = data.loaded_at.map(|t| t.elapsed());
-        if !data.loading && history_view::reload_due(came_back, self.tab == Tab::Data, age) {
+        let (loading, loaded_at) = self.history.status();
+        let age = loaded_at.map(|t| t.elapsed());
+        if !loading && history_view::reload_due(came_back, self.tab == Tab::Data, age) {
             history_chart::reload(ctx, &self.history);
         }
         let now = unix_now();
