@@ -150,6 +150,7 @@ impl ApiHubApp {
         let snap = self.state.get();
         let feed = self.feed.get();
         // History reloaded by itself (#272): daemon back, or stale on DATA.
+        shell::set_daemon_online(ctx, feed != view::Feed::Local);
         let arrivals = self.feed.arrivals();
         let came_back = arrivals != self.daemon_arrivals;
         self.daemon_arrivals = arrivals;

@@ -485,8 +485,11 @@ pub fn fn_button_text(mode: Option<i32>) -> String {
 /// The button that toggles the function keys (polkit dialog of the daemon).
 pub fn fn_button(ui: &mut Ui, fnmode: &FnMode) {
     let label = fn_button_text(fnmode.mode());
-    if theme::action(ui, &label, !fnmode.job.busy())
-        .on_hover_text(tr("Toggle the function keys"))
+    let online = shell::daemon_online(ui.ctx());
+    let hint = shell::needs_daemon(online, tr("Toggle the function keys"));
+    if theme::action(ui, &label, online && !fnmode.job.busy())
+        .on_hover_text(hint)
+        .on_disabled_hover_text(hint)
         .clicked()
     {
         let ctx = ui.ctx().clone();

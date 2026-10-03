@@ -475,10 +475,40 @@ pub fn copied_left(at: Option<f64>, now: f64) -> Option<f64> {
     (left > 0.0).then_some(left)
 }
 
+const DAEMON_ONLINE: &str = "akm-daemon-online";
+
+/// Published once per frame by the window: the daemon is the source (#279).
+pub fn set_daemon_online(ctx: &egui::Context, online: bool) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new(DAEMON_ONLINE), online));
+}
+
+/// Actions that go through the daemon are greyed out while it is absent.
+pub fn daemon_online(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp(egui::Id::new(DAEMON_ONLINE)))
+        .unwrap_or(true)
+}
+
+/// Hover text of an action that needs the daemon.
+pub fn needs_daemon(online: bool, what: &'static str) -> &'static str {
+    if online {
+        what
+    } else {
+        tr("Unavailable: the apple-kb-monitord service is not running")
+    }
+}
+
 /// The Reconnect button of STAT and RADIO.
 pub fn reconnect_button(ui: &mut Ui, link: &crate::actions::Job) {
-    if theme::action(ui, tr("Reconnect"), !link.busy())
-        .on_hover_text(tr("Ask the daemon to page the keyboard now"))
+    let online = daemon_online(ui.ctx());
+    if theme::action(ui, tr("Reconnect"), online && !link.busy())
+        .on_hover_text(needs_daemon(
+            online,
+            tr("Ask the daemon to page the keyboard now"),
+        ))
+        .on_disabled_hover_text(needs_daemon(
+            online,
+            tr("Ask the daemon to page the keyboard now"),
+        ))
         .clicked()
     {
         let ctx = ui.ctx().clone();

@@ -678,11 +678,11 @@ pub fn alerts(s: &akm_core::Snapshot, feed: Feed) -> Vec<Alert> {
     if feed == Feed::Local {
         push(
             Level::Warn,
-            tr("Daemon absent: this window reads the keyboard itself").into(),
+            tr("Service absent: this window reads the keyboard itself (start it: systemctl --user start apple-kb-monitord)").into(),
         );
     }
     if let Some(e) = s.kb_error.as_deref().filter(|e| !e.trim().is_empty()) {
-        push(Level::Bad, e.to_string());
+        push(Level::Bad, kb_error_text(e));
     }
     match &s.keyboard {
         None => push(Level::Unknown, tr("Waiting for keyboard data...").into()),
@@ -707,6 +707,16 @@ pub fn alerts(s: &akm_core::Snapshot, feed: Feed) -> Vec<Alert> {
         }
     }
     out
+}
+
+/// The daemon's fixed `kb_error` texts, translated (#279); any other text
+/// is shown as received.
+pub fn kb_error_text(e: &str) -> String {
+    match e {
+        "Keyboard: not found" => tr("No Apple keyboard found: turn it on, or pair it").into(),
+        "Keyboard disconnected" => tr("Keyboard disconnected").into(),
+        other => other.to_string(),
+    }
 }
 
 /// Bluetooth address with its middle hidden (`AA:BB:XX:XX:XX:F1`), for the
@@ -1326,5 +1336,16 @@ mod tests {
         snap.connected = false;
         snap.keyboard.as_mut().unwrap().radio.set_rssi_rel(None);
         assert_eq!(signal_problem_in(true, &snap), None);
+    }
+
+    #[test]
+    fn daemon_errors_of_the_keyboard_are_translated() {
+        assert_eq!(
+            kb_error_text("Keyboard: not found"),
+            "No Apple keyboard found: turn it on, or pair it"
+        );
+        assert_eq!(kb_error_text("something else"), "something else");
+        let fr = crate::i18n::parse_po(include_str!("../i18n/fr.po"));
+        assert!(fr.contains_key("No Apple keyboard found: turn it on, or pair it"));
     }
 }

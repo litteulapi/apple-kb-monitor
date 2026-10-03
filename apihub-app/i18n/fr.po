@@ -461,9 +461,6 @@ msgstr "aucun clavier connu du démon"
 msgid "unknown mode {}"
 msgstr "mode inconnu {}"
 
-msgid "daemon unreachable: {}"
-msgstr "démon injoignable : {}"
-
 msgid "Fn mode unknown ({}): is hid_apple loaded?"
 msgstr "mode Fn inconnu ({}) : hid_apple est-il chargé ?"
 
@@ -592,8 +589,8 @@ msgstr "CRITIQUE"
 msgid "EMPTY"
 msgstr "VIDE"
 
-msgid "Daemon absent: this window reads the keyboard itself"
-msgstr "Démon absent : cette fenêtre lit elle-même le clavier"
+msgid "Service absent: this window reads the keyboard itself (start it: systemctl --user start apple-kb-monitord)"
+msgstr "Service absent : cette fenêtre lit elle-même le clavier (démarrez-le : systemctl --user start apple-kb-monitord)"
 
 msgid "Keyboard disconnected: press a key, or use Reconnect"
 msgstr "Clavier déconnecté : appuyez sur une touche, ou utilisez Reconnecter"
@@ -690,3 +687,18 @@ msgstr "Copié : collez-la dans un terminal"
 
 msgid "the service could not give the history: read from the local file (F5 to retry)"
 msgstr "le service n'a pas pu fournir l'historique : lu depuis le fichier local (F5 pour réessayer)"
+
+msgid "The apple-kb-monitord service does not answer. Start it: systemctl --user start apple-kb-monitord"
+msgstr "Le service apple-kb-monitord ne répond pas. Démarrez-le : systemctl --user start apple-kb-monitord"
+
+msgid "The service refused the request: {}"
+msgstr "Le service a refusé la demande : {}"
+
+msgid "Unavailable: the apple-kb-monitord service is not running"
+msgstr "Indisponible : le service apple-kb-monitord ne tourne pas"
+
+msgid "No Apple keyboard found: turn it on, or pair it"
+msgstr "Aucun clavier Apple trouvé : allumez-le, ou appairez-le"
+
+msgid "Keyboard disconnected"
+msgstr "Clavier déconnecté"
