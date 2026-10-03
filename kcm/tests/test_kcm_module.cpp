@@ -339,6 +339,30 @@ private Q_SLOTS:
         QCOMPARE(readFile(configPath()), before);
         QVERIFY2(text(QStringLiteral("alertsResult")).startsWith(QStringLiteral("Non enregistré")), qPrintable(text(QStringLiteral("alertsResult"))));
     }
+
+    // #285 (K1): a refused save keeps the module "modified" for System
+    // Settings (KCModule::needsSave, the Apply button and the "unsaved
+    // changes" question), not only for the QML page.
+    void refusedSaveKeepsApplyEnabled()
+    {
+        writeFile(configPath(), "[alerts]\nthresholds = [30, 15, 5]\n");
+        QVERIFY(open(QStringLiteral("notifications")));
+        QVERIFY(waitAlertsReady());
+        QVERIFY(typeInto(QStringLiteral("alerts_thresholds"), QStringLiteral(", abc")));
+        QCOMPARE(text(QStringLiteral("alerts_thresholds")), QStringLiteral("30, 15, 5, abc"));
+        QVERIFY(m_module->needsSave());
+        QSignalSpy spy(m_module.get(), &KCModule::needsSaveChanged);
+        apply();
+        QVERIFY2(text(QStringLiteral("alertsResult")).startsWith(QStringLiteral("Non enregistré")), qPrintable(text(QStringLiteral("alertsResult"))));
+        QVERIFY2(m_module->needsSave(), "Apply was greyed out although nothing was saved");
+        QCOMPARE(readFile(configPath()), QByteArray("[alerts]\nthresholds = [30, 15, 5]\n"));
+        // a write refused by the bridge (file changed meanwhile) as well
+        writeFile(configPath(), "[alerts]\nthresholds = [30, 15, 5]\n# changed\n");
+        QVERIFY(typeInto(QStringLiteral("alerts_thresholds"), QStringLiteral("40, 20"), true));
+        apply();
+        QVERIFY2(m_module->needsSave(), "Apply was greyed out although the write was refused");
+        QCOMPARE(readFile(configPath()), QByteArray("[alerts]\nthresholds = [30, 15, 5]\n# changed\n"));
+    }
 };
 
 QTEST_MAIN(TestKcmModule)

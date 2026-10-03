@@ -108,7 +108,9 @@ ColumnLayout {
         let dirty = false;
         let defaults = true;
         for (const k in defaultsMap) {
-            if (c[k] === null) { dirty = true; continue; }   // invalid entry: keep Apply visible, save refuses
+            // invalid entry: keep Apply enabled, save refuses (kcm.cpp keeps
+            // it enabled after the refusal, #285)
+            if (c[k] === null) { dirty = true; continue; }
             if (!same(c[k], loaded[k])) dirty = true;
             if (!same(c[k], defaultsMap[k])) defaults = false;
         }

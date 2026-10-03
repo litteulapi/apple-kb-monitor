@@ -9,6 +9,8 @@
 #include <KPluginFactory>
 #include <KQuickConfigModule>
 
+#include <QTimer>
+
 #include "bridge.h"
 
 class AppleKeyboardKcm : public KQuickConfigModule
@@ -44,6 +46,11 @@ public:
     {
         // needsSave is cleared by QML once the file is really written.
         Q_EMIT saveRequested();
+        // #285: System Settings (KCModuleQml) sets needsSave to false right
+        // after this returns, whatever the page did. The page then says again
+        // whether it is still modified (save refused, or still writing), so
+        // that Apply and the "unsaved changes" question stay.
+        QTimer::singleShot(0, this, &AppleKeyboardKcm::saveReturned);
     }
     void defaults() override
     {
@@ -54,6 +61,7 @@ public:
 Q_SIGNALS:
     void loadRequested();
     void saveRequested();
+    void saveReturned();
     void defaultsRequested();
 
 private:
