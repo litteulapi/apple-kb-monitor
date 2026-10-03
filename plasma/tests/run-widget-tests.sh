@@ -5,7 +5,7 @@
 #  - the window opens through org.freedesktop.Application.Activate;
 #  - the widget spawns NO subprocess (no orphans: dbus-monitor/timeout/sh);
 #  - History(since), Device.FnMode / SetFnMode, Link.Status / Reconnect and
-#    Refresh are called on the daemon as declared (#97, #120).
+#    Refresh and Diagnose are called on the daemon as declared (#97, #120).
 # Needs: qml6, python3-dbus + gi, dbus-run-session.
 set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -53,5 +53,5 @@ exec dbus-run-session -- sh -eu -c '
   grep -q PASS "$out.log" && grep -E "RESULT|PASS" "$out.log" || cat "$out.log"
   echo "children of the widget process: $kids ; stray dbus-monitor: $stray ; Activate calls: $(grep -c activate "$out")"
   cat "$out.err" | tail -5; rm -f "$out.log" "$out.err"
-  [ "$kids" -eq 0 ] && [ "$stray" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q "^activate 0" "$out" && grep -q "^alias AA:BB Mon clavier" "$out" && grep -q "^claim 42" "$out" && grep -q "^release 42" "$out" && grep -q "^fnmode 2" "$out" && [ "$(grep -c "^fnmode" "$out")" -eq 1 ] && grep -q "^refresh" "$out" && grep -q "^reconnect" "$out" && grep -Eq "^history 6048[0-9][0-9]$" "$out"
+  [ "$kids" -eq 0 ] && [ "$stray" -eq 0 ] && [ "$rc" -eq 0 ] && grep -q "^activate 0" "$out" && grep -q "^alias AA:BB Mon clavier" "$out" && grep -q "^claim 42" "$out" && grep -q "^release 42" "$out" && grep -q "^fnmode 2" "$out" && [ "$(grep -c "^fnmode" "$out")" -eq 1 ] && grep -q "^refresh" "$out" && grep -q "^reconnect" "$out" && grep -q "^diagnose" "$out" && grep -Eq "^history 6048[0-9][0-9]$" "$out"
 ' sh "$here"

@@ -183,6 +183,10 @@ package() {
     for qml in "$startdir/plasma/com.agenceapi.devicehub/contents/ui/"*.qml "$startdir/plasma/com.agenceapi.devicehub/contents/ui/"*.js; do
         install -Dm644 "$qml" "$plasma_dir/contents/ui/$(basename "$qml")"
     done
+    # VT323 of the Pip-Boy popup (SIL OFL 1.1, licence installed above),
+    # loaded by the widget with FontLoader, never system-wide.
+    install -Dm644 "$startdir/plasma/com.agenceapi.devicehub/contents/fonts/VT323-Regular.ttf" \
+        "$plasma_dir/contents/fonts/VT323-Regular.ttf"
     # French translation of the widget (#114): gettext catalogue compiled here,
     # loaded by Plasma's i18n() from the system locale directory.
     msgfmt -o "$srcdir/plasma_applet_com.agenceapi.devicehub.mo" "$startdir/plasma/po/fr.po"

@@ -58,6 +58,9 @@ Item {
     signal menuReceived(string json)
     signal menuItemFailed(string message)
     signal refreshDone(bool ok, string message)
+    // Diagnose() JSON {schema, daemon_version, passed, total, checks}.
+    signal diagnoseReceived(string json)
+    signal diagnoseFailed(string message)
     signal reconnectDone(bool ok, string message)
 
     function fetch() {
@@ -222,6 +225,22 @@ Item {
             link.refreshDone(true, "");
         }, function (error) {
             link.refreshDone(false, link.errorText(error));
+        });
+    }
+
+    // The checks of the window's Diag tab, run by the daemon (#120).
+    function diagnose() {
+        if (!watcher.registered) return;
+        DBus.SessionBus.asyncCall({
+            service: link.busName,
+            path: link.objectPath,
+            iface: link.busName,
+            member: "Diagnose",
+            arguments: []
+        }, function (reply) {
+            link.diagnoseReceived(String(reply.value));
+        }, function (error) {
+            link.diagnoseFailed(link.errorText(error));
         });
     }
 

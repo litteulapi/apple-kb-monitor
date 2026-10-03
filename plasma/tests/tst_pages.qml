@@ -3,10 +3,11 @@ import QtQuick.Layouts
 import "../com.agenceapi.devicehub/contents/ui"
 import "../com.agenceapi.devicehub/contents/ui/History.js" as Hist
 
-// The popup (state, history and diagnostic pages, #97 #120) is instantiated
-// offscreen against a stand-in for the applet: every property and function
-// the pages use exists here, so a binding on a missing name shows up as a
-// ReferenceError in the log (run-widget-tests.sh fails on it). No D-Bus.
+// The Pip-Boy popup (tabs STAT RADIO KEYS DATA DIAG, #97 #120) is
+// instantiated offscreen against a stand-in for the applet: every property
+// and function the tabs use exists here, so a binding on a missing name shows
+// up as a ReferenceError in the log (run-widget-tests.sh fails on it). Each
+// tab is opened in the popup and also loaded alone. No D-Bus.
 Item {
     id: root
     width: 420
@@ -70,6 +71,43 @@ Item {
     property string linkText: "connected (attempts: 0, failures: 0)"
     property string linkError: ""
     property string diagHint: ""
+    property int linkAttempts: 0
+    property int linkFailures: 0
+    property string kbMac: "AA:BB:CC:DD:EE:F1"
+    property real rssi: -3
+    property string rssiQuality: "good"
+    property bool hasRssi: true
+    property real lastUpdate: 1790000000
+    property string estimateChem: "alkaline"
+    property bool capsLock: true
+    property bool numLock: false
+    property bool paired: true
+    property string pairedHost: "AA:BB:CC:DD:EE:F2"
+    property string kbChip: "BCM2042"
+    property string kbDriver: "hid-apple"
+    property real txPower: 4
+    property real rssiAt: 1790000000
+    property real wakeAge: 120
+    property string thresholdLevel: "ok"
+    property var thresholds: ({ full_mv: 2954, low_mv: 2506, critical_mv: 2404, empty_mv: 2054 })
+    property string fwSource: "table"
+    property string fwLatest: "0x0050"
+    property real installedAt: 1780000000
+    property real forecastEmptyAt: Date.now() / 1000 + 41 * 86400
+    property real forecastRate: 0.8
+    property int discHour: 0
+    property int discDay: 2
+    property int disc7d: 5
+    property var discByDay: [0, 1, 0, 2, 0, 0, 2]
+    property bool linkUnstable: false
+    property string kbError: ""
+    property var diagChecks: []
+    property int diagPassed: 0
+    property int diagTotal: 0
+    property bool diagRunning: false
+    property string diagError: ""
+    property int rssiHelperOk: -1
+    property int diagnoses: 0
 
     property int toggles: 0
     property int shown: 0
@@ -82,22 +120,23 @@ Item {
     function requestReconnect() { reconnects++; }
     function renameKeyboard(name) {}
     function openWindow() {}
+    function runDiagnose() { diagnoses++; }
+
+    FontLoader {
+        id: vt
+        source: "../com.agenceapi.devicehub/contents/fonts/VT323-Regular.ttf"
+    }
 
     Loader {
         id: popup
         anchors.fill: parent
         source: "../com.agenceapi.devicehub/contents/ui/FullRepresentation.qml"
     }
-    HistoryPage {
-        id: history
-        applet: root
-        width: 400
-    }
-    DiagPage {
-        id: diag
-        applet: root
-        width: 400
-    }
+    TabStat { id: stat; applet: root; width: 400 }
+    TabRadio { id: radio; applet: root; width: 400 }
+    TabKeys { id: keys; applet: root; width: 400 }
+    TabData { id: data; applet: root; width: 400 }
+    TabDiag { id: diag; applet: root; width: 400 }
     LineChart {
         id: chart
         width: 300
@@ -117,8 +156,23 @@ Item {
         running: true
         onTriggered: {
             root.check("popup loaded (status " + popup.status + ")", popup.status === Loader.Ready);
-            root.check("history page has a size", history.implicitHeight > 0);
-            root.check("diagnostic page has a size", diag.implicitHeight > 0);
+            root.check("VT323 font loaded", vt.status === FontLoader.Ready && vt.font.family === "VT323");
+            var tabs = [stat, radio, keys, data, diag];
+            for (var t = 0; t < tabs.length; t++)
+                root.check("tab " + t + " has a size", tabs[t].implicitHeight > 200);
+            // Every tab opens in the popup; DATA loads the history, DIAG runs the checks.
+            for (var o = 4; o >= 0; o--) {
+                popup.item.openTab(o);
+                root.check("popup shows tab " + o, popup.item.tab === o);
+            }
+            root.check("DATA asked for the history", root.shown === 1);
+            root.check("DIAG ran the checks", root.diagnoses === 1);
+            // Diagnose result: count and log.
+            root.diagChecks = [{ id: "binary", label: "Daemon binary", ok: true, detail: "apple-kb-monitord 3.1.0" },
+                               { id: "rssi_helper", label: "RSSI helper", ok: false, detail: "missing" }];
+            root.diagPassed = 1;
+            root.diagTotal = 2;
+            root.check("diag log listed", diag.implicitHeight > 300);
             // 90 days of readings reach the chart as a bounded series.
             var now = Date.now() / 1000, all = [];
             for (var i = 0; i < 20000; i++)
@@ -135,13 +189,21 @@ Item {
             root.historyVolt = h.volt;
             root.sparkPct = h.pct;
             root.check("chart gets the bounded series", chart.primary.length <= Hist.POINTS_MAX && chart.primary.length > 100);
-            root.check("history page shows the chart", history.hasChart && history.hasVoltage);
+            root.check("DATA shows the chart", data.hasChart && data.hasVoltage);
             // Daemon gone, then keyboard gone: the pages still evaluate.
             root.connected = false;
             root.daemonRunning = false;
             root.daemonRunning = true;
             root.historyError = "org.freedesktop.DBus.Error.NoReply";
             root.linkHealth = "unreachable";
+            // No signal while connected: RADIO says why.
+            root.connected = true;
+            root.hasRssi = false;
+            root.rssi = NaN;
+            root.discHour = -1;
+            root.discByDay = [];
+            root.thresholds = null;
+            root.fnMode = -1;
             done.start();
         }
     }

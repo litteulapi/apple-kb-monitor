@@ -111,6 +111,45 @@ PlasmoidItem {
             : linkHealth === "unreachable" ? i18n("unreachable") : linkHealth,
         linkAttempts, linkFailures)
 
+    // ── Pip-Boy panel (docs/DA-PIPBOY.md): the data of the window's tabs ──
+    property bool capsLock: false
+    property bool numLock: false
+    property bool paired: false
+    property string pairedHost: ""
+    property string kbChip: ""
+    property string kbDriver: ""
+    property real txPower: NaN
+    property real rssiAt: 0
+    property real wakeAge: -1
+    property string thresholdLevel: ""
+    property var thresholds: null
+    property string fwSource: ""
+    property real installedAt: 0
+    // Autonomy forecast of the daemon (#83): empty_at in Unix s, 0 = none.
+    property real forecastEmptyAt: 0
+    property real forecastRate: 0
+    // Disconnections of the link (#105), -1 = nothing recorded.
+    property int discHour: -1
+    property int discDay: -1
+    property int disc7d: -1
+    property var discByDay: []
+    property bool linkUnstable: false
+    property string kbError: ""
+    // Diagnose() of the daemon (#120): checks run on demand only.
+    property var diagChecks: []
+    property int diagPassed: 0
+    property int diagTotal: 0
+    property bool diagRunning: false
+    property string diagError: ""
+    // rssi_helper check of the last Diagnose(): 1 ok, 0 failed, -1 unknown.
+    property int rssiHelperOk: -1
+    // VT323, the face of the window (SIL OFL 1.1), registered for the popup.
+    readonly property bool pipFontReady: vt.status === FontLoader.Ready
+    FontLoader {
+        id: vt
+        source: Qt.resolvedUrl("../fonts/VT323-Regular.ttf")
+    }
+
     readonly property bool hasBattery: connected && batteryPercent >= 0
     readonly property bool hasRssi: connected && !isNaN(rssi)
 
@@ -271,6 +310,13 @@ PlasmoidItem {
             root.diagHint = ok ? i18n("New reading requested.")
                                : i18n("Reading not requested: %1", message);
         }
+        onDiagnoseReceived: function (json) {
+            root.applyDiagnose(json);
+        }
+        onDiagnoseFailed: function (message) {
+            root.diagRunning = false;
+            root.diagError = message;
+        }
         onReconnectDone: function (ok, message) {
             root.diagHint = ok
                 ? i18n("Reconnection requested. Press a key on the keyboard if it is asleep.")
@@ -343,6 +389,32 @@ PlasmoidItem {
         root.remaining = d.remaining_display || "";
         root.lastError = d.last_error || "";
         root.readIncomplete = !!(kb && kb.incomplete);
+        root.capsLock = !!d.caps_lock;
+        root.numLock = !!d.num_lock;
+        var bt = kb ? (kb.bluetooth || {}) : {};
+        root.paired = !!bt.paired;
+        root.pairedHost = bt.paired_host_addr ? String(bt.paired_host_addr) : "";
+        root.kbChip = (kb && kb.device && kb.device.chip) ? String(kb.device.chip) : "";
+        root.kbDriver = (kb && kb.device && kb.device.driver) ? String(kb.device.driver) : "";
+        var tx = kb && kb.radio ? kb.radio.tx_power_dbm : null;
+        root.txPower = (tx === null || tx === undefined) ? NaN : Number(tx);
+        root.rssiAt = Number(d.rssi_at || 0);
+        var wk = kb && kb.wake ? kb.wake.last_age_s : null;
+        root.wakeAge = (wk === null || wk === undefined) ? -1 : Number(wk);
+        root.thresholdLevel = b.threshold_level ? String(b.threshold_level) : "";
+        root.thresholds = th;
+        root.fwSource = (kb && kb.firmware && kb.firmware.source) ? String(kb.firmware.source) : "";
+        root.installedAt = Number(d.batteries_installed_at || 0);
+        var fc = d.forecast || null;
+        root.forecastEmptyAt = fc ? Number(fc.empty_at || 0) : 0;
+        root.forecastRate = fc ? Number(fc.rate_pct_per_day || 0) : 0;
+        var lq = d.link_quality || null;
+        root.discHour = lq ? Number(lq.disconnects_last_hour) : -1;
+        root.discDay = lq ? Number(lq.disconnects_last_day) : -1;
+        root.disc7d = lq ? Number(lq.disconnects_7d) : -1;
+        root.discByDay = lq && lq.disconnects_by_day ? lq.disconnects_by_day : [];
+        root.linkUnstable = !!(lq && lq.unstable);
+        root.kbError = d.kb_error ? String(d.kb_error) : "";
         // Popup opened before the first state: the address is known only now.
         if (root.expanded && root.fnMode < 0 && root.kbMac !== "" && !root.fnBusy) link.fetchFnMode(root.kbMac);
     }
@@ -380,7 +452,7 @@ PlasmoidItem {
         root.historyVolt = h.volt;
     }
 
-    // History page: load `days` (7, 30 or 90) from the daemon.
+    // History page: load `days` (1, 7, 30 or 90) from the daemon.
     function showHistory(days) {
         root.historyDays = days;
         if (!link.registered) return;
@@ -416,6 +488,34 @@ PlasmoidItem {
         root.fnError = "";
         root.fnBusy = true;
         link.setFnMode(root.kbMac, next);
+    }
+
+    // DIAG tab: the daemon runs its checks (each bounded to 3 s, never the
+    // keyboard). Only on demand, never polled.
+    function runDiagnose() {
+        if (!link.registered || root.diagRunning) return;
+        root.diagError = "";
+        root.diagRunning = true;
+        link.diagnose();
+    }
+
+    function applyDiagnose(json) {
+        root.diagRunning = false;
+        var d;
+        try {
+            d = JSON.parse(json);
+        } catch (e) {
+            root.diagError = String(e);
+            return;
+        }
+        var checks = d.checks || [];
+        root.diagChecks = checks;
+        root.diagPassed = Number(d.passed || 0);
+        root.diagTotal = Number(d.total || checks.length);
+        if (d.daemon_version) root.daemonVersion = String(d.daemon_version);
+        root.rssiHelperOk = -1;
+        for (var i = 0; i < checks.length; i++)
+            if (checks[i].id === "rssi_helper") root.rssiHelperOk = checks[i].ok ? 1 : 0;
     }
 
     function requestRefresh() {
@@ -458,6 +558,17 @@ PlasmoidItem {
         root.linkHealth = "";
         root.daemonVersion = "";
         root.diagHint = "";
+        root.capsLock = false;
+        root.numLock = false;
+        root.forecastEmptyAt = 0;
+        root.discHour = -1;
+        root.discDay = -1;
+        root.disc7d = -1;
+        root.discByDay = [];
+        root.linkUnstable = false;
+        root.txPower = NaN;
+        root.rssiAt = 0;
+        root.wakeAge = -1;
     }
 
     function fetchData() {
