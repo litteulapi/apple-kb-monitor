@@ -1,5 +1,6 @@
 mod actions;
 mod activation;
+mod cli;
 mod diag;
 mod fn_toggle;
 mod fnmode_diag;
@@ -292,10 +293,26 @@ fn open_window(
 fn main() {
     // Windowless modes, thin D-Bus clients of the daemon: the command of the
     // global shortcut (#99) and the KRunner runner (#98).
-    match std::env::args().nth(1).as_deref() {
-        Some(fn_toggle::FLAG) => std::process::exit(fn_toggle::run()),
-        Some(krunner::FLAG) => std::process::exit(krunner::run()),
-        _ => {}
+    // Every argument is handled here, before the single-instance claim:
+    // `--help` must never activate a running window (#271).
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match cli::parse(&args) {
+        cli::Cli::Window => {}
+        cli::Cli::ToggleFn => std::process::exit(fn_toggle::run()),
+        cli::Cli::Krunner => std::process::exit(krunner::run()),
+        cli::Cli::Help => {
+            print!("{}", cli::help());
+            return;
+        }
+        cli::Cli::Version => {
+            println!("{}", cli::version());
+            return;
+        }
+        cli::Cli::Bad(a) => {
+            eprintln!("apihub-app: {}", i18n::trf("unknown argument: {}", &[&a]));
+            eprintln!("{}", i18n::tr("Try 'apihub-app --help'."));
+            std::process::exit(2);
+        }
     }
     // One window = one process (#226): `apihub-app` or D-Bus
     // `org.freedesktop.Application` Activate opens the window; a second launch

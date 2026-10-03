@@ -642,3 +642,30 @@ msgstr "Nom sur cet ordinateur"
 
 msgid "The name stored in the keyboard is changed from a terminal:"
 msgstr "Le nom enregistré dans le clavier se change depuis un terminal :"
+
+msgid "Usage: apihub-app [OPTION]"
+msgstr "Usage : apihub-app [OPTION]"
+
+msgid "Opens the Apple keyboard monitor window; if it is already open, brings it to the front."
+msgstr "Ouvre la fenêtre du moniteur de clavier Apple ; si elle est déjà ouverte, la ramène au premier plan."
+
+msgid "Options:"
+msgstr "Options :"
+
+msgid "show this help and exit"
+msgstr "affiche cette aide et quitte"
+
+msgid "show the version and exit"
+msgstr "affiche la version et quitte"
+
+msgid "toggle the Fn mode through the service, without a window"
+msgstr "bascule le mode Fn via le service, sans fenêtre"
+
+msgid "KRunner runner (started by KRunner itself)"
+msgstr "module KRunner (lancé par KRunner lui-même)"
+
+msgid "unknown argument: {}"
+msgstr "argument inconnu : {}"
+
+msgid "Try 'apihub-app --help'."
+msgstr "Essayez « apihub-app --help »."
