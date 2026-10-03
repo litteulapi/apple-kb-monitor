@@ -314,14 +314,48 @@ impl PctSource {
 /// estimate, else a guess from the voltage, always marked as such.
 pub fn chemistry_text(b: &akm_core::report::KbBattery) -> Option<String> {
     if let Some(e) = &b.charge_estimate {
-        return Some(trf("{} (declared)", &[&e.chemistry.as_str()]));
+        return Some(trf(
+            "{} (declared)",
+            &[&chemistry_word(e.chemistry.as_str())],
+        ));
     }
     b.voltage.filter(|v| v.is_finite() && *v > 0.0).map(|v| {
         trf(
             "{} (guess from the voltage)",
-            &[&akm_core::calibration::detect_battery_type(v)],
+            &[&chemistry_word(akm_core::calibration::detect_battery_type(
+                v,
+            ))],
         )
     })
+}
+
+/// The chemistry words of akm-core, translated (#273); others unchanged.
+pub fn chemistry_word(w: &str) -> String {
+    match w {
+        "alkaline" => tr("alkaline").into(),
+        "nimh" => tr("NiMH").into(),
+        "lithium" => tr("lithium").into(),
+        "unknown" => tr("unknown").into(),
+        "Lithium (fresh)" => tr("Lithium (fresh)").into(),
+        "Alkaline (fresh)" => tr("Alkaline (fresh)").into(),
+        "Alkaline or NiMH" => tr("Alkaline or NiMH").into(),
+        "NiMH (likely)" => tr("NiMH (likely)").into(),
+        "Depleted" => tr("Depleted").into(),
+        "Critical \u{2014} replace" => tr("Critical \u{2014} replace").into(),
+        other => other.to_string(),
+    }
+}
+
+/// The notes of the key table (`akm_core::keymap::row_note`), translated
+/// (#273); an unknown note is shown as received.
+pub fn key_note_text(n: &str) -> String {
+    match n {
+        "NumLock: with the NumLock LED on, hid_apple turns J K L U I O 7 8 9 M 0 ; / P - into keypad keys (APPLE_NUMLOCK_EMULATION); press again to leave" => tr("NumLock: with the NumLock LED on, hid_apple turns J K L U I O 7 8 9 M 0 ; / P - into keypad keys (APPLE_NUMLOCK_EMULATION); press again to leave").into(),
+        "Fn remapped: the Fn layer of hid_apple is lost" => tr("Fn remapped: the Fn layer of hid_apple is lost").into(),
+        "remapped before hid_apple: no Fn layer on this key any more" => tr("remapped before hid_apple: no Fn layer on this key any more").into(),
+        "iso_layout=-1: hid_apple swaps these two keys when the keyboard reports the ISO country code" => tr("iso_layout=-1: hid_apple swaps these two keys when the keyboard reports the ISO country code").into(),
+        other => other.to_string(),
+    }
 }
 
 /// Paired state. The daemon never fills `bluetooth.paired` (always false
@@ -865,7 +899,7 @@ mod tests {
         b.charge_estimate =
             akm_core::chemistry::estimate_charge(2460, akm_core::chemistry::Chemistry::Nimh);
         if b.charge_estimate.is_some() {
-            assert_eq!(chemistry_text(&b).unwrap(), "nimh (declared)");
+            assert_eq!(chemistry_text(&b).unwrap(), "NiMH (declared)");
         }
     }
 
@@ -1347,5 +1381,21 @@ mod tests {
         assert_eq!(kb_error_text("something else"), "something else");
         let fr = crate::i18n::parse_po(include_str!("../i18n/fr.po"));
         assert!(fr.contains_key("No Apple keyboard found: turn it on, or pair it"));
+    }
+
+    /// #273: every text akm-core gives for the chemistry has a translation.
+    #[test]
+    fn chemistry_words_of_akm_core_are_all_translated() {
+        let fr = crate::i18n::parse_po(include_str!("../i18n/fr.po"));
+        for v in [
+            0.5, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 2.0, 2.4, 2.6, 2.8, 3.0, 3.2, 3.4,
+        ] {
+            let w = akm_core::calibration::detect_battery_type(v);
+            assert!(fr.contains_key(w), "untranslated chemistry {w:?} ({v} V)");
+        }
+        use akm_core::chemistry::Chemistry as C;
+        for c in [C::Alkaline, C::Nimh, C::Lithium, C::Unknown] {
+            assert_ne!(chemistry_word(c.as_str()), "", "{c:?}");
+        }
     }
 }

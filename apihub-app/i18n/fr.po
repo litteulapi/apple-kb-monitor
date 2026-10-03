@@ -702,3 +702,45 @@ msgstr "Aucun clavier Apple trouvé : allumez-le, ou appairez-le"
 
 msgid "Keyboard disconnected"
 msgstr "Clavier déconnecté"
+
+msgid "alkaline"
+msgstr "alcaline"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "lithium"
+
+msgid "unknown"
+msgstr "inconnue"
+
+msgid "Lithium (fresh)"
+msgstr "Lithium (neuves)"
+
+msgid "Alkaline (fresh)"
+msgstr "Alcalines (neuves)"
+
+msgid "Alkaline or NiMH"
+msgstr "Alcalines ou NiMH"
+
+msgid "NiMH (likely)"
+msgstr "NiMH (probable)"
+
+msgid "Depleted"
+msgstr "Épuisées"
+
+msgid "Critical — replace"
+msgstr "Critique — à remplacer"
+
+msgid "NumLock: with the NumLock LED on, hid_apple turns J K L U I O 7 8 9 M 0 ; / P - into keypad keys (APPLE_NUMLOCK_EMULATION); press again to leave"
+msgstr "Verr. num. : voyant allumé, hid_apple transforme J K L U I O 7 8 9 M 0 ; / P - en touches du pavé numérique (APPLE_NUMLOCK_EMULATION) ; rappuyez pour en sortir"
+
+msgid "Fn remapped: the Fn layer of hid_apple is lost"
+msgstr "Fn réaffectée : la couche Fn de hid_apple est perdue"
+
+msgid "remapped before hid_apple: no Fn layer on this key any more"
+msgstr "réaffectée avant hid_apple : plus de couche Fn sur cette touche"
+
+msgid "iso_layout=-1: hid_apple swaps these two keys when the keyboard reports the ISO country code"
+msgstr "iso_layout=-1 : hid_apple échange ces deux touches quand le clavier annonce le code pays ISO"
