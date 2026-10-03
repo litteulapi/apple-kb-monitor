@@ -44,10 +44,16 @@ pub fn device_name_command(name: &str) -> String {
     } else {
         name.trim()
     };
-    format!(
-        "akmctl rename --device-name \"{}\"",
-        name.replace(['\\', '"'], "")
-    )
+    format!("akmctl rename --device-name {}", shell_quote(name))
+}
+
+/// One shell word that a POSIX shell never expands (#276): single quotes,
+/// in which `$( )`, backquotes, `!` and `\` are plain characters; a `'` is
+/// written `'\''`. Control characters (a pasted newline would run the line)
+/// are dropped.
+pub fn shell_quote(s: &str) -> String {
+    let clean: String = s.chars().filter(|c| !c.is_control()).collect();
+    format!("'{}'", clean.replace('\'', "'\\''"))
 }
 
 pub fn show(
@@ -345,16 +351,41 @@ mod tests {
     fn device_name_command_is_shown_never_run() {
         assert_eq!(
             device_name_command("Bureau"),
-            "akmctl rename --device-name \"Bureau\""
+            "akmctl rename --device-name 'Bureau'"
         );
         assert_eq!(
             device_name_command("  "),
-            "akmctl rename --device-name \"NAME\""
+            "akmctl rename --device-name 'NAME'"
         );
         // Nothing that would end the quoted argument.
         assert_eq!(
             device_name_command("a\"; rm -rf \\"),
-            "akmctl rename --device-name \"a; rm -rf \""
+            "akmctl rename --device-name 'a\"; rm -rf \\'"
         );
+    }
+
+    /// #276: the name comes from the keyboard itself (its announced name);
+    /// pasted in a terminal, the command must run nothing else.
+    #[test]
+    fn device_name_command_never_expands_in_a_shell() {
+        for evil in [
+            "$(touch PWNED)",
+            "`touch PWNED`",
+            "x'; touch PWNED; echo '",
+            "!! ${HOME} \\$(id)",
+            "a\ntouch PWNED",
+        ] {
+            let cmd = device_name_command(evil);
+            assert!(!cmd.contains('\n'), "{cmd}");
+            // What a real shell sees: exactly 4 words, the name intact.
+            let out = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(format!("set -- {cmd}; printf '%s\\n' \"$#\" \"$4\""))
+                .output()
+                .unwrap();
+            let out = String::from_utf8_lossy(&out.stdout);
+            let want: String = evil.trim().chars().filter(|c| !c.is_control()).collect();
+            assert_eq!(out, format!("4\n{want}\n"), "{cmd}");
+        }
     }
 }
