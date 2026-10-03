@@ -23,7 +23,7 @@ use crate::view::Feed;
 
 /// Where the state currently comes from, readable from the UI thread.
 #[derive(Clone, Default)]
-pub struct FeedCell(Arc<AtomicU8>);
+pub struct FeedCell(Arc<AtomicU8>, Arc<std::sync::atomic::AtomicU64>);
 
 impl FeedCell {
     pub fn get(&self) -> Feed {
@@ -34,13 +34,21 @@ impl FeedCell {
         }
     }
 
+    /// How many times the daemon became the source (#272): a change, even
+    /// one shorter than a frame, tells the window to reload the history.
+    pub fn arrivals(&self) -> u64 {
+        self.1.load(Ordering::Relaxed)
+    }
+
     fn set(&self, f: Feed) {
         let v = match f {
             Feed::Starting => 0,
             Feed::Daemon => 1,
             Feed::Local => 2,
         };
-        self.0.store(v, Ordering::Relaxed);
+        if self.0.swap(v, Ordering::Relaxed) != v && f == Feed::Daemon {
+            self.1.fetch_add(1, Ordering::Relaxed);
+        }
     }
 }
 
@@ -221,14 +229,16 @@ pub fn spawn(watch: Arc<Watch>) -> SourceHandle {
 /// Battery history from the daemon, `None` when it is absent or fails.
 /// Blocking D-Bus I/O: call it from a worker thread only (see
 /// `history_view`, #230), never from the UI thread.
-pub fn load_history_from_daemon() -> Option<Vec<HistoryEntry>> {
-    let conn = Connection::session().ok()?;
+pub fn load_history_from_daemon() -> crate::history_view::DaemonHistory {
+    let Ok(conn) = Connection::session() else {
+        return Ok(None);
+    };
     if !client::daemon_present(&conn) {
-        return None;
+        return Ok(None);
     }
     client::fetch_history(&conn, 0)
-        .map_err(|e| eprintln!("[source] History() failed: {e}"))
-        .ok()
+        .map(Some)
+        .map_err(|e| e.to_string())
 }
 
 /// Battery history from the file (fallback). Disk I/O: worker thread only.
@@ -239,6 +249,17 @@ pub fn load_history_from_file() -> Vec<HistoryEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_return_of_the_daemon_is_counted() {
+        let c = FeedCell::default();
+        c.set(Feed::Daemon);
+        c.set(Feed::Daemon);
+        assert_eq!(c.arrivals(), 1);
+        c.set(Feed::Local);
+        c.set(Feed::Daemon);
+        assert_eq!(c.clone().arrivals(), 2);
+    }
 
     #[test]
     fn feed_cell_round_trips() {

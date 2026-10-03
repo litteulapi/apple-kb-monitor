@@ -48,6 +48,8 @@ struct ApiHubApp {
     state: State,
     // Daemon or local fallback (alert of the shell).
     feed: source::FeedCell,
+    // Arrivals of the daemon seen so far: a new one reloads the history (#272).
+    daemon_arrivals: u64,
     tab: Tab,
     theme: Theme,
     style_initialized: bool,
@@ -88,6 +90,7 @@ impl ApiHubApp {
         Self {
             state,
             feed,
+            daemon_arrivals: 0,
             tab: Tab::Stat,
             theme: Theme {
                 crt: ui.crt_effects,
@@ -146,6 +149,15 @@ impl ApiHubApp {
 
         let snap = self.state.get();
         let feed = self.feed.get();
+        // History reloaded by itself (#272): daemon back, or stale on DATA.
+        let arrivals = self.feed.arrivals();
+        let came_back = arrivals != self.daemon_arrivals;
+        self.daemon_arrivals = arrivals;
+        let data = self.history.data();
+        let age = data.loaded_at.map(|t| t.elapsed());
+        if !data.loading && history_view::reload_due(came_back, self.tab == Tab::Data, age) {
+            history_chart::reload(ctx, &self.history);
+        }
         let now = unix_now();
         self.navigate(ctx);
 

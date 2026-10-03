@@ -687,3 +687,6 @@ msgstr "{}/{} caractères : raccourcissez le nom"
 
 msgid "Copied: paste it in a terminal"
 msgstr "Copié : collez-la dans un terminal"
+
+msgid "the service could not give the history: read from the local file (F5 to retry)"
+msgstr "le service n'a pas pu fournir l'historique : lu depuis le fichier local (F5 pour réessayer)"
