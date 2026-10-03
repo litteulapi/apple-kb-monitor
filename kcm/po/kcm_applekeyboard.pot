@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: kcm_applekeyboard\n"
 "Report-Msgid-Bugs-To: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-"
 "monitor/issues\n"
-"POT-Creation-Date: 2026-10-03 09:01+0200\n"
+"POT-Creation-Date: 2026-10-03 09:03+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -265,94 +265,181 @@ msgctxt "diagnosis level"
 msgid "problem"
 msgstr ""
 
-#: ui/DiagPage.qml:49 ui/DiagPage.qml:64
+#: ui/DiagPage.qml:50
+msgctxt "doctor topic"
+msgid "adapter"
+msgstr ""
+
+#: ui/DiagPage.qml:51
+msgctxt "doctor topic"
+msgid "adapter power"
+msgstr ""
+
+#: ui/DiagPage.qml:52
+msgctxt "doctor topic"
+msgid "BlueZ settings"
+msgstr ""
+
+#: ui/DiagPage.qml:53
+msgctxt "doctor topic"
+msgid "service"
+msgstr ""
+
+#: ui/DiagPage.qml:54
+msgctxt "doctor topic"
+msgid "HID access"
+msgstr ""
+
+#: ui/DiagPage.qml:55
+msgctxt "doctor topic"
+msgid "journal"
+msgstr ""
+
+#: ui/DiagPage.qml:56
+msgctxt "doctor topic"
+msgid "link"
+msgstr ""
+
+#: ui/DiagPage.qml:57
+msgctxt "doctor topic"
+msgid "link key"
+msgstr ""
+
+#: ui/DiagPage.qml:58
+msgctxt "doctor topic"
+msgid "link quality"
+msgstr ""
+
+#: ui/DiagPage.qml:59
+msgctxt "doctor topic"
+msgid "pairing"
+msgstr ""
+
+#: ui/DiagPage.qml:60
+msgctxt "doctor topic"
+msgid "signal"
+msgstr ""
+
+#: ui/DiagPage.qml:61
+msgctxt "doctor topic"
+msgid "UPower"
+msgstr ""
+
+#: ui/DiagPage.qml:68
+msgctxt "doctor verdict"
+msgid "the pairing is refused or missing: run `akmctl repair`"
+msgstr ""
+
+#: ui/DiagPage.qml:70
+msgctxt "doctor verdict"
+msgid "no usable pairing: run `akmctl repair`"
+msgstr ""
+
+#: ui/DiagPage.qml:72
+msgctxt "doctor verdict"
+msgid "link up; apply the fixes above to keep it reliable"
+msgstr ""
+
+#: ui/DiagPage.qml:74
+msgctxt "doctor verdict"
+msgid "link up and configuration sound"
+msgstr ""
+
+#: ui/DiagPage.qml:76
+msgctxt "doctor verdict"
+msgid ""
+"keyboard not connected: press a key and wait 10 s; the service pages it on "
+"its own. Pair it again only if `akmctl doctor` reports auth-failed"
+msgstr ""
+
+#: ui/DiagPage.qml:86 ui/DiagPage.qml:101
 msgid "no answer within 60 seconds"
 msgstr ""
 
-#: ui/DiagPage.qml:100
+#: ui/DiagPage.qml:137
 msgid "Check the link"
 msgstr ""
 
-#: ui/DiagPage.qml:103
+#: ui/DiagPage.qml:140
 msgid ""
 "Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. "
 "Reads only."
 msgstr ""
 
-#: ui/DiagPage.qml:107
+#: ui/DiagPage.qml:144
 msgid "Self-check"
 msgstr ""
 
-#: ui/DiagPage.qml:109
+#: ui/DiagPage.qml:146
 msgid ""
 "Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
 msgstr ""
 
-#: ui/DiagPage.qml:114
+#: ui/DiagPage.qml:151
 msgid "Reconnect"
 msgstr ""
 
-#: ui/DiagPage.qml:117
+#: ui/DiagPage.qml:154
 msgid ""
 "Asks the service to page the keyboard now (at most once every 20 seconds)"
 msgstr ""
 
-#: ui/DiagPage.qml:123
+#: ui/DiagPage.qml:160
 msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
 msgstr ""
 
-#: ui/DiagPage.qml:124
+#: ui/DiagPage.qml:161
 msgid "refused by the service (asleep, too soon, or pairing refused)"
 msgstr ""
 
-#: ui/DiagPage.qml:124
+#: ui/DiagPage.qml:161
 msgid "Reconnection not requested: %1"
 msgstr ""
 
-#: ui/DiagPage.qml:130
+#: ui/DiagPage.qml:167
 msgid "Copy the diagnosis"
 msgstr ""
 
-#: ui/DiagPage.qml:135
+#: ui/DiagPage.qml:172
 msgid "Diagnosis copied: paste it into a bug report."
 msgstr ""
 
-#: ui/DiagPage.qml:140
+#: ui/DiagPage.qml:177
 msgid "Documentation"
 msgstr ""
 
-#: ui/DiagPage.qml:151
+#: ui/DiagPage.qml:188
 msgctxt "@title:group"
 msgid "Link check (akmctl doctor)"
 msgstr ""
 
-#: ui/DiagPage.qml:157
+#: ui/DiagPage.qml:194
 msgid "Link check running"
 msgstr ""
 
-#: ui/DiagPage.qml:167
+#: ui/DiagPage.qml:204
 msgctxt "level, advice"
 msgid "Verdict: %1 — %2"
 msgstr ""
 
-#: ui/DiagPage.qml:168 ui/DiagPage.qml:217 ui/KeysPage.qml:33
+#: ui/DiagPage.qml:205 ui/DiagPage.qml:254 ui/KeysPage.qml:33
 msgid "Failed: %1"
 msgstr ""
 
-#: ui/DiagPage.qml:168 ui/DiagPage.qml:217
+#: ui/DiagPage.qml:205 ui/DiagPage.qml:254
 msgid "Not run yet."
 msgstr ""
 
-#: ui/DiagPage.qml:203
+#: ui/DiagPage.qml:240
 msgctxt "@title:group"
 msgid "Self-check (akmctl selftest)"
 msgstr ""
 
-#: ui/DiagPage.qml:209
+#: ui/DiagPage.qml:246
 msgid "Self-check running"
 msgstr ""
 
-#: ui/DiagPage.qml:216
+#: ui/DiagPage.qml:253
 msgid "Verdict: %1"
 msgstr ""
 

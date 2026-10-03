@@ -519,6 +519,21 @@ private Q_SLOTS:
         QVERIFY(click(QStringLiteral("nameCopy2")));
         QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("akmctl rename --device-name='Bureau'"));
     }
+
+    // #291 (K8): the doctor verdict and the topics, given by akmctl's JSON in
+    // English, are shown in French.
+    void doctorVerdictIsTranslated()
+    {
+        writeFile(benchDir() + QStringLiteral("/doctor.json"),
+                  "{\"verdict\":{\"level\":\"warn\",\"advice\":\"link up; apply the fixes above to keep it reliable\"},"
+                  "\"findings\":[{\"level\":\"info\",\"topic\":\"link-key\",\"text\":\"link key not checked (needs root: sudo akmctl doctor)\",\"fix\":null}]}");
+        QVERIFY(open(QStringLiteral("diagnostics")));
+        QVERIFY(click(QStringLiteral("diagDoctorBtn")));
+        QTRY_VERIFY_WITH_TIMEOUT(text(QStringLiteral("diagDoctorVerdict")).contains(QStringLiteral("—")), 10000);
+        QCOMPARE(text(QStringLiteral("diagDoctorVerdict")),
+                 QStringLiteral("Verdict : avertissement — liaison établie ; appliquez les corrections ci-dessus pour qu'elle reste fiable"));
+        QVERIFY2(text(QStringLiteral("diagFinding0")).startsWith(QStringLiteral("[clé de liaison] ")), qPrintable(text(QStringLiteral("diagFinding0"))));
+    }
 };
 
 QTEST_MAIN(TestKcmModule)
