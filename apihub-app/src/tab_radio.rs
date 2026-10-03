@@ -57,11 +57,18 @@ fn tuner(ui: &mut Ui, th: &Theme, snap: &Snapshot, kb: &KbReport, now: u64) {
     // Relative BR/EDR value (dB to the ideal range), not dBm (#174).
     let rssi = kb.radio.rel_db();
     let level = view::rssi_level(rssi);
-    let color = theme::level_color(level);
+    let problem = view::signal_problem(snap);
+    let color = match problem {
+        Some(_) => theme::AMBER,
+        None => theme::level_color(level),
+    };
     let avail = ui.available_width();
     // Reading: the quality in words, and the four bars.
     let (head, resp) = ui.allocate_exact_size(Vec2::new(avail, 44.0), Sense::hover());
-    let said = view::rssi_text(rssi);
+    let said = match problem {
+        Some(_) => tr("not measured").to_string(),
+        None => view::rssi_text(rssi),
+    };
     resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &said));
     let p = ui.painter();
     let size = theme::fit_size(
@@ -151,6 +158,24 @@ fn tuner(ui: &mut Ui, th: &Theme, snap: &Snapshot, kb: &KbReport, now: u64) {
         _ => view::DASH.into(),
     };
     th.kv(ui, tr("Measured"), &measured, Level::Unknown);
+    // No value while connected: say why and what to do, never a bare "---" (#269).
+    if let Some(pb) = problem {
+        ui.add_space(4.0);
+        th.alert(
+            ui,
+            Level::Warn,
+            &format!("{}.", view::capitalize(&pb.reason)),
+        );
+        theme::text(
+            ui,
+            &format!("{} {}", tr("Fix:"), pb.fix),
+            theme::BODY,
+            theme::PHOSPHOR,
+        );
+        if let Some(cmd) = pb.command {
+            shell::command_line(ui, cmd);
+        }
+    }
 }
 
 fn link_panel(ui: &mut Ui, th: &Theme, snap: &Snapshot, kb: &KbReport) {

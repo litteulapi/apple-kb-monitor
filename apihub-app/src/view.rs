@@ -33,6 +33,54 @@ pub fn rssi_text(r: Option<i32>) -> String {
     }
 }
 
+/// Why the signal of a connected keyboard is not measured, and what to do
+/// (#269): `(reason, fix, command to copy)`. `None` when there is a value or
+/// no connected keyboard (nothing to measure).
+pub fn signal_problem(snap: &akm_core::Snapshot) -> Option<SignalProblem> {
+    signal_problem_in(is_french(), snap)
+}
+
+/// First letter in capital: a reason shown as a sentence.
+pub fn capitalize(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_uppercase().chain(c).collect())
+        .unwrap_or_default()
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SignalProblem {
+    pub reason: String,
+    pub fix: String,
+    /// The command line of the fix, when there is one to type.
+    pub command: Option<&'static str>,
+}
+
+pub fn signal_problem_in(fr: bool, snap: &akm_core::Snapshot) -> Option<SignalProblem> {
+    use akm_core::rssi;
+    let kb = snap.keyboard.as_ref().filter(|_| snap.connected)?;
+    if rssi_valid(kb.radio.rel_db()).is_some() {
+        return None;
+    }
+    Some(match kb.radio.rssi_error.as_ref() {
+        Some(i) => {
+            let (reason, fix) = rssi::explain(&i.code, fr);
+            SignalProblem {
+                reason: reason.to_string(),
+                fix: fix.to_string(),
+                command: (i.code == rssi::CODE_NOT_IN_GROUP)
+                    .then_some("sudo usermod -aG akm $USER"),
+            }
+        }
+        // A daemon that does not publish the reason (older than #269).
+        None => SignalProblem {
+            reason: tr_in(fr, "the signal is not measured").to_string(),
+            fix: tr_in(fr, "the DIAG tab tells why").to_string(),
+            command: None,
+        },
+    })
+}
+
 /// Estimated charge by chemistry, always marked as an estimate (#178).
 pub fn estimate_text(b: &akm_core::report::KbBattery) -> Option<String> {
     estimate_text_in(is_french(), b)
@@ -1247,5 +1295,36 @@ mod tests {
         assert!(thresholds_text(&b)
             .unwrap()
             .ends_with("+480 mV to Low, +582 mV to Critical"));
+    }
+
+    /// #269: connected, no signal: the daemon's reason and the command,
+    /// never a bare "---".
+    #[test]
+    fn missing_signal_says_why_and_what_to_type() {
+        use akm_core::report::KbReport;
+        use akm_core::rssi;
+        let mut snap = akm_core::Snapshot {
+            connected: true,
+            keyboard: Some(KbReport::default()),
+            ..Default::default()
+        };
+        let pb = signal_problem_in(true, &snap).expect("no value while connected");
+        assert!(pb.fix.contains("DIAG"), "older daemon: points to DIAG");
+        snap.keyboard.as_mut().unwrap().radio.rssi_error =
+            Some(rssi::classify(&rssi::RssiError::Denied, || false));
+        let pb = signal_problem_in(true, &snap).unwrap();
+        assert!(pb.reason.contains("groupe akm"), "{pb:?}");
+        assert_eq!(pb.command, Some("sudo usermod -aG akm $USER"));
+        snap.keyboard.as_mut().unwrap().radio.rssi_error =
+            Some(rssi::classify(&rssi::RssiError::Denied, || true));
+        let pb = signal_problem_in(true, &snap).unwrap();
+        assert!(pb.fix.contains("redémarrez"), "{pb:?}");
+        assert_eq!(pb.command, None);
+        // A value, or nothing connected: nothing to explain.
+        snap.keyboard.as_mut().unwrap().radio.set_rssi_rel(Some(-2));
+        assert_eq!(signal_problem_in(true, &snap), None);
+        snap.connected = false;
+        snap.keyboard.as_mut().unwrap().radio.set_rssi_rel(None);
+        assert_eq!(signal_problem_in(true, &snap), None);
     }
 }

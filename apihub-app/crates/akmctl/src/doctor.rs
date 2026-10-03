@@ -72,8 +72,8 @@ fn f(level: Level, topic: &'static str, text: impl Into<String>, fix: Option<&st
 // ── pure checks ────────────────────────────────────────────────────────────
 
 /// What the user can do about the signal reading (#269): `rssi-helper` is
-/// `root:akm 0750` (#209), so it runs only for members of `akm`, and a group
-/// added with usermod counts only from the next login.
+/// `root:akm 0750` (#209), so it runs only for members of `akm`, and a
+/// process sees a group added with usermod only once restarted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HelperAccess {
     /// The helper is not installed.
@@ -86,43 +86,102 @@ pub enum HelperAccess {
     NotInGroup,
 }
 
-pub fn rssi_finding(a: HelperAccess) -> Finding {
-    match a {
-        HelperAccess::Runnable => f(Level::Ok, "signal", "rssi-helper runnable (group akm)", None),
-        HelperAccess::Missing => f(
-            Level::Warn,
-            "signal",
-            format!("{RSSI_HELPER} missing: the signal is never measured"),
-            Some("reinstall the package"),
-        ),
-        HelperAccess::NeedsRelogin => f(
-            Level::Warn,
-            "signal",
-            "you are in the group akm, but this session started before: the signal stays unmeasured",
-            Some("log out and back in (or reboot)"),
-        ),
-        HelperAccess::NotInGroup => f(
-            Level::Warn,
-            "signal",
-            "not in the group akm: rssi-helper is refused, the signal is never measured",
-            Some("sudo usermod -aG akm $USER, then log out and back in"),
-        ),
+impl HelperAccess {
+    fn code(self) -> Option<&'static str> {
+        use akm_core::rssi;
+        match self {
+            Self::Runnable => None,
+            Self::Missing => Some(rssi::CODE_HELPER_MISSING),
+            Self::NeedsRelogin => Some(rssi::CODE_NEEDS_RELOGIN),
+            Self::NotInGroup => Some(rssi::CODE_NOT_IN_GROUP),
+        }
     }
 }
 
-const RSSI_HELPER: &str = "/usr/lib/apple-kb-monitor/rssi-helper";
-
-/// Members of `group` in an `/etc/group` text.
-pub fn group_members<'a>(etc_group: &'a str, group: &str) -> Vec<&'a str> {
-    etc_group
-        .lines()
-        .find_map(|l| {
-            let mut it = l.split(':');
-            (it.next() == Some(group)).then(|| it.nth(2).unwrap_or(""))
-        })
-        .map(|m| m.split(',').filter(|s| !s.is_empty()).collect())
-        .unwrap_or_default()
+/// Finding of an issue code (texts shared with the window and the daemon).
+fn signal_issue(code: &str) -> Finding {
+    let (why, fix) = akm_core::rssi::explain(code, false);
+    f(Level::Warn, "signal", why, Some(fix))
 }
+
+pub fn rssi_finding(a: HelperAccess) -> Finding {
+    match a.code() {
+        None => f(
+            Level::Ok,
+            "signal",
+            "rssi-helper runnable (group akm)",
+            None,
+        ),
+        Some(c) => signal_issue(c),
+    }
+}
+
+/// The signal finding (#269). The DAEMON measures the signal, not this
+/// command: its own reason (`radio.rssi_error` of `GetState`) comes first,
+/// then its groups (`/proc/<pid>/status`: a lingering user manager keeps
+/// the groups it started with), and only then what this process may do.
+pub fn signal_finding(
+    helper_exists: bool,
+    daemon_issue: Option<&akm_core::rssi::RssiIssue>,
+    daemon_in_akm: Option<bool>,
+    listed_in_akm: bool,
+    this_process: HelperAccess,
+) -> Finding {
+    use akm_core::rssi;
+    if !helper_exists {
+        return signal_issue(rssi::CODE_HELPER_MISSING);
+    }
+    if let Some(i) = daemon_issue {
+        let mut x = signal_issue(&i.code);
+        x.text = format!("the service reports: {}", x.text);
+        return x;
+    }
+    if daemon_in_akm == Some(false) {
+        return signal_issue(if listed_in_akm {
+            rssi::CODE_NEEDS_RELOGIN
+        } else {
+            rssi::CODE_NOT_IN_GROUP
+        });
+    }
+    rssi_finding(this_process)
+}
+
+/// Group id of `group` in an `/etc/group` text.
+pub fn group_gid(etc_group: &str, group: &str) -> Option<u32> {
+    etc_group.lines().find_map(|l| {
+        let mut it = l.split(':');
+        (it.next() == Some(group)).then(|| it.nth(1)?.parse().ok())?
+    })
+}
+
+/// Does a `/proc/<pid>/status` text list `gid` in its `Groups:` line?
+pub fn status_has_group(status: &str, gid: u32) -> Option<bool> {
+    let line = status.lines().find_map(|l| l.strip_prefix("Groups:"))?;
+    Some(line.split_whitespace().any(|g| g.parse() == Ok(gid)))
+}
+
+/// The daemon's reason for an unmeasured signal, and whether its process
+/// is in `akm`. Read-only; nothing when the daemon is not on the bus.
+fn daemon_signal() -> (Option<akm_core::rssi::RssiIssue>, Option<bool>) {
+    let Ok(conn) = Connection::session() else {
+        return (None, None);
+    };
+    let issue = crate::bus::get_state(&conn)
+        .ok()
+        .and_then(|s| s.connected.then(|| s.keyboard?.radio.rssi_error).flatten());
+    let in_akm = (|| {
+        let dbus = zbus::blocking::fdo::DBusProxy::new(&conn).ok()?;
+        let pid = dbus
+            .get_connection_unix_process_id(BUS_NAME.try_into().ok()?)
+            .ok()?;
+        let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+        let gid = group_gid(&std::fs::read_to_string("/etc/group").ok()?, "akm")?;
+        status_has_group(&status, gid)
+    })();
+    (issue, in_akm)
+}
+
+const RSSI_HELPER: &str = "/usr/lib/apple-kb-monitor/rssi-helper";
 
 fn helper_access() -> HelperAccess {
     use std::os::unix::ffi::OsStrExt;
@@ -135,11 +194,7 @@ fn helper_access() -> HelperAccess {
     if unsafe { libc::access(c.as_ptr(), libc::X_OK) } == 0 {
         return HelperAccess::Runnable;
     }
-    let user = std::env::var("USER").unwrap_or_default();
-    let listed = std::fs::read_to_string("/etc/group")
-        .map(|g| group_members(&g, "akm").contains(&user.as_str()))
-        .unwrap_or(false);
-    if listed {
+    if akm_core::rssi::user_listed_in_akm() {
         HelperAccess::NeedsRelogin
     } else {
         HelperAccess::NotInGroup
@@ -789,7 +844,14 @@ pub fn gather(mac: Option<&str>) -> Report {
             None => {}
         }
     }
-    fs.push(rssi_finding(helper_access()));
+    let (daemon_issue, daemon_in_akm) = daemon_signal();
+    fs.push(signal_finding(
+        Path::new(RSSI_HELPER).exists(),
+        daemon_issue.as_ref(),
+        daemon_in_akm,
+        akm_core::rssi::user_listed_in_akm(),
+        helper_access(),
+    ));
     let rule = Path::new(UDEV_RULE).exists();
     fs.push(check_usb_power(
         usb_power(Path::new("/sys"), "hci0").as_ref(),
@@ -971,16 +1033,60 @@ mod tests {
     #[test]
     fn signal_access_findings() {
         let g = "wheel:x:998:alice\nakm:x:934:bob,alice\nempty:x:1:\n";
-        assert_eq!(group_members(g, "akm"), ["bob", "alice"]);
-        assert!(group_members(g, "empty").is_empty());
-        assert!(group_members(g, "nope").is_empty());
+        assert_eq!(akm_core::rssi::group_members(g, "akm"), ["bob", "alice"]);
+        assert!(akm_core::rssi::group_members(g, "empty").is_empty());
+        assert!(akm_core::rssi::group_members(g, "nope").is_empty());
         assert_eq!(rssi_finding(HelperAccess::Runnable).level, Level::Ok);
-        for a in [HelperAccess::Missing, HelperAccess::NeedsRelogin, HelperAccess::NotInGroup] {
+        for a in [
+            HelperAccess::Missing,
+            HelperAccess::NeedsRelogin,
+            HelperAccess::NotInGroup,
+        ] {
             let x = rssi_finding(a);
             assert_eq!(x.level, Level::Warn, "{a:?}");
             assert!(x.fix.is_some(), "{a:?}");
         }
-        assert!(rssi_finding(HelperAccess::NeedsRelogin).fix.unwrap().contains("log out"));
+        // A lingering user manager outlives a logout: restart (#269).
+        assert!(rssi_finding(HelperAccess::NeedsRelogin)
+            .fix
+            .unwrap()
+            .contains("restart the computer"));
+    }
+
+    /// #269 / audit C3: the daemon measures the signal, not akmctl: its
+    /// reason and its groups decide, even when akmctl itself may run it.
+    #[test]
+    fn signal_finding_follows_the_daemon_not_this_process() {
+        use akm_core::rssi;
+        let ok = HelperAccess::Runnable;
+        assert_eq!(
+            signal_finding(true, None, Some(true), true, ok).level,
+            Level::Ok
+        );
+        let issue = rssi::classify(&rssi::RssiError::Denied, || true);
+        let x = signal_finding(true, Some(&issue), None, true, ok);
+        assert_eq!(x.level, Level::Warn);
+        assert!(x.text.starts_with("the service reports"), "{}", x.text);
+        assert!(x.fix.unwrap().contains("restart the computer"));
+        // Daemon started before usermod: its groups lack akm.
+        let x = signal_finding(true, None, Some(false), true, ok);
+        assert!(x.fix.unwrap().contains("restart the computer"));
+        let x = signal_finding(true, None, Some(false), false, ok);
+        assert!(x.fix.unwrap().contains("usermod -aG akm"));
+        assert!(signal_finding(false, None, None, true, ok)
+            .text
+            .contains("not installed"));
+    }
+
+    #[test]
+    fn daemon_groups_from_proc_status() {
+        let g = "wheel:x:998:alice\nakm:x:934:bob\n";
+        assert_eq!(group_gid(g, "akm"), Some(934));
+        assert_eq!(group_gid(g, "nope"), None);
+        let st = "Name:\tapple-kb-monitord\nGroups:\t998 934 \nVmPeak:\t1 kB\n";
+        assert_eq!(status_has_group(st, 934), Some(true));
+        assert_eq!(status_has_group(st, 1), Some(false));
+        assert_eq!(status_has_group("Name:\tx\n", 934), None);
     }
 
     #[test]

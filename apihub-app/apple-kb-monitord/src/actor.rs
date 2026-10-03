@@ -331,6 +331,8 @@ struct Actor {
     linked: bool,
     rssi: RssiTracker,
     rssi_at: Option<u64>,
+    /// Why the last RSSI read failed (#269), `None` after a success.
+    rssi_issue: Option<rssi::RssiIssue>,
     provider: Option<bluez::BatteryProvider>,
     provider_mac: Option<String>,
     alerts: AlertState,
@@ -405,6 +407,7 @@ impl Actor {
             linked: false,
             rssi: RssiTracker::new(RSSI_MAX_AGE),
             rssi_at: None,
+            rssi_issue: None,
             provider: None,
             provider_mac: None,
             history,
@@ -683,6 +686,7 @@ impl Actor {
         hidraw::set_wake_monitor_enabled(false);
         self.rssi.clear();
         self.rssi_at = None;
+        self.rssi_issue = None;
         hidraw::close_hid_fd();
         if let (Some(old), Some(bp)) = (self.provider_mac.take(), self.provider.as_ref()) {
             bp.remove(&old);
@@ -959,6 +963,12 @@ impl Actor {
                 stats.rssi(&mac, now, i32::from(rel));
             }
         }
+        // Classified once per read (not at every publication): a refusal
+        // reads /etc/group to tell "not in akm" from "new session needed".
+        self.rssi_issue = match r {
+            Some(_) => None,
+            None => rssi::last_issue(),
+        };
         self.rssi.record(&mac, r, Instant::now());
     }
 
@@ -1041,6 +1051,8 @@ impl Actor {
             // BR/EDR: a gap in dB to the ideal range, not dBm (#174).
             k.radio.set_rssi_rel(cur.map(|c| c.0));
             k.radio.tx_power_dbm = cur.and_then(|c| c.1);
+            // No value: say why (#269), never a bare "n/a".
+            k.radio.rssi_error = cur.is_none().then(|| self.rssi_issue.clone()).flatten();
             k.bluetooth.rssi_dbus = None;
             k.bluetooth.tx_power_dbus = None;
             rssi_at = cur.and(self.rssi_at);
@@ -1770,6 +1782,24 @@ mod tests {
         let mut actor = quiet_actor();
         actor.advice = Some(a.clone());
         assert_eq!(actor.snapshot().battery_advice, Some(a));
+    }
+
+    /// #269: a connected keyboard without signal carries the reason in
+    /// `GetState` (`radio.rssi_error`); none once disconnected.
+    #[test]
+    fn missing_signal_is_published_with_its_reason() {
+        let mut a = quiet_actor();
+        a.kb = Some(report(42.0, Some(2.8)));
+        a.linked = true;
+        a.rssi_issue = Some(rssi::classify(&rssi::RssiError::Denied, || false));
+        let json = serde_json::to_value(a.snapshot()).unwrap();
+        let e = &json["keyboard"]["radio"]["rssi_error"];
+        assert_eq!(e["code"], "not_in_group", "{json}");
+        assert!(e["detail"].as_str().unwrap().contains("akm"));
+        assert!(json["keyboard"]["radio"]["rssi_rel_db"].is_null());
+        a.disconnected();
+        let json = serde_json::to_value(a.snapshot()).unwrap();
+        assert!(json["keyboard"]["radio"]["rssi_error"].is_null());
     }
 
     #[test]

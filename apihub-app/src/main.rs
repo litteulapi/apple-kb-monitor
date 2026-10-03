@@ -207,7 +207,10 @@ impl ApiHubApp {
                 &mut self.history_range,
                 &mut self.rename,
             ),
-            Tab::Diag => self.diag.show(ui, &self.theme),
+            Tab::Diag => {
+                self.diag.signal = signal_issue(snap);
+                self.diag.show(ui, &self.theme)
+            }
         }
     }
 
@@ -241,9 +244,19 @@ impl ApiHubApp {
                 tab_keys::reload(ctx);
             }
             Tab::Data => history_chart::reload(ctx, &self.history),
-            Tab::Diag => self.diag.run(),
+            Tab::Diag => {
+                self.diag.signal = signal_issue(&self.state.get());
+                self.diag.run()
+            }
         }
     }
+}
+
+/// Why the daemon does not measure the signal of the connected keyboard (#269).
+fn signal_issue(snap: &akm_core::Snapshot) -> Option<akm_core::rssi::RssiIssue> {
+    snap.connected
+        .then(|| snap.keyboard.as_ref()?.radio.rssi_error.clone())
+        .flatten()
 }
 
 // ── Entrypoint ──────────────────────────────────────────────────────────────

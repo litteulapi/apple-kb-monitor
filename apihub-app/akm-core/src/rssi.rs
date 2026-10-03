@@ -31,6 +31,9 @@ pub enum RssiError {
     BadMac,
     HelperMissing(String),
     HelperSpawn(String),
+    /// `rssi-helper` exists but this process may not run it (`root:akm
+    /// 0750`, #209): not in the group `akm`, or not yet in this session.
+    Denied,
     Timeout,
     /// Helper exited non-zero; carries its stderr (first line).
     Helper {
@@ -47,6 +50,7 @@ impl std::fmt::Display for RssiError {
             Self::BadMac => write!(f, "invalid MAC address"),
             Self::HelperMissing(p) => write!(f, "rssi-helper not installed ({p})"),
             Self::HelperSpawn(e) => write!(f, "cannot run rssi-helper: {e}"),
+            Self::Denied => write!(f, "cannot run rssi-helper: {}", DENIED_TEXT),
             Self::Timeout => write!(f, "rssi-helper timed out"),
             Self::Helper { code, msg } => write!(f, "rssi-helper failed (exit {code:?}): {msg}"),
             Self::BadOutput(o) => write!(f, "unparseable rssi-helper output: {o}"),
@@ -57,12 +61,186 @@ impl std::fmt::Display for RssiError {
 
 type Cache = HashMap<String, (Instant, Result<(i8, Option<i8>), RssiError>)>;
 static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
-static LAST_ERROR: Mutex<Option<String>> = Mutex::new(None);
+static LAST_ERROR: Mutex<Option<RssiError>> = Mutex::new(None);
 
 /// Reason of the last failed `read_rssi`, `None` if the last call succeeded.
-#[allow(dead_code)]
-pub fn last_error() -> Option<String> {
+pub fn last_error() -> Option<RssiError> {
     LAST_ERROR.lock().ok().and_then(|g| g.clone())
+}
+
+/// Why the signal is not measured, as published by the daemon in
+/// `radio.rssi_error` of `GetState` (#269): a stable `code` for the
+/// interfaces to translate, and the raw `detail` (English, for logs).
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct RssiIssue {
+    /// One of the `CODE_*` constants (an unknown code reads as "other").
+    pub code: String,
+    pub detail: String,
+}
+
+/// Not a member of the group `akm`: `sudo usermod -aG akm $USER`.
+pub const CODE_NOT_IN_GROUP: &str = "not_in_group";
+/// Listed in `akm`, but the process predates it: a new session is needed
+/// (with lingering, the whole user manager: reboot, or log out everywhere).
+pub const CODE_NEEDS_RELOGIN: &str = "needs_relogin";
+/// `rssi-helper` is not installed.
+pub const CODE_HELPER_MISSING: &str = "helper_missing";
+/// The helper ran but failed (capability lost, Bluetooth controller refused).
+pub const CODE_HELPER_FAILED: &str = "helper_failed";
+/// The helper did not answer in time.
+pub const CODE_TIMEOUT: &str = "timeout";
+/// The controller has no value for this link (not connected, out of range).
+pub const CODE_UNAVAILABLE: &str = "unavailable";
+pub const CODE_OTHER: &str = "other";
+
+const DENIED_TEXT: &str =
+    "permission denied: add your user to the 'akm' group (sudo usermod -aG akm $USER, then start a new session)";
+
+/// What to tell the user for an issue code: (reason, fix), in French or
+/// English. One text for every interface (window, tray, Diagnose, akmctl).
+/// The group is read by a process only when it starts: the daemon runs in
+/// the user manager, which outlives a logout when lingering is enabled, so
+/// the fix says "restart the computer", never only "log in again".
+pub fn explain(code: &str, french: bool) -> (&'static str, &'static str) {
+    match (code, french) {
+        (CODE_NOT_IN_GROUP, false) => (
+            "your account is not in the group akm: the signal cannot be measured",
+            "sudo usermod -aG akm $USER, then restart the computer (logging out is not enough)",
+        ),
+        (CODE_NOT_IN_GROUP, true) => (
+            "votre compte n'est pas dans le groupe akm : le signal ne peut pas être mesuré",
+            "sudo usermod -aG akm $USER, puis redémarrez l'ordinateur (se déconnecter ne suffit pas)",
+        ),
+        (CODE_NEEDS_RELOGIN, false) => (
+            "you are in the group akm, but the service started before and does not see it yet",
+            "restart the computer (logging out is not enough: the service keeps its old groups)",
+        ),
+        (CODE_NEEDS_RELOGIN, true) => (
+            "vous êtes dans le groupe akm, mais le service a démarré avant et ne le voit pas encore",
+            "redémarrez l'ordinateur (se déconnecter ne suffit pas : le service garde ses anciens groupes)",
+        ),
+        (CODE_HELPER_MISSING, false) => (
+            "the rssi-helper utility is not installed",
+            "reinstall the apple-kb-monitor package",
+        ),
+        (CODE_HELPER_MISSING, true) => (
+            "l'utilitaire rssi-helper n'est pas installé",
+            "réinstallez le paquet apple-kb-monitor",
+        ),
+        (CODE_HELPER_FAILED, false) => (
+            "the rssi-helper utility failed (missing capability, Bluetooth refused)",
+            "reinstall the apple-kb-monitor package, then run akmctl doctor",
+        ),
+        (CODE_HELPER_FAILED, true) => (
+            "l'utilitaire rssi-helper a échoué (capacité absente, refus du Bluetooth)",
+            "réinstallez le paquet apple-kb-monitor, puis lancez akmctl doctor",
+        ),
+        (CODE_TIMEOUT, false) => (
+            "the rssi-helper utility does not answer in time",
+            "check the Bluetooth service: systemctl status bluetooth",
+        ),
+        (CODE_TIMEOUT, true) => (
+            "l'utilitaire rssi-helper ne répond pas à temps",
+            "vérifiez le service Bluetooth : systemctl status bluetooth",
+        ),
+        (CODE_UNAVAILABLE, false) => (
+            "the Bluetooth adapter gives no measure for this link",
+            "bring the keyboard closer, or reconnect it",
+        ),
+        (CODE_UNAVAILABLE, true) => (
+            "l'adaptateur Bluetooth ne donne aucune mesure pour cette liaison",
+            "rapprochez le clavier, ou reconnectez-le",
+        ),
+        (_, false) => ("the signal cannot be measured", "run akmctl doctor"),
+        (_, true) => ("le signal ne peut pas être mesuré", "lancez akmctl doctor"),
+    }
+}
+
+/// One line for a tooltip or a menu: "Signal: not measured (…)" (#269).
+pub fn short_line(code: &str, french: bool) -> String {
+    let why = match (code, french) {
+        (CODE_NOT_IN_GROUP, false) => "account not in the group akm",
+        (CODE_NOT_IN_GROUP, true) => "compte hors du groupe akm",
+        (CODE_NEEDS_RELOGIN, false) => "restart the computer",
+        (CODE_NEEDS_RELOGIN, true) => "redémarrez l'ordinateur",
+        (CODE_HELPER_MISSING, false) => "rssi-helper not installed",
+        (CODE_HELPER_MISSING, true) => "rssi-helper non installé",
+        (_, false) => "see akmctl doctor",
+        (_, true) => "voir akmctl doctor",
+    };
+    if french {
+        format!("Signal\u{a0}: non mesuré ({why})")
+    } else {
+        format!("Signal: not measured ({why})")
+    }
+}
+
+/// Members of `group` in an `/etc/group` text.
+pub fn group_members<'a>(etc_group: &'a str, group: &str) -> Vec<&'a str> {
+    etc_group
+        .lines()
+        .find_map(|l| {
+            let mut it = l.split(':');
+            (it.next() == Some(group)).then(|| it.nth(2).unwrap_or(""))
+        })
+        .map(|m| m.split(',').filter(|s| !s.is_empty()).collect())
+        .unwrap_or_default()
+}
+
+/// The issue for one error. `listed_in_akm`: `/etc/group` lists the user in
+/// `akm` (asked only for a refusal).
+pub fn classify(e: &RssiError, listed_in_akm: impl FnOnce() -> bool) -> RssiIssue {
+    let code = match e {
+        RssiError::Denied if listed_in_akm() => CODE_NEEDS_RELOGIN,
+        RssiError::Denied => CODE_NOT_IN_GROUP,
+        RssiError::HelperMissing(_) => CODE_HELPER_MISSING,
+        RssiError::Helper { .. } | RssiError::HelperSpawn(_) | RssiError::BadOutput(_) => {
+            CODE_HELPER_FAILED
+        }
+        RssiError::Timeout => CODE_TIMEOUT,
+        RssiError::Unavailable => CODE_UNAVAILABLE,
+        RssiError::BadMac => CODE_OTHER,
+    };
+    RssiIssue {
+        code: code.to_string(),
+        detail: e.to_string(),
+    }
+}
+
+/// Name of the user running this process.
+fn user_name() -> Option<String> {
+    if let Some(u) = std::env::var("USER").ok().filter(|u| !u.is_empty()) {
+        return Some(u);
+    }
+    // SAFETY: getuid never fails; getpwuid returns NULL or a static entry
+    // whose name is copied at once.
+    unsafe {
+        let pw = libc::getpwuid(libc::getuid());
+        if pw.is_null() || (*pw).pw_name.is_null() {
+            return None;
+        }
+        Some(
+            std::ffi::CStr::from_ptr((*pw).pw_name)
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+}
+
+/// `/etc/group` lists the user of this process in `akm`.
+pub fn user_listed_in_akm() -> bool {
+    let Some(user) = user_name() else {
+        return false;
+    };
+    std::fs::read_to_string("/etc/group")
+        .map(|g| group_members(&g, "akm").contains(&user.as_str()))
+        .unwrap_or(false)
+}
+
+/// Why the last `read_rssi` failed, `None` when it succeeded (or never ran).
+pub fn last_issue() -> Option<RssiIssue> {
+    last_error().map(|e| classify(&e, user_listed_in_akm))
 }
 
 /// Read RSSI and TX power (dBm) for `mac` (`"AA:BB:CC:DD:EE:FF"`).
@@ -73,11 +251,11 @@ pub fn read_rssi(mac: &str) -> Option<(i8, Option<i8>)> {
     match &res {
         Ok(_) => *last = None,
         Err(e) => {
-            let msg = e.to_string();
-            if last.as_deref() != Some(msg.as_str()) {
-                eprintln!("rssi: {msg}");
+            // Once per distinct cause, at warning priority (#269).
+            if last.as_ref() != Some(e) {
+                tracing::warn!("rssi: {e}: the signal is not measured");
             }
-            *last = Some(msg);
+            *last = Some(e.clone());
         }
     }
     res.ok()
@@ -106,11 +284,11 @@ fn read_rssi_cached(mac: &str) -> Result<(i8, Option<i8>), RssiError> {
 
 /// The helper is `root:akm 0750` (#209): a refusal means the user is not in
 /// the `akm` group yet.
-fn spawn_error_text(e: &std::io::Error) -> String {
+fn spawn_error(e: &std::io::Error) -> RssiError {
     if e.kind() == std::io::ErrorKind::PermissionDenied {
-        "permission denied: add your user to the 'akm' group (sudo usermod -aG akm $USER, then log in again)".to_string()
+        RssiError::Denied
     } else {
-        e.to_string()
+        RssiError::HelperSpawn(e.to_string())
     }
 }
 
@@ -139,7 +317,7 @@ fn run_helper(path: &str, mac: &str, timeout: Duration) -> Result<(i8, Option<i8
             other => Some(other),
         })
         .expect("last attempt always returns")
-        .map_err(|e| RssiError::HelperSpawn(spawn_error_text(&e)))?;
+        .map_err(|e| spawn_error(&e))?;
     let deadline = Instant::now() + timeout;
     let status = loop {
         match child.try_wait() {
@@ -390,5 +568,88 @@ mod tests {
         assert_eq!(parse_mac("AA:bb:0C:dd:EE:01:02"), None);
         assert_eq!(parse_mac("ZZ:bb:0C:dd:EE:01"), None);
         assert_eq!(parse_mac(""), None);
+    }
+
+    /// #269: a helper this process may not run (the package installs it
+    /// `root:akm 0750`) is a refusal with a code, not a generic failure.
+    #[test]
+    fn helper_not_executable_is_a_refusal_with_a_code() {
+        let p = fake_helper("noexec", "exit 0");
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o644)).unwrap();
+        // root runs anything: the refusal cannot be reproduced as root.
+        if unsafe { libc::geteuid() } == 0 {
+            return;
+        }
+        let e = run_helper(&p, MAC, Duration::from_secs(2)).unwrap_err();
+        assert_eq!(e, RssiError::Denied);
+        assert_eq!(classify(&e, || false).code, CODE_NOT_IN_GROUP);
+        assert_eq!(classify(&e, || true).code, CODE_NEEDS_RELOGIN);
+        assert!(classify(&e, || false).detail.contains("usermod -aG akm"));
+    }
+
+    #[test]
+    fn every_error_has_a_stable_code() {
+        let c = |e: RssiError| classify(&e, || panic!("asked only for a refusal")).code;
+        assert_eq!(
+            c(RssiError::HelperMissing("/x".into())),
+            CODE_HELPER_MISSING
+        );
+        assert_eq!(c(RssiError::Timeout), CODE_TIMEOUT);
+        assert_eq!(c(RssiError::Unavailable), CODE_UNAVAILABLE);
+        assert_eq!(
+            c(RssiError::Helper {
+                code: Some(3),
+                msg: "MGMT status 0x14".into()
+            }),
+            CODE_HELPER_FAILED
+        );
+        assert_eq!(c(RssiError::BadMac), CODE_OTHER);
+    }
+
+    #[test]
+    fn issue_json_is_code_and_detail() {
+        let i = classify(&RssiError::Timeout, || false);
+        let j = serde_json::to_value(&i).unwrap();
+        assert_eq!(j["code"], "timeout");
+        assert_eq!(j["detail"], "rssi-helper timed out");
+        let back: RssiIssue = serde_json::from_str(r#"{"code":"x"}"#).unwrap();
+        assert_eq!(back.detail, "");
+    }
+
+    #[test]
+    fn every_code_is_explained_with_an_action() {
+        for c in [
+            CODE_NOT_IN_GROUP,
+            CODE_NEEDS_RELOGIN,
+            CODE_HELPER_MISSING,
+            CODE_HELPER_FAILED,
+            CODE_TIMEOUT,
+            CODE_UNAVAILABLE,
+            CODE_OTHER,
+        ] {
+            for fr in [false, true] {
+                let (why, fix) = explain(c, fr);
+                assert!(!why.is_empty() && !fix.is_empty(), "{c}");
+            }
+        }
+        assert!(explain(CODE_NOT_IN_GROUP, true)
+            .1
+            .contains("usermod -aG akm"));
+        // Lingering user manager: a new login is not enough (#269).
+        assert!(explain(CODE_NEEDS_RELOGIN, true)
+            .1
+            .contains("redémarrez l'ordinateur"));
+        assert_ne!(
+            explain(CODE_NEEDS_RELOGIN, true),
+            explain(CODE_NEEDS_RELOGIN, false)
+        );
+    }
+
+    #[test]
+    fn group_members_of_etc_group() {
+        let g = "root:x:0:\nakm:x:964:paul,anne\nwheel:x:998:paul\n";
+        assert_eq!(group_members(g, "akm"), vec!["paul", "anne"]);
+        assert!(group_members(g, "nope").is_empty());
+        assert!(group_members("akm:x:964:\n", "akm").is_empty());
     }
 }

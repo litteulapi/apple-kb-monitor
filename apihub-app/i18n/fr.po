@@ -413,12 +413,6 @@ msgstr "INTROUVABLE"
 msgid "hid_apple fnmode"
 msgstr "hid_apple fnmode"
 
-msgid "RSSI helper"
-msgstr "Utilitaire RSSI"
-
-msgid "rssi-helper installed (needs CAP_NET_ADMIN)"
-msgstr "rssi-helper installé (nécessite CAP_NET_ADMIN)"
-
 msgid "System Diagnostics"
 msgstr "Diagnostic du système"
 
@@ -669,3 +663,21 @@ msgstr "argument inconnu : {}"
 
 msgid "Try 'apihub-app --help'."
 msgstr "Essayez « apihub-app --help »."
+
+msgid "Signal measure"
+msgstr "Mesure du signal"
+
+msgid "rssi-helper runnable by this account (group akm)"
+msgstr "rssi-helper utilisable par ce compte (groupe akm)"
+
+msgid "Fix:"
+msgstr "Correction :"
+
+msgid "the signal is not measured"
+msgstr "le signal n'est pas mesuré"
+
+msgid "the DIAG tab tells why"
+msgstr "l'onglet DIAG en donne la raison"
+
+msgid "not measured"
+msgstr "non mesuré"

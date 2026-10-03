@@ -31,6 +31,12 @@ impl Probe for Fixture {
     fn readable(&self, _path: &str) -> Result<(), String> {
         Ok(())
     }
+    fn executable(&self, _path: &str) -> bool {
+        true
+    }
+    fn rssi_issue(&self) -> Option<akm_core::rssi::RssiIssue> {
+        None
+    }
 }
 
 fn inner() {

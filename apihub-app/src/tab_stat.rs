@@ -419,12 +419,16 @@ fn cells(ui: &mut Ui, th: &Theme, snap: &Snapshot, kb: &KbReport, now: u64, per_
             Level::Unknown,
             0,
         ),
-        (
-            tr("Signal"),
-            view::rssi_text(rssi),
-            view::rssi_level(rssi),
-            1 + view::rssi_bar_count(rssi),
-        ),
+        match view::signal_problem(snap) {
+            // The reason is on RADIO; here, a word instead of "---" (#269).
+            Some(_) => (tr("Signal"), tr("not measured").to_string(), Level::Warn, 0),
+            None => (
+                tr("Signal"),
+                view::rssi_text(rssi),
+                view::rssi_level(rssi),
+                1 + view::rssi_bar_count(rssi),
+            ),
+        },
     ];
     let avail = ui.available_width();
     let w = ((avail - (per_row - 1) as f32 * theme::GAP) / per_row as f32).floor();

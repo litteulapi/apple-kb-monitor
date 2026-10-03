@@ -637,7 +637,11 @@ impl View {
             s
         });
         let rssi = if snap.connected {
-            rssi_text(lang, snap.rssi())
+            // No value: the reason in short, never silence (#269).
+            rssi_text(lang, snap.rssi()).or_else(|| {
+                let issue = snap.keyboard.as_ref()?.radio.rssi_error.as_ref()?;
+                Some(akm_core::rssi::short_line(&issue.code, lang == Lang::Fr))
+            })
         } else {
             None
         };
@@ -1409,6 +1413,19 @@ mod tests {
         assert!(!v.entry(id::SIGNAL).unwrap().visible());
         let v = View::build(&snap(Some(99.0), true, Some(127)), false, None, Lang::Fr);
         assert!(!v.tooltip_body(Lang::Fr, 1_012, true).contains("127"));
+        // #269: no value but a known reason: it is said, in short.
+        let mut s = snap(Some(99.0), true, None);
+        s.keyboard.as_mut().unwrap().radio.rssi_error = Some(akm_core::rssi::classify(
+            &akm_core::rssi::RssiError::Denied,
+            || false,
+        ));
+        let v = View::build(&s, false, None, Lang::Fr);
+        let body = v.tooltip_body(Lang::Fr, 1_012, true);
+        assert!(
+            body.contains("non mesuré (compte hors du groupe akm)"),
+            "{body}"
+        );
+        assert!(v.entry(id::SIGNAL).unwrap().visible());
     }
 
     #[test]
