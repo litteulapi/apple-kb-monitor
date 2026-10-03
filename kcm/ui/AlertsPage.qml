@@ -26,6 +26,20 @@ ColumnLayout {
         "display.apple_percent": true,
         "apple.will_shutdown": true
     })
+    // TOML type the daemon takes for each key (serde in config.rs): a value
+    // of another type is ignored there, so it is ignored here too (#12).
+    readonly property var kindsMap: ({
+        "alerts.enabled": "boolean",
+        "alerts.thresholds": "integers",
+        "alerts.critical": "integer",
+        "alerts.hysteresis": "float",
+        "battery.chemistry": "string",
+        "notifications.connection": "boolean",
+        "notifications.battery_replaced": "boolean",
+        "notifications.defer_to_powerdevil": "boolean",
+        "display.apple_percent": "boolean",
+        "apple.will_shutdown": "boolean"
+    })
     readonly property var chemistries: ["alkaline", "nimh", "lithium", "unknown"]
     property var loaded: ({})        // values read from the file (defaults filled in)
     property bool ready: false
@@ -37,6 +51,11 @@ ColumnLayout {
 
     function val(k, m) {
         return m[k] !== undefined ? m[k] : defaultsMap[k];
+    }
+    // The value the daemon takes for `k` in the parsed file, else the default.
+    function readKey(k, p) {
+        const v = Toml.typed(p, k, kindsMap[k]);
+        return v !== undefined ? v : defaultsMap[k];
     }
     function parseThresholds(t) {
         const parts = String(t).split(/[ ,;]+/).filter(function (x) { return x !== ""; });
@@ -100,10 +119,15 @@ ColumnLayout {
         ready = false;
         root.store.readConfig(function (ok, text, error) {
             const m = {};
-            const p = ok ? Toml.parse(text) : { values: {}, warnings: [] };
-            for (const k in defaultsMap) m[k] = val(k, p.values);
+            const p = ok ? Toml.parse(text) : { values: {}, kinds: {}, lines: {}, warnings: [] };
+            const warnings = p.warnings.slice();
+            for (const k in defaultsMap) {
+                m[k] = readKey(k, p);
+                if (p.kinds[k] !== undefined && Toml.typed(p, k, kindsMap[k]) === undefined)
+                    warnings.push(k + (p.lines[k] ? " (line " + p.lines[k] + ")" : ""));
+            }
             loaded = m;
-            parseWarnings = p.warnings;
+            parseWarnings = warnings;
             fill(m);
             ready = true;
             update();
