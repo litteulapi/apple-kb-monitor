@@ -42,6 +42,12 @@ if(BUILD_TESTING)
     target_link_libraries(test_devicename PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME kcm_devicename COMMAND test_devicename)
 
+    # Every string of the pages is translated (kcm/Messages.sh --check).
+    find_program(XGETTEXT_EXE xgettext)
+    if(XGETTEXT_EXE)
+        add_test(NAME kcm_translations COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/Messages.sh --check)
+    endif()
+
     # The real module on a sealed bench (audit of 2026-10-03): loaded with
     # KCModuleLoader as System Settings does, private session bus without any
     # activation directory, temporary HOME/XDG, fake akmctl (tests/private_bus.sh).
