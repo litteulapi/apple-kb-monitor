@@ -146,6 +146,8 @@ pub struct LinkStatus {
     pub connected: bool,
     /// Battery percentage known to BlueZ / UPower, if any (#94).
     pub battery: Option<u8>,
+    /// BlueZ `Device1.Paired` (or `Bonded`), as last seen (C6).
+    pub paired: bool,
 }
 
 impl LinkStatus {
@@ -154,6 +156,7 @@ impl LinkStatus {
             "mac": self.mac,
             "name": self.name,
             "health": self.health,
+            "paired": self.paired,
             "since": self.since,
             "attempts": self.attempts,
             "failures": self.failures,
@@ -697,6 +700,7 @@ impl<B: LinkBus> Keeper<B> {
                     .and_then(|s| s.quality(mac, self.unix(now))),
                 connected: d.connected,
                 battery: d.battery,
+                paired: d.rec.paired(),
             })
             .collect()
     }

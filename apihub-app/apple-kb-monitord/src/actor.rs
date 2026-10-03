@@ -1008,6 +1008,16 @@ impl Actor {
         akm_core::roster::merge(primary, others)
     }
 
+    /// BlueZ says `mac` is paired, from the link keeper's roster (C6).
+    fn paired(&self, mac: &str) -> bool {
+        self.opts.roster.as_ref().is_some_and(|r| {
+            r.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .iter()
+                .any(|s| s.paired && s.mac.eq_ignore_ascii_case(mac))
+        })
+    }
+
     /// Link quality of the keyboard followed, at publication time (#105).
     fn link_quality(&self) -> Option<akm_core::linkstats::LinkQuality> {
         let mac = self.kb.as_ref()?.device.mac.as_deref()?;
@@ -1052,6 +1062,10 @@ impl Actor {
             k.bluetooth.rssi_dbus = None;
             k.bluetooth.tx_power_dbus = None;
             rssi_at = cur.and(self.rssi_at);
+        }
+        // Paired as BlueZ says (C6): the link keeper's roster carries it.
+        if let Some(k) = kb.as_mut() {
+            k.bluetooth.paired = k.device.mac.as_deref().is_some_and(|m| self.paired(m));
         }
         // Charge estimate by declared chemistry (#178), recomputed at every
         // publication so a change of set or of config shows at once.
@@ -1662,6 +1676,7 @@ mod tests {
             quality: None,
             connected,
             battery,
+            paired: true,
         };
         let roster = crate::repair::SharedStatus::default();
         let mut a = quiet_actor();
@@ -1683,6 +1698,11 @@ mod tests {
         assert_eq!(akm_core::roster::weakest(&s.devices).unwrap().mac, M2);
         // Root fields still describe the keyboard read here (API 1 clients).
         assert_eq!(s.battery_pct(), Some(80.0));
+        // C6: BlueZ says paired, the published state says so too.
+        assert!(s.keyboard.as_ref().unwrap().bluetooth.paired);
+        roster.lock().unwrap()[0].paired = false;
+        assert!(!a.snapshot().keyboard.unwrap().bluetooth.paired, "bond lost");
+        roster.lock().unwrap()[0].paired = true;
         // The second one disconnects: the first is unchanged.
         roster.lock().unwrap()[1] = status(M2, "Clavier du salon", false, Some(12));
         let s = a.snapshot();

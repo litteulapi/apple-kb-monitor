@@ -318,6 +318,11 @@ impl Recovery {
         self.episode_start
     }
     /// Connection attempts made by the daemon in this episode.
+    /// BlueZ last said the device is paired (bonded).
+    pub fn paired(&self) -> bool {
+        self.paired
+    }
+
     pub fn attempts(&self) -> u32 {
         self.attempts
     }
