@@ -115,7 +115,9 @@ s_fmt() {
     after=$(hunks < "$f")
     if [ "$st" = A ]; then before=0; else before=$(git show "$base:$f" 2>/dev/null | hunks); fi
     if [ "$after" -gt "${before:-0}" ]; then echo "rustfmt: $f has $after unformatted hunk(s), $before on main (run rustfmt --edition 2021 $f)"; bad=1; fi
-  done < <( { git diff --name-status --diff-filter=AM "$base" -- '*.rs'; git ls-files --others --exclude-standard -- '*.rs' | sed 's/^/A\t/'; } | sort -u -k2)
+  # apihub-app/vendor: patched upstream crates keep their upstream format
+  # (minimal diff, see apihub-app/vendor/README.md).
+  done < <( { git diff --name-status --diff-filter=AM "$base" -- '*.rs' ':(exclude)apihub-app/vendor/**'; git ls-files --others --exclude-standard -- '*.rs' ':(exclude)apihub-app/vendor/**' | sed 's/^/A\t/'; } | sort -u -k2)
   echo "rustfmt: $n changed file(s) checked, $([ $bad = 0 ] && echo none || echo some) failing; whole tree: $total hunk(s) to reformat (informative)"
   return $bad
 }
