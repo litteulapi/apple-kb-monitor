@@ -71,6 +71,81 @@ fn f(level: Level, topic: &'static str, text: impl Into<String>, fix: Option<&st
 
 // ── pure checks ────────────────────────────────────────────────────────────
 
+/// What the user can do about the signal reading (#269): `rssi-helper` is
+/// `root:akm 0750` (#209), so it runs only for members of `akm`, and a group
+/// added with usermod counts only from the next login.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HelperAccess {
+    /// The helper is not installed.
+    Missing,
+    /// This process may run it.
+    Runnable,
+    /// The user is listed in `akm` but this session predates it.
+    NeedsRelogin,
+    /// The user is not in `akm`.
+    NotInGroup,
+}
+
+pub fn rssi_finding(a: HelperAccess) -> Finding {
+    match a {
+        HelperAccess::Runnable => f(Level::Ok, "signal", "rssi-helper runnable (group akm)", None),
+        HelperAccess::Missing => f(
+            Level::Warn,
+            "signal",
+            format!("{RSSI_HELPER} missing: the signal is never measured"),
+            Some("reinstall the package"),
+        ),
+        HelperAccess::NeedsRelogin => f(
+            Level::Warn,
+            "signal",
+            "you are in the group akm, but this session started before: the signal stays unmeasured",
+            Some("log out and back in (or reboot)"),
+        ),
+        HelperAccess::NotInGroup => f(
+            Level::Warn,
+            "signal",
+            "not in the group akm: rssi-helper is refused, the signal is never measured",
+            Some("sudo usermod -aG akm $USER, then log out and back in"),
+        ),
+    }
+}
+
+const RSSI_HELPER: &str = "/usr/lib/apple-kb-monitor/rssi-helper";
+
+/// Members of `group` in an `/etc/group` text.
+pub fn group_members<'a>(etc_group: &'a str, group: &str) -> Vec<&'a str> {
+    etc_group
+        .lines()
+        .find_map(|l| {
+            let mut it = l.split(':');
+            (it.next() == Some(group)).then(|| it.nth(2).unwrap_or(""))
+        })
+        .map(|m| m.split(',').filter(|s| !s.is_empty()).collect())
+        .unwrap_or_default()
+}
+
+fn helper_access() -> HelperAccess {
+    use std::os::unix::ffi::OsStrExt;
+    let path = std::path::Path::new(RSSI_HELPER);
+    if !path.exists() {
+        return HelperAccess::Missing;
+    }
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).expect("no NUL in a constant path");
+    // SAFETY: access(2) on a valid NUL-terminated path, no other effect.
+    if unsafe { libc::access(c.as_ptr(), libc::X_OK) } == 0 {
+        return HelperAccess::Runnable;
+    }
+    let user = std::env::var("USER").unwrap_or_default();
+    let listed = std::fs::read_to_string("/etc/group")
+        .map(|g| group_members(&g, "akm").contains(&user.as_str()))
+        .unwrap_or(false);
+    if listed {
+        HelperAccess::NeedsRelogin
+    } else {
+        HelperAccess::NotInGroup
+    }
+}
+
 /// Active `key = value` entries of an INI-like file, with their section.
 pub fn ini_entries(text: &str) -> Vec<(String, String, String)> {
     let mut sec = String::new();
@@ -714,6 +789,7 @@ pub fn gather(mac: Option<&str>) -> Report {
             None => {}
         }
     }
+    fs.push(rssi_finding(helper_access()));
     let rule = Path::new(UDEV_RULE).exists();
     fs.push(check_usb_power(
         usb_power(Path::new("/sys"), "hci0").as_ref(),
@@ -891,6 +967,21 @@ mod tests {
 
     const BAD_CONF: &str = "[General]\nExperimental = true\n#FastConnectable = false\n\n[Policy]\n#ReconnectAttempts=7\n\n[AdvMon]\nReconnectUUIDs=00001124-0000-1000-8000-00805f9b34fb\nReconnectAttempts=7\n";
     const GOOD_CONF: &str = "[General]\nFastConnectable = true\n[Policy]\nReconnectAttempts=7\nReconnectIntervals=1,2,4\n";
+
+    #[test]
+    fn signal_access_findings() {
+        let g = "wheel:x:998:alice\nakm:x:934:bob,alice\nempty:x:1:\n";
+        assert_eq!(group_members(g, "akm"), ["bob", "alice"]);
+        assert!(group_members(g, "empty").is_empty());
+        assert!(group_members(g, "nope").is_empty());
+        assert_eq!(rssi_finding(HelperAccess::Runnable).level, Level::Ok);
+        for a in [HelperAccess::Missing, HelperAccess::NeedsRelogin, HelperAccess::NotInGroup] {
+            let x = rssi_finding(a);
+            assert_eq!(x.level, Level::Warn, "{a:?}");
+            assert!(x.fix.is_some(), "{a:?}");
+        }
+        assert!(rssi_finding(HelperAccess::NeedsRelogin).fix.unwrap().contains("log out"));
+    }
 
     #[test]
     fn main_conf_detects_the_advmon_mistake() {
