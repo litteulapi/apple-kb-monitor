@@ -23,6 +23,7 @@ impl Default for UiSettings {
     }
 }
 
+#[cfg(test)]
 pub fn parse(content: &str) -> UiSettings {
     parse_with_warnings(content).0
 }

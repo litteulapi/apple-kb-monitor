@@ -789,14 +789,6 @@ pub fn read_text(age_s: Option<u64>, hms: Option<(u32, u32, u32)>) -> String {
     }
 }
 
-/// `HH:MM:SS`, or dashes for a time not known yet.
-pub fn clock_text(hms: Option<(u32, u32, u32)>) -> String {
-    match hms {
-        Some((h, m, s)) if h < 24 && m < 60 && s < 61 => format!("{h:02}:{m:02}:{s:02}"),
-        _ => "--:--:--".into(),
-    }
-}
-
 /// Where the reading sits on the scale of the signal tuner, 0 (weakest
 /// shown) to 1 (strongest shown); `None` when unknown.
 pub const TUNER_MIN_DB: i32 = -20;
@@ -835,7 +827,7 @@ mod tests {
         assert_eq!(rssi_text(Some(-3)), "good (\u{2212}3\u{a0}dB)");
         assert_eq!(rssi_text(Some(-12)), "weak (\u{2212}12\u{a0}dB)");
         assert_eq!(rssi_text(Some(2)), "excellent (+2\u{a0}dB)");
-        assert!(!rssi_text(Some(-3)).contains("dBm"));
+        assert!(rssi_text(Some(-3)).ends_with("3\u{a0}dB)"));
         assert_eq!(rssi_level(Some(127)), Level::Unknown);
         assert_eq!(rssi_bar_count(Some(127)), 0);
         assert_eq!(rssi_bar_count(None), 0);
@@ -1249,10 +1241,6 @@ mod tests {
         ] {
             assert_eq!(mask_mac(bad), "--:--:--:--:--:--");
         }
-        assert_eq!(clock_text(Some((7, 5, 9))), "07:05:09");
-        assert_eq!(clock_text(Some((23, 59, 60))), "23:59:60");
-        assert_eq!(clock_text(Some((24, 0, 0))), "--:--:--");
-        assert_eq!(clock_text(None), "--:--:--");
     }
 
     #[test]

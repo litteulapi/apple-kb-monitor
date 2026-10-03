@@ -96,9 +96,7 @@ fn batteries(ui: &mut Ui, th: &Theme, snap: &Snapshot, kb: &KbReport, now: u64) 
     th.panel(ui, tr("Batteries"), 0.0, |ui| {
         let b = &kb.battery;
         let dash = || view::DASH.to_string();
-        // Measured: reports 0x46 / 0xFF, in mV (#139).
-        let volts = b.voltage.filter(|v| v.is_finite() && *v > 0.0);
-        // The daemon flags a voltage its two readings disagree on (#280).
+        // Measured: reports 0x46 / 0xFF, in mV (#139). The daemon flags a voltage its two readings disagree on (#280).
         let (volt_text, volt_level) = view::voltage_cell(b);
         th.kv(ui, tr("Voltage"), &volt_text, volt_level);
         threshold_scale(ui, th, b);
