@@ -38,4 +38,7 @@ export HOME="$work/home" XDG_CONFIG_HOME="$work/config" XDG_DATA_HOME="$work/dat
   XDG_CACHE_HOME="$work/cache" XDG_STATE_HOME="$work/state" XDG_RUNTIME_DIR="$work/runtime" \
   AKM_BENCH_DIR="$work/bench" QT_QPA_PLATFORM=offscreen
 unset DISPLAY WAYLAND_DISPLAY SESSION_MANAGER DBUS_SESSION_BUS_ADDRESS KDE_FULL_SESSION
+# French interface whatever the caller's locale (ci-local.sh runs with LC_ALL=C)
+unset LC_ALL LC_MESSAGES
+export LANGUAGE=fr LANG=fr_FR.UTF-8
 dbus-run-session --config-file="$work/bus.conf" -- "$@"
