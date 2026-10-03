@@ -229,10 +229,12 @@ s_package() {
   { git ls-files -z --cached; git ls-files -z --others --exclude-standard; } \
     | (cd "$top" && xargs -0 -I{} sh -c '[ -f "{}" ] && echo "{}"') | grep -v '^scripts/out/' \
     | tar -C "$top" -cf - -T - | tar -C "$cp" -xf -
+  # AKM_ALLOW_DIRTY=1: this copy of the working tree is deliberately not a
+  # commit (the PKGBUILD refuses such a tree otherwise, #295).
   # Reuse a target dir between runs (the PKGBUILD builds into apihub-app/target).
   local cache="${AKM_CI_PKG_TARGET:-${CARGO_TARGET_DIR:-$top/apihub-app/target}-pkg}"
   mkdir -p "$cache" && ln -sfn "$cache" "$cp/apihub-app/target"
-  (cd "$cp" && PKGDEST="$cp" SRCDEST="$cp" BUILDDIR="$cp/build" timeout 3600 makepkg -f --nodeps --noconfirm --nosign >"$out/logs/makepkg-full.log" 2>&1) \
+  (cd "$cp" && AKM_ALLOW_DIRTY=1 PKGDEST="$cp" SRCDEST="$cp" BUILDDIR="$cp/build" timeout 3600 makepkg -f --nodeps --noconfirm --nosign >"$out/logs/makepkg-full.log" 2>&1) \
     || { tail -30 "$out/logs/makepkg-full.log"; return 1; }
   pkg=$(ls "$cp"/*.pkg.tar.* | head -1)
   echo "package: $(basename "$pkg") ($(du -h "$pkg" | cut -f1))"

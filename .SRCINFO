@@ -11,6 +11,7 @@ pkgbase = apple-kb-monitor
 	makedepends = gettext
 	makedepends = cmake
 	makedepends = extra-cmake-modules
+	makedepends = git
 	depends = bluez
 	depends = polkit
 	depends = dbus
