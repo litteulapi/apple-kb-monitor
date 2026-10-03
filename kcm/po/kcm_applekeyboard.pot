@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: kcm_applekeyboard\n"
 "Report-Msgid-Bugs-To: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-"
 "monitor/issues\n"
-"POT-Creation-Date: 2026-10-03 08:55+0200\n"
+"POT-Creation-Date: 2026-10-03 08:59+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -685,230 +685,234 @@ msgctxt "placeholder in a command"
 msgid "NAME"
 msgstr ""
 
-#: ui/NamePage.qml:64
+#: ui/NamePage.qml:65
+msgid "akmctl stopped abruptly before giving its verdict (crash or signal)."
+msgstr ""
+
+#: ui/NamePage.qml:68
 msgid ""
 "No answer in time. Nothing more is attempted; look at the stored name above "
 "in a moment."
 msgstr ""
 
-#: ui/NamePage.qml:67
+#: ui/NamePage.qml:71
 msgid "Check passed: “%1” can be written. Nothing was written."
 msgstr ""
 
-#: ui/NamePage.qml:70
+#: ui/NamePage.qml:74
 msgid ""
 "“%1” is now stored in the keyboard: written, then read back identical. This "
 "computer may show the old name until a later connection."
 msgstr ""
 
-#: ui/NamePage.qml:73
+#: ui/NamePage.qml:77
 msgid ""
 "The name was written, but it could not be read back. Look at the stored name "
 "above in a moment.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:76
+#: ui/NamePage.qml:80
 msgid ""
 "The name was written, but the keyboard reads back another one.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:79
+#: ui/NamePage.qml:83
 msgid ""
 "The write failed on its way: the name may or may not have been written. Look "
 "at the stored name above in a moment.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:82
+#: ui/NamePage.qml:86
 msgid ""
 "Check failed, nothing was written.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:85
+#: ui/NamePage.qml:89
 msgid ""
 "Not written.\n"
 "%1"
 msgstr ""
 
-#: ui/NamePage.qml:96
+#: ui/NamePage.qml:100
 msgctxt "@title:window"
 msgid "Write the name into the keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:97
+#: ui/NamePage.qml:101
 msgid "Write “%1” into the keyboard's memory?"
 msgstr ""
 
-#: ui/NamePage.qml:115
+#: ui/NamePage.qml:119
 msgctxt "@title:group"
 msgid "Name on this computer"
 msgstr ""
 
-#: ui/NamePage.qml:118
+#: ui/NamePage.qml:122
 msgid "Shown as:"
 msgstr ""
 
-#: ui/NamePage.qml:124
+#: ui/NamePage.qml:128
 msgid "Keyboard's own name:"
 msgstr ""
 
-#: ui/NamePage.qml:132
+#: ui/NamePage.qml:136
 msgid "New name:"
 msgstr ""
 
-#: ui/NamePage.qml:136
+#: ui/NamePage.qml:140
 msgid "e.g. Office keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:138
+#: ui/NamePage.qml:142
 msgid "New name of the keyboard on this computer"
 msgstr ""
 
-#: ui/NamePage.qml:144
+#: ui/NamePage.qml:148
 msgid "Rename"
 msgstr ""
 
-#: ui/NamePage.qml:152
+#: ui/NamePage.qml:156
 msgid "Renamed to “%1” on this computer."
 msgstr ""
 
-#: ui/NamePage.qml:152
+#: ui/NamePage.qml:156
 msgid "no answer in time"
 msgstr ""
 
-#: ui/NamePage.qml:152 ui/NamePage.qml:167
+#: ui/NamePage.qml:156 ui/NamePage.qml:171
 msgid "Not renamed: %1"
 msgstr ""
 
-#: ui/NamePage.qml:159
+#: ui/NamePage.qml:163
 msgid "Use the keyboard's own name"
 msgstr ""
 
-#: ui/NamePage.qml:167
+#: ui/NamePage.qml:171
 msgid "The keyboard's own name is used again."
 msgstr ""
 
-#: ui/NamePage.qml:178
+#: ui/NamePage.qml:182
 msgid "Renaming needs the keyboard service."
 msgstr ""
 
-#: ui/NamePage.qml:179
+#: ui/NamePage.qml:183
 msgid "No keyboard is known yet."
 msgstr ""
 
-#: ui/NamePage.qml:180
+#: ui/NamePage.qml:184
 msgid ""
 "Only this computer sees this name (Bluetooth alias); the keyboard itself is "
 "not changed."
 msgstr ""
 
-#: ui/NamePage.qml:185
+#: ui/NamePage.qml:189
 msgctxt "@title:group"
 msgid "Name stored inside the keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:188
+#: ui/NamePage.qml:192
 msgid "Stored now:"
 msgstr ""
 
-#: ui/NamePage.qml:189
+#: ui/NamePage.qml:193
 msgid "not read yet (the service reads it once per connection)"
 msgstr ""
 
-#: ui/NamePage.qml:196
+#: ui/NamePage.qml:200
 msgid "Name to write:"
 msgstr ""
 
-#: ui/NamePage.qml:200
+#: ui/NamePage.qml:204
 msgid "1 to 32 ASCII characters"
 msgstr ""
 
-#: ui/NamePage.qml:202
+#: ui/NamePage.qml:206
 msgid "Name to write into the keyboard"
 msgstr ""
 
-#: ui/NamePage.qml:203
+#: ui/NamePage.qml:207
 msgid ""
 "1 to 32 printable ASCII characters, no leading or trailing space, no "
 "backslash"
 msgstr ""
 
-#: ui/NamePage.qml:209
+#: ui/NamePage.qml:213
 msgid "Check (nothing written)"
 msgstr ""
 
-#: ui/NamePage.qml:212
+#: ui/NamePage.qml:216
 msgid ""
 "Runs every check that precedes the write and saves the current name; nothing "
 "is written"
 msgstr ""
 
-#: ui/NamePage.qml:218
+#: ui/NamePage.qml:222
 msgid "Write the name into the keyboard…"
 msgstr ""
 
-#: ui/NamePage.qml:221
+#: ui/NamePage.qml:225
 msgid ""
 "Asks for a confirmation, then writes the name into the keyboard and reads it "
 "back"
 msgstr ""
 
-#: ui/NamePage.qml:240
+#: ui/NamePage.qml:244
 msgid ""
 "Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
 "no backslash."
 msgstr ""
 
-#: ui/NamePage.qml:241
+#: ui/NamePage.qml:245
 msgid ""
 "Every computer and phone sees this name. The current name is saved first, "
 "the keyboard is checked, the name is written once and read back at once. Not "
 "measured: whether the name survives a battery change."
 msgstr ""
 
-#: ui/NamePage.qml:260
+#: ui/NamePage.qml:264
 msgctxt "@title:group"
 msgid "Same operations, to copy into a terminal"
 msgstr ""
 
-#: ui/NamePage.qml:265
+#: ui/NamePage.qml:269
 msgid ""
 "Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
 "authentication):"
 msgstr ""
 
-#: ui/NamePage.qml:267
+#: ui/NamePage.qml:271
 msgid "Every check and the backup of the current name (writes nothing):"
 msgstr ""
 
-#: ui/NamePage.qml:269
+#: ui/NamePage.qml:273
 msgid ""
 "The write itself (checks, backup, one confirmation, one write, read back; "
 "issue #248):"
 msgstr ""
 
-#: ui/NamePage.qml:271
+#: ui/NamePage.qml:275
 msgid ""
 "Forget the keyboard cleanly, as macOS does, then pair it again (only after "
 "typing the confirmation word, issue #217):"
 msgstr ""
 
-#: ui/NamePage.qml:294
+#: ui/NamePage.qml:298
 msgid "Command: %1"
 msgstr ""
 
-#: ui/NamePage.qml:298
+#: ui/NamePage.qml:302
 msgid "Copy"
 msgstr ""
 
-#: ui/NamePage.qml:300
+#: ui/NamePage.qml:304
 msgid "Copy the command"
 msgstr ""
 
-#: ui/NamePage.qml:304
+#: ui/NamePage.qml:308
 msgid "Command copied."
 msgstr ""
 

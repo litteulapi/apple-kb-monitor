@@ -50,15 +50,19 @@ ColumnLayout {
     // its verdict in the page. Exit codes of akmctl: 0 done, 11 pre-flight
     // refused, 13 written but not read back, 14 read back different, 15 the
     // write failed on its way (a frame may have been sent: never "not
-    // written"). Their meaning is decided in C++ (Store.deviceNameVerdict).
+    // written"); akmctl killed or crashed meanwhile is the same (#288).
+    // Their meaning is decided in C++ (Store.deviceNameVerdict).
     function runDeviceName(checkOnly) {
         const name = deviceNameField.text;
         root.deviceBusy = true;
         deviceResult.visible = false;
-        root.store.deviceName(name, checkOnly, function (code, out, err, timedOut) {
+        root.store.deviceName(name, checkOnly, function (code, out, err, timedOut, crashed) {
             root.deviceBusy = false;
-            const detail = (String(out || "").trim() || String(err || "").trim());
-            const verdict = root.store.deviceNameVerdict(code, checkOnly, timedOut);
+            let detail = (String(out || "").trim() || String(err || "").trim());
+            const verdict = root.store.deviceNameVerdict(code, checkOnly, timedOut, !!crashed);
+            // #288: akmctl ended abruptly (signal, crash, panic): say so
+            if (crashed || code === 101)
+                detail = i18n("akmctl stopped abruptly before giving its verdict (crash or signal).") + (detail !== "" ? "\n" + detail : "");
             if (verdict === "timeout") {
                 deviceResult.type = Kirigami.MessageType.Error;
                 deviceResult.text = i18n("No answer in time. Nothing more is attempted; look at the stored name above in a moment.");

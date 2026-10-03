@@ -41,8 +41,14 @@ QString copyCommand(const QString &name, const QString &flag);
 //   "unverified"   13: written, not read back
 //   "mismatch"     14: written, read back different
 //   "uncertain"    15: the write failed on its way, a frame may have been
-//                  sent: NEVER shown as "not written"
+//                  sent: NEVER shown as "not written"; also when akmctl
+//                  ended abruptly during the write (crashed: killed by a
+//                  signal, or 101 = Rust panic), #288
 //   "check-failed" anything else with --check: nothing written
 //   "not-written"  anything else: nothing written
-QString verdict(int exitCode, bool checkOnly, bool timedOut);
+// crashed: the process did not exit by itself (QProcess::CrashExit).
+QString verdict(int exitCode, bool checkOnly, bool timedOut, bool crashed = false);
+
+// Exit code of a Rust program that panicked (akmctl): an abrupt end too.
+constexpr int kPanicExitCode = 101;
 } // namespace AkmDeviceName

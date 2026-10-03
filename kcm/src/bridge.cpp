@@ -390,7 +390,7 @@ int AkmBridge::run(const QString &program, const QStringList &args, int timeoutM
         const QString why = allowed(program, args) ? QStringLiteral("%1: not found").arg(program)
                                                    : QStringLiteral("%1: not allowed").arg(program);
         QTimer::singleShot(0, this, [this, id, why] {
-            Q_EMIT runFinished(id, -1, QString(), why, false);
+            Q_EMIT runFinished(id, -1, QString(), why, false, false);
         });
         return id;
     }
@@ -411,12 +411,12 @@ int AkmBridge::run(const QString &program, const QStringList &args, int timeoutM
     connect(p, &QProcess::finished, this, [this, id, p, timedOut](int code, QProcess::ExitStatus st) {
         const QString out = QString::fromUtf8(p->readAllStandardOutput().left(kMaxOutput));
         const QString err = QString::fromUtf8(p->readAllStandardError().left(kMaxOutput));
-        Q_EMIT runFinished(id, st == QProcess::NormalExit ? code : -1, out, err, *timedOut);
+        Q_EMIT runFinished(id, st == QProcess::NormalExit ? code : -1, out, err, *timedOut, st == QProcess::CrashExit);
         p->deleteLater();
     });
     connect(p, &QProcess::errorOccurred, this, [this, id, p](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
-            Q_EMIT runFinished(id, -1, QString(), p->errorString(), false);
+            Q_EMIT runFinished(id, -1, QString(), p->errorString(), false, false);
             p->deleteLater();
         }
     });
@@ -503,16 +503,16 @@ int AkmBridge::runDeviceName(const QString &name, bool checkOnly)
         const int id = nextId();
         QTimer::singleShot(0, this, [this, id] {
             Q_EMIT runFinished(id, -1, QString(),
-                               QStringLiteral("name refused: 1 to 32 printable ASCII characters, no leading or trailing space, no backslash"), false);
+                               QStringLiteral("name refused: 1 to 32 printable ASCII characters, no leading or trailing space, no backslash"), false, false);
         });
         return id;
     }
     return run(QStringLiteral("akmctl"), args, kDeviceNameTimeout);
 }
 
-QString AkmBridge::deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut) const
+QString AkmBridge::deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut, bool crashed) const
 {
-    return AkmDeviceName::verdict(exitCode, checkOnly, timedOut);
+    return AkmDeviceName::verdict(exitCode, checkOnly, timedOut, crashed);
 }
 
 QString AkmBridge::deviceNameCommand(const QString &name, const QString &flag) const

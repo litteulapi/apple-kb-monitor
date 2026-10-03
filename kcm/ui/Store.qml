@@ -72,17 +72,17 @@ QtObject {
 
     // Name stored inside the keyboard (#248): `akmctl rename
     // --device-name=<name> --yes` (or `--check`), built and bounded (90 s) by
-    // the bridge; cb(exitCode, stdout, stderr, timedOut).
+    // the bridge; cb(exitCode, stdout, stderr, timedOut, crashed).
     function deviceName(name, checkOnly, cb) {
-        if (!bridge) { cb(-1, "", "no bridge", false); return; }
+        if (!bridge) { cb(-1, "", "no bridge", false, false); return; }
         const id = bridge.runDeviceName(name, checkOnly);
         _runs[id] = cb;
     }
 
     // Meaning of akmctl's exit code and the command to copy (C++, unit
     // tested: AkmDeviceName::verdict / copyCommand).
-    function deviceNameVerdict(code, checkOnly, timedOut) {
-        return bridge ? bridge.deviceNameVerdict(code, checkOnly, timedOut) : (checkOnly ? "check-failed" : "not-written");
+    function deviceNameVerdict(code, checkOnly, timedOut, crashed) {
+        return bridge ? bridge.deviceNameVerdict(code, checkOnly, timedOut, crashed) : (checkOnly ? "check-failed" : "uncertain");
     }
     function deviceNameCommand(name, flag) {
         return bridge ? bridge.deviceNameCommand(name, flag) : "";
@@ -95,10 +95,10 @@ QtObject {
             delete store._calls[id];
             if (cb) cb(ok, value, error);
         }
-        function onRunFinished(id, code, out, err, timedOut) {
+        function onRunFinished(id, code, out, err, timedOut, crashed) {
             const cb = store._runs[id];
             delete store._runs[id];
-            if (cb) cb(code, out, err, timedOut);
+            if (cb) cb(code, out, err, timedOut, crashed);
         }
         function onFileFinished(id, ok, text, error) {
             const cb = store._files[id];

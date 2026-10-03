@@ -81,7 +81,7 @@ public:
     // What that exit code means for the page (AkmDeviceName::verdict), and
     // the same command to copy into a terminal (AkmDeviceName::copyCommand:
     // the name glued to `--device-name=`).
-    Q_INVOKABLE QString deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut) const;
+    Q_INVOKABLE QString deviceNameVerdict(int exitCode, bool checkOnly, bool timedOut, bool crashed) const;
     Q_INVOKABLE QString deviceNameCommand(const QString &name, const QString &flag) const;
     // Ask the bus again whether the daemon is there (asynchronous).
     Q_INVOKABLE void checkDaemon();
@@ -89,7 +89,9 @@ public:
 Q_SIGNALS:
     void daemonPresentChanged();
     void callFinished(int id, bool ok, const QVariant &value, const QString &error);
-    void runFinished(int id, int exitCode, const QString &out, const QString &err, bool timedOut);
+    // crashed: the program did not exit by itself (killed by a signal or
+    // crashed, QProcess::CrashExit); exitCode is then -1 (#288).
+    void runFinished(int id, int exitCode, const QString &out, const QString &err, bool timedOut, bool crashed);
     void fileFinished(int id, bool ok, const QString &text, const QString &error);
     // StateChanged(t revision, s json) of the daemon (root object).
     void daemonStateChanged(qulonglong revision);

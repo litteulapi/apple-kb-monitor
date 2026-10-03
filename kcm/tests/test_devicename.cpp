@@ -122,6 +122,19 @@ private Q_SLOTS:
         QCOMPARE(verdict(15, false, true), QStringLiteral("timeout"));
     }
 
+    // #288: akmctl ended abruptly during the write (killed by a signal,
+    // crashed, or a Rust panic = exit 101): a frame may have been sent.
+    void anAbruptEndOfTheWriteIsUncertain()
+    {
+        QCOMPARE(verdict(-1, false, false, true), QStringLiteral("uncertain"));
+        QCOMPARE(verdict(kPanicExitCode, false, false), QStringLiteral("uncertain"));
+        QCOMPARE(verdict(-1, true, false, true), QStringLiteral("check-failed"));
+        QCOMPARE(verdict(kPanicExitCode, true, false), QStringLiteral("check-failed"));
+        QCOMPARE(verdict(-1, false, true, true), QStringLiteral("timeout"));
+        // could not start at all: nothing ran, nothing written
+        QCOMPARE(verdict(-1, false, false, false), QStringLiteral("not-written"));
+    }
+
     // The real process boundary, as AkmBridge::run crosses it (QProcess with a
     // program and an argument list): a fake "akmctl" records its argv. The
     // name with quotes, a semicolon, spaces and $(...) arrives as one line,

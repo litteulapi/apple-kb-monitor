@@ -114,9 +114,26 @@ class TestKcmModule : public QObject
     {
         return m_view ? findItem(m_view->quickWindow()->contentItem(), name) : nullptr;
     }
+    // Any object (a popup is not an item): QObject children of every item.
+    static QObject *findObject(QQuickItem *root, const QString &name)
+    {
+        if (!root) {
+            return nullptr;
+        }
+        if (QObject *o = root->findChild<QObject *>(name, Qt::FindDirectChildrenOnly)) {
+            return o;
+        }
+        const auto children = root->childItems();
+        for (QQuickItem *c : children) {
+            if (QObject *f = findObject(c, name)) {
+                return f;
+            }
+        }
+        return nullptr;
+    }
     QObject *object(const QString &name)
     {
-        return m_view && m_view->rootObject() ? m_view->rootObject()->findChild<QObject *>(name) : nullptr;
+        return m_view ? findObject(m_view->quickWindow()->contentItem(), name) : nullptr;
     }
     bool waitAlertsReady()
     {
@@ -448,6 +465,40 @@ private Q_SLOTS:
         apply();
         QVERIFY2(text(QStringLiteral("alertsResult")).startsWith(QStringLiteral("Non enregistré")), qPrintable(text(QStringLiteral("alertsResult"))));
         QVERIFY(m_module->needsSave());
+    }
+
+    // #288 (K5): akmctl killed while it writes the name (crash, signal,
+    // Rust panic): the frame may have gone, so never "Not written".
+    void crashDuringNameWriteIsUncertain_data()
+    {
+        QTest::addColumn<QByteArray>("mode");
+        QTest::newRow("sigsegv") << QByteArray("segv");
+        QTest::newRow("sigkill") << QByteArray("kill");
+        QTest::newRow("panic-101") << QByteArray("code101");
+        QTest::newRow("preflight-11") << QByteArray("code11");
+    }
+    void crashDuringNameWriteIsUncertain()
+    {
+        QFETCH(QByteArray, mode);
+        setMode(mode);
+        QVERIFY(open(QStringLiteral("name")));
+        QVERIFY(typeInto(QStringLiteral("nameDeviceField"), QStringLiteral("Bureau-Han's KB")));
+        QVERIFY(click(QStringLiteral("nameWriteBtn")));
+        QObject *dialog = object(QStringLiteral("nameConfirmDialog"));
+        QVERIFY(dialog);
+        QTRY_VERIFY(dialog->property("opened").toBool());
+        QVERIFY(QMetaObject::invokeMethod(dialog, "accept"));
+        QTRY_VERIFY_WITH_TIMEOUT(shown(QStringLiteral("nameDeviceResult")), 10000);
+        const QString verdict = text(QStringLiteral("nameDeviceResult"));
+        // one write, with the exact arguments (the reads of the Keys tab aside)
+        QCOMPARE(akmctlLog().count("rename"), 1);
+        QVERIFY(akmctlLog().endsWith("\nrename --device-name=Bureau-Han's KB --yes\n"));
+        if (mode == "code11") {
+            QVERIFY2(verdict.startsWith(QStringLiteral("Non écrit")), qPrintable(verdict));
+        } else {
+            QVERIFY2(!verdict.startsWith(QStringLiteral("Non écrit")), qPrintable(verdict));
+            QVERIFY2(verdict.contains(QStringLiteral("a pu être écrit ou non")), qPrintable(verdict));
+        }
     }
 };
 
