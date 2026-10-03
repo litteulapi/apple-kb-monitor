@@ -361,6 +361,12 @@ impl<C: Clock> History<C> {
         if !valid_sample(entry.pct, entry.voltage) {
             return Ok(false);
         }
+        // One sample per second (C7): a Refresh or a restart of the daemon in
+        // the same second as the last sample wrote it twice. An event (new
+        // batteries) is never dropped.
+        if entry.event.is_none() && self.last_ts() == Some(entry.ts) {
+            return Ok(false);
+        }
         if let Some(p) = self.path.parent() {
             std::fs::create_dir_all(p)?;
         }
@@ -372,6 +378,18 @@ impl<C: Clock> History<C> {
         // One write call: an interruption cannot leave a line without its `\n`.
         f.write_all(format!("{line}\n").as_bytes())?;
         Ok(true)
+    }
+
+    /// Timestamp of the last entry, read from the end of the file only.
+    fn last_ts(&self) -> Option<u64> {
+        use std::io::{Read, Seek, SeekFrom};
+        let mut f = std::fs::File::open(&self.path).ok()?;
+        let len = f.metadata().ok()?.len();
+        let from = len.saturating_sub(4096);
+        f.seek(SeekFrom::Start(from)).ok()?;
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).ok()?;
+        parse_bytes(&buf).last().map(|e| e.ts)
     }
 
     /// Every entry (empty if the file is missing).
@@ -680,6 +698,26 @@ mod tests {
         let mut mixed = legacy;
         mixed.extend(real);
         assert!(estimate_remaining(&mixed).is_some());
+    }
+
+    #[test]
+    fn same_second_sample_is_written_once() {
+        // C7: a Refresh / a restart in the same second wrote the line twice.
+        let dir = std::env::temp_dir().join(format!("akm-hist-c7-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let h = History::new(dir.join("h.jsonl"), SystemClock);
+        let e = HistoryEntry::measured(1_791_007_043, 55.0, Some(2969), Some(2908));
+        assert!(h.append_entry(&e).unwrap());
+        // A new History on the same file: the daemon was restarted.
+        let h2 = History::new(dir.join("h.jsonl"), SystemClock);
+        assert!(!h2.append_entry(&e).unwrap(), "same second: not written");
+        let mut ev = HistoryEntry::measured(1_791_007_043, 99.0, None, None);
+        ev.event = Some(HistoryEvent::BatteryReplaced);
+        assert!(h2.append_entry(&ev).unwrap(), "an event is never dropped");
+        let next = HistoryEntry::measured(1_791_007_044, 55.0, Some(2969), Some(2908));
+        assert!(h2.append_entry(&next).unwrap());
+        assert_eq!(h2.read().len(), 3);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
