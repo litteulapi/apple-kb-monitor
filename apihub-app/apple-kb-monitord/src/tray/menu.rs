@@ -168,6 +168,18 @@ pub fn action_for(item: i32) -> Option<Action> {
     })
 }
 
+/// `ActivateMenuItem(id)` (C10): an information row of the menu is a valid
+/// entry with nothing to run (`Ok(None)`), not an error; an id the menu does
+/// not have is refused; "Quit (hide icon)" only makes sense on the icon.
+pub fn activation(item: i32, in_menu: bool) -> Result<Option<Action>, String> {
+    match action_for(item) {
+        Some(Action::Hide) => Err(format!("menu item {item} only works on the daemon's icon")),
+        Some(a) => Ok(Some(a)),
+        None if in_menu => Ok(None),
+        None => Err(format!("no menu item {item}")),
+    }
+}
+
 impl Menu {
     fn click(&self, item: i32) {
         if let Some(action) = action_for(item) {
@@ -291,6 +303,18 @@ impl Menu {
 mod tests {
     use super::super::view::Lang;
     use super::*;
+
+    /// C10: clicking the name / battery / state rows from the widget answered
+    /// "no action for menu item N".
+    #[test]
+    fn information_rows_activate_cleanly() {
+        for row in [id::HEADER, id::BATTERY, id::CONNECTION, id::KB_FIRST] {
+            assert_eq!(activation(row, true), Ok(None), "{row}");
+        }
+        assert!(matches!(activation(id::REFRESH, true), Ok(Some(Action::Refresh))));
+        assert!(activation(id::QUIT, true).is_err());
+        assert!(activation(4242, false).is_err());
+    }
     use akm_core::{KbReport, Snapshot};
 
     fn view(pct: f64, connected: bool) -> View {

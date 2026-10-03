@@ -7,6 +7,7 @@ use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 
 use zbus::blocking::Connection;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Value};
@@ -33,7 +34,10 @@ fn is_executable(p: &Path) -> bool {
 
 /// Start a desktop program outside the daemon's cgroup when possible
 /// (`systemd-run --user --scope`): restarting the service must not kill the
-/// window it opened. The child is reaped by a short-lived thread.
+/// window it opened. The daemon may predate `import-environment`: the
+/// display variables it lacks are taken from the user manager (C10). A
+/// program that fails within [`START_CHECK`] is journalled and notified,
+/// never reported "started" in silence.
 pub fn launch(argv: &[&str], token: Option<&str>) -> std::io::Result<()> {
     let mut cmd = if which("systemd-run").is_some() && std::env::var_os("INVOCATION_ID").is_some() {
         let mut c = Command::new("systemd-run");
@@ -45,22 +49,92 @@ pub fn launch(argv: &[&str], token: Option<&str>) -> std::io::Result<()> {
         c.args(&argv[1..]);
         c
     };
+    for (k, v) in missing_display_env() {
+        cmd.env(k, v);
+    }
     if let Some(t) = token {
         cmd.env("XDG_ACTIVATION_TOKEN", t);
         cmd.env("DESKTOP_STARTUP_ID", t);
     }
-    let mut child = cmd
+    let child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .process_group(0)
         .spawn()?;
+    let prog = argv[0].to_string();
     let _ = std::thread::Builder::new()
         .name("tray-reap".into())
         .spawn(move || {
-            let _ = child.wait();
+            if let Err(e) = wait_start(child, START_CHECK) {
+                tracing::warn!("tray: {prog} failed to start: {e}");
+                apple_kb_monitord::notify::send_with(
+                    &prog,
+                    &e,
+                    "dialog-error",
+                    akm_core::alerts::Urgency::Normal,
+                    true,
+                );
+            }
         });
     Ok(())
+}
+
+/// How long a launched program is watched for an immediate failure.
+pub const START_CHECK: Duration = Duration::from_secs(2);
+
+/// `Err(exit status + end of stderr)` when the child ends in failure within
+/// `window`; `Ok` when it is still running then (reaped later) or exited 0.
+pub fn wait_start(mut child: std::process::Child, window: Duration) -> Result<(), String> {
+    let start = std::time::Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(st)) if st.success() => return Ok(()),
+            Ok(Some(st)) => {
+                let mut err = String::new();
+                if let Some(mut e) = child.stderr.take() {
+                    let _ = std::io::Read::read_to_string(&mut e, &mut err);
+                }
+                let tail: String = err.trim().lines().last().unwrap_or("").chars().take(200).collect();
+                return Err(if tail.is_empty() { format!("{st}") } else { format!("{st}: {tail}") });
+            }
+            Ok(None) if start.elapsed() >= window => {
+                // Still running: drop stderr (no pipe left full), reap later.
+                drop(child.stderr.take());
+                let _ = child.wait();
+                return Ok(());
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+}
+
+/// `WAYLAND_DISPLAY` / `DISPLAY` / `XAUTHORITY` the daemon lacks, from the
+/// user manager's environment (`systemctl --user show-environment`).
+fn missing_display_env() -> Vec<(String, String)> {
+    const KEYS: [&str; 3] = ["WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY"];
+    if KEYS.iter().all(|k| std::env::var_os(k).is_some()) {
+        return Vec::new();
+    }
+    let Ok(out) = Command::new("systemctl")
+        .args(["--user", "show-environment"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+    else {
+        return Vec::new();
+    };
+    pick_display_env(&String::from_utf8_lossy(&out.stdout), |k| std::env::var_os(k).is_some())
+}
+
+fn pick_display_env(text: &str, present: impl Fn(&str) -> bool) -> Vec<(String, String)> {
+    const KEYS: [&str; 3] = ["WAYLAND_DISPLAY", "DISPLAY", "XAUTHORITY"];
+    text.lines()
+        .filter_map(|l| l.split_once('='))
+        .filter(|(k, v)| KEYS.contains(k) && !present(k) && !v.is_empty())
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
 }
 
 /// Open the window: `org.freedesktop.Application.Activate` on
@@ -163,15 +237,29 @@ pub fn ask_name(title: &str, prompt: &str, current: &str) -> Result<Option<Strin
     let argv = rename_dialog_argv(prog, title, prompt, current);
     let out = Command::new(&argv[0])
         .args(&argv[1..])
+        .envs(missing_display_env())
         .stdin(Stdio::null())
         .stderr(Stdio::null())
         .output()
         .map_err(|_| ())?;
-    if !out.status.success() {
-        return Ok(None); // cancelled
+    let r = dialog_outcome(out.status.code(), &out.stdout);
+    if r.is_err() {
+        tracing::warn!("tray: {prog} failed ({}), not a cancellation", out.status);
     }
-    let text = String::from_utf8_lossy(&out.stdout);
-    Ok(Some(text.trim_end_matches(['\n', '\r']).to_string()))
+    r
+}
+
+/// kdialog / zenity: 0 = a name, 1 = cancelled; anything else (no display,
+/// killed) is a failure, never taken for a cancellation (C10).
+fn dialog_outcome(code: Option<i32>, stdout: &[u8]) -> Result<Option<String>, ()> {
+    match code {
+        Some(0) => {
+            let text = String::from_utf8_lossy(stdout);
+            Ok(Some(text.trim_end_matches(['\n', '\r']).to_string()))
+        }
+        Some(1) => Ok(None),
+        _ => Err(()),
+    }
 }
 
 /// Clipboard: Klipper over D-Bus (works without `WAYLAND_DISPLAY` in the
@@ -307,6 +395,46 @@ pub fn upower_charging(sys: &Connection, mac: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// C10: a program that fails at once is reported, with its stderr; one
+    /// still running after the window is a start.
+    #[test]
+    fn a_launch_that_fails_at_once_is_reported() {
+        let spawn = |script: &str| {
+            Command::new("sh")
+                .args(["-c", script])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .spawn()
+                .unwrap()
+        };
+        let e = wait_start(spawn("echo 'cannot open display' >&2; exit 3"), START_CHECK).unwrap_err();
+        assert!(e.contains("cannot open display") && e.contains('3'), "{e}");
+        assert!(wait_start(spawn("sleep 1"), Duration::from_millis(200)).is_ok());
+        assert!(wait_start(spawn("exit 0"), START_CHECK).is_ok());
+    }
+
+    #[test]
+    fn a_dialog_that_fails_is_not_a_cancellation() {
+        assert_eq!(dialog_outcome(Some(0), b"Bureau\n"), Ok(Some("Bureau".into())));
+        assert_eq!(dialog_outcome(Some(1), b""), Ok(None));
+        assert_eq!(dialog_outcome(Some(254), b""), Err(()));
+        assert_eq!(dialog_outcome(None, b""), Err(()), "killed by a signal");
+    }
+
+    #[test]
+    fn display_variables_come_from_the_user_manager_when_missing() {
+        let env = "HOME=/h\nWAYLAND_DISPLAY=wayland-1\nDISPLAY=:1\nXAUTHORITY=\n";
+        assert_eq!(
+            pick_display_env(env, |_| false),
+            vec![
+                ("WAYLAND_DISPLAY".to_string(), "wayland-1".to_string()),
+                ("DISPLAY".to_string(), ":1".to_string())
+            ]
+        );
+        assert!(pick_display_env(env, |_| true).is_empty(), "own values kept");
+    }
 
     #[test]
     fn a_frozen_upower_never_blocks_the_tray_loop() {

@@ -187,9 +187,13 @@ impl Control {
     /// Run a menu entry as if clicked in the icon's menu (#268). "Quit (hide
     /// icon)" is refused: it only makes sense on the daemon's own icon.
     fn activate_menu_item(&self, id: i32, token: String) -> zbus::fdo::Result<()> {
-        let action = super::menu::action_for(id)
-            .filter(|a| !matches!(a, Action::Hide))
-            .ok_or_else(|| zbus::fdo::Error::InvalidArgs(format!("no action for menu item {id}")))?;
+        let in_menu = lock(&self.shared).view.menu.iter().any(|e| e.id == id);
+        let Some(action) =
+            super::menu::activation(id, in_menu).map_err(zbus::fdo::Error::InvalidArgs)?
+        else {
+            tracing::debug!("tray: menu item {id} is an information row, nothing to run");
+            return Ok(());
+        };
         if !token.is_empty() {
             lock(&self.shared).xdg_token = Some(token);
         }

@@ -429,7 +429,7 @@ fn rename_flow(
         Ok(Some(t)) => t,
         Ok(None) => return,
         Err(()) => {
-            tracing::info!("tray: no dialog program, opening the window");
+            tracing::info!("tray: no working dialog program, opening the window");
             actions::open_window(conn, token);
             return;
         }
@@ -1150,7 +1150,10 @@ mod tests {
             Some("com.agenceapi.AppleKbMonitor1.Tray"), "ActivateMenuItem", &(id, "")).is_ok();
         assert!(run(view::id::REFRESH));
         assert!(!run(view::id::QUIT), "hiding the icon from the widget");
-        assert!(!run(view::id::BATTERY), "information row");
+        // C10: an information row answers cleanly (nothing to run), an id
+        // the menu does not have is refused.
+        assert!(run(view::id::BATTERY), "information row");
+        assert!(!run(4242), "unknown menu item");
 
         // 4. The user ticks the widget in the system tray configuration.
         std::fs::write(&rc, "[Containments][3][General]\nextraItems=org.kde.plasma.battery,com.agenceapi.devicehub\n").unwrap();
