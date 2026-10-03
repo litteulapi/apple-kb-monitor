@@ -681,3 +681,6 @@ msgstr "l'onglet DIAG en donne la raison"
 
 msgid "not measured"
 msgstr "non mesuré"
+
+msgid "{}/{} characters: shorten the name"
+msgstr "{}/{} caractères : raccourcissez le nom"

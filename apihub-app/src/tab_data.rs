@@ -272,6 +272,10 @@ fn rename_row(ui: &mut Ui, th: &Theme, mac: &str, current: Option<&str>, st: &mu
             .char_limit(akm_core::alias::MAX_CHARS)
             .hint_text(tr("Keyboard name")),
     );
+    // A current name longer than the limit blocks typing: say so (#278).
+    if let Some(note) = length_note(&st.buf) {
+        theme::text(ui, &note, theme::BODY, theme::AMBER);
+    }
     if std::mem::take(&mut st.focus) {
         edit.request_focus();
         edit.scroll_to_me(Some(egui::Align::Center));
@@ -304,6 +308,13 @@ fn rename_row(ui: &mut Ui, th: &Theme, mac: &str, current: Option<&str>, st: &mu
     }
     let status = st.status.lock().unwrap_or_else(|e| e.into_inner()).clone();
     shell::outcome(ui, th, &status);
+}
+
+/// "68/64 characters: shorten the name" when the field holds more than the
+/// limit (the field then refuses every new character).
+pub fn length_note(buf: &str) -> Option<String> {
+    let (n, max) = (buf.chars().count(), akm_core::alias::MAX_CHARS);
+    (n > max).then(|| trf("{}/{} characters: shorten the name", &[&n, &max]))
 }
 
 fn firmware(ui: &mut Ui, th: &Theme, kb: &KbReport) {
@@ -361,6 +372,17 @@ mod tests {
         assert_eq!(
             device_name_command("a\"; rm -rf \\"),
             "akmctl rename --device-name 'a\"; rm -rf \\'"
+        );
+    }
+
+    /// #278: a name over the limit is reported, not silently frozen.
+    #[test]
+    fn a_name_over_the_limit_is_reported() {
+        let max = akm_core::alias::MAX_CHARS;
+        assert_eq!(length_note(&"é".repeat(max)), None);
+        assert_eq!(
+            length_note(&"x".repeat(max + 4)).as_deref(),
+            Some(format!("{}/{max} characters: shorten the name", max + 4).as_str())
         );
     }
 
