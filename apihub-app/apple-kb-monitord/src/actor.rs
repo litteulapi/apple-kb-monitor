@@ -6,6 +6,7 @@
 //! ([`Machine`]) and publishes an immutable [`Snapshot`] into a [`Watch`].
 //! Consumers (D-Bus interface, UI) never block it.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
@@ -377,7 +378,9 @@ struct Actor {
     rssi_at: Option<u64>,
     provider: Option<bluez::BatteryProvider>,
     provider_mac: Option<String>,
-    alerts: AlertState,
+    /// Low-battery alert state PER keyboard (C14): the "previous value" of
+    /// one keyboard is never another's.
+    alerts: HashMap<String, AlertState>,
     detector: Detector,
     link: LinkTracker,
     forecast: Option<Forecast>,
@@ -438,7 +441,7 @@ impl Actor {
             alias_memory_path: opts
                 .history
                 .then(akm_core::alias::AliasMemory::default_path),
-            alerts: AlertState::new(opts.alerts.clone()),
+            alerts: HashMap::new(),
             detector: Detector::primed(&past),
             link: LinkTracker::new(),
             forecast: None,
@@ -838,7 +841,12 @@ impl Actor {
         if self.opts.alerts_enabled {
             let assessment = self.assess(k, self.history.as_ref().map_or_else(unix_now, History::now));
             let (alert_pct, basis) = chemistry::alert_pct(assessment.estimate.as_ref(), pct);
-            if let Some(c) = self.alerts.update_after(alert_pct, after_reconnect) {
+            let cfg = self.opts.alerts.clone();
+            let state = self
+                .alerts
+                .entry(mac.clone().unwrap_or_default().to_ascii_uppercase())
+                .or_insert_with(|| AlertState::new(cfg));
+            if let Some(c) = state.update_after(alert_pct, after_reconnect) {
                 tracing::warn!(
                     "low battery: {alert_pct:.0}% ({basis:?}, keyboard {pct:.0}%, threshold {}%)",
                     c.threshold
@@ -971,7 +979,14 @@ impl Actor {
             r.voltage_before,
             r.voltage_after
         );
-        self.alerts.rearm_all();
+        match mac {
+            Some(m) => {
+                if let Some(a) = self.alerts.get_mut(&m.to_ascii_uppercase()) {
+                    a.rearm_all();
+                }
+            }
+            None => self.alerts.values_mut().for_each(AlertState::rearm_all),
+        }
         self.estimate_reminded = false;
         if mac.is_some_and(|m| self.notices.rearm_battery(m)) {
             self.save_notices();
@@ -2105,6 +2120,34 @@ mod tests {
         a.kb = Some(report(14.0, None));
         a.after_battery_update(false);
         assert_eq!(crossings(&rx), vec![15]);
+    }
+
+    #[test]
+    fn the_low_battery_alert_is_per_keyboard() {
+        // C14: keyboard 02 at 16 % was followed (warned at 30 %); it leaves,
+        // 01 is now read at 14 % right after the switch. 01's previous value
+        // is not 02's 16 % (a 2-point "firmware step" that disarmed 15 %
+        // silently): its first reading warns at 15 %.
+        let mut a = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            chemistry: Chemistry::Unknown,
+            ..Options::default()
+        });
+        let rx = a.opts.events.subscribe();
+        let mut k2 = report(16.0, None);
+        k2.device.mac = Some("AA:BB:CC:DD:EE:02".into());
+        a.kb = Some(k2);
+        a.linked = true;
+        a.after_battery_update(true);
+        a.disconnected();
+        let mut k1 = report(14.0, None);
+        k1.device.mac = Some("AA:BB:CC:DD:EE:01".into());
+        a.kb = Some(k1);
+        a.linked = true;
+        a.after_battery_update(true);
+        assert_eq!(crossings(&rx), vec![30, 15]);
     }
 
     #[test]

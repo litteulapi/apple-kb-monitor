@@ -93,6 +93,10 @@ impl AlertConfig {
     }
 }
 
+/// Largest drop (points) at a reconnection still taken for a firmware step
+/// (#179, C14); a larger drop is a discharge and alerts.
+pub const MAX_RECONNECT_STEP: f64 = 5.0;
+
 /// A threshold that was just crossed downwards.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Crossing {
@@ -141,19 +145,29 @@ impl AlertState {
         if !pct.is_finite() {
             return None;
         }
-        let stepped = after_reconnect && self.last.is_some_and(|prev| pct < prev);
+        // A firmware step is a few points (99 -> 96, 32 -> 28 measured): a
+        // larger drop is a real discharge during the disconnection (C14).
+        let stepped = after_reconnect
+            && self
+                .last
+                .is_some_and(|prev| pct < prev && prev - pct <= MAX_RECONNECT_STEP);
         self.last = Some(pct);
         let mut lowest = None;
+        let mut crossed = 0;
         for (i, &t) in self.cfg.thresholds.iter().enumerate() {
             let t_f = f64::from(t);
             if pct >= t_f + self.cfg.hysteresis {
                 self.armed[i] = true;
             } else if self.armed[i] && pct <= t_f {
                 self.armed[i] = false;
-                if !stepped {
-                    lowest = Some(t); // thresholds are sorted highest first
-                }
+                crossed += 1;
+                lowest = Some(t); // thresholds are sorted highest first
             }
+        }
+        // The step hides at most the ONE threshold it crosses; a jump over
+        // several thresholds is warned at the lowest (C14).
+        if stepped && crossed == 1 {
+            lowest = None;
         }
         lowest.map(|threshold| Crossing {
             threshold,
@@ -329,6 +343,23 @@ mod tests {
         s.update(32.0);
         s.update_after(28.0, true);
         assert_eq!(s.update(14.0).unwrap().threshold, 15);
+    }
+
+    #[test]
+    fn a_real_discharge_across_a_disconnection_is_never_swallowed() {
+        // C14: 41 % -> 14 % across a long disconnection: two thresholds
+        // crossed, warned at the lowest.
+        let mut s = AlertState::new(AlertConfig::default());
+        assert!(s.update(41.0).is_none());
+        assert_eq!(s.update_after(14.0, true).unwrap().threshold, 15);
+        // A drop of more than a step over a single threshold alerts too.
+        let mut s = AlertState::new(AlertConfig::default());
+        s.update(38.0);
+        assert_eq!(s.update_after(29.0, true).unwrap().threshold, 30);
+        // A small step over two close thresholds is no artefact either.
+        let mut s = AlertState::new(AlertConfig::new(vec![20, 18], 2.0, 5));
+        s.update(21.0);
+        assert_eq!(s.update_after(17.0, true).unwrap().threshold, 18);
     }
 
     #[test]
