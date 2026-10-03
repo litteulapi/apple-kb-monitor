@@ -13,6 +13,12 @@ here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if grep -rEn "plasma5support|dbus-monitor|engine: *\"executable\"" "$here/../com.agenceapi.devicehub/contents"; then
   echo "FAIL: the widget starts subprocesses again" >&2; exit 1
 fi
+# The system tray only opens the popup of applets without a
+# preferredRepresentation (Plasma 6 SystemTrayState.setActiveApplet): with
+# one, a left click did nothing at all.
+if grep -rEn "^[^/]*preferredRepresentation *:" "$here/../com.agenceapi.devicehub/contents/ui"; then
+  echo "FAIL: preferredRepresentation set, the system tray popup would never open" >&2; exit 1
+fi
 # Display data is plain text, never rich text (#205).
 python3 "$here/check_plaintext.py" >/dev/null || { python3 "$here/check_plaintext.py" >&2; echo "FAIL: rich text in widget" >&2; exit 1; }
 # Every i18n() text of the widget is translated in po/fr.po (#114).

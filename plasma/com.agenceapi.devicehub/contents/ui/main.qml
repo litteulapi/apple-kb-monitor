@@ -142,7 +142,9 @@ PlasmoidItem {
     Plasmoid.title: i18n("ApiHub")
     Plasmoid.icon: "apihub-scarab"
 
-    preferredRepresentation: compactRepresentation
+    // No preferredRepresentation: the system tray (Plasma 6, SystemTrayState
+    // .setActiveApplet) only opens the popup of applets that leave it unset;
+    // with it set, a click toggled `expanded` but the popup never showed.
     compactRepresentation: CompactRepresentation {}
     fullRepresentation: FullRepresentation {}
 
