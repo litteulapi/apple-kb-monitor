@@ -61,4 +61,16 @@ for s in "$top"/dbus/*.service "$top"/plasma/krunner/*.service; do
   name=$(sed -n 's/^Name=//p' "$s")
   [ "$name.service" = "$(basename "$s")" ] || fail "$(basename "$s"): Name=$name must match the file name"
 done
-echo "PASS data files (polkit XML + DTD, .desktop, JSON, D-Bus services)"
+# One licence everywhere it is declared (#297): the one of the PKGBUILD,
+# GPL-2.0-or-later since the first release (LICENSE = the GPL v2 text).
+lic=$(sed -n "s/^license=('\([^']*\)'.*/\1/p" "$top/PKGBUILD")
+[ "$lic" = GPL-2.0-or-later ] || fail "PKGBUILD license=$lic, the project is GPL-2.0-or-later"
+for j in "$top/plasma/com.agenceapi.devicehub/metadata.json" "$top/kcm/kcm_applekeyboard.json"; do
+  l=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["KPlugin"].get("License",""))' "$j")
+  [ "$l" = "$lic" ] || fail "$(basename "$j"): License $l != $lic"
+done
+for d in "$top"/data/*.desktop "$top/com.agenceapi.AppleKbMonitor.desktop"; do
+  l=$(sed -n 's/^X-KDE-PluginInfo-License=//p' "$d")
+  [ -z "$l" ] || [ "$l" = "$lic" ] || fail "$(basename "$d"): License $l != $lic"
+done
+echo "PASS data files (polkit XML + DTD, .desktop, JSON, D-Bus services, licence)"
