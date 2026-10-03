@@ -325,6 +325,20 @@ private Q_SLOTS:
         QCOMPARE(readFile(configPath()), after);
         QVERIFY(!m_module->needsSave());
     }
+
+    // #287 (K4): a value written as a string on several lines is not
+    // rewritten (its second line would stay behind): refused, file intact.
+    void multiLineStringIsNotRewritten()
+    {
+        const QByteArray before = "[notifications]\nconnection = \"\"\"\ntrue\"\"\"\n[ddc]\nbrightness = 40\n";
+        writeFile(configPath(), before);
+        QVERIFY(open(QStringLiteral("notifications")));
+        QVERIFY(waitAlertsReady());
+        QVERIFY(click(QStringLiteral("alerts_connection")));
+        apply();
+        QCOMPARE(readFile(configPath()), before);
+        QVERIFY2(text(QStringLiteral("alertsResult")).startsWith(QStringLiteral("Non enregistré")), qPrintable(text(QStringLiteral("alertsResult"))));
+    }
 };
 
 QTEST_MAIN(TestKcmModule)

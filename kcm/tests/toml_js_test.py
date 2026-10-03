@@ -44,6 +44,9 @@ CASES = [
     ("quoted-header", "[\"alerts\"]\nlow = 1\n", "alerts", "low", 5, "refuse"),
     ("other-quoted-key-is-fine", "[alerts]\n\"other\" = 1\nlow = 2\n", "alerts", "low", 5, "ok"),
     ("other-array-of-tables-is-fine", "[[x]]\na = 1\n\n[alerts]\nlow = 2\n", "alerts", "low", 5, "ok"),
+    # #287 (K4): a string written on several lines is never rewritten
+    ("multiline-basic-string", "[notifications]\nconnection = \"\"\"\ntrue\"\"\"\n", "notifications", "connection", False, "refuse"),
+    ("multiline-literal-string", "[battery]\nchemistry = \'\'\'\nnimh\'\'\'\n", "battery", "chemistry", "lithium", "refuse"),
 ]
 
 # #284 (K3): byte for byte, only the statement of the key changes; every

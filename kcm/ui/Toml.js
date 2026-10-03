@@ -691,6 +691,11 @@ function set(text, section, key, value) {
         const i = found;
         const m = /^(\s*)([A-Za-z0-9_-]+)(\s*=\s*)(.*)$/.exec(lines[i].body);
         const rest = lines[i].body.slice(m[1].length + m[2].length + m[3].length);
+        // #287: a string on several lines (or one not closed) is not
+        // rewritten: its other lines would stay behind, orphaned.
+        if (/^("""|\'\'\')/.test(rest.trim()) && (foundEnd > i || statementEnd(lines, i) !== i || !parsesAlone(lines[i].body))) {
+            refuse(i, "string written on several lines for " + key);
+        }
         // keep the comment after the value (on the last line of a value
         // written on several lines; the comments inside it are not kept)
         const last = foundEnd === i ? rest : lines[foundEnd].body;
