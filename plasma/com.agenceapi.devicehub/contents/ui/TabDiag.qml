@@ -9,9 +9,53 @@ import "Pip.js" as Pip
 ColumnLayout {
     id: page
     property var applet
+    // Popup at the tray's own size: smaller figures.
+    property bool compact: false
     spacing: Pip.GAP * 1.5
 
     readonly property int failed: applet.diagTotal - applet.diagPassed
+
+    PipPanel {
+        title: i18n("System diagnostic")
+        PipButton {
+            Layout.fillWidth: true
+            text: applet.diagRunning ? i18n("Checking…") : i18n("Run the full check")
+            tint: applet.diagRunning ? Pip.AMBER : Pip.PHOSPHOR
+            enabled: applet.daemonRunning && !applet.diagRunning
+            onClicked: applet.runDiagnose()
+        }
+        Flow {
+            Layout.fillWidth: true
+            visible: applet.diagTotal > 0
+            spacing: Pip.GAP * 2
+            PipText {
+                text: i18n("%1/%2 PASSED", applet.diagPassed, applet.diagTotal)
+                font.pixelSize: Pip.VALUE
+                color: page.failed > 0 ? Pip.AMBER : Pip.PHOSPHOR
+                glow: true
+                wrapMode: Text.NoWrap
+            }
+            PipText {
+                visible: page.failed > 0
+                text: i18n("%1 PROBLEM(S)", page.failed)
+                font.pixelSize: Pip.VALUE
+                color: Pip.RED
+                glow: true
+                wrapMode: Text.NoWrap
+            }
+        }
+        PipSegments {
+            Layout.fillWidth: true
+            visible: applet.diagChecks.length > 0
+            colors: applet.diagChecks.map(function (c) { return c.ok ? Pip.PHOSPHOR : Pip.RED; })
+        }
+        PipText {
+            Layout.fillWidth: true
+            visible: applet.diagError !== ""
+            text: i18n("Check not run: %1", applet.diagError)
+            color: Pip.RED
+        }
+    }
 
     PipPanel {
         title: i18n("Monitor")
@@ -62,48 +106,6 @@ ColumnLayout {
             visible: applet.diagHint !== ""
             text: applet.diagHint
             font.pixelSize: Pip.SMALL
-        }
-    }
-
-    PipPanel {
-        title: i18n("System diagnostic")
-        PipButton {
-            Layout.fillWidth: true
-            text: applet.diagRunning ? i18n("Checking…") : i18n("Run the full check")
-            tint: applet.diagRunning ? Pip.AMBER : Pip.PHOSPHOR
-            enabled: applet.daemonRunning && !applet.diagRunning
-            onClicked: applet.runDiagnose()
-        }
-        Flow {
-            Layout.fillWidth: true
-            visible: applet.diagTotal > 0
-            spacing: Pip.GAP * 2
-            PipText {
-                text: i18n("%1/%2 PASSED", applet.diagPassed, applet.diagTotal)
-                font.pixelSize: Pip.VALUE
-                color: page.failed > 0 ? Pip.AMBER : Pip.PHOSPHOR
-                glow: true
-                wrapMode: Text.NoWrap
-            }
-            PipText {
-                visible: page.failed > 0
-                text: i18n("%1 PROBLEM(S)", page.failed)
-                font.pixelSize: Pip.VALUE
-                color: Pip.RED
-                glow: true
-                wrapMode: Text.NoWrap
-            }
-        }
-        PipSegments {
-            Layout.fillWidth: true
-            visible: applet.diagChecks.length > 0
-            colors: applet.diagChecks.map(function (c) { return c.ok ? Pip.PHOSPHOR : Pip.RED; })
-        }
-        PipText {
-            Layout.fillWidth: true
-            visible: applet.diagError !== ""
-            text: i18n("Check not run: %1", applet.diagError)
-            color: Pip.RED
         }
     }
 

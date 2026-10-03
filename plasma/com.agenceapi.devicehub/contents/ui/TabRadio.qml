@@ -10,6 +10,8 @@ import "Signal.js" as Sig
 ColumnLayout {
     id: page
     property var applet
+    // Popup at the tray's own size: smaller figures.
+    property bool compact: false
     spacing: Pip.GAP * 1.5
 
     function num(v, digits) {

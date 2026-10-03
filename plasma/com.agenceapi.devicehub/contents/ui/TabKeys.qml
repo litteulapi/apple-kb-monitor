@@ -9,6 +9,8 @@ import "FnMode.js" as Fn
 ColumnLayout {
     id: page
     property var applet
+    // Popup at the tray's own size: smaller figures.
+    property bool compact: false
     spacing: Pip.GAP * 1.5
 
     readonly property string kind: Fn.kind(applet.fnMode)

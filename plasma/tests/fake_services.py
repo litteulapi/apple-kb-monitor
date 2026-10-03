@@ -4,7 +4,8 @@ bus of run-widget-tests.sh. Never touches a keyboard.
 
 Optional second argument, for the screenshots of the Pip-Boy popup
 (docs/captures/widget-pipboy): "demo" = a complete state and 90 days of
-history; "nosignal" = the same without any RSSI measurement."""
+history; "nosignal" = the same without any RSSI measurement; "offline" = the
+keyboard is not connected."""
 import json, sys, time, dbus, dbus.service, dbus.mainloop.glib
 from gi.repository import GLib
 
@@ -21,6 +22,9 @@ NOW = int(time.time())
 
 
 def demo_state():
+    if SCENARIO == "offline":
+        return {"schema": 1, "version": 3, "connected": False, "keyboard": None,
+                "kb_error": "Keyboard: not found", "last_update": NOW - 7200}
     radio = {} if SCENARIO == "nosignal" else {
         "rssi_rel_db": -3, "rssi_kind": "relative", "rssi_quality": "good", "tx_power_dbm": 4}
     return {

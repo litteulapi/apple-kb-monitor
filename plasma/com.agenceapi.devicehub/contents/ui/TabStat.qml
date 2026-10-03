@@ -10,6 +10,8 @@ import "FnMode.js" as Fn
 ColumnLayout {
     id: page
     property var applet
+    // Popup at the tray's own size: smaller figures.
+    property bool compact: false
     spacing: Pip.GAP * 1.5
 
     readonly property bool hasPct: applet.connected && applet.batteryPercent >= 0
@@ -21,6 +23,20 @@ ColumnLayout {
         return Pip.daysLeft({ empty_at: applet.forecastEmptyAt }, Date.now() / 1000);
     }
     property bool renaming: false
+    readonly property string stateWord: !applet.connected ? "" : applet.thresholdLevel === "ok" ? i18n("OK")
+        : applet.thresholdLevel === "low" ? i18n("LOW")
+        : applet.thresholdLevel === "critical" ? i18n("CRITICAL")
+        : applet.thresholdLevel === "empty" ? i18n("EMPTY") : ""
+    // [label, value ("" = unknown), colour] of the stat strip.
+    readonly property var facts: [
+        [i18n("State"), page.stateWord, Pip.thresholdColor(applet.thresholdLevel)],
+        [i18n("Voltage"), applet.connected && applet.voltage > 0 ? i18n("%1 V", page.num(applet.voltage, 2)) : "",
+         Pip.thresholdColor(applet.thresholdLevel)],
+        [i18n("Autonomy"), page.days < 0 ? "" : page.days >= 1.5 ? i18n("≈ %1 days", Math.round(page.days))
+            : i18n("≈ %1 h", Math.max(0, Math.round(page.days * 24))),
+         page.days >= 0 && page.days < 7 ? Pip.AMBER : Pip.PHOSPHOR],
+        [i18n("Signal"), applet.hasRssi ? applet.rssiText : (applet.connected ? i18n("unavailable") : ""),
+         applet.hasRssi ? Pip.qualityColor(applet.rssiQuality) : Pip.AMBER]]
 
     function num(v, digits) {
         return Number(v).toLocaleString(Qt.locale(), "f", digits);
@@ -31,12 +47,32 @@ ColumnLayout {
         RowLayout {
             Layout.fillWidth: true
             spacing: Pip.GAP * 2
+            // Keyboard away: an OFFLINE plaque instead of a figure.
+            Rectangle {
+                Layout.alignment: Qt.AlignVCenter
+                visible: !applet.connected
+                implicitWidth: plaque.implicitWidth + 24
+                implicitHeight: plaque.implicitHeight + 12
+                color: Qt.rgba(1, 0.35, 0.24, 0.10)
+                border.color: Pip.RED
+                border.width: 2
+                PipText {
+                    id: plaque
+                    anchors.centerIn: parent
+                    text: applet.daemonRunning ? i18n("OFFLINE") : i18n("NO DAEMON")
+                    font.pixelSize: Pip.VALUE
+                    color: applet.daemonRunning ? Pip.RED : Pip.AMBER
+                    glow: true
+                    wrapMode: Text.NoWrap
+                }
+            }
             Row {
                 Layout.alignment: Qt.AlignTop
+                visible: applet.connected
                 PipText {
                     id: hero
                     text: page.hasPct ? String(applet.batteryPercent) : "---"
-                    font.pixelSize: Pip.HERO
+                    font.pixelSize: page.compact ? Pip.HERO * 0.78 : Pip.HERO
                     color: page.level
                     glow: page.hasPct
                     wrapMode: Text.NoWrap
@@ -53,21 +89,51 @@ ColumnLayout {
                     wrapMode: Text.NoWrap
                 }
             }
-            ColumnLayout {
+            // Stat strip beside the figure: state by the keyboard's
+            // thresholds, voltage, autonomy, signal.
+            GridLayout {
                 Layout.fillWidth: true
-                Layout.alignment: Qt.AlignTop
-                spacing: 2
-                PipText {
-                    Layout.fillWidth: true
-                    text: i18n("Keyboard indication").toUpperCase()
-                    font.pixelSize: Pip.SMALL
-                    color: Pip.GREEN_MID
+                Layout.alignment: Qt.AlignVCenter
+                columns: 2
+                columnSpacing: Pip.GAP
+                rowSpacing: 0
+                Repeater {
+                    model: page.facts
+                    delegate: PipText {
+                        required property var modelData
+                        required property int index
+                        Layout.row: index
+                        Layout.column: 0
+                        text: modelData[0].toUpperCase()
+                        font.pixelSize: Pip.SMALL
+                        color: Pip.GREEN_MID
+                        wrapMode: Text.NoWrap
+                    }
                 }
-                PipText {
-                    Layout.fillWidth: true
-                    text: i18n("Its own percentage: it only goes down when the keyboard reconnects.")
-                    font.pixelSize: Pip.SMALL
-                    color: Pip.GREEN_MID
+                Repeater {
+                    model: page.facts
+                    delegate: RowLayout {
+                        required property var modelData
+                        required property int index
+                        Layout.row: index
+                        Layout.column: 1
+                        Layout.fillWidth: true
+                        spacing: Pip.GAP
+                        PipText {
+                            Layout.fillWidth: true
+                            text: modelData[1] !== "" ? Pip.glyphs(modelData[1]) : "---"
+                            font.pixelSize: Pip.TITLE
+                            color: modelData[1] !== "" ? modelData[2] : Pip.GREEN_MID
+                            glow: modelData[1] !== ""
+                            Accessible.name: modelData[0] + " " + text
+                        }
+                        PipBars {
+                            visible: index === 3 && applet.hasRssi
+                            lit: Pip.qualityBars(applet.rssiQuality)
+                            color: Pip.qualityColor(applet.rssiQuality)
+                            barHeight: 16
+                        }
+                    }
                 }
             }
         }
@@ -75,6 +141,24 @@ ColumnLayout {
             Layout.fillWidth: true
             fraction: page.hasPct ? applet.batteryPercent / 100 : 0
             color: page.level
+        }
+        // Origin of the figure, then what the stat strip cannot say in one word.
+        PipText {
+            Layout.fillWidth: true
+            text: i18n("Keyboard indication: its own percentage, it only goes down when the keyboard reconnects.")
+            font.pixelSize: Pip.SMALL
+            color: Pip.GREEN_MID
+        }
+        PipKv {
+            visible: applet.connected && !applet.hasRssi
+            label: i18n("Signal")
+            value: i18n("see RADIO")
+            valueColor: Pip.AMBER
+        }
+        PipKv {
+            label: i18n("Discharge")
+            value: page.days < 0 ? i18n("not enough history yet") : i18n("−%1 % per day", page.num(applet.forecastRate, 1))
+            valueColor: page.days < 0 ? Pip.GREEN_MID : Pip.PHOSPHOR
         }
         // Last 7 days of the keyboard's percentage (#97), read when the popup opens.
         RowLayout {
@@ -106,52 +190,16 @@ ColumnLayout {
             value: applet.connected && (applet.hasEstimate || applet.newBatteries) ? applet.estimateText : ""
         }
         PipKv {
+            label: i18n("Chemistry")
+            value: applet.connected ? applet.batteryType : ""
+        }
+        PipKv {
             label: i18n("Apple display")
             value: applet.connected && applet.applePct >= 0 ? i18n("%1%", Math.round(applet.applePct)) : ""
         }
     }
 
     // Stat strip: two cells per row.
-    GridLayout {
-        Layout.fillWidth: true
-        columns: 2
-        columnSpacing: Pip.GAP
-        rowSpacing: Pip.GAP
-        PipCell {
-            label: i18n("State")
-            value: !applet.connected ? "" : applet.thresholdLevel === "ok" ? i18n("OK")
-                : applet.thresholdLevel === "low" ? i18n("LOW")
-                : applet.thresholdLevel === "critical" ? i18n("CRITICAL")
-                : applet.thresholdLevel === "empty" ? i18n("EMPTY") : ""
-            valueColor: Pip.thresholdColor(applet.thresholdLevel)
-            note: applet.connected && applet.batteryType !== "" ? applet.batteryType : ""
-        }
-        PipCell {
-            label: i18n("Voltage")
-            value: applet.connected && applet.voltage > 0 ? i18n("%1 V", page.num(applet.voltage, 2)) : ""
-            valueColor: Pip.thresholdColor(applet.thresholdLevel)
-        }
-        PipCell {
-            label: i18n("Autonomy")
-            value: page.days < 0 ? "" : page.days >= 1.5 ? i18n("≈ %1 days", Math.round(page.days))
-                : i18n("≈ %1 h", Math.max(0, Math.round(page.days * 24)))
-            valueColor: page.days >= 0 && page.days < 7 ? Pip.AMBER : Pip.PHOSPHOR
-            note: page.days < 0 ? i18n("not enough history yet")
-                : i18n("−%1 % per day", page.num(applet.forecastRate, 1))
-        }
-        PipCell {
-            label: i18n("Signal")
-            value: applet.hasRssi ? applet.rssiText : (applet.connected ? i18n("unavailable") : "")
-            valueColor: applet.hasRssi ? Pip.qualityColor(applet.rssiQuality) : Pip.AMBER
-            note: applet.connected && !applet.hasRssi ? i18n("see RADIO") : ""
-            PipBars {
-                lit: Pip.qualityBars(applet.rssiQuality)
-                color: Pip.qualityColor(applet.rssiQuality)
-                barHeight: 18
-            }
-        }
-    }
-
     PipPanel {
         title: i18n("Keyboard")
         PipKv {

@@ -401,12 +401,6 @@ msgstr ""
 msgid "Pairing lost or refused? Pair it again from a terminal (a confirmation is asked): akmctl repair"
 msgstr ""
 
-msgid "Keyboard indication"
-msgstr ""
-
-msgid "Its own percentage: it only goes down when the keyboard reconnects."
-msgstr ""
-
 msgid "OK"
 msgstr ""
 
@@ -419,13 +413,16 @@ msgstr ""
 msgid "≈ %1 h"
 msgstr ""
 
-msgid "not enough history yet"
-msgstr ""
-
 msgid "unavailable"
 msgstr ""
 
+msgid "Keyboard indication: its own percentage, it only goes down when the keyboard reconnects."
+msgstr ""
+
 msgid "see RADIO"
+msgstr ""
+
+msgid "not enough history yet"
 msgstr ""
 
 msgid "%1, up to date"

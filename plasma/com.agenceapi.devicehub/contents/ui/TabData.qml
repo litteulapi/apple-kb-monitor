@@ -9,6 +9,8 @@ import "Pip.js" as Pip
 ColumnLayout {
     id: page
     property var applet
+    // Popup at the tray's own size: smaller figures.
+    property bool compact: false
     spacing: Pip.GAP * 1.5
 
     readonly property bool hasChart: applet.historyPct.length >= 2

@@ -12,16 +12,20 @@ import "Pip.js" as Pip
 PlasmaExtras.Representation {
     id: full
 
-    // Size of a Plasma applet popup; the tab body scrolls when taller.
+    // Size of a Plasma applet popup; the tab body scrolls when taller. In
+    // the notification area the tray sets the popup size itself (about 24
+    // grid units square, resizable by the user): below 30 grid units of
+    // height the shell gets compact (one header line, one status line).
     Layout.preferredWidth: Kirigami.Units.gridUnit * 26
     Layout.minimumWidth: Kirigami.Units.gridUnit * 22
-    Layout.preferredHeight: Kirigami.Units.gridUnit * 36
-    Layout.minimumHeight: Kirigami.Units.gridUnit * 24
+    Layout.preferredHeight: Kirigami.Units.gridUnit * 34
+    Layout.minimumHeight: Kirigami.Units.gridUnit * 20
     // The Pip-Boy screen fills the popup edge to edge, whatever the theme.
     collapseMarginsHint: true
 
     // 0 STAT, 1 RADIO, 2 KEYS, 3 DATA, 4 DIAG.
     property int tab: 0
+    readonly property bool compact: screen.height < Kirigami.Units.gridUnit * 30
     readonly property var tabNames: ["STAT", "RADIO", "KEYS", "DATA", "DIAG"]
 
     focus: true
@@ -132,6 +136,7 @@ PlasmaExtras.Representation {
             RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: false
+                visible: !full.compact
                 PipText {
                     Layout.fillWidth: true
                     text: "ROBCO INDUSTRIES (TM) TERMLINK PROTOCOL"
@@ -310,13 +315,26 @@ PlasmaExtras.Representation {
                 Layout.fillWidth: true
                 Layout.fillHeight: false
                 spacing: Pip.GAP
-                PipText {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    text: root.kbName !== "" ? root.kbName.toUpperCase() : (root.kbModel !== "" ? root.kbModel.toUpperCase() : "---")
-                    font.pixelSize: Pip.BODY
-                    color: Pip.PHOSPHOR
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
+                    spacing: 0
+                    PipText {
+                        Layout.fillWidth: true
+                        text: full.kbLabel
+                        font.pixelSize: full.compact ? Pip.SMALL : Pip.BODY
+                        color: Pip.PHOSPHOR
+                        maximumLineCount: full.compact ? 1 : 2
+                        elide: Text.ElideRight
+                    }
+                    PipText {
+                        Layout.fillWidth: true
+                        visible: full.compact
+                        text: full.facts
+                        font.pixelSize: Pip.SMALL
+                        color: Pip.GREEN_MID
+                        maximumLineCount: 1
+                        elide: Text.ElideRight
+                    }
                 }
                 PipButton {
                     text: i18n("Open window")
@@ -325,8 +343,8 @@ PlasmaExtras.Representation {
             }
             PipText {
                 Layout.fillWidth: true
-                text: Pip.maskMac(root.kbMac) + " | FW " + (root.fwVersion !== "" ? root.fwVersion : "---")
-                      + " | " + i18n("READ %1", root.lastUpdate > 0 ? root.updatedText : "--:--")
+                visible: !full.compact
+                text: Pip.maskMac(root.kbMac) + " | " + full.facts
                 font.pixelSize: Pip.SMALL
                 color: Pip.GREEN_MID
             }
@@ -368,6 +386,10 @@ PlasmaExtras.Representation {
         }
     }
 
+    readonly property string kbLabel: root.kbName !== "" ? root.kbName.toUpperCase()
+        : (root.kbModel !== "" ? root.kbModel.toUpperCase() : "---")
+    readonly property string facts: "FW " + (root.fwVersion !== "" ? root.fwVersion : "---")
+        + " | " + i18n("READ %1", root.lastUpdate > 0 ? root.updatedText : "--:--")
     readonly property string statusWord: !root.daemonRunning ? i18n("NO DAEMON")
         : root.connected ? i18n("ONLINE") : i18n("OFFLINE")
     readonly property color statusColor: !root.daemonRunning ? Pip.AMBER
@@ -391,9 +413,9 @@ PlasmaExtras.Representation {
         return a;
     }
 
-    Component { id: tabStat; TabStat { applet: root } }
-    Component { id: tabRadio; TabRadio { applet: root } }
-    Component { id: tabKeys; TabKeys { applet: root } }
-    Component { id: tabData; TabData { applet: root } }
-    Component { id: tabDiag; TabDiag { applet: root } }
+    Component { id: tabStat; TabStat { applet: root; compact: full.compact } }
+    Component { id: tabRadio; TabRadio { applet: root; compact: full.compact } }
+    Component { id: tabKeys; TabKeys { applet: root; compact: full.compact } }
+    Component { id: tabData; TabData { applet: root; compact: full.compact } }
+    Component { id: tabDiag; TabDiag { applet: root; compact: full.compact } }
 }

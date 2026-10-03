@@ -398,12 +398,6 @@ msgstr "Reconnecter"
 msgid "Pairing lost or refused? Pair it again from a terminal (a confirmation is asked): akmctl repair"
 msgstr "Appairage perdu ou refusé ? Refaites-le depuis un terminal (une confirmation est demandée) : akmctl repair"
 
-msgid "Keyboard indication"
-msgstr "Indication du clavier"
-
-msgid "Its own percentage: it only goes down when the keyboard reconnects."
-msgstr "Son propre pourcentage : il ne baisse qu'à la reconnexion du clavier."
-
 msgid "OK"
 msgstr "OK"
 
@@ -416,14 +410,17 @@ msgstr "≈ %1 jours"
 msgid "≈ %1 h"
 msgstr "≈ %1 h"
 
-msgid "not enough history yet"
-msgstr "pas encore assez d'historique"
-
 msgid "unavailable"
 msgstr "indisponible"
 
+msgid "Keyboard indication: its own percentage, it only goes down when the keyboard reconnects."
+msgstr "Indication du clavier : son propre pourcentage, il ne baisse qu'à la reconnexion du clavier."
+
 msgid "see RADIO"
 msgstr "voir RADIO"
+
+msgid "not enough history yet"
+msgstr "pas encore assez d'historique"
 
 msgid "%1, up to date"
 msgstr "%1, à jour"
