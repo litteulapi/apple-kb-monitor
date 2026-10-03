@@ -802,6 +802,7 @@ fn read_with_hold(
     let held = || hold.load(Ordering::SeqCst);
     let start = Instant::now();
     let mut complete = true;
+    let mut volt_frames: std::collections::HashMap<u8, Vec<u8>> = std::collections::HashMap::new();
     // Apple's order (R2): 0x47, then GET Input 0x30 once, then 0x46 / 0x49.
     for req in routine_reads() {
         if held() || (safe.sent() > 0 && start.elapsed() >= BUDGET) {
@@ -840,21 +841,22 @@ fn read_with_hold(
                     }
                 }
             }
-            Request::GetFeature(0x46) => {
-                report.raw.insert("0x46".into(), hex(&b[1..]));
-                if b.len() >= 3 {
-                    // [mesuré] battery voltage in mV, little-endian (= 0xFF BE).
-                    let mv = u16::from_le_bytes([b[1], b[2]]);
-                    if (1500..=3700).contains(&mv) {
-                        report.battery.voltage = Some(f64::from(mv) / 1000.0);
-                    }
-                }
+            Request::GetFeature(id @ (0x46 | 0x49)) => {
+                report.raw.insert(format!("{id:#04x}"), hex(&b[1..]));
+                // Decoded below by the same decoder as `akmctl info` (#C5).
+                volt_frames.insert(id, b);
             }
             Request::GetFeature(id) => {
                 report.raw.insert(format!("{id:#04x}"), hex(&b[1..]));
             }
             _ => {}
         }
+    }
+    if !volt_frames.is_empty() {
+        // 0x46 = cell voltage, 0x49 = filtered voltage, both u16 LE in mV:
+        // `voltage_mv` / `voltage_filtered_mv` feed the keyboard's threshold
+        // reminders, the history and the chemistry estimate in the daemon.
+        crate::decode::decode_voltage(&volt_frames, &mut report.battery);
     }
     if complete && with_once {
         let phase = Instant::now();
@@ -1539,6 +1541,26 @@ mod tests {
         );
         assert_eq!(r.raw.get("input 0x30").map(String::as_str), Some("00"));
         assert!(!r.incomplete);
+    }
+
+    /// C5: the daemon's read path fills the millivolts, not only `voltage`.
+    /// Frames measured on the real keyboard on 2026-10-03 through GetState
+    /// `raw`: 0x46 = "990b" (2969 mV), 0x49 = "5c0b" (2908 mV).
+    #[test]
+    fn safe_read_fills_millivolts_from_real_frames() {
+        let f = Fixture::new()
+            .with_input(&[0x30, 0])
+            .with(&[0x47, 55])
+            .with(&[0x46, 0x99, 0x0B])
+            .with(&[0x49, 0x5C, 0x0B]);
+        let mut r = KbReport::default();
+        assert_eq!(read_safe(&f, &mut r), SafeRead::Complete);
+        assert_eq!(r.raw.get("0x46").map(String::as_str), Some("990b"));
+        assert_eq!(r.raw.get("0x49").map(String::as_str), Some("5c0b"));
+        assert_eq!(r.battery.voltage_mv, Some(2969));
+        assert_eq!(r.battery.voltage_filtered_mv, Some(2908));
+        assert_eq!(r.battery.voltage, Some(2.969));
+        assert!(!r.battery.voltage_doubtful);
     }
 
     // ── GET Input 0x30 (Apple R2, #251) ────────────────────────────────────

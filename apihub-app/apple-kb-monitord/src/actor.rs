@@ -711,7 +711,11 @@ impl Actor {
             // once the sample is stored.
             let ts = self.history.as_ref().map_or_else(unix_now, History::now);
             // The real voltages in mV (0x46 and 0x49), not the legacy constant (#180).
-            let mv46 = voltage.and(k.battery.voltage_mv);
+            let mv46 = voltage.and(
+                k.battery
+                    .voltage_mv
+                    .or_else(|| voltage.map(|v| (v * 1000.0).round() as u32)),
+            );
             let mv49 = k
                 .battery
                 .voltage_filtered_mv
@@ -866,7 +870,11 @@ impl Actor {
         let mut changed = false;
         // Battery: the keyboard's own thresholds (0x60 = 0x5A) against the
         // smoothed voltage 0x49, as macOS compares them.
-        let mv = k.battery.voltage_filtered_mv.or(k.battery.voltage_mv);
+        let mv = k
+            .battery
+            .voltage_filtered_mv
+            .or(k.battery.voltage_mv)
+            .or_else(|| k.battery.voltage.map(|v| (v * 1000.0).round() as u32));
         if let (Some(t), Some(mv), true) = (k.battery.thresholds, mv, self.opts.alerts_enabled) {
             let pct = k.battery_pct();
             let (due, ch) = self.notices.battery(&mac, mv, &t);
@@ -2046,6 +2054,63 @@ mod tests {
         assert_eq!(e[0].schema, Some(akm_core::history::SCHEMA));
         assert!(e[0].voltage_reliable());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// C5: the report built by the daemon's real read path (GET Feature
+    /// 0x47/0x46/0x49, frames measured on 2026-10-03: 0x46 = "990b",
+    /// 0x49 = "5c0b") carries the millivolts: the history stores them and the
+    /// keyboard's threshold reminder can fire.
+    #[test]
+    fn real_read_path_feeds_history_millivolts_and_reminders() {
+        struct Frames;
+        impl akm_core::decode::HidSource for Frames {
+            fn feature(&self, id: u8) -> std::io::Result<Vec<u8>> {
+                match id {
+                    0x47 => Ok(vec![0x47, 55]),
+                    0x46 => Ok(vec![0x46, 0x99, 0x0B]),
+                    0x49 => Ok(vec![0x49, 0x5C, 0x0B]),
+                    _ => Err(std::io::Error::other("no such report")),
+                }
+            }
+            fn input(&self, _: u8) -> std::io::Result<Vec<u8>> {
+                Ok(vec![0x30, 0])
+            }
+        }
+        let mut k = report(55.0, None);
+        k.battery.percentage = None;
+        let _ = akm_core::read_policy::read_safe(&Frames, &mut k);
+        assert_eq!(
+            (k.battery.voltage_mv, k.battery.voltage_filtered_mv),
+            (Some(2969), Some(2908))
+        );
+        let dir = std::env::temp_dir().join(format!("akm-actor-c5-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut a = quiet_actor();
+        a.linked = true;
+        a.history = Some(History::new(dir.join("h.jsonl"), SystemClock));
+        // Thresholds above the measured voltage: the Low reminder is due.
+        k.battery.thresholds = Some(akm_core::registry::Thresholds {
+            full_mv: 3100,
+            low_mv: 2950,
+            critical_mv: 2404,
+            empty_mv: 2054,
+        });
+        a.kb = Some(k);
+        a.after_battery_update(true);
+        let e = a.history.as_ref().unwrap().read();
+        assert_eq!(e.len(), 1);
+        assert_eq!((e[0].mv_0x46, e[0].mv_0x49), (Some(2969), Some(2908)));
+        let _ = std::fs::remove_dir_all(&dir);
+        // The memory moved: the reminder was computed on 2908 mV.
+        let mut b = quiet_actor();
+        b.linked = true;
+        b.kb = a.kb.clone();
+        let n = b.due_notices(notify::Lang::En);
+        assert!(
+            n.iter().any(|n| n.event == notify::Event::BatteryReminder),
+            "{:?}",
+            n.iter().map(|n| n.event).collect::<Vec<_>>()
+        );
     }
 
     #[test]

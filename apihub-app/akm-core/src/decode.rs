@@ -409,7 +409,7 @@ fn plausible_mv(v: u16) -> Option<u32> {
 /// (u16 BE, same value) [mesuré]; 0x49 (u16 LE) is the filtered voltage
 /// [hypothèse]. A gap above 20 mV between 0x46 and 0xFF flags the sample as
 /// doubtful and keeps 0x46.
-fn decode_voltage(frames: &HashMap<u8, Vec<u8>>, bat: &mut crate::report::KbBattery) {
+pub(crate) fn decode_voltage(frames: &HashMap<u8, Vec<u8>>, bat: &mut crate::report::KbBattery) {
     let v46 = frames
         .get(&HID_RAW_46)
         .filter(|b| b.len() >= 3)
