@@ -282,6 +282,79 @@ def cargo_version() -> str:
     return m.group(1) if m else "?"
 
 
+def package_content(pkg: str, files: set, f: "Findings") -> None:
+    """What the shipped files say, read by the parsers that will read them (#292, #293)."""
+    import shutil
+    import tempfile
+    import xml.etree.ElementTree as ET
+    with tempfile.TemporaryDirectory(prefix="akm-pkg-") as tmp:
+        r = subprocess.run(["bsdtar", "-xf", pkg, "-C", tmp], capture_output=True, text=True)
+        if r.returncode:
+            f.add(pkg, 0, "extract", r.stderr.strip()[:200])
+            return
+        root = Path(tmp)
+        # the scriptlet must at least parse
+        r = subprocess.run(["bash", "-n", str(root / ".INSTALL")], capture_output=True, text=True)
+        if r.returncode:
+            f.add(".INSTALL", 0, "syntax", r.stderr.strip()[:200])
+        # polkit: polkitd (expat) must load every declared action; DTD of polkit
+        for pol in sorted(n for n in files if n.startswith("usr/share/polkit-1/actions/")):
+            text = (root / pol).read_text()
+            try:
+                parsed = [a.get("id") for a in ET.fromstring(text).iter("action")]
+            except ET.ParseError as e:
+                f.add(pol, 0, "xml", f"polkitd cannot parse it, no action loads: {e}")
+                continue
+            declared = re.findall(r'<action id="([^"]+)"', re.sub(r"<!--.*?-->", "", text, flags=re.S))
+            if parsed != declared:
+                f.add(pol, 0, "polkit-actions", f"parsed {parsed} != declared {declared}")
+            dtd = Path("/usr/share/polkit-1/policyconfig-1.dtd")
+            if shutil.which("xmllint") and dtd.exists():
+                r = subprocess.run(["xmllint", "--noout", "--nonet", "--dtdvalid", str(dtd), str(root / pol)],
+                                   capture_output=True, text=True)
+                if r.returncode:
+                    f.add(pol, 0, "polkit-dtd", r.stderr.strip().splitlines()[-1][:200])
+            else:
+                f.add(pol, 0, "polkit-dtd", "xmllint or the polkit DTD missing: the policy is not validated")
+        # .desktop files: what KDE / the menu / kglobalaccel / KRunner read
+        for d in sorted(n for n in files if n.endswith(".desktop")):
+            if not shutil.which("desktop-file-validate"):
+                f.add(d, 0, "desktop", "desktop-file-validate missing: not validated")
+                break
+            r = subprocess.run(["desktop-file-validate", str(root / d)], capture_output=True, text=True)
+            if r.returncode or r.stdout.strip() or r.stderr.strip():
+                f.add(d, 0, "desktop", (r.stdout + r.stderr).strip()[:200])
+        # the widget: valid JSON, a notification-area entry, its icon shipped
+        for m in sorted(n for n in files if n.startswith("usr/share/plasma/plasmoids/") and n.endswith("/metadata.json")):
+            try:
+                meta = json.loads((root / m).read_text())
+            except ValueError as e:
+                f.add(m, 0, "json", f"plasmashell cannot read it: {e}")
+                continue
+            plugin = meta.get("KPlugin", {})
+            if plugin.get("Id") != m.split("/")[4]:
+                f.add(m, 0, "plasmoid-id", f"KPlugin.Id {plugin.get('Id')!r} != directory {m.split('/')[4]!r}")
+            if meta.get("X-Plasma-NotificationArea") != "true":
+                f.add(m, 0, "plasmoid-tray", "X-Plasma-NotificationArea must be \"true\": the widget is the notification-area icon")
+            if not meta.get("X-Plasma-API-Minimum-Version"):
+                f.add(m, 0, "plasmoid-api", "X-Plasma-API-Minimum-Version missing: Plasma 6 refuses the widget")
+            icon = plugin.get("Icon", "")
+            if not any(n.endswith(f"/{icon}.svg") for n in files):
+                f.add(m, 0, "plasmoid-icon", f"icon {icon!r} is not shipped")
+            ui = str(Path(m).parent / "contents/ui/main.qml")
+            if ui not in files:
+                f.add(m, 0, "plasmoid-main", f"{ui} missing: the widget cannot load")
+        # D-Bus activation: Exec= must be a shipped executable
+        for sv in sorted(n for n in files if n.startswith("usr/share/dbus-1/services/")):
+            text = (root / sv).read_text()
+            exe = re.search(r"(?m)^Exec=(\S+)", text)
+            name = re.search(r"(?m)^Name=(\S+)", text)
+            if not exe or exe.group(1).lstrip("/") not in files:
+                f.add(sv, 0, "dbus-exec", f"Exec= {exe.group(1) if exe else '?'} is not a file of the package")
+            if not name or f"{name.group(1)}.service" != Path(sv).name:
+                f.add(sv, 0, "dbus-name", "Name= must match the file name")
+
+
 def cmd_package(pkg: str) -> int:
     f = Findings("package-allow.tsv")
     expected = [l.strip() for l in (HERE / "package-expected.txt").read_text().splitlines()
@@ -297,9 +370,17 @@ def cmd_package(pkg: str) -> int:
             continue
         mode, name = parts[0], parts[8].split(" -> ")[0]
         names[name.rstrip("/")] = mode
-    for e in expected:
-        if e not in names:
-            f.add(pkg, 0, "missing", f"expected file not in the package: {e}")
+    # #293: the package holds exactly the listed files (directories aside):
+    # a missing main.qml, KCM .so or status icon fails, and so does a file
+    # nobody listed (an untracked .qml picked up by a glob, a stray backup).
+    files = {n for n, mode in names.items() if mode[0] != "d" and not n.startswith(".")}
+    for e in sorted(set(expected) - files):
+        f.add(pkg, 0, "missing", f"expected file not in the package: {e}")
+    for e in sorted(files - set(expected)):
+        f.add(pkg, 0, "unexpected", f"file in the package but not in scripts/package-expected.txt: {e}")
+    dup = sorted({e for e in expected if expected.count(e) > 1})
+    if dup:
+        f.add("scripts/package-expected.txt", 0, "duplicate", f"listed twice: {dup}")
     for name, mode in names.items():
         if mode[0] != "l" and mode[8] == "w":
             f.add(name, 0, "world-writable", f"{mode} {name}")
@@ -343,6 +424,7 @@ def cmd_package(pkg: str) -> int:
             f.add(conf, 0, "modprobe-mode", f"{names[conf]} {conf}: must be 0644")
     if re.search(r"(?m)^depend = python", pkginfo):
         f.add(".PKGINFO", 0, "python", "the package must not depend on Python")
+    package_content(pkg, files, f)
     return f.done(f"package {Path(pkg).name} ({len(names)} entries)")
 
 

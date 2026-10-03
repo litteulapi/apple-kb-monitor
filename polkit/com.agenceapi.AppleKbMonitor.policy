@@ -83,8 +83,10 @@
     <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-hid-inspect</annotate>
   </action>
 
-  <!-- #106: the corrections `akmctl doctor` proposes, applied by
-       `akmctl doctor --fix`. An executable of its own (one path, one action).
+  <!-- #106: the corrections `akmctl doctor` proposes, applied by its fix
+       option (no double hyphen may appear in an XML comment: polkitd would
+       reject the whole file, tests/check-security-files.sh parses it).
+       An executable of its own (one path, one action).
        It takes identifiers of a closed list (bluez-conf, upower-conf,
        adapter-autosuspend) and two switches, never a path, a key or a value:
        it can only set FastConnectable and the [Policy] Reconnect* keys of

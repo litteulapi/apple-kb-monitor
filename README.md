@@ -48,7 +48,7 @@ Status legend: **hardware** = verified on the real A1314 ISO; **code** = covered
 | RSSI / TX power (BlueZ MGMT, relative dB, **not** a power level) | hardware (needs group `akm`) | `rssi-helper.c`, `signal.rs` |
 | Link doctor (`akmctl doctor`), guided repair (`akmctl repair`) | hardware | `crates/akmctl/src/doctor.rs`, `repair.rs` |
 | Tray icon (SNI + dbusmenu, dynamic battery icons) | hardware | `apple-kb-monitord/src/tray/` |
-| KNotification events (14), PowerDevil dedupe, actions | hardware (`docs/AUDIT-INTEGRATION-KDE.md`) | `notify.rs`, `data/apple-kb-monitor.notifyrc` |
+| KNotification events (18), PowerDevil dedupe, actions | hardware (`docs/AUDIT-INTEGRATION-KDE.md`) | `notify.rs`, `data/apple-kb-monitor.notifyrc` |
 | Plasma widget (FR/EN) | hardware | `plasma/com.agenceapi.devicehub/` |
 | System Settings module "Apple Keyboard" (5 pages) | hardware (captures in `kcm/captures/`) | `kcm/`, `docs/KCM.md` |
 | Window `apihub-app` (tabs Keyboard, Keys, Diag), single instance | hardware + e2e under Xvfb | `apihub-app/src/` |
@@ -68,12 +68,13 @@ Not on the AUR: build the package from this repository.
 git clone https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor.git
 cd apple-kb-monitor
 makepkg -si
-sudo usermod -aG akm "$USER"      # RSSI: rssi-helper is root:akm 0750; log in again
+sudo usermod -aG akm "$USER"      # RSSI: rssi-helper is root:akm 0750; effective once your
+                                   # user manager restarts (Linger=yes: reboot), docs/INSTALL.md
 akmctl doctor                       # link, pairing, hidraw, BlueZ / UPower configuration
 akmctl status
 ```
 
-The package installs and **enables** everything itself (`apple-kb-monitor.install`): the user daemon `apple-kb-monitord.service`, the shutdown notice, the self-check timer, and the two system sleep / wake units. The udev rule `70-apple-kb-hidraw.rules` tags the hidraw node `uaccess`, so the active-seat user needs no group for the keyboard itself. keyd is **optional** and never touched (an example config is in `/usr/share/doc/apple-kb-monitor/examples/keyd/`). Details, upgrade notes and uninstall: [docs/INSTALL.md](docs/INSTALL.md).
+The package enables its units itself, through the `*.target.wants/` links it ships under `/usr/lib/systemd` (the scriptlet `apple-kb-monitor.install` enables nothing): the user daemon `apple-kb-monitord.service`, the shutdown notice, the self-check timer, and the two system sleep / wake units. The daemon starts at the next login, or now with `systemctl --user start apple-kb-monitord.service`; the install and every upgrade print, per user, what is still to do (group `akm`, processes still on the previous version, plasmashell to restart for the widget). The udev rule `70-apple-kb-hidraw.rules` tags the hidraw node `uaccess`, so the active-seat user needs no group for the keyboard itself. keyd is **optional** and never touched (an example config is in `/usr/share/doc/apple-kb-monitor/examples/keyd/`). Details, upgrade notes and uninstall: [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Daily use
 
@@ -101,8 +102,9 @@ Everything but `dump`, `led` and the two write commands goes through the daemon 
 
 - **System Settings → Input Devices → Keyboard → Apple Keyboard** (`kcm_applekeyboard`): pages State, Keys, Notifications, Name, Diagnostics. No write without a click. One write goes to the keyboard itself: the Name tab's "Write the name into the keyboard…" (one confirmation, then `akmctl rename --device-name=<name> --yes`, read back). Fn mode and parameters ask for administrator authentication (polkit). Apply rewrites only the `config.toml` keys you changed, every other byte kept, and never a file it could not read. [docs/KCM.md](docs/KCM.md)
 - **Notifications**: the daemon is an application of System Settings → Notifications (`apple-kb-monitor.notifyrc`): popup, sound, history and Do Not Disturb per event; "Open" and "Repair…" buttons; one single reminder when PowerDevil already warns about the same keyboard. [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
-- **Tray**: icon drawn by the daemon (battery steps, charging, disconnected), tooltip with age of the last reading, menu with "Rename keyboard…", "Copy information", "Fn mode" (current `hid_apple.fnmode`, media keys first / F1–F12 first, through the daemon's `SetFnMode` and polkit), "Quit (hide icon)".
-- **Plasma widget** `com.agenceapi.devicehub`: compact and full views, FR/EN, reads the daemon over the session bus; to place on a panel or the desktop. The notification-area icon is the daemon's (left click: window, right click: full menu).
+- **Notification-area icon**: the ApiHub widget once enabled in the notification area (left click: panel anchored to the icon, opened and closed like the sound one; right click: the daemon's full menu, through `Tray.MenuItems` / `Tray.ActivateMenuItem`); the daemon withdraws its own icon while the widget claims it or is listed in the notification-area configuration. Otherwise the daemon's own icon (left click: window, right click: the same menu). [docs/INTEGRATION-KDE.md](docs/INTEGRATION-KDE.md) §2
+- **Daemon's icon and menu**: icon drawn by the daemon (battery steps, charging, disconnected), tooltip with age of the last reading, menu with "Rename keyboard…", "Copy information", "Fn mode" (current `hid_apple.fnmode`, media keys first / F1–F12 first, through the daemon's `SetFnMode` and polkit), "Quit (hide icon)".
+- **Plasma widget** `com.agenceapi.devicehub`: compact and full views, FR/EN, reads the daemon over the session bus; it is the notification-area icon (above), and can also be placed on a panel or the desktop. After an upgrade plasmashell keeps the old widget until `systemctl --user restart plasma-plasmashell.service`.
 - **Window** `apihub-app`: D-Bus activatable (`com.agenceapi.AppleKbMonitor`), single instance, launched from the icon, the widget or a notification button; no autostart. [docs/INTEGRATION-KDE.md](docs/INTEGRATION-KDE.md)
 - **Special keys**: F1-F2 brightness, F3 Exposé, F7-F12 media and volume work through `hid_apple fnmode=1`; F4 and Eject are unbound in Plasma until `akmctl keymap kde-apply`. [docs/TOUCHES.md](docs/TOUCHES.md)
 
@@ -113,7 +115,7 @@ Start with `akmctl doctor`, then `akmctl selftest`. Full table (symptom → caus
 | Symptom | First command |
 |---|---|
 | The keyboard does not reconnect | press a key; if nothing, switch it **off and on** (light at power-on), then `akmctl repair` |
-| `Signal: n/a` | `id -nG \| grep akm` — add yourself to the group `akm`, log in again |
+| `Signal: n/a` | the **daemon** must have the group `akm`: `grep Groups /proc/$(pgrep -x apple-kb-monitord)/status` vs `getent group akm`; `sudo usermod -aG akm $USER`, then restart your user manager (log out of every session; with `Linger=yes` a reboot, see [INSTALL](docs/INSTALL.md)) |
 | Battery stuck or wrong | `akmctl status` shows the age of the reading; the keyboard's % only steps down at reconnections |
 | No tray icon, no alerts | `systemctl --user status apple-kb-monitord.service` |
 | F4 / Eject do nothing | `akmctl keys --check`, then `akmctl keymap kde-apply` |
@@ -134,7 +136,6 @@ Start with `akmctl doctor`, then `akmctl selftest`. Full table (symptom → caus
 - The effect on the keyboard of `WillShutdown`, of `RecantConnection` and of the sleep / wake bytes is not observable from the host.
 - BR/EDR RSSI is relative to the controller's golden receive range (0 = ideal), not a power level: the UI shows words, the JSON keeps `rssi_dbm` only as a deprecated mirror of `rssi_rel_db` ([#174](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/174)).
 - The BCM2042 is an 8051-based Bluetooth 2.0 controller (Broadcom brief `2042-PB03-R`); whether its firmware images are signed is unknown; nothing here flashes anything.
-- Two KNotification events (`FirmwareUpdate`, `BatteryReminder`) exist in Plasma but no daemon trigger calls them yet.
 - The udev `uaccess` rule covers the 17 Bluetooth product ids only; wired Apple keyboards are no longer matched ([#155](https://gitea.pika.agenceapi.fr/adminapi/apple-kb-monitor/issues/155)).
 
 ## Architecture

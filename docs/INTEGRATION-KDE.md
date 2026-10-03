@@ -25,28 +25,48 @@ Bluetooth, `bluetoothctl remove`) disparaît du démon **aussitôt** :
 Test : `apple-kb-monitord/tests/bluez_forget.rs` (bus privé, faux `org.bluez`,
 faux serveur de notifications) et les tests `repair::tests::forgetting_from_plasma…`.
 
-## 2. Une seule icône : celle du démon (#253, revu par #267)
+## 2. Une seule icône : le widget dans la zone de notification (#253, #267, #268)
 
-L'icône de la zone de notification est celle du démon : clic gauche = fenêtre
-ApiHub, clic du milieu = relecture, clic droit = menu complet (Ouvrir,
-Actualiser, Copier, Bluetooth, Renommer, Réparer, Reconnecter, Déconnecter,
-Oublier, mode Fn).
+Comportement voulu depuis 3.1.0-26 (commit cde256b, demande du gérant) : le
+widget `com.agenceapi.devicehub` (« ApiHub ») **est** l'icône du clavier dans
+la zone de notification.
 
-De 3.1.0-22 à 3.1.0-25, le widget `com.agenceapi.devicehub` s'ajoutait de lui-même
-à la zone de notification (`X-Plasma-NotificationArea`), y réclamait l'icône
-(`Tray.ClaimTrayFor`) et le démon se retirait aussi dès que l'appletsrc de
-plasmashell listait le widget. Résultat : un petit popup au clic gauche, ni
-fenêtre ni menu au clic droit (#267). Depuis 3.1.0-26 :
+* clic gauche : panneau ancré à l'icône, qui s'ouvre et se ferme comme ceux du
+  son ou du réseau ;
+* clic droit : le menu complet du démon (Ouvrir, Actualiser, Copier, Bluetooth,
+  Renommer, Réparer, Reconnecter, Déconnecter, Oublier, mode Fn…). Le widget le
+  construit à partir de `Tray.MenuItems()` (JSON, mêmes libellés et états que
+  l'icône du démon) à chaque changement d'état, et chaque entrée passe par
+  `Tray.ActivateMenuItem(id, token)`, exécutée comme un clic (refus pour
+  « Quitter » et les lignes d'information) ;
+* le démon retire sa propre icône (StatusNotifierItem) tant que le widget la
+  réclame (`Tray.ClaimTrayFor`) **ou** figure dans la configuration de la zone
+  de notification de plasmashell : une seule icône à l'écran. La réclamation
+  se libère, expire au départ du client ou après 5 min sans renouvellement.
 
-* le widget n'est plus un élément de la zone de notification et ne réclame plus
-  l'icône ; il reste disponible pour un panneau ou le bureau ;
-* le démon ne se retire plus pour la configuration de plasmashell ; seule une
-  réclamation explicite `ClaimTray()` / `ClaimTrayFor(id)` le fait encore
-  (même règles qu'avant : libération, départ du client, péremption après 5 min).
+Le widget est un élément de la zone de notification
+(`X-Plasma-NotificationArea: "true"` dans `metadata.json`, catégorie
+`Hardware`). Sans `KPlugin.EnabledByDefault`, Plasma ne l'active pas de lui-même
+à l'installation : Zone de notification → Configurer → Entrées → ApiHub. Tant
+qu'il n'est pas activé (première installation, ou plasmashell démarré avant
+l'installation du widget), c'est l'icône du démon qui s'affiche : clic gauche =
+fenêtre ApiHub, clic droit = le même menu complet.
 
-Mode `APPLE_KB_MONITOR_TRAY` = `auto` (défaut) | `always` | `never` inchangé.
+Après une mise à jour, plasmashell garde le widget chargé à son démarrage :
+`systemctl --user restart plasma-plasmashell.service` (le scriptlet du paquet
+le rappelle à chaque mise à jour).
+
+Historique : de 3.1.0-22 à 3.1.0-25 le widget réclamait déjà l'icône mais
+n'offrait qu'un petit popup, sans fenêtre ni menu au clic droit (#267) ; une
+première correction l'avait sorti de la zone de notification, cde256b l'y a
+remis avec le menu complet du démon.
+
+Mode `APPLE_KB_MONITOR_TRAY` = `auto` (défaut : règle ci-dessus) | `always`
+(icône du démon affichée même à côté du widget, sauf si l'utilisateur l'a
+masquée) | `never` (jamais d'icône du démon).
 Test : `tray::tests::widget_claim_and_configuration_…` (bus privé, faux
-StatusNotifierWatcher) et `plasma/tests/run-widget-tests.sh` (faux démon).
+StatusNotifierWatcher), tests `menu_json` et `MenuItems` / `ActivateMenuItem`
+sur bus privé, `plasma/tests/run-widget-tests.sh` (faux démon).
 
 ## 3. Alertes de piles et PowerDevil (#254)
 

@@ -37,6 +37,132 @@ _akm_drop_orphans() {
     return 0
 }
 
+# ── Users and their running processes, read from /proc (#269, #294) ──────────
+# The scriptlet runs as root, outside any user session: it changes nothing in
+# the users' sessions, it only says what is still to do, per user, with the
+# exact command. "$_akm_root" is "" (tests point it to a fake tree).
+
+# One line per running systemd user manager (a session, or Linger=yes):
+#   "<uid> <user> <linger:yes|no> <supplementary gids of the manager>"
+# The services of a user (apple-kb-monitord among them) get their groups from
+# this manager, fixed when user@UID.service started.
+_akm_managers() {
+    for d in "$_akm_root"/proc/[0-9]*; do
+        [ "$(cat "$d/comm" 2>/dev/null)" = systemd ] || continue
+        case "$(tr '\0' ' ' < "$d/cmdline" 2>/dev/null)" in *" --user"*) ;; *) continue ;; esac
+        uid=$(sed -n 's/^Uid:[[:space:]]*\([0-9]*\).*/\1/p' "$d/status" 2>/dev/null)
+        [ -n "$uid" ] && [ "$uid" -ge 1000 ] 2>/dev/null || continue
+        name=$(getent passwd "$uid" 2>/dev/null | cut -d: -f1)
+        [ -n "$name" ] || continue
+        linger=no; [ -e "$_akm_root/var/lib/systemd/linger/$name" ] && linger=yes
+        gids=$(sed -n 's/^Groups:[[:space:]]*//p' "$d/status" 2>/dev/null)
+        echo "$uid $name $linger $gids"
+    done | sort -un
+}
+
+# How a group change reaches the services of a user. `systemctl --user
+# daemon-reexec` is no use: the manager re-executes itself in the same
+# process, with the same groups; only a new user@UID.service has the new ones.
+_akm_group_effect() {  # uid name linger
+    if [ "$3" = yes ]; then
+        echo "    It reaches $2's services only when user@$1.service restarts. Logging out is not"
+        echo "    enough ($2 has Linger=yes: the user manager keeps running). Reboot, or: log out"
+        echo "    of Plasma, log in on a text console (Ctrl+Alt+F3), run"
+        echo "      sudo systemctl restart user@$1.service"
+        echo "    log out of the console and log in to Plasma again."
+    else
+        echo "    It takes effect once every session of $2 is closed (Plasma, SSH, tmux...) and"
+        echo "    $2 logs in again, or after a reboot."
+    fi
+}
+
+# rssi-helper (signal strength) is run by the daemon, as the user, and only
+# members of the group akm may run it (#209). The scriptlet adds nobody: the
+# group grants a cap_net_admin helper that reads the RSSI / presence of every
+# connected Bluetooth device, a decision for the administrator, per account,
+# not for whoever happens to be logged in while pacman runs. It says, for
+# each user with a running user manager, what is missing and the command.
+# Prints nothing when every such user's daemon already has the group.
+_akm_group_notice() {  # always: also print when nobody is logged in
+    akm=$(getent group akm 2>/dev/null)
+    gid=$(echo "$akm" | cut -d: -f3)
+    members=",$(echo "$akm" | cut -d: -f4),"
+    [ -n "$gid" ] || return 0
+    found=0
+    list=$(_akm_managers)
+    while read -r uid name linger gids; do
+        [ -n "$uid" ] || continue
+        found=1
+        case " $gids " in *" $gid "*) continue ;; esac
+        case $members in
+            *",$name,"*)
+                echo ">>> Signal strength (RSSI): $name is in the group 'akm', but $name's services"
+                echo "    started before that and do not have it yet (the signal stays empty)." ;;
+            *)
+                echo ">>> Signal strength (RSSI): $name is not in the group 'akm', so the daemon may not"
+                echo "    run rssi-helper and the signal stays empty (nothing else is affected). To allow it:"
+                echo "      sudo usermod -aG akm $name" ;;
+        esac
+        _akm_group_effect "$uid" "$name" "$linger"
+    done <<EOF
+$list
+EOF
+    if [ $found = 0 ] && [ "${1:-}" = always ]; then
+        echo ">>> Signal strength (RSSI): the daemon reads it through rssi-helper, which only the"
+        echo "    group 'akm' may run. For each user:  sudo usermod -aG akm <user>"
+        echo "    then a new login of that user (a reboot if the user has Linger=yes)."
+    fi
+    return 0
+}
+
+# After an upgrade the running processes keep the previous version: pacman
+# replaced the files, the processes still run the old ones ("(deleted)") and
+# plasmashell keeps the widget it loaded at its start (#294). Nothing is
+# restarted here (a user's session is not root's to restart): one block per
+# user, only for what is actually running.
+_akm_stale_notice() {
+    stale=$(for d in "$_akm_root"/proc/[0-9]*; do
+        exe=$(readlink "$d/exe" 2>/dev/null) || continue
+        case $exe in
+            "/usr/bin/apple-kb-monitord (deleted)") what=daemon ;;
+            "/usr/bin/apihub-app (deleted)") what=app ;;
+            /usr/bin/plasmashell) what=plasma ;;
+            *) continue ;;
+        esac
+        uid=$(sed -n 's/^Uid:[[:space:]]*\([0-9]*\).*/\1/p' "$d/status" 2>/dev/null)
+        echo "$uid $what"
+    done | sort -u)
+    for uid in $(echo "$stale" | cut -d' ' -f1 | sort -un); do
+        name=$(getent passwd "$uid" 2>/dev/null | cut -d: -f1)
+        has() { echo "$stale" | grep -qx "$uid $1"; }
+        echo ">>> Still running the previous version, for ${name:-uid $uid} (as that user, no sudo):"
+        has daemon && echo "      systemctl --user restart apple-kb-monitord.service    # the daemon"
+        has app && echo "      pkill -x apihub-app    # ApiHub window / KRunner runner; reopen the window from the menu"
+        if has plasma; then
+            echo "      systemctl --user restart plasma-plasmashell.service    # the ApiHub widget (notification area)"
+            echo "    Global shortcuts and the KRunner plugin are read when the Plasma session starts:"
+            echo "    if 'Apple Keyboard' is missing in System Settings > Shortcuts, log out and back in."
+        fi
+    done
+    return 0
+}
+
+# A rule of the same name in /etc/udev/rules.d replaces the packaged one
+# entirely (udev precedence): on 2026-10-01 such a leftover, owned by no
+# package, gave the ACL to every Apple HID device instead of the closed list
+# of keyboards (#296). Not removed here (it may be a deliberate override):
+# said, with the command.
+_akm_udev_override_notice() {
+    f="$_akm_root/etc/udev/rules.d/70-apple-kb-hidraw.rules"
+    [ -e "$f" ] || return 0
+    cmp -s "$f" "$_akm_root/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules" && return 0
+    owner=$(pacman -Qqo "$f" 2>/dev/null) || owner=
+    echo ">>> WARNING: $f replaces the packaged udev rule"
+    echo "    (same name: udev reads only the /etc one)${owner:+, it belongs to $owner}. The keyboard list"
+    echo "    of the package is not applied. Unless this override is deliberate:"
+    echo "      sudo rm $f && sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw"
+}
+
 post_install() {
     # Reload udev rules and re-apply the uaccess ACL on already-connected keyboards
     udevadm control --reload-rules 2>/dev/null || true
@@ -56,6 +182,7 @@ post_install() {
     _akm_drop_etc_links
     _akm_drop_orphans
     _akm_message
+    _akm_udev_override_notice
 }
 
 post_upgrade() {
@@ -65,10 +192,8 @@ post_upgrade() {
         echo "    If you had enabled its unit:  systemctl --user disable apple-kb-monitor.service"
         echo "    Keep its volatile history:    akmctl history import"
     fi
-    if [ "$(vercmp "$2" 3.1.0-7)" -lt 0 ]; then
-        echo ">>> rssi-helper is now restricted to the group 'akm' (#209). To keep the signal"
-        echo "    indicator:  sudo usermod -aG akm \$USER   (then log in again)."
-    fi
+    # 3.1.0-7 restricted rssi-helper to the group akm (#209): _akm_group_notice
+    # below says, at every upgrade, who still lacks it and how it takes effect.
     if [ "$(vercmp "$2" 3.1.0-10)" -lt 0 ]; then
         _akm_keyd_notice
     fi
@@ -86,6 +211,11 @@ post_upgrade() {
     # keyd: never reloaded nor restarted (#246).
     # fnmode is deliberately left alone (user choice / modprobe.d).
     _akm_setcap
+    # Every upgrade: what still runs the old version, who still lacks the
+    # group akm, an /etc rule hiding the packaged one (silent when all is well).
+    _akm_stale_notice
+    _akm_group_notice
+    _akm_udev_override_notice
 }
 
 # Before the unit files go: drop any /etc link to them (nothing may point to a
@@ -102,8 +232,32 @@ post_remove() {
         echo "      then switch the keyboard off and on (the kernel keeps the mapping until then)"
     fi
     echo ">>> The units left with the package (no link remains under /etc/systemd)."
-    echo "    A running daemon stops at the next logout, or now: systemctl --user stop apple-kb-monitord.service"
+    echo "    A daemon still running keeps running until its user manager stops (at logout, never"
+    echo "    with Linger=yes). Stop it now, as the user:  systemctl --user stop apple-kb-monitord.service"
+    _akm_user_links_notice
+    echo "    Per-user state, kept: ~/.config/apple-kb-monitor/ and ~/.local/state/apple-kb-monitor/"
 }
+
+# `systemctl --user enable` by a user (or by a scriptlet older than 3.1.0-17)
+# leaves links to our units under ~/.config/systemd/user, which dangle once the
+# package is gone (#298). Root does not edit users' homes: said, per user.
+_akm_user_links_notice() {
+    getent passwd 2>/dev/null | awk -F: '$3 == 0 || ($3 >= 1000 && $3 < 60000) {print $1 ":" $6}' |
+    while IFS=: read -r name home; do
+        links=""
+        for u in $_akm_user_units; do
+            for l in "$_akm_root$home"/.config/systemd/user/*.wants/"$u"; do
+                [ -L "$l" ] && links="$links ${l#"$_akm_root"}"
+            done
+        done
+        [ -n "$links" ] || continue
+        echo ">>> Links to the removed units remain for $name (dangling now). As $name:"
+        echo "      rm$links"
+        echo "      systemctl --user daemon-reload"
+    done
+    return 0
+}
+
 
 # Up to 3.1.0-9 the package shipped /etc/keyd/apple-keyboard.conf and ran
 # `keyd reload`, which crashed keyd 2.6.0 on PC01 (#246). The file is now an
@@ -168,34 +322,42 @@ _akm_hid_suspend_notice() {
 
 _akm_message() {
     echo ""
-    echo ">>> apple-kb-monitor installed"
+    echo ">>> apple-kb-monitor installed. To finish, as each user of the keyboard (no sudo):"
+    echo "    1. Start the daemon now (otherwise at the next login; pacman already reloaded the"
+    echo "       user managers):"
+    echo "         systemctl --user start apple-kb-monitord.service apple-kb-monitor-selfcheck.timer"
+    echo "       The keyboard's icon then appears in the notification area (the daemon's own)."
+    echo "    2. Widget: Plasma learns of the ApiHub widget when plasmashell starts. Restart it:"
+    echo "         systemctl --user restart plasma-plasmashell.service"
+    echo "       then enable it: notification area > Configure > Entries > ApiHub. It becomes the"
+    echo "       keyboard's icon (left click: panel, right click: the daemon's menu) and the"
+    echo "       daemon's own icon steps aside."
+    echo "    3. Global shortcuts ('Apple Keyboard' in System Settings > Shortcuts) are read when"
+    echo "       the Plasma session starts: log out and back in. KRunner ('clavier', 'keyboard'):"
+    echo "         systemctl --user restart plasma-krunner.service"
+    echo ""
+    _akm_group_notice always
     echo ""
     echo ">>> Keyboard access: no group needed. The udev rule 70-apple-kb-hidraw.rules"
     echo "    tags the hidraw node of Apple Bluetooth KEYBOARDS 'uaccess' (ACL for the"
-    echo "    active seat user). Accepted trade-off: any process of that user can read"
-    echo "    the keystrokes of that keyboard (see /usr/share/doc/apple-kb-monitor/udev-README.md)."
-    echo "    If a keyboard was already connected, reconnect it or run:"
-    echo "      sudo udevadm trigger --subsystem-match=hidraw"
+    echo "    user of the active local seat: not over SSH). Accepted trade-off: any process of"
+    echo "    that user can read the keystrokes of that keyboard"
+    echo "    (see /usr/share/doc/apple-kb-monitor/udev-README.md). Already-connected keyboards"
+    echo "    were re-tagged (udevadm trigger)."
     echo ""
-    echo ">>> Signal strength (RSSI): the helper that reads it carries cap_net_admin and is"
-    echo "    restricted to the group 'akm'. Add your user, then log in again:"
-    echo "      sudo usermod -aG akm \$USER"
-    echo "    (without it the signal indicator stays empty; nothing else is affected)."
-    echo ""
-    echo ">>> Self-check every 15 min (akmctl selftest, enabled for every user at next"
-    echo "    login): result in ~/.local/state/apple-kb-monitor/selfcheck.json, a notification"
-    echo "    on any new grave problem. Start now: systemctl --user daemon-reload &&"
-    echo "    systemctl --user start apple-kb-monitor-selfcheck.timer ; opt out: ... mask ..."
+    echo ">>> Self-check every 15 min (akmctl selftest, enabled for every user): result in"
+    echo "    ~/.local/state/apple-kb-monitor/selfcheck.json, a notification on any new grave"
+    echo "    problem; opt out: systemctl --user mask apple-kb-monitor-selfcheck.timer"
+    echo "    Diagnosis at any time: akmctl doctor"
     echo ""
     _akm_hid_suspend_notice
     echo ""
-    echo ">>> Launch:"
-    echo "      apihub-app                     # from terminal"
-    echo "      # or search 'ApiHub' in KDE application menu"
-    echo ""
-    _akm_kde_keys_hint
+    echo ">>> Window: apihub-app, or 'Apple Keyboard Monitor' ('Moniteur de clavier Apple')"
+    echo "    in the application menu."
     echo ">>> System Settings: Input Devices > Keyboard > Apple Keyboard (search 'clavier apple'),"
     echo "    or: kcmshell6 kcm_applekeyboard   (see /usr/share/doc/apple-kb-monitor/KCM.md)"
+    echo ""
+    _akm_kde_keys_hint
     echo ""
     echo ">>> Special keys: akmctl keys --check shows what each key does in KDE; optional"
     echo "    remapping: akmctl keymap (udev hwdb, nothing installed by default). keyd is optional:"

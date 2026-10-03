@@ -2,8 +2,9 @@
 # PKGBUILD / .SRCINFO (#14): the build uses the locked dependencies, every
 # source has a real checksum that matches the file, and .SRCINFO is the one
 # makepkg generates from the PKGBUILD; the modprobe file is shipped as a
-# backup= file and says why (#68). Static: builds nothing, downloads
-# nothing, writes nothing. Exit 0 = all checks pass.
+# backup= file and says why (#68); prepare() refuses a tree that is not a
+# commit (#295). Builds nothing, downloads nothing; writes only throw-away git
+# repositories under $TMPDIR. Exit 0 = all checks pass.
 set -uo pipefail
 top=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 pk="$top/PKGBUILD"
@@ -77,5 +78,30 @@ bash -c 'source "$1" >/dev/null 2>&1; printf "%s\n" "${backup[@]}"' _ "$pk" | gr
 grep -qF 'const MODPROBE_CONF: &str = "/etc/modprobe.d/hid_apple.conf";' "$top/apihub-app/crates/akm-helper/src/main.rs" \
   || no "akm-helper no longer persists into /etc/modprobe.d/hid_apple.conf: the reason to ship the file is gone, see #68"
 
-[ $fail = 0 ] && echo "PKGBUILD: cargo --locked, ${#sources[@]} source(s) with a matching sha256, .SRCINFO in sync, modprobe file kept as backup="
+# 6. a package is the image of one commit (#295): prepare() calls the guard
+#    first, which refuses a non-git tree and any change or untracked file,
+#    unless AKM_ALLOW_DIRTY=1 is set explicitly.
+body prepare | sed -n '2p' | grep -q '_akm_require_clean_tree' || no "prepare() does not start with _akm_require_clean_tree"
+g=$(mktemp -d "${TMPDIR:-/tmp}/akm-pkgbuild-test.XXXXXX")
+guard() {  # guard <startdir> [env...]: exit code of _akm_require_clean_tree
+  local d=$1; shift
+  env "$@" bash -c 'error() { :; }; plain() { :; }; warning() { :; }; msg2() { :; }
+    eval "$(sed -n "/^_akm_require_clean_tree() {/,/^}/p" "$1")"; startdir=$2; _akm_require_clean_tree' _ "$pk" "$d" >/dev/null 2>&1
+}
+mkdir -p "$g/plain" "$g/repo"
+git -C "$g/repo" init -q && echo a > "$g/repo/f" && git -C "$g/repo" add f \
+  && git -C "$g/repo" -c user.name=t -c user.email=t@t.invalid commit -qm t
+guard "$g/plain" && no "the guard accepts a tree that is not a git work tree"
+guard "$g/plain" AKM_ALLOW_DIRTY=1 || no "AKM_ALLOW_DIRTY=1 does not lift the guard"
+guard "$g/repo" || no "the guard refuses a clean commit"
+mkdir -p "$g/repo/src" "$g/repo/pkg" && echo x > "$g/repo/src/x" && echo x > "$g/repo/pkg/x"
+guard "$g/repo" || no "the guard counts makepkg's own src/ and pkg/ as changes"
+echo b > "$g/repo/f"
+guard "$g/repo" && no "the guard accepts a modified tracked file"
+git -C "$g/repo" checkout -q f && echo n > "$g/repo/new.qml"
+guard "$g/repo" && no "the guard accepts an untracked file (package() globs would ship it)"
+mkdir -p "$g/repo/sub"; guard "$g/repo/sub" && no "the guard accepts a subdirectory of a work tree"
+rm -rf "$g"
+
+[ $fail = 0 ] && echo "PKGBUILD: clean-tree guard, cargo --locked, ${#sources[@]} source(s) with a matching sha256, .SRCINFO in sync, modprobe file kept as backup="
 exit $fail

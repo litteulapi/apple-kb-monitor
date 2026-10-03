@@ -2,6 +2,15 @@
 
 `70-apple-kb-hidraw.rules` pose le tag `uaccess` (ACL logind rw pour l'utilisateur de la session active) sur les `/dev/hidraw*` des **claviers Bluetooth** Apple uniquement : la liste de product ids est celle de `APPLE_MODELS` (`apihub-app/akm-core/src/model.rs`). Souris, trackpads (Magic Mouse/Trackpad) et peripheriques USB filaires ne sont plus touches.
 
+## Ou est la regle, et ce qui la masque (#296)
+
+Le paquet l'installe dans `/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules`. udev lit les regles par **nom de fichier** : un fichier de meme nom dans `/etc/udev/rules.d/` (ou `/run/udev/rules.d/`) **remplace entierement** celui du paquet, sans avertissement. Constate le 2026-10-03 : un `/etc/udev/rules.d/70-apple-kb-hidraw.rules` d'une ancienne installation (aucun paquet proprietaire) donnait l'ACL a **tout** peripherique HID Apple (`KERNELS=="0005:05AC:*|0005:004C:*|0003:05AC:*"` : souris, trackpads, filaires), et toute correction de la regle packagee restait sans effet ; ni `pacman -Qkk` ni la CI ne le voyaient.
+
+* Le scriptlet du paquet le signale a l'installation et a chaque mise a jour quand ce fichier existe et differe du fichier package ; il ne le supprime pas (ce peut etre une surcharge voulue, par exemple la variante « groupe dedie » ci-dessous).
+* Verifier quelle regle s'applique : `udevadm cat 70-apple-kb-hidraw.rules` (premiere ligne = chemin du fichier retenu ; verifie le 2026-10-03 : `# /usr/lib/udev/rules.d/70-apple-kb-hidraw.rules` une fois l'orphelin retire) ; `pacman -Qo /etc/udev/rules.d/70-apple-kb-hidraw.rules` (« aucun paquet » = reste d'une installation a la main).
+* Retirer une surcharge non voulue : `sudo rm /etc/udev/rules.d/70-apple-kb-hidraw.rules && sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw`.
+* Surcharger volontairement : copier le fichier du paquet dans `/etc/udev/rules.d/` sous le meme nom et l'adapter ; le message du scriptlet le rappellera a chaque mise a jour (la copie ne suit plus le paquet).
+
 ## Compromis accepte : risque keylogger
 
 Un `read()` sur hidraw rend les rapports d'entree bruts du clavier, donc les frappes. Avec `uaccess`, **tout processus tournant sous l'utilisateur de la session active** peut lire les frappes de ce clavier, y compris hors du modele d'isolation Wayland. L'ACL ouvre aussi l'ecriture (rapports de sortie/feature : LED, etc.).
