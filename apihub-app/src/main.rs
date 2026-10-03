@@ -176,25 +176,22 @@ impl ApiHubApp {
             .frame(frame(12, 4))
             .show_separator_line(false)
             .show(ctx, |ui| {
-                shell::header(ui, &self.theme, &snap);
-                if let Some(tab) = shell::tab_bar(ui, &self.theme, self.tab) {
-                    self.tab = tab;
-                }
-                shell::alerts(ui, &self.theme, &snap, feed);
+                centred(ui, |ui| {
+                    shell::header(ui, &self.theme, &snap);
+                    if let Some(tab) = shell::tab_bar(ui, &self.theme, self.tab) {
+                        self.tab = tab;
+                    }
+                    shell::alerts(ui, &self.theme, &snap, feed);
+                });
             });
         egui::TopBottomPanel::bottom("status")
             .frame(frame(2, 10))
             .show_separator_line(false)
-            .show(ctx, |ui| shell::status_bar(ui, &snap));
+            .show(ctx, |ui| centred(ui, |ui| shell::status_bar(ui, &snap)));
         egui::CentralPanel::default()
             .frame(frame(4, 4))
             .show(ctx, |ui| {
-                // Very wide windows: the tabs stay centred, not stretched.
-                let spare = (ui.available_width() - theme::MAX_CONTENT).max(0.0) / 2.0;
-                let rect = ui.max_rect().shrink2(egui::Vec2::new(spare, 0.0));
-                ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-                    self.body(ui, &snap, now);
-                });
+                centred(ui, |ui| self.body(ui, &snap, now));
             });
         self.theme.overlay(ctx);
     }
@@ -263,6 +260,15 @@ impl ApiHubApp {
             }
         }
     }
+}
+
+/// Very wide windows: header, tabs, body and status bar share one centred
+/// column of at most `MAX_CONTENT`, never stretched apart (#282).
+fn centred<R>(ui: &mut egui::Ui, f: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let spare = (ui.available_width() - theme::MAX_CONTENT).max(0.0) / 2.0;
+    let rect = ui.max_rect().shrink2(egui::Vec2::new(spare, 0.0));
+    ui.scope_builder(egui::UiBuilder::new().max_rect(rect), f)
+        .inner
 }
 
 /// Why the daemon does not measure the signal of the connected keyboard (#269).
