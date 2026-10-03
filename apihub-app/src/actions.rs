@@ -29,7 +29,21 @@ pub type Outcome = Option<(bool, String)>;
 #[derive(Clone, Default)]
 pub struct Job {
     busy: Arc<AtomicBool>,
-    outcome: Arc<Mutex<Outcome>>,
+    outcome: Arc<Mutex<(Outcome, Option<std::time::Instant>)>>,
+}
+
+/// How long a result stays on screen (#275): a success is a short
+/// acknowledgement, a failure stays longer, both go at the next action.
+pub const SHOW_SUCCESS: Duration = Duration::from_secs(10);
+pub const SHOW_FAILURE: Duration = Duration::from_secs(60);
+
+/// The result still worth showing `age` after it arrived.
+pub fn still_shown(o: &Outcome, age: Duration) -> bool {
+    match o {
+        Some((true, _)) => age < SHOW_SUCCESS,
+        Some((false, _)) => age < SHOW_FAILURE,
+        None => false,
+    }
 }
 
 impl Job {
@@ -38,14 +52,14 @@ impl Job {
     }
 
     pub fn outcome(&self) -> Outcome {
-        self.outcome
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        let g = self.outcome.lock().unwrap_or_else(|e| e.into_inner());
+        let age = g.1.map_or(Duration::ZERO, |t| t.elapsed());
+        still_shown(&g.0, age).then(|| g.0.clone()).flatten()
     }
 
     fn set(&self, o: Outcome) {
-        *self.outcome.lock().unwrap_or_else(|e| e.into_inner()) = o;
+        *self.outcome.lock().unwrap_or_else(|e| e.into_inner()) =
+            (o, Some(std::time::Instant::now()));
     }
 
     /// Run `work` on a worker thread, waited for at most `timeout`; `done`
@@ -204,6 +218,18 @@ mod tests {
     use super::*;
     use crate::testbus::FakeDaemon;
     use std::time::Instant;
+
+    /// #275: a result does not stay for minutes.
+    #[test]
+    fn results_expire() {
+        let ok: Outcome = Some((true, "done".into()));
+        let ko: Outcome = Some((false, "failed".into()));
+        assert!(still_shown(&ok, Duration::from_secs(1)));
+        assert!(!still_shown(&ok, SHOW_SUCCESS));
+        assert!(still_shown(&ko, SHOW_SUCCESS));
+        assert!(!still_shown(&ko, SHOW_FAILURE));
+        assert!(!still_shown(&None, Duration::ZERO));
+    }
 
     fn wait(job: &Job) -> Outcome {
         let t = Instant::now();
