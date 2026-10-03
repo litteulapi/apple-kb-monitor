@@ -377,7 +377,13 @@ pub fn status_bar(ui: &mut Ui, snap: &Snapshot) {
         item("", &name),
         item("", &view::mask_mac(snap.mac())),
         item("FW", &fw),
-        item(tr("READ"), &view::clock_text(local_hms(snap.last_update))),
+        item(
+            tr("READ"),
+            &view::read_text(
+                snap.update_age_s(crate::unix_now()),
+                local_hms(snap.last_update),
+            ),
+        ),
     ];
     let sep = 2.0 * theme::GAP + 1.0;
     let widths: Vec<f32> = galleys.iter().map(|g| g.size().x).collect();

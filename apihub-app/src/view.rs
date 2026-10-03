@@ -16,8 +16,8 @@ pub fn rssi_valid(r: Option<i32>) -> Option<i32> {
     akm_core::signal::valid_rel(r)
 }
 
-/// `"excellent (0)"`, `"good (−3)"`, `"weak (−12)"`: words first, the raw
-/// value in parentheses, no unit.
+/// `"excellent (0 dB)"`, `"good (−3 dB)"`: words first, then the gap in dB
+/// to the ideal reception range (#281: a bare number meant nothing).
 pub fn rssi_text(r: Option<i32>) -> String {
     match rssi_valid(r) {
         Some(v) => {
@@ -27,7 +27,7 @@ pub fn rssi_text(r: Option<i32>) -> String {
                 Q::Good => tr("good"),
                 Q::Weak => tr("weak"),
             };
-            format!("{} ({})", word, akm_core::signal::raw_text(v))
+            format!("{} ({}\u{a0}dB)", word, akm_core::signal::raw_text(v))
         }
         None => DASH.to_string(),
     }
@@ -777,6 +777,18 @@ pub fn mask_mac(mac: Option<&str>) -> String {
     format!("{}:{}:XX:XX:XX:{}", parts[0], parts[1], parts[5]).to_uppercase()
 }
 
+/// Status bar "read" item (#281): the age first, the clock time after, so
+/// that an old value is seen as old ("1 h ago (08:22)").
+pub fn read_text(age_s: Option<u64>, hms: Option<(u32, u32, u32)>) -> String {
+    match (age_s, hms) {
+        (Some(a), Some((h, m, _))) if h < 24 && m < 60 => {
+            format!("{} ({h:02}:{m:02})", age_text(Some(a)))
+        }
+        (Some(a), _) => age_text(Some(a)),
+        _ => DASH.to_string(),
+    }
+}
+
 /// `HH:MM:SS`, or dashes for a time not known yet.
 pub fn clock_text(hms: Option<(u32, u32, u32)>) -> String {
     match hms {
@@ -818,11 +830,12 @@ mod tests {
         assert_eq!(rssi_text(None), "---");
         assert_eq!(rssi_text(Some(127)), "---");
         assert_eq!(rssi_text(Some(-200)), "---");
-        // #174: 0 is the ideal range, a real value; no dBm unit.
-        assert_eq!(rssi_text(Some(0)), "excellent (0)");
-        assert_eq!(rssi_text(Some(-3)), "good (\u{2212}3)");
-        assert_eq!(rssi_text(Some(-12)), "weak (\u{2212}12)");
-        assert_eq!(rssi_text(Some(2)), "excellent (+2)");
+        // #174: 0 is the ideal range, a real value; relative dB, never dBm.
+        assert_eq!(rssi_text(Some(0)), "excellent (0\u{a0}dB)");
+        assert_eq!(rssi_text(Some(-3)), "good (\u{2212}3\u{a0}dB)");
+        assert_eq!(rssi_text(Some(-12)), "weak (\u{2212}12\u{a0}dB)");
+        assert_eq!(rssi_text(Some(2)), "excellent (+2\u{a0}dB)");
+        assert!(!rssi_text(Some(-3)).contains("dBm"));
         assert_eq!(rssi_level(Some(127)), Level::Unknown);
         assert_eq!(rssi_bar_count(Some(127)), 0);
         assert_eq!(rssi_bar_count(None), 0);
@@ -1423,5 +1436,12 @@ mod tests {
         let (t, l) = voltage_cell(&b);
         assert!(t.contains("doubtful"), "{t}");
         assert_eq!(l, Level::Warn);
+    }
+
+    #[test]
+    fn the_read_time_says_its_age() {
+        assert_eq!(read_text(Some(5400), Some((8, 22, 7))), "1 h ago (08:22)");
+        assert_eq!(read_text(None, Some((8, 22, 7))), DASH);
+        assert_eq!(read_text(Some(30), None), "30 s ago");
     }
 }

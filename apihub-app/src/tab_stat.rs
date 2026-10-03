@@ -475,18 +475,35 @@ fn actions(
 }
 
 /// Text of the Fn button: the current mode, `---` while it is not known.
+/// The button says what a click does (#281), the current mode is its hover.
 pub fn fn_button_text(mode: Option<i32>) -> String {
+    match mode
+        .filter(|m| *m >= 0)
+        .and_then(crate::fn_toggle::next_mode)
+    {
+        Some(next) => trf("Fn: switch to {}", &[&crate::fn_toggle::mode_text(next)]),
+        None => trf("Fn: {}", &[&view::DASH]),
+    }
+}
+
+/// Hover of the Fn button: the mode in force.
+pub fn fn_button_hint(mode: Option<i32>) -> String {
     let now = mode
         .filter(|m| *m >= 0)
         .map_or(view::DASH.to_string(), crate::fn_toggle::mode_text);
-    trf("Fn: {}", &[&now])
+    trf("Now: {}. Toggle the function keys", &[&now])
 }
 
 /// The button that toggles the function keys (polkit dialog of the daemon).
 pub fn fn_button(ui: &mut Ui, fnmode: &FnMode) {
     let label = fn_button_text(fnmode.mode());
     let online = shell::daemon_online(ui.ctx());
-    let hint = shell::needs_daemon(online, tr("Toggle the function keys"));
+    let now = fn_button_hint(fnmode.mode());
+    let hint = if online {
+        now.as_str()
+    } else {
+        shell::needs_daemon(false, "")
+    };
     if theme::action(ui, &label, online && !fnmode.job.busy())
         .on_hover_text(hint)
         .on_disabled_hover_text(hint)
@@ -555,8 +572,9 @@ mod tests {
 
     #[test]
     fn fn_button_says_the_mode_or_dashes() {
-        assert_eq!(fn_button_text(Some(1)), "Fn: media keys first");
-        assert_eq!(fn_button_text(Some(2)), "Fn: F1\u{2013}F12 first");
+        assert_eq!(fn_button_text(Some(1)), "Fn: switch to F1\u{2013}F12 first");
+        assert_eq!(fn_button_text(Some(2)), "Fn: switch to media keys first");
+        assert!(fn_button_hint(Some(2)).starts_with("Now: F1\u{2013}F12 first"));
         assert_eq!(fn_button_text(None), "Fn: ---");
         assert_eq!(fn_button_text(Some(-1)), "Fn: ---", "hid_apple not loaded");
     }

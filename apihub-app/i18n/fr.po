@@ -282,7 +282,7 @@ msgid "Model"
 msgstr "Modèle"
 
 msgid "Own name"
-msgstr "Nom propre"
+msgstr "Nom dans le clavier"
 
 msgid "MAC"
 msgstr "MAC"
@@ -539,7 +539,7 @@ msgid "NO DATA"
 msgstr "SANS DONNÉES"
 
 msgid "READ"
-msgstr "LU"
+msgstr "LECTURE"
 
 msgid "Copy"
 msgstr "Copier"
@@ -759,3 +759,9 @@ msgstr "aucune erreur signalée par le service"
 
 msgid "last error of the service: {}"
 msgstr "dernière erreur du service : {}"
+
+msgid "Fn: switch to {}"
+msgstr "Fn : passer à {}"
+
+msgid "Now: {}. Toggle the function keys"
+msgstr "Actuellement : {}. Bascule les touches de fonction"
