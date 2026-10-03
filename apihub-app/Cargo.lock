@@ -266,7 +266,11 @@ dependencies = [
  "apple-kb-monitord",
  "eframe",
  "libc",
+ "raw-window-handle",
  "serde_json",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
  "zbus 4.4.0",
 ]
 

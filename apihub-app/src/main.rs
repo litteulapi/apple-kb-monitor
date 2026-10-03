@@ -1,4 +1,5 @@
 mod actions;
+mod activation;
 mod diag;
 mod fn_toggle;
 mod fnmode_diag;
@@ -50,8 +51,8 @@ struct ApiHubApp {
     theme: Theme,
     style_initialized: bool,
     diag: tab_diag::DiagTab,
-    // Set by a second launch / D-Bus Activate: bring the window to front
-    raise: Arc<AtomicBool>,
+    // Set by a second launch / D-Bus Activate: bring the window to front (#270)
+    raise: activation::Request,
     // Battery history graph: loaded by a worker thread, only read here.
     history: history_view::Loader,
     // Period of the history chart (#96): 24 h, 7, 30 or 90 days.
@@ -73,7 +74,7 @@ impl ApiHubApp {
         cc: &eframe::CreationContext<'_>,
         state: State,
         feed: source::FeedCell,
-        raise: Arc<AtomicBool>,
+        raise: activation::Request,
         ui: settings::UiSettings,
     ) -> Self {
         // Battery history: loaded off the UI thread (D-Bus + disk, #230).
@@ -107,6 +108,14 @@ impl ApiHubApp {
 impl eframe::App for ApiHubApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let t0 = std::time::Instant::now();
+        // A second launch or Activate asked for the window: use its
+        // activation token on this thread, where the surface is known (#270).
+        if let Some(token) = self.raise.take() {
+            eprintln!(
+                "[apihub] activate: {}",
+                activation::raise(ctx, frame, token)
+            );
+        }
         self.update_ui(ctx);
         let took = t0.elapsed();
         self.frame_stats.record(took, frame.info().cpu_usage);
@@ -127,13 +136,6 @@ impl ApiHubApp {
         if !self.style_initialized {
             theme::install(ctx);
             self.style_initialized = true;
-        }
-
-        // A second launch or Activate asked for the window
-        if self.raise.swap(false, Ordering::Relaxed) {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
 
         // Next repaint in 1 s (also minimised/hidden): drives the UI heartbeat
@@ -251,7 +253,7 @@ impl ApiHubApp {
 fn open_window(
     state: &State,
     feed: &source::FeedCell,
-    raise: &Arc<AtomicBool>,
+    raise: &activation::Request,
     open: &Arc<AtomicBool>,
 ) -> bool {
     // `[ui]` of config.toml, read once before the window exists.
@@ -273,7 +275,7 @@ fn open_window(
         ..Default::default()
     };
     let (st, fd, sw) = (state.clone(), feed.clone(), raise.clone());
-    raise.store(false, Ordering::Relaxed);
+    raise.reset();
     open.store(true, Ordering::Relaxed);
     let r = eframe::run_native(
         instance::APP_ID,
@@ -301,21 +303,17 @@ fn main() {
     // the D-Bus name. Nothing ever reopens a window by itself. The tray icon
     // belongs to the daemon alone (#62): this process never registers one.
     let window_open = Arc::new(AtomicBool::new(false));
-    let raise = Arc::new(AtomicBool::new(false));
+    let raise = activation::Request::default();
     let activate = {
         let raise = raise.clone();
-        move |token: Option<String>| {
-            // The window is (being) opened by this process: just raise it.
-            // The token cannot be used any more (the window is already
-            // mapped) and `set_var` from this D-Bus thread would be
-            // undefined behaviour (#197).
-            let _ = token;
-            raise.store(true, Ordering::Relaxed);
-        }
+        // The window is (being) opened by this process: hand the token to
+        // the UI thread, which activates its surface with it (#270). Never
+        // `set_var` from this D-Bus thread: undefined behaviour (#197).
+        move |token: Option<String>| raise.ask(token)
     };
     let conn = match instance::claim(activate) {
         instance::Claim::Existing => {
-            eprintln!("[apihub] already running: window raised");
+            eprintln!("[apihub] already running: activation sent to the open window");
             return;
         }
         instance::Claim::Unreachable => std::process::exit(1),
