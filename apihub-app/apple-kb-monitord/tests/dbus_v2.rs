@@ -212,8 +212,17 @@ fn inner() {
             .unwrap();
         assert_xml_comments_well_formed(path, &xml);
         if path == service::OBJECT_PATH {
-            for m in ["RereadName", "Diagnose", "History", "GetDevices", "BatterySets"] {
-                assert!(xml.contains(&format!("<method name=\"{m}\"")), "{m} missing");
+            for m in [
+                "RereadName",
+                "Diagnose",
+                "History",
+                "GetDevices",
+                "BatterySets",
+            ] {
+                assert!(
+                    xml.contains(&format!("<method name=\"{m}\"")),
+                    "{m} missing"
+                );
             }
         }
     }
@@ -507,7 +516,13 @@ fn inner() {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(c
-        .call_method(Some(service::BUS_NAME), DEV, Some(DEVICE_INTERFACE), "Refresh", &())
+        .call_method(
+            Some(service::BUS_NAME),
+            DEV,
+            Some(DEVICE_INTERFACE),
+            "Refresh",
+            &()
+        )
         .is_err());
 
     let _ = std::fs::remove_dir_all(&dir);

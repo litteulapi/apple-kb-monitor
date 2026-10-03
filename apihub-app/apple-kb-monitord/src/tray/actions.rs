@@ -95,8 +95,19 @@ pub fn wait_start(mut child: std::process::Child, window: Duration) -> Result<()
                 if let Some(mut e) = child.stderr.take() {
                     let _ = std::io::Read::read_to_string(&mut e, &mut err);
                 }
-                let tail: String = err.trim().lines().last().unwrap_or("").chars().take(200).collect();
-                return Err(if tail.is_empty() { format!("{st}") } else { format!("{st}: {tail}") });
+                let tail: String = err
+                    .trim()
+                    .lines()
+                    .last()
+                    .unwrap_or("")
+                    .chars()
+                    .take(200)
+                    .collect();
+                return Err(if tail.is_empty() {
+                    format!("{st}")
+                } else {
+                    format!("{st}: {tail}")
+                });
             }
             Ok(None) if start.elapsed() >= window => {
                 // Still running: drop stderr (no pipe left full), reap later.
@@ -125,7 +136,9 @@ fn missing_display_env() -> Vec<(String, String)> {
     else {
         return Vec::new();
     };
-    pick_display_env(&String::from_utf8_lossy(&out.stdout), |k| std::env::var_os(k).is_some())
+    pick_display_env(&String::from_utf8_lossy(&out.stdout), |k| {
+        std::env::var_os(k).is_some()
+    })
 }
 
 fn pick_display_env(text: &str, present: impl Fn(&str) -> bool) -> Vec<(String, String)> {
@@ -409,7 +422,8 @@ mod tests {
                 .spawn()
                 .unwrap()
         };
-        let e = wait_start(spawn("echo 'cannot open display' >&2; exit 3"), START_CHECK).unwrap_err();
+        let e =
+            wait_start(spawn("echo 'cannot open display' >&2; exit 3"), START_CHECK).unwrap_err();
         assert!(e.contains("cannot open display") && e.contains('3'), "{e}");
         assert!(wait_start(spawn("sleep 1"), Duration::from_millis(200)).is_ok());
         assert!(wait_start(spawn("exit 0"), START_CHECK).is_ok());
@@ -417,7 +431,10 @@ mod tests {
 
     #[test]
     fn a_dialog_that_fails_is_not_a_cancellation() {
-        assert_eq!(dialog_outcome(Some(0), b"Bureau\n"), Ok(Some("Bureau".into())));
+        assert_eq!(
+            dialog_outcome(Some(0), b"Bureau\n"),
+            Ok(Some("Bureau".into()))
+        );
         assert_eq!(dialog_outcome(Some(1), b""), Ok(None));
         assert_eq!(dialog_outcome(Some(254), b""), Err(()));
         assert_eq!(dialog_outcome(None, b""), Err(()), "killed by a signal");
@@ -433,7 +450,10 @@ mod tests {
                 ("DISPLAY".to_string(), ":1".to_string())
             ]
         );
-        assert!(pick_display_env(env, |_| true).is_empty(), "own values kept");
+        assert!(
+            pick_display_env(env, |_| true).is_empty(),
+            "own values kept"
+        );
     }
 
     #[test]

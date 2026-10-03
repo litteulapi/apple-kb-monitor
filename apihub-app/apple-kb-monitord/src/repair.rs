@@ -422,7 +422,12 @@ impl<B: LinkBus> Keeper<B> {
             self.note_down(&mac, DisconnectReason::Unknown, now);
         }
         // Removed from BlueZ (forgotten by the user): stop following, silently.
-        let gone: Vec<String> = self.devs.keys().filter(|m| !seen.contains(m)).cloned().collect();
+        let gone: Vec<String> = self
+            .devs
+            .keys()
+            .filter(|m| !seen.contains(m))
+            .cloned()
+            .collect();
         self.devs.retain(|m, _| seen.contains(m));
         for mac in gone {
             self.bus.forgotten(&mac);
@@ -857,7 +862,9 @@ impl LinkBus for SystemBus {
                     })
                 })
                 .unwrap_or_else(|| {
-                    tracing::warn!("link: BlueZ did not answer Connect for {mac} within {CONNECT_TIMEOUT:?}");
+                    tracing::warn!(
+                        "link: BlueZ did not answer Connect for {mac} within {CONNECT_TIMEOUT:?}"
+                    );
                     Err(ConnectError::Other(format!(
                         "BlueZ did not answer Device1.Connect within {} s",
                         CONNECT_TIMEOUT.as_secs()
@@ -1386,7 +1393,9 @@ impl LinkIface {
     /// attempt is already waiting for BlueZ: nothing new would be sent (C9).
     fn reconnect(&self) -> bool {
         if connect_in_flight(&self.handle.shared) {
-            tracing::info!("link: reconnection asked while an attempt is in flight: nothing new sent");
+            tracing::info!(
+                "link: reconnection asked while an attempt is in flight: nothing new sent"
+            );
             return false;
         }
         self.handle.tx.send(KMsg::Request).is_ok()

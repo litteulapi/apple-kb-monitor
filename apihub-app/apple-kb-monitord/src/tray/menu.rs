@@ -311,7 +311,10 @@ mod tests {
         for row in [id::HEADER, id::BATTERY, id::CONNECTION, id::KB_FIRST] {
             assert_eq!(activation(row, true), Ok(None), "{row}");
         }
-        assert!(matches!(activation(id::REFRESH, true), Ok(Some(Action::Refresh))));
+        assert!(matches!(
+            activation(id::REFRESH, true),
+            Ok(Some(Action::Refresh))
+        ));
         assert!(activation(id::QUIT, true).is_err());
         assert!(activation(4242, false).is_err());
     }

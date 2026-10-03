@@ -80,7 +80,11 @@ impl<T> Default for Reply<T> {
 
 impl<T> std::fmt::Debug for Reply<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(if self.0.is_some() { "Reply" } else { "Reply(none)" })
+        f.write_str(if self.0.is_some() {
+            "Reply"
+        } else {
+            "Reply(none)"
+        })
     }
 }
 
@@ -347,7 +351,9 @@ pub fn refresh_text(o: akm_core::machine::RefreshOutcome, fr: bool) -> Option<St
         R::TooSoon { wait } => {
             let s = wait.as_secs().max(1);
             Some(if fr {
-                format!("trop tôt : le clavier vient d'être lu, prochaine lecture possible dans {s} s")
+                format!(
+                    "trop tôt : le clavier vient d'être lu, prochaine lecture possible dans {s} s"
+                )
             } else {
                 format!("too soon: the keyboard was just read, next read possible in {s} s")
             })
@@ -1089,10 +1095,11 @@ impl Actor {
             .unwrap_or_default()
             .into_iter()
             .map(|s| DeviceSummary {
-                battery: s
-                    .battery
-                    .map(f64::from)
-                    .or_else(|| s.connected.then(|| (self.opts.kernel_battery)(&s.mac)).flatten()),
+                battery: s.battery.map(f64::from).or_else(|| {
+                    s.connected
+                        .then(|| (self.opts.kernel_battery)(&s.mac))
+                        .flatten()
+                }),
                 mac: s.mac,
                 name: s.name,
                 connected: s.connected,
@@ -1391,7 +1398,10 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             Ok(Msg::Refresh(reply)) => {
                 let o = machine.request_refresh(Instant::now());
                 if o != akm_core::machine::RefreshOutcome::Accepted {
-                    tracing::info!("refresh not taken: {}", refresh_text(o, false).unwrap_or_default());
+                    tracing::info!(
+                        "refresh not taken: {}",
+                        refresh_text(o, false).unwrap_or_default()
+                    );
                 }
                 reply.answer(o);
             }
@@ -1402,8 +1412,10 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
             }
             Ok(Msg::Alias(mac, alias)) => actor.set_alias(&mac, alias),
             Ok(Msg::Forgotten(mac)) => {
-                if machine.on_event(&Event::Disconnected(mac.to_ascii_uppercase()), Instant::now())
-                    == Some(Action::Clear)
+                if machine.on_event(
+                    &Event::Disconnected(mac.to_ascii_uppercase()),
+                    Instant::now(),
+                ) == Some(Action::Clear)
                 {
                     actor.clear();
                 }
@@ -1808,7 +1820,10 @@ mod tests {
         // C6: BlueZ says paired, the published state says so too.
         assert!(s.keyboard.as_ref().unwrap().bluetooth.paired);
         roster.lock().unwrap()[0].paired = false;
-        assert!(!a.snapshot().keyboard.unwrap().bluetooth.paired, "bond lost");
+        assert!(
+            !a.snapshot().keyboard.unwrap().bluetooth.paired,
+            "bond lost"
+        );
         roster.lock().unwrap()[0].paired = true;
         // The second one disconnects: the first is unchanged.
         roster.lock().unwrap()[1] = status(M2, "Clavier du salon", false, Some(12));
@@ -2175,7 +2190,10 @@ mod tests {
         a.kb = Some(report(55.0, None));
         a.linked = true;
         a.forget("AA:BB:CC:DD:EE:99");
-        assert!(a.snapshot().keyboard.is_some(), "another keyboard: unchanged");
+        assert!(
+            a.snapshot().keyboard.is_some(),
+            "another keyboard: unchanged"
+        );
         a.forget("aa:bb:cc:dd:ee:f1");
         let s = a.snapshot();
         assert!(s.keyboard.is_none() && !s.connected, "{s:?}");
@@ -2214,7 +2232,11 @@ mod tests {
         assert_eq!(a.snapshot().devices[1].battery, Some(42.0));
         st.connected = false;
         *roster.lock().unwrap() = vec![st];
-        assert_eq!(a.snapshot().devices[1].battery, None, "not read while offline");
+        assert_eq!(
+            a.snapshot().devices[1].battery,
+            None,
+            "not read while offline"
+        );
     }
 
     #[test]

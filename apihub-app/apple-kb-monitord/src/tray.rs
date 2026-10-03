@@ -789,7 +789,11 @@ impl Tray {
                         if let Some(text) = apple_kb_monitord::actor::refresh_text(o, fr) {
                             tracing::info!("tray: refresh not taken: {text}");
                             apple_kb_monitord::notify::send_with(
-                                if fr { "Lecture non relancée" } else { "No new reading" },
+                                if fr {
+                                    "Lecture non relancée"
+                                } else {
+                                    "No new reading"
+                                },
                                 &text,
                                 "dialog-information",
                                 akm_core::alerts::Urgency::Normal,
@@ -826,7 +830,9 @@ impl Tray {
                 if apple_kb_monitord::repair::reconnect_in_flight() {
                     // C9: say it, instead of a click that does nothing.
                     let lang = self.cfg.lang;
-                    tracing::info!("tray: an attempt is already waiting for BlueZ, nothing new sent");
+                    tracing::info!(
+                        "tray: an attempt is already waiting for BlueZ, nothing new sent"
+                    );
                     apple_kb_monitord::notify::send_with(
                         lang.t("Reconnexion en cours", "Reconnection in progress"),
                         lang.t(

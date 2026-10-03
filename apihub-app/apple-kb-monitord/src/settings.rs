@@ -308,8 +308,7 @@ mod tests {
             format!("#!/bin/sh\necho x >> {}/runs\nexit 0\n", dir.display()),
         )
         .unwrap();
-        std::fs::set_permissions(&pk, std::os::unix::fs::PermissionsExt::from_mode(0o755))
-            .unwrap();
+        std::fs::set_permissions(&pk, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
         let b = HelperBackend::with_paths(&pk, &helper).with_sysfs(&dir);
         let runs = || std::fs::read_to_string(dir.join("runs")).map_or(0, |s| s.lines().count());
         assert_eq!(b.get(Param::FnMode), 1);
@@ -317,9 +316,15 @@ mod tests {
         assert_eq!(runs(), 0, "already in effect: no pkexec");
         let e = b.apply(Param::FnMode, 2).unwrap_err();
         assert_eq!(runs(), 1);
-        assert!(matches!(e, SetError::Failed(ref m) if m.contains("still 1")), "{e}");
+        assert!(
+            matches!(e, SetError::Failed(ref m) if m.contains("still 1")),
+            "{e}"
+        );
         let e = b.apply(Param::FnMode, 2).unwrap_err();
-        assert!(matches!(e, SetError::Busy(ref m) if m.contains("retry in")), "{e}");
+        assert!(
+            matches!(e, SetError::Busy(ref m) if m.contains("retry in")),
+            "{e}"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

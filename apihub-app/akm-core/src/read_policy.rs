@@ -859,7 +859,11 @@ fn read_with_hold(
         crate::decode::decode_voltage(&volt_frames, &mut report.battery);
         // The daemon keeps its own stricter bound on the cell voltage (an
         // ADC misread outside 1.5-3.7 V is no sample).
-        if report.battery.voltage_mv.is_some_and(|mv| !(1500..=3700).contains(&mv)) {
+        if report
+            .battery
+            .voltage_mv
+            .is_some_and(|mv| !(1500..=3700).contains(&mv))
+        {
             report.battery.voltage_mv = None;
             report.battery.voltage = None;
         }
