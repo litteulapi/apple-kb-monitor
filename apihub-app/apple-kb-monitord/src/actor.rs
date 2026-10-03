@@ -183,6 +183,10 @@ pub struct Options {
     /// How that disconnection is asked (BlueZ `Device1.Disconnect`; tests
     /// replace it).
     pub disconnect: fn(&str, Duration) -> Result<(), String>,
+    /// Kernel battery level (`power_supply`, read-only sysfs, no HID) of a
+    /// keyboard other than the one read: BlueZ has no `Battery1` for it
+    /// (C13). Tests replace it.
+    pub kernel_battery: fn(&str) -> Option<f64>,
     /// Where detected events go (D-Bus device signals, tray...).
     pub events: Arc<EventHub>,
     /// Where the keyboard's alias is read (BlueZ).
@@ -219,6 +223,7 @@ impl Default for Options {
             will_shutdown: true,
             disconnect_on_breaker: true,
             disconnect: watcher::request_disconnect,
+            kernel_battery: |mac| power::kernel_battery(mac).map(|r| f64::from(r.percent)),
             events: EventHub::new(),
             alias: Arc::new(BluezAlias::default()),
         }
@@ -1084,10 +1089,13 @@ impl Actor {
             .unwrap_or_default()
             .into_iter()
             .map(|s| DeviceSummary {
+                battery: s
+                    .battery
+                    .map(f64::from)
+                    .or_else(|| s.connected.then(|| (self.opts.kernel_battery)(&s.mac)).flatten()),
                 mac: s.mac,
                 name: s.name,
                 connected: s.connected,
-                battery: s.battery.map(f64::from),
                 primary: false,
             })
             .collect();
@@ -2174,6 +2182,39 @@ mod tests {
         assert!(s.devices.is_empty());
         assert!(rx.try_iter().any(|e| matches!(e,
             DeviceEvent::Forgotten { ref mac } if mac == "AA:BB:CC:DD:EE:F1")));
+    }
+
+    /// C13: the second keyboard, without BlueZ `Battery1`, gets the
+    /// kernel's level (42 % in sysfs) instead of "unknown".
+    #[test]
+    fn a_second_keyboard_gets_its_kernel_battery() {
+        let roster = crate::repair::SharedStatus::default();
+        let mut a = quiet_actor();
+        a.opts.roster = Some(roster.clone());
+        a.opts.kernel_battery = |mac| (mac == "AA:BB:CC:DD:EE:02").then_some(42.0);
+        a.kb = Some(report(55.0, None));
+        a.linked = true;
+        let mut st = crate::repair::LinkStatus {
+            mac: "AA:BB:CC:DD:EE:02".into(),
+            name: "fake-02".into(),
+            health: "connected".into(),
+            since: 0,
+            attempts: 0,
+            failures: 0,
+            last_error: String::new(),
+            last_reason: String::new(),
+            updated: 0,
+            quality: None,
+            connected: true,
+            battery: None,
+            paired: true,
+            connecting: false,
+        };
+        roster.lock().unwrap().push(st.clone());
+        assert_eq!(a.snapshot().devices[1].battery, Some(42.0));
+        st.connected = false;
+        *roster.lock().unwrap() = vec![st];
+        assert_eq!(a.snapshot().devices[1].battery, None, "not read while offline");
     }
 
     #[test]
