@@ -45,7 +45,7 @@ Every `doctor` finding comes with the command that fixes it. The System Settings
 
 | Symptom | Cause | What to do |
 |---|---|---|
-| `Signal: n/a` | You are not in the group `akm`: `rssi-helper` is `root:akm 0750` since 3.1.0-7 (#209). Verified on 2026-10-01: `id -nG` without `akm` gives exactly this line | `sudo usermod -aG akm $USER`, log out and in; `getcap /usr/lib/apple-kb-monitor/rssi-helper` must print `cap_net_admin=ep` (else `sudo setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper`) |
+| `Signal: n/a` | The **daemon** does not have the group `akm`: `rssi-helper` is `root:akm 0750` since 3.1.0-7 (#209). Verified on 2026-10-01 (user outside `akm`) and 2026-10-03 (user in `akm`, but the daemon's `Groups:` without its GID: the user manager predates the change, `Linger=yes`) | `sudo usermod -aG akm $USER`; it reaches the daemon only when `user@UID.service` restarts: log out of every session, or with `Linger=yes` reboot / `sudo systemctl restart user@$(id -u).service` from a text console ([INSTALL.md](INSTALL.md)); check `grep Groups /proc/$(pgrep -x apple-kb-monitord)/status`; `getcap /usr/lib/apple-kb-monitor/rssi-helper` must print `cap_net_admin=ep` (else `sudo setcap cap_net_admin+ep /usr/lib/apple-kb-monitor/rssi-helper`) |
 | A value such as `0` or `-3` without a unit | Correct: BR/EDR RSSI is the gap in dB to the controller's golden receive range, 0 = ideal, not a power level (#174) | nothing to do |
 | Helper exit code 2 / 3 / 4 / 5 | socket, MGMT status, timeout (1.5 s), connection info unavailable | `/usr/lib/apple-kb-monitor/rssi-helper <MAC>` by hand; the keyboard must be connected |
 
@@ -65,9 +65,11 @@ Every `doctor` finding comes with the command that fixes it. The System Settings
 
 | Symptom | Cause | What to do |
 |---|---|---|
-| No tray icon, no alerts after login | `apple-kb-monitord.service` not running (masked, failed, or an upgrade left the old binary) | `systemctl --user status apple-kb-monitord.service`; `systemctl --user restart apple-kb-monitord.service`; the package enables the unit for every user (`systemctl --global`) |
+| No tray icon, no alerts after login | `apple-kb-monitord.service` not running (masked, failed, or an upgrade left the old binary) | `systemctl --user status apple-kb-monitord.service`; `systemctl --user restart apple-kb-monitord.service`; the package enables the unit for every user through its own link `/usr/lib/systemd/user/default.target.wants/` (never `systemctl --global`, #260); after an upgrade the scriptlet lists the processes still on the old binary |
 | Self-check `versions`: daemon ≠ akmctl ≠ package | The daemon was not restarted after the upgrade | `systemctl --user restart apple-kb-monitord.service` |
-| The icon opens a small popup instead of the window, right click has no menu (3.1.0-22 to 25) | The widget had taken over the notification area (#253, reverted by #267) | update to 3.1.0-26 or later, then restart plasmashell (`systemctl --user restart plasma-plasmashell`) |
+| The icon opens a small popup instead of the window, right click has no menu (3.1.0-22 to 25) | The widget had taken over the notification area without the daemon's menu (#253, #267) | update to 3.1.0-26 or later, then restart plasmashell (`systemctl --user restart plasma-plasmashell.service`): the widget is the icon, left click = anchored panel, right click = the daemon's full menu (#268) |
+| Widget old after an upgrade, or not offered in the notification area | plasmashell keeps the widget it loaded at its start | `systemctl --user restart plasma-plasmashell.service`; then notification area → Configure → Entries → ApiHub |
+| Global shortcuts "Apple Keyboard" missing in System Settings → Shortcuts | kglobalaccel reads `/usr/share/kglobalaccel` at session start | log out and back in once after the install |
 | Tray icon gone after `plasmashell` restarted | The daemon re-registers when the StatusNotifierWatcher reappears | wait a few seconds; `systemctl --user restart apple-kb-monitord.service` otherwise |
 | The window says "Not responding" / the self-check reports `ui-heartbeat` | Fixed in 3.1.0-8 (#230-#236): vsync, D-Bus calls bounded, history off the UI thread; the window writes a heartbeat file the self-check watches | update; `akmctl selftest` reports `ui-heartbeat` grave when the heartbeat is older than 10 s |
 | `akmctl` exit code 2 | Daemon not on the session bus | `systemctl --user start apple-kb-monitord.service` (the unit) or just open the window / widget (D-Bus activation) |

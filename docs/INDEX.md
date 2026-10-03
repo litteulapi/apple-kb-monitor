@@ -13,7 +13,7 @@ One line per document of `docs/`. Language in brackets. **Living** documents are
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) [EN] | Symptom → cause → command: reconnection (switch the keyboard off and on, `akmctl repair`), battery, signal / group `akm`, keys / keyd, daemon, disk and BlueZ |
 | [TOUCHES.md](TOUCHES.md) [FR] | Special keys (#247): what each key does, the kernel → evdev → KDE chain, `akmctl keys`, pitfalls, manual mapping without keyd, missing KDE shortcuts, test checklist |
 | [KCM.md](KCM.md) [FR] | System Settings module "Apple Keyboard" (#250): pages, writes and authentication, responsiveness, languages, tests, limits |
-| [NOTIFICATIONS.md](NOTIFICATIONS.md) [FR] | KNotification integration (#249): the 14 events, buttons, replacement, language, configuration, test |
+| [NOTIFICATIONS.md](NOTIFICATIONS.md) [FR] | KNotification integration (#249): the 18 events, buttons, replacement, language, configuration, test |
 | [INTEGRATION-KDE.md](INTEGRATION-KDE.md) [FR] | Fixes of the KDE audit: Forget from Plasma (#252), one icon (#253), PowerDevil (#254), two names (#248), F4 / Eject (#247), French (#114), window start (#21) |
 | [RECONNEXION-PAIRAGE.md](RECONNEXION-PAIRAGE.md) [FR] | Reconnection, pairing and sleep (#142): symptom, what the errors mean, measurements, root cause, fixes (system, daemon, tools, clean forget), expected behaviour, controlled test, risks |
 | [RENOMMER-CLAVIER.md](RENOMMER-CLAVIER.md) [FR] | The two names (#141, #192, #248): alias delivered; name stored in the keyboard: validation, three locks, Lion frames, risks, manager's procedure, rollback |
