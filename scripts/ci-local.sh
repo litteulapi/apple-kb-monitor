@@ -215,7 +215,7 @@ s_shell() {
 
 s_c() { gcc -Wall -Wextra -Werror -o "$out/rssi-helper" rssi-helper.c && echo "rssi-helper builds with -Werror"; }
 
-s_security() { sh tests/check-security-files.sh && sh tests/check-sleep-units.sh && python3 plasma/tests/check_plaintext.py && bash tests/check-install-scriptlet.sh && echo "security files + plain text + install scriptlet OK"; }
+s_security() { sh tests/check-security-files.sh && sh tests/check-data-files.sh && sh tests/check-sleep-units.sh && python3 plasma/tests/check_plaintext.py && bash tests/check-install-scriptlet.sh && echo "security files + data files + plain text + install scriptlet OK"; }
 
 s_secrets() { python3 scripts/qa_checks.py secrets; }
 s_claims() { python3 scripts/qa_checks.py claims; }
