@@ -114,6 +114,9 @@ pub trait LinkBus {
     /// The keyboard `name` was removed from the computer from outside; tell
     /// the user once what to do next (#252).
     fn removed(&mut self, _name: &str) {}
+    /// The pairing of `mac` is gone from BlueZ: the rest of the daemon stops
+    /// presenting it (C12). Must not block.
+    fn forgotten(&mut self, _mac: &str) {}
     /// Start `Device1.Disconnect` on `path`. Must not block.
     fn disconnect(&mut self, _path: &str, _mac: &str) {}
     /// Start `Adapter1.RemoveDevice(path)`: the pairing is removed from this
@@ -146,6 +149,10 @@ pub struct LinkStatus {
     pub connected: bool,
     /// Battery percentage known to BlueZ / UPower, if any (#94).
     pub battery: Option<u8>,
+    /// BlueZ `Device1.Paired` (or `Bonded`), as last seen (C6).
+    pub paired: bool,
+    /// A `Device1.Connect` is in flight (C9).
+    pub connecting: bool,
 }
 
 impl LinkStatus {
@@ -154,6 +161,8 @@ impl LinkStatus {
             "mac": self.mac,
             "name": self.name,
             "health": self.health,
+            "paired": self.paired,
+            "connecting": self.connecting,
             "since": self.since,
             "attempts": self.attempts,
             "failures": self.failures,
@@ -413,7 +422,16 @@ impl<B: LinkBus> Keeper<B> {
             self.note_down(&mac, DisconnectReason::Unknown, now);
         }
         // Removed from BlueZ (forgotten by the user): stop following, silently.
+        let gone: Vec<String> = self
+            .devs
+            .keys()
+            .filter(|m| !seen.contains(m))
+            .cloned()
+            .collect();
         self.devs.retain(|m, _| seen.contains(m));
+        for mac in gone {
+            self.bus.forgotten(&mac);
+        }
         let connected = list
             .iter()
             .filter(|d| d.connected)
@@ -476,11 +494,12 @@ impl<B: LinkBus> Keeper<B> {
             KMsg::Removed(path) => {
                 if let Some(mac) = self.mac_of(&path) {
                     if let Some(d) = self.devs.remove(&mac) {
-                        tracing::info!("link: {mac} removed from BlueZ from outside");
+                        tracing::info!("link: {mac} removed from BlueZ");
                         if self.notify {
                             self.bus.removed(&d.name);
                         }
                     }
+                    self.bus.forgotten(&mac);
                     let connected = self
                         .devs
                         .iter()
@@ -697,6 +716,8 @@ impl<B: LinkBus> Keeper<B> {
                     .and_then(|s| s.quality(mac, self.unix(now))),
                 connected: d.connected,
                 battery: d.battery,
+                paired: d.rec.paired(),
+                connecting: d.rec.in_flight(),
             })
             .collect()
     }
@@ -768,6 +789,35 @@ pub fn enumerate(calls: &Connection) -> zbus::Result<Vec<DevInfo>> {
     Ok(out)
 }
 
+/// Longest wait for BlueZ's answer to `Device1.Connect` (its own page
+/// timeout is shorter): past it the attempt counts as failed (C9).
+pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(40);
+
+/// Run `f` on its own thread; `None` when it did not return within `limit`
+/// (the thread is left to end on its own).
+pub fn with_timeout<T: Send + 'static>(
+    limit: Duration,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    std::thread::Builder::new()
+        .name("kb-link-call".into())
+        .spawn(move || {
+            let _ = tx.send(f());
+        })
+        .ok()?;
+    rx.recv_timeout(limit).ok()
+}
+
+/// A `Device1.Connect` is waiting for BlueZ for one of the keyboards (C9).
+pub fn connect_in_flight(shared: &SharedStatus) -> bool {
+    shared
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .any(|s| s.connecting)
+}
+
 struct SystemBus {
     calls: Option<Connection>,
     tx: Sender<KMsg>,
@@ -793,8 +843,10 @@ impl LinkBus for SystemBus {
         let _ = std::thread::Builder::new()
             .name("kb-link-connect".into())
             .spawn(move || {
-                let r = conn
-                    .call_method(
+                // zbus 4 has no per-call timeout: a BlueZ that never answers
+                // must not freeze the reconnection (C9).
+                let r = with_timeout(CONNECT_TIMEOUT, move || {
+                    conn.call_method(
                         Some("org.bluez"),
                         path.as_str(),
                         Some("org.bluez.Device1"),
@@ -807,7 +859,17 @@ impl LinkBus for SystemBus {
                             ConnectError::classify(name.as_str(), msg.as_deref().unwrap_or(""))
                         }
                         other => ConnectError::Other(other.to_string()),
-                    });
+                    })
+                })
+                .unwrap_or_else(|| {
+                    tracing::warn!(
+                        "link: BlueZ did not answer Connect for {mac} within {CONNECT_TIMEOUT:?}"
+                    );
+                    Err(ConnectError::Other(format!(
+                        "BlueZ did not answer Device1.Connect within {} s",
+                        CONNECT_TIMEOUT.as_secs()
+                    )))
+                });
                 let _ = tx.send(KMsg::ConnectDone(mac, r));
             });
     }
@@ -891,6 +953,10 @@ impl LinkBus for SystemBus {
 
     fn removed(&mut self, name: &str) {
         crate::notify::keyboard_removed(name);
+    }
+
+    fn forgotten(&mut self, mac: &str) {
+        self.mailbox.send(Msg::Forgotten(mac.to_string()));
     }
 
     fn notify_unstable(&mut self, name: &str, count: usize) {
@@ -1004,6 +1070,15 @@ pub fn adapter_of(device_path: &str) -> Option<String> {
 
 /// Sender of the running keeper, for the tray and the confirmation gate.
 static CONTROL: std::sync::OnceLock<Mutex<Option<Sender<KMsg>>>> = std::sync::OnceLock::new();
+
+/// Status of the running keeper, for the tray's "Reconnect" (C9).
+static STATUS: std::sync::OnceLock<SharedStatus> = std::sync::OnceLock::new();
+
+/// A reconnection attempt is waiting for BlueZ: "Reconnect" would send
+/// nothing new (C9).
+pub fn reconnect_in_flight() -> bool {
+    STATUS.get().is_some_and(connect_in_flight)
+}
 
 fn control() -> Option<Sender<KMsg>> {
     CONTROL
@@ -1232,6 +1307,7 @@ pub fn spawn_with(
     install_control(tx.clone());
     // Given by the caller when the actor reads it too (roster, #94).
     let shared: SharedStatus = shared.unwrap_or_default();
+    let _ = STATUS.set(shared.clone());
     let ltx = tx.clone();
     let _ = std::thread::Builder::new()
         .name("kb-link-listen".into())
@@ -1313,8 +1389,15 @@ impl LinkIface {
     }
 
     /// Page the keyboard now (still rate-limited to one attempt per 20 s,
-    /// never while sleeping or when the pairing is refused).
+    /// never while sleeping or when the pairing is refused). `false` while an
+    /// attempt is already waiting for BlueZ: nothing new would be sent (C9).
     fn reconnect(&self) -> bool {
+        if connect_in_flight(&self.handle.shared) {
+            tracing::info!(
+                "link: reconnection asked while an attempt is in flight: nothing new sent"
+            );
+            return false;
+        }
         self.handle.tx.send(KMsg::Request).is_ok()
     }
 
@@ -1402,6 +1485,39 @@ pub fn launch_repair() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// C9: a Connect that BlueZ never answers ends after the limit; the
+    /// status says an attempt is in flight, so "Reconnect" is refused.
+    #[test]
+    fn a_connect_without_answer_ends_and_reconnect_is_honest() {
+        let t = Instant::now();
+        let r = with_timeout(Duration::from_millis(100), || {
+            std::thread::sleep(Duration::from_secs(3));
+            1
+        });
+        assert_eq!(r, None);
+        assert!(t.elapsed() < Duration::from_secs(1));
+        assert_eq!(with_timeout(Duration::from_secs(1), || 2), Some(2));
+        let shared = SharedStatus::default();
+        assert!(!connect_in_flight(&shared));
+        shared.lock().unwrap().push(LinkStatus {
+            mac: "AA".into(),
+            name: String::new(),
+            health: "connecting".into(),
+            since: 0,
+            attempts: 1,
+            failures: 0,
+            last_error: String::new(),
+            last_reason: String::new(),
+            updated: 0,
+            quality: None,
+            connected: false,
+            battery: None,
+            paired: true,
+            connecting: true,
+        });
+        assert!(connect_in_flight(&shared));
+    }
     use akm_core::machine::{Action as MAction, Machine};
     use akm_core::recovery::{Health, MIN_SPACING};
 
@@ -1415,6 +1531,7 @@ mod tests {
         connects: Vec<Instant>,
         notes: Vec<(String, Urgency)>,
         removed: Vec<String>,
+        forgotten: Vec<String>,
         unstable: Vec<(String, usize)>,
         disconnects: Vec<String>,
         forgets: Vec<String>,
@@ -1432,6 +1549,9 @@ mod tests {
         }
         fn removed(&mut self, name: &str) {
             self.removed.push(name.to_string());
+        }
+        fn forgotten(&mut self, mac: &str) {
+            self.forgotten.push(mac.to_string());
         }
         fn notify_unstable(&mut self, name: &str, count: usize) {
             self.unstable.push((name.to_string(), count));
@@ -1567,6 +1687,7 @@ mod tests {
             connects: Vec::new(),
             notes: Vec::new(),
             removed: Vec::new(),
+            forgotten: Vec::new(),
             unstable: Vec::new(),
             disconnects: Vec::new(),
             forgets: Vec::new(),
@@ -1774,6 +1895,8 @@ mod tests {
         k.handle(KMsg::Removed(PATH.into()), t1);
         assert!(k.status(t1).is_empty(), "ghost keyboard gone immediately");
         assert_eq!(k.bus().removed, ["Clavier de alice #1"]);
+        // C12: the rest of the daemon is told, so it stops presenting it.
+        assert_eq!(k.bus().forgotten.len(), 1);
         let t = run_for(&mut k, t1, 3600);
         assert!(k.bus().connects.is_empty(), "no reconnection to a forgotten device");
         assert!(k.bus().notes.is_empty(), "no re-pairing notice: {:?}", k.bus().notes);

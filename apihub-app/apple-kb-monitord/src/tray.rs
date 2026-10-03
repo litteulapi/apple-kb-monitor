@@ -429,7 +429,7 @@ fn rename_flow(
         Ok(Some(t)) => t,
         Ok(None) => return,
         Err(()) => {
-            tracing::info!("tray: no dialog program, opening the window");
+            tracing::info!("tray: no working dialog program, opening the window");
             actions::open_window(conn, token);
             return;
         }
@@ -773,9 +773,34 @@ impl Tray {
     fn action(&mut self, a: Action, conn: &Connection) {
         match a {
             Action::Refresh => {
-                if !self.mailbox.send(Msg::Refresh) {
+                let (reply, rx) = apple_kb_monitord::actor::RefreshReply::channel();
+                if !self.mailbox.send(Msg::Refresh(reply)) {
                     tracing::warn!("tray: refresh ignored, acquisition thread not running");
+                    return;
                 }
+                // C15: a refused refresh is said, not swallowed.
+                let fr = matches!(self.cfg.lang, Lang::Fr);
+                let _ = std::thread::Builder::new()
+                    .name("tray-refresh".into())
+                    .spawn(move || {
+                        let Ok(o) = rx.recv_timeout(Duration::from_secs(30)) else {
+                            return;
+                        };
+                        if let Some(text) = apple_kb_monitord::actor::refresh_text(o, fr) {
+                            tracing::info!("tray: refresh not taken: {text}");
+                            apple_kb_monitord::notify::send_with(
+                                if fr {
+                                    "Lecture non relancée"
+                                } else {
+                                    "No new reading"
+                                },
+                                &text,
+                                "dialog-information",
+                                akm_core::alerts::Urgency::Normal,
+                                true,
+                            );
+                        }
+                    });
             }
             Action::Hide => {
                 tracing::info!(
@@ -802,7 +827,23 @@ impl Tray {
             }
             Action::Reconnect => {
                 tracing::info!("tray: reconnection asked from the menu");
-                if !apple_kb_monitord::repair::user_reconnect() {
+                if apple_kb_monitord::repair::reconnect_in_flight() {
+                    // C9: say it, instead of a click that does nothing.
+                    let lang = self.cfg.lang;
+                    tracing::info!(
+                        "tray: an attempt is already waiting for BlueZ, nothing new sent"
+                    );
+                    apple_kb_monitord::notify::send_with(
+                        lang.t("Reconnexion en cours", "Reconnection in progress"),
+                        lang.t(
+                            "Une tentative attend déjà la réponse de BlueZ (40 s au plus).",
+                            "An attempt is already waiting for BlueZ (40 s at most).",
+                        ),
+                        "network-bluetooth",
+                        akm_core::alerts::Urgency::Normal,
+                        true,
+                    );
+                } else if !apple_kb_monitord::repair::user_reconnect() {
                     tracing::warn!("tray: link keeper not running, nothing asked");
                 }
             }
@@ -845,7 +886,7 @@ impl Tray {
                             tracing::warn!("tray: Fn mode not changed: {e}");
                             apple_kb_monitord::notify::send(
                                 lang.t("Mode Fn non modifié", "Fn mode not changed"),
-                                &e.to_string(),
+                                &fn_mode_error_text(&e, lang),
                                 "dialog-error",
                             );
                         }
@@ -924,9 +965,56 @@ fn emit(
     })
 }
 
+/// What the user reads when the Fn mode was not changed (C11): the daemon's
+/// sentence, never a raw D-Bus error name; the cooldown in the user's words.
+fn fn_mode_error_text(e: &zbus::Error, lang: Lang) -> String {
+    match e {
+        zbus::Error::MethodError(name, msg, _) => {
+            let msg = msg.clone().unwrap_or_default();
+            if name.as_str().ends_with(".LimitsExceeded") {
+                let wait = msg
+                    .rsplit("retry in ")
+                    .next()
+                    .filter(|_| msg.contains("retry in "))
+                    .map(str::to_string);
+                match (lang, wait) {
+                    (Lang::Fr, Some(w)) => format!(
+                        "Un changement du mode Fn vient de se terminer : réessayez dans {w}."
+                    ),
+                    (Lang::Fr, None) => {
+                        "Un changement du mode Fn attend déjà l'authentification.".into()
+                    }
+                    (Lang::En, _) => msg,
+                }
+            } else {
+                msg
+            }
+        }
+        other => other.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fn_mode_refusal_is_said_in_words_not_as_a_dbus_name() {
+        // C11: the notification body was
+        // "org.freedesktop.DBus.Error.LimitsExceeded: too many requests...".
+        let e = zbus::Error::MethodError(
+            zbus::names::OwnedErrorName::try_from("org.freedesktop.DBus.Error.LimitsExceeded")
+                .unwrap(),
+            Some("a change of the Fn mode just ended, retry in 3 s".into()),
+            zbus::Message::method("/", "x").unwrap().build(&()).unwrap(),
+        );
+        let fr = fn_mode_error_text(&e, Lang::Fr);
+        assert_eq!(
+            fr,
+            "Un changement du mode Fn vient de se terminer : réessayez dans 3 s."
+        );
+        assert!(!fn_mode_error_text(&e, Lang::En).contains("org.freedesktop"));
+    }
 
     #[test]
     fn modes() {
@@ -1082,7 +1170,10 @@ mod tests {
             Some("com.agenceapi.AppleKbMonitor1.Tray"), "ActivateMenuItem", &(id, "")).is_ok();
         assert!(run(view::id::REFRESH));
         assert!(!run(view::id::QUIT), "hiding the icon from the widget");
-        assert!(!run(view::id::BATTERY), "information row");
+        // C10: an information row answers cleanly (nothing to run), an id
+        // the menu does not have is refused.
+        assert!(run(view::id::BATTERY), "information row");
+        assert!(!run(4242), "unknown menu item");
 
         // 4. The user ticks the widget in the system tray configuration.
         std::fs::write(&rc, "[Containments][3][General]\nextraItems=org.kde.plasma.battery,com.agenceapi.devicehub\n").unwrap();

@@ -23,13 +23,16 @@ pub enum DeviceEvent {
     /// Disconnection / reconnection as notified to the user (#84); a
     /// switch-off announced by the keyboard is `LinkEvent::PoweredOff` (#190).
     Link(LinkEvent),
+    /// The pairing was removed from BlueZ: the device object goes (C12).
+    Forgotten { mac: String },
 }
 
 impl DeviceEvent {
     pub fn mac(&self) -> &str {
         match self {
             DeviceEvent::BatteryLevelCrossed { mac, .. }
-            | DeviceEvent::BatteryReplaced { mac, .. } => mac,
+            | DeviceEvent::BatteryReplaced { mac, .. }
+            | DeviceEvent::Forgotten { mac } => mac,
             DeviceEvent::Link(LinkEvent::Disconnected { mac })
             | DeviceEvent::Link(LinkEvent::PoweredOff { mac })
             | DeviceEvent::Link(LinkEvent::Reconnected { mac, .. }) => mac,

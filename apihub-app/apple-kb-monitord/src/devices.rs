@@ -141,13 +141,26 @@ impl Shared {
             .collect()
     }
 
+    /// `Refresh()`: an error says honestly when nothing will be read (no
+    /// keyboard, or read less than 5 min ago, with the wait; C15). The actor
+    /// in the middle of a read answers late: the request is queued, `Ok`.
     pub fn refresh(&self) -> zbus::fdo::Result<()> {
-        if self.mailbox.send(Msg::Refresh) {
-            Ok(())
-        } else {
-            Err(zbus::fdo::Error::Failed(
+        use akm_core::machine::RefreshOutcome as R;
+        let (reply, rx) = crate::actor::RefreshReply::channel();
+        if !self.mailbox.send(Msg::Refresh(reply)) {
+            return Err(zbus::fdo::Error::Failed(
                 "acquisition thread not running".into(),
-            ))
+            ));
+        }
+        let fr = crate::notify::Lang::detect() == crate::notify::Lang::Fr;
+        match rx.recv_timeout(NAME_REPLY_WAIT) {
+            Ok(o @ R::TooSoon { .. }) => Err(zbus::fdo::Error::LimitsExceeded(
+                crate::actor::refresh_text(o, fr).unwrap_or_default(),
+            )),
+            Ok(o @ R::Disconnected) => Err(zbus::fdo::Error::Failed(
+                crate::actor::refresh_text(o, fr).unwrap_or_default(),
+            )),
+            Ok(R::Accepted) | Err(_) => Ok(()),
         }
     }
 
@@ -485,6 +498,20 @@ pub fn ensure_device(
         .at(&path, Device::new(&mac, model, name, shared.clone()))?;
     tracing::info!("D-Bus device object {path}");
     Ok(Some(path))
+}
+
+/// Withdraw the object of a keyboard no longer known (forgotten, C12).
+pub fn remove_device(conn: &zbus::blocking::Connection, shared: &Arc<Shared>, mac: &str) {
+    let Some(path) = device_path(mac) else { return };
+    shared
+        .devices
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .retain(|m| !m.eq_ignore_ascii_case(mac));
+    match conn.object_server().remove::<Device, _>(&path) {
+        Ok(_) => tracing::info!("D-Bus device object {path} withdrawn"),
+        Err(e) => tracing::warn!("cannot withdraw {path}: {e}"),
+    }
 }
 
 /// Run a blocking closure on its own thread and await its result without

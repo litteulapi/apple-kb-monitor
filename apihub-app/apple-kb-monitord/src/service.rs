@@ -227,13 +227,15 @@ impl Monitor {
         true
     }
 
-    /// Ask for a full read now (no effect while the keyboard is disconnected).
+    /// Ask for a full read now. Refused with an error that says why: no
+    /// keyboard connected (Failed), or read less than 5 min ago with the wait
+    /// before the next read (LimitsExceeded).
     fn refresh(&self) -> zbus::fdo::Result<()> {
         self.shared.refresh()
     }
 
-    /// The name stored in the keyboard was just rewritten by `akmctl rename
-    /// --device-name` (#248): forget the four fragments `0x51`-`0x54` (claims
+    /// The name stored in the keyboard was just rewritten by `akmctl rename`
+    /// with the device-name option (#248): forget the four fragments `0x51`-`0x54` (claims
     /// and cached values, nothing else) and read these four reports again
     /// (never the routine reports): now, or, when a re-read was made less
     /// than 30 s ago, when those 30 s end (deferred, never dropped). Returns
@@ -612,6 +614,10 @@ fn spawn_event_forwarder(conn: Connection, shared: Arc<Shared>, hub: &EventHub) 
 }
 
 fn forward(conn: &Connection, shared: &Arc<Shared>, ev: &DeviceEvent) -> zbus::Result<()> {
+    if let DeviceEvent::Forgotten { mac } = ev {
+        devices::remove_device(conn, shared, mac);
+        return Ok(());
+    }
     let snap = shared.watch.get();
     let (model, name) = (
         snap.model().unwrap_or_default(),
@@ -646,7 +652,7 @@ fn forward(conn: &Connection, shared: &Arc<Shared>, ev: &DeviceEvent) -> zbus::R
                 .await
             }
             // ConnectionChanged follows the published state (sync_devices).
-            DeviceEvent::Link(_) => Ok(()),
+            DeviceEvent::Link(_) | DeviceEvent::Forgotten { .. } => Ok(()),
         }
     })
 }

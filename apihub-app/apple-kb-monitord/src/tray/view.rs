@@ -597,7 +597,14 @@ impl View {
                     } else {
                         lang.t("hors ligne", "offline")
                     };
-                    let mark = if weakest.is_some_and(|w| w.mac == d.mac) {
+                    // Never "the weakest" next to a keyboard whose level is
+                    // unknown (C13).
+                    let all_known = snap
+                        .devices
+                        .iter()
+                        .filter(|o| o.connected)
+                        .all(|o| o.battery.is_some_and(f64::is_finite));
+                    let mark = if all_known && weakest.is_some_and(|w| w.mac == d.mac) {
                         lang.t(" · le plus faible", " · weakest")
                     } else {
                         ""
@@ -1023,6 +1030,15 @@ mod tests {
         );
         assert!(!v.entry(id::KB_FIRST + 2).unwrap().visible());
         assert!(v.tooltip_lines.iter().any(|l| l.starts_with("Salon")));
+        // C13: never "the weakest" next to a keyboard whose level is unknown.
+        let mut u = s.clone();
+        u.devices[1].battery = None;
+        let vu = View::build(&u, false, None, Lang::Fr);
+        assert!(
+            !label(&vu, id::KB_FIRST).contains("plus faible"),
+            "{}",
+            label(&vu, id::KB_FIRST)
+        );
         // The battery line of the menu still describes the keyboard read here.
         assert!(label(&v, id::BATTERY).contains("80"));
         // The weak one disconnects: the icon is the first again, whose line

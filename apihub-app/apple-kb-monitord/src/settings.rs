@@ -103,6 +103,8 @@ struct Guard {
 pub struct HelperBackend {
     pkexec: PathBuf,
     helper: PathBuf,
+    /// Where the value in effect is read (and read back after a write, C11).
+    sysfs: PathBuf,
     guard: Arc<Mutex<Guard>>,
 }
 
@@ -119,17 +121,38 @@ impl HelperBackend {
         Self {
             pkexec: pkexec.into(),
             helper: helper.into(),
+            sysfs: PathBuf::from(akm_core::hid_params::SYSFS_DIR),
             guard: Arc::default(),
         }
+    }
+
+    /// Another parameters directory (tests only).
+    pub fn with_sysfs(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.sysfs = dir.into();
+        self
+    }
+
+    fn current(&self, p: Param) -> i32 {
+        p.read_in(&self.sysfs)
+            .unwrap_or(akm_core::hid_params::UNKNOWN)
     }
 
     fn acquire(&self) -> Result<(), SetError> {
         let mut g = self.guard.lock().unwrap_or_else(|e| e.into_inner());
         if g.running {
-            return Err(SetError::Busy("an authentication is already pending".into()));
+            return Err(SetError::Busy(
+                "a change of the Fn mode is already waiting for authentication".into(),
+            ));
         }
-        if g.last_end.is_some_and(|t| t.elapsed() < COOLDOWN) {
-            return Err(SetError::Busy("too many requests, retry shortly".into()));
+        if let Some(left) = g
+            .last_end
+            .and_then(|t| COOLDOWN.checked_sub(t.elapsed()))
+            .filter(|d| !d.is_zero())
+        {
+            return Err(SetError::Busy(format!(
+                "a change of the Fn mode just ended, retry in {} s",
+                left.as_secs().max(1)
+            )));
         }
         g.running = true;
         Ok(())
@@ -178,7 +201,7 @@ impl HelperBackend {
 
 impl SettingsBackend for HelperBackend {
     fn get(&self, p: Param) -> i32 {
-        p.read()
+        self.current(p)
     }
 
     fn apply(&self, p: Param, v: i32) -> Result<(), SetError> {
@@ -194,9 +217,21 @@ impl SettingsBackend for HelperBackend {
                 self.helper.display()
             )));
         }
+        // Already in effect: no authentication window to change nothing (C11).
+        if self.current(p) == v {
+            tracing::info!(value = v, "fnmode already in effect, nothing to change");
+            return Ok(());
+        }
         self.acquire()?;
         tracing::info!(value = v, "fnmode change: opening polkit authentication");
-        let r = self.run(v);
+        // Success is the value read back from sysfs, not pkexec's exit code
+        // alone: a write that did not happen is never "applied" (C11).
+        let r = self.run(v).and_then(|()| match self.current(p) {
+            now if now == v => Ok(()),
+            now => Err(SetError::Failed(format!(
+                "the helper ended without error but the Fn mode in effect is still {now}"
+            ))),
+        });
         self.release();
         match &r {
             Ok(()) => tracing::info!(value = v, "fnmode change applied"),
@@ -254,6 +289,43 @@ mod tests {
         let prod = &src[..src.find("#[cfg(test)]").unwrap()];
         assert!(!prod.contains("env::var"), "no env var picks a program");
         assert!(!prod.contains(r#"Command::new("pkexec")"#));
+    }
+
+    /// C11: a value already in effect runs nothing; a "success" that did not
+    /// change sysfs is a failure; the cooldown says how long to wait.
+    #[test]
+    fn fnmode_is_checked_against_sysfs() {
+        let dir = std::env::temp_dir().join(format!("akm-c11-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("fnmode"), "1\n").unwrap();
+        let helper = dir.join("akm-helper");
+        std::fs::write(&helper, "").unwrap();
+        // A "pkexec" that exits 0 and writes nothing, and counts its runs.
+        let pk = dir.join("pkexec");
+        std::fs::write(
+            &pk,
+            format!("#!/bin/sh\necho x >> {}/runs\nexit 0\n", dir.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&pk, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let b = HelperBackend::with_paths(&pk, &helper).with_sysfs(&dir);
+        let runs = || std::fs::read_to_string(dir.join("runs")).map_or(0, |s| s.lines().count());
+        assert_eq!(b.get(Param::FnMode), 1);
+        b.apply(Param::FnMode, 1).unwrap();
+        assert_eq!(runs(), 0, "already in effect: no pkexec");
+        let e = b.apply(Param::FnMode, 2).unwrap_err();
+        assert_eq!(runs(), 1);
+        assert!(
+            matches!(e, SetError::Failed(ref m) if m.contains("still 1")),
+            "{e}"
+        );
+        let e = b.apply(Param::FnMode, 2).unwrap_err();
+        assert!(
+            matches!(e, SetError::Busy(ref m) if m.contains("retry in")),
+            "{e}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

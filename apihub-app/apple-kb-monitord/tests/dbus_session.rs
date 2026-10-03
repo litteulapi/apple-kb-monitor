@@ -130,11 +130,26 @@ fn inner() {
     // ...and reaches the actor once one is installed.
     let (tx, rx) = mpsc::channel();
     mailbox.install(tx);
+    // C15: an actor that answers "too soon" makes Refresh() fail with the
+    // wait; "taken" makes it succeed.
+    let answer = std::thread::spawn(move || {
+        for o in [
+            akm_core::machine::RefreshOutcome::TooSoon {
+                wait: Duration::from_secs(240),
+            },
+            akm_core::machine::RefreshOutcome::Accepted,
+        ] {
+            match rx.recv_timeout(Duration::from_secs(5)).unwrap() {
+                Msg::Refresh(reply) => reply.answer(o),
+                m => panic!("unexpected {m:?}"),
+            }
+        }
+        rx
+    });
+    let e = client::request_refresh(&c).unwrap_err().to_string();
+    assert!(e.contains("LimitsExceeded") && e.contains("240 s"), "{e}");
     client::request_refresh(&c).unwrap();
-    assert_eq!(
-        rx.recv_timeout(Duration::from_secs(2)).unwrap(),
-        Msg::Refresh
-    );
+    let rx = answer.join().unwrap();
 
     // RereadName() (#248): reaches the actor as its own message and answers
     // `(accepted, text)`. Nobody answers here: after the wait the caller is
