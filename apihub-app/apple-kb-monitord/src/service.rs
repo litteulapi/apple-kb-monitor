@@ -232,8 +232,8 @@ impl Monitor {
         self.shared.refresh()
     }
 
-    /// The name stored in the keyboard was just rewritten by `akmctl rename
-    /// --device-name` (#248): forget the four fragments `0x51`-`0x54` (claims
+    /// The name stored in the keyboard was just rewritten by `akmctl rename`
+    /// with the device-name option (#248): forget the four fragments `0x51`-`0x54` (claims
     /// and cached values, nothing else) and read these four reports again
     /// (never the routine reports): now, or, when a re-read was made less
     /// than 30 s ago, when those 30 s end (deferred, never dropped). Returns

@@ -194,6 +194,30 @@ fn inner() {
 
     let c = Connection::session().unwrap();
 
+    // C4: the introspection XML of every object is well formed. zbus copies
+    // the `///` docs into `<!-- -->` comments, where `--` is forbidden: Qt
+    // (qdbus6, QDBusInterface) then dropped 27 of the 30 members.
+    for path in [service::OBJECT_PATH, DEV] {
+        let xml: String = c
+            .call_method(
+                Some(service::BUS_NAME),
+                path,
+                Some("org.freedesktop.DBus.Introspectable"),
+                "Introspect",
+                &(),
+            )
+            .unwrap()
+            .body()
+            .deserialize()
+            .unwrap();
+        assert_xml_comments_well_formed(path, &xml);
+        if path == service::OBJECT_PATH {
+            for m in ["RereadName", "Diagnose", "History", "GetDevices", "BatterySets"] {
+                assert!(xml.contains(&format!("<method name=\"{m}\"")), "{m} missing");
+            }
+        }
+    }
+
     // v1 surface intact + version.
     assert_eq!(
         i32::try_from(get(&c, service::OBJECT_PATH, service::INTERFACE, "Battery")).unwrap(),
@@ -461,6 +485,21 @@ fn inner() {
     assert!(e.to_string().contains("NotSupported"), "{e}");
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// XML 1.0 §2.5: a comment must not contain `--` nor end with `-`.
+fn assert_xml_comments_well_formed(path: &str, xml: &str) {
+    let mut rest = xml;
+    while let Some(i) = rest.find("<!--") {
+        let body = &rest[i + 4..];
+        let end = body.find("-->").expect("unterminated comment");
+        let c = &body[..end];
+        assert!(
+            !c.contains("--") && !c.ends_with('-'),
+            "{path}: comment not well formed: {c:?}"
+        );
+        rest = &body[end + 3..];
+    }
 }
 
 #[test]
