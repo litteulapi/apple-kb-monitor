@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: kcm_applekeyboard\n"
 "Report-Msgid-Bugs-To: https://gitea.pika.agenceapi.fr/adminapi/apple-kb-"
 "monitor/issues\n"
-"POT-Creation-Date: 2026-10-03 08:48+0200\n"
+"POT-Creation-Date: 2026-10-03 08:55+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -19,205 +19,229 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/AlertsPage.qml:142
+#: ui/AlertsPage.qml:234
 msgid ""
 "Not saved: the settings file could not be read (%1), so it is not written "
 "over. Fix the file or move it away, then reopen this page."
 msgstr ""
 
-#: ui/AlertsPage.qml:149
+#: ui/AlertsPage.qml:240
 msgid ""
-"Not saved: the thresholds must be whole numbers between 1 and 95, separated "
+"Not saved: the thresholds must be whole numbers between 1 and 99, separated "
 "by commas."
 msgstr ""
 
-#: ui/AlertsPage.qml:165
+#: ui/AlertsPage.qml:244
+msgid "Not saved: the critical level must be a whole number between 0 and 99."
+msgstr ""
+
+#: ui/AlertsPage.qml:248
+msgid ""
+"Not saved: the re-arm margin must be a number between 1 and 20 (for example "
+"3 or 2.5)."
+msgstr ""
+
+#: ui/AlertsPage.qml:264
 msgid ""
 "Not saved: config.toml uses a form this page cannot edit safely (%1). Edit "
 "the file by hand."
 msgstr ""
 
-#: ui/AlertsPage.qml:178
+#: ui/AlertsPage.qml:285
 msgid ""
 "Saved. The service reads these settings when it starts: restart it to use "
 "them now."
 msgstr ""
 
-#: ui/AlertsPage.qml:179
+#: ui/AlertsPage.qml:286
 msgid "Saved. They will be used when the service starts."
 msgstr ""
 
-#: ui/AlertsPage.qml:183
+#: ui/AlertsPage.qml:290
 msgid ""
 "Not saved: the settings file was changed by another program since this page "
 "read it. Nothing was written; use Reset to read it again."
 msgstr ""
 
-#: ui/AlertsPage.qml:184
+#: ui/AlertsPage.qml:291
 msgid "Not saved: %1"
 msgstr ""
 
-#: ui/AlertsPage.qml:205
+#: ui/AlertsPage.qml:315
 msgid "Restart the service"
 msgstr ""
 
-#: ui/AlertsPage.qml:210
+#: ui/AlertsPage.qml:320
 msgid "Service restarted with the new settings."
 msgstr ""
 
-#: ui/AlertsPage.qml:210
+#: ui/AlertsPage.qml:320
 msgid "The service could not be restarted: %1"
 msgstr ""
 
-#: ui/AlertsPage.qml:224
+#: ui/AlertsPage.qml:334
 msgid ""
 "The settings file could not be read (%1): the defaults are shown and nothing "
 "can be saved, so that the file is never written over."
 msgstr ""
 
-#: ui/AlertsPage.qml:225
+#: ui/AlertsPage.qml:335
 msgid ""
 "Some lines of the settings file are not understood (%1); they are kept as "
 "they are."
 msgstr ""
 
-#: ui/AlertsPage.qml:235
+#: ui/AlertsPage.qml:344
+msgid ""
+"The service does not take these values of the settings file as they are "
+"written: %1. They are shown as written and kept unless you change them."
+msgstr ""
+
+#: ui/AlertsPage.qml:354
 msgctxt "@title:group"
 msgid "Low battery"
 msgstr ""
 
-#: ui/AlertsPage.qml:240
+#: ui/AlertsPage.qml:359
 msgid "Alerts:"
 msgstr ""
 
-#: ui/AlertsPage.qml:241
+#: ui/AlertsPage.qml:360
 msgid "Notify when the battery is low"
 msgstr ""
 
-#: ui/AlertsPage.qml:247
+#: ui/AlertsPage.qml:366
 msgid "Thresholds (%):"
 msgstr ""
 
-#: ui/AlertsPage.qml:251
+#: ui/AlertsPage.qml:370
 msgid "Alert thresholds in percent, separated by commas"
 msgstr ""
 
-#: ui/AlertsPage.qml:260
+#: ui/AlertsPage.qml:373
+msgid "Whole numbers from 1 to 99"
+msgstr ""
+
+#: ui/AlertsPage.qml:380
 msgid "One notification per threshold crossed, on the estimated charge."
 msgstr ""
 
-#: ui/AlertsPage.qml:265
+#: ui/AlertsPage.qml:385
 msgid "With KDE:"
 msgstr ""
 
-#: ui/AlertsPage.qml:267
+#: ui/AlertsPage.qml:387
 msgid "When KDE already warns about this keyboard, send only one reminder"
 msgstr ""
 
-#: ui/AlertsPage.qml:273
+#: ui/AlertsPage.qml:393
 msgid "Critical at or below (%):"
 msgstr ""
 
-#: ui/AlertsPage.qml:277
+#: ui/AlertsPage.qml:398
 msgid "Critical threshold in percent"
 msgstr ""
 
-#: ui/AlertsPage.qml:283
+#: ui/AlertsPage.qml:404
 msgid "Re-arm after (points):"
 msgstr ""
 
-#: ui/AlertsPage.qml:287
+#: ui/AlertsPage.qml:409
 msgid "Points above a threshold before it can notify again"
 msgstr ""
 
-#: ui/AlertsPage.qml:293
+#: ui/AlertsPage.qml:410
+msgid "A number from 1 to 20, decimals allowed"
+msgstr ""
+
+#: ui/AlertsPage.qml:417
 msgctxt "@title:group"
 msgid "Batteries"
 msgstr ""
 
-#: ui/AlertsPage.qml:298
+#: ui/AlertsPage.qml:422
 msgid "Battery type:"
 msgstr ""
 
-#: ui/AlertsPage.qml:299 ui/StatePage.qml:47
+#: ui/AlertsPage.qml:423 ui/StatePage.qml:47
 msgctxt "battery chemistry"
 msgid "alkaline"
 msgstr ""
 
-#: ui/AlertsPage.qml:299 ui/StatePage.qml:48
+#: ui/AlertsPage.qml:423 ui/StatePage.qml:48
 msgctxt "battery chemistry"
 msgid "NiMH (rechargeable)"
 msgstr ""
 
-#: ui/AlertsPage.qml:299 ui/StatePage.qml:49
+#: ui/AlertsPage.qml:423 ui/StatePage.qml:49
 msgctxt "battery chemistry"
 msgid "lithium"
 msgstr ""
 
-#: ui/AlertsPage.qml:299 ui/StatePage.qml:50
+#: ui/AlertsPage.qml:423 ui/StatePage.qml:50
 msgctxt "battery chemistry"
 msgid "unknown"
 msgstr ""
 
-#: ui/AlertsPage.qml:300
+#: ui/AlertsPage.qml:424
 msgid "Battery type"
 msgstr ""
 
-#: ui/AlertsPage.qml:308
+#: ui/AlertsPage.qml:432
 msgid ""
 "Used for the estimated charge and its range; the keyboard's own indication "
 "does not depend on it."
 msgstr ""
 
-#: ui/AlertsPage.qml:313
+#: ui/AlertsPage.qml:437
 msgid "Display:"
 msgstr ""
 
-#: ui/AlertsPage.qml:314
+#: ui/AlertsPage.qml:438
 msgid "Also show the percentage as macOS shows it"
 msgstr ""
 
-#: ui/AlertsPage.qml:320
+#: ui/AlertsPage.qml:444
 msgctxt "@title:group"
 msgid "Other notifications"
 msgstr ""
 
-#: ui/AlertsPage.qml:325 ui/StatePage.qml:134
+#: ui/AlertsPage.qml:449 ui/StatePage.qml:134
 msgid "Connection:"
 msgstr ""
 
-#: ui/AlertsPage.qml:326
+#: ui/AlertsPage.qml:450
 msgid "Notify on disconnection and reconnection"
 msgstr ""
 
-#: ui/AlertsPage.qml:332
+#: ui/AlertsPage.qml:456
 msgid "New batteries:"
 msgstr ""
 
-#: ui/AlertsPage.qml:333
+#: ui/AlertsPage.qml:457
 msgid "Notify when new batteries are detected"
 msgstr ""
 
-#: ui/AlertsPage.qml:339
+#: ui/AlertsPage.qml:463
 msgctxt "@title:group"
 msgid "Shutdown"
 msgstr ""
 
-#: ui/AlertsPage.qml:344
+#: ui/AlertsPage.qml:468
 msgid "WillShutdown:"
 msgstr ""
 
-#: ui/AlertsPage.qml:345
+#: ui/AlertsPage.qml:469
 msgid "Tell the keyboard when the computer shuts down or restarts"
 msgstr ""
 
-#: ui/AlertsPage.qml:353
+#: ui/AlertsPage.qml:477
 msgid ""
 "What macOS sends at every shutdown (one message, nothing else is written). "
 "Off = the keyboard is left untouched."
 msgstr ""
 
-#: ui/AlertsPage.qml:360
+#: ui/AlertsPage.qml:484
 msgid "File:"
 msgstr ""
 

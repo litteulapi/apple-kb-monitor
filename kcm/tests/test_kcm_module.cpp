@@ -363,6 +363,92 @@ private Q_SLOTS:
         QVERIFY2(m_module->needsSave(), "Apply was greyed out although the write was refused");
         QCOMPARE(readFile(configPath()), QByteArray("[alerts]\nthresholds = [30, 15, 5]\n# changed\n"));
     }
+
+    // #286 (K2): a file the daemon reads without a warning opens unmodified,
+    // shows its values as written, and Apply rewrites only what was changed.
+    void validFileOpensUnmodified_data()
+    {
+        QTest::addColumn<QByteArray>("line");
+        QTest::addColumn<QString>("control");
+        QTest::addColumn<QString>("shownAs");
+        QTest::newRow("decimal-hysteresis") << QByteArray("hysteresis = 2.5") << QStringLiteral("alerts_hysteresis") << QStringLiteral("2.5");
+        QTest::newRow("ascending-thresholds") << QByteArray("thresholds = [5, 15, 30]") << QStringLiteral("alerts_thresholds") << QStringLiteral("5, 15, 30");
+        QTest::newRow("critical-99") << QByteArray("critical = 99") << QStringLiteral("alerts_critical") << QStringLiteral("99");
+        QTest::newRow("thresholds-above-95") << QByteArray("thresholds = [97, 50]") << QStringLiteral("alerts_thresholds") << QStringLiteral("97, 50");
+        QTest::newRow("chemistry-case") << QByteArray("chemistry = \"NiMH\"") << QString() << QString();
+    }
+    void validFileOpensUnmodified()
+    {
+        QFETCH(QByteArray, line);
+        QFETCH(QString, control);
+        QFETCH(QString, shownAs);
+        const QByteArray section = line.startsWith("chemistry") ? "[battery]\r\n" : "[alerts]\r\n";
+        const QByteArray before = "[notifications]\r\nconnection = true\r\n" + section + line + "\r\n[ddc]\r\nbrightness = 40\r\n";
+        writeFile(configPath(), before);
+        QVERIFY(open(QStringLiteral("notifications")));
+        QVERIFY(waitAlertsReady());
+        QVERIFY2(!m_module->needsSave(), "opened as modified");
+        // [5, 15, 30] is what the daemon reads as the default [30, 15, 5]
+        QCOMPARE(m_module->representsDefaults(), line == "thresholds = [5, 15, 30]");
+        if (!control.isEmpty()) {
+            QQuickItem *it = item(control);
+            QVERIFY(it);
+            const QString shown = it->property("text").isValid() && !it->property("value").isValid() ? it->property("text").toString()
+                                                                                                   : it->property("value").toString();
+            QCOMPARE(shown, shownAs);
+        }
+        QVERIFY(!shown(QStringLiteral("alertsRangeWarning")));
+        QVERIFY(click(QStringLiteral("alerts_connection")));
+        QVERIFY(m_module->needsSave());
+        apply();
+        QVERIFY2(text(QStringLiteral("alertsResult")).startsWith(QStringLiteral("Enregistré")), qPrintable(text(QStringLiteral("alertsResult"))));
+        QByteArray after = before;
+        after.replace("connection = true", "connection = false");
+        QCOMPARE(readFile(configPath()), after);
+        QVERIFY(!m_module->needsSave());
+    }
+
+    // #286 (K2): values the daemon does not take as written are shown as they
+    // are, with a warning, and never "corrected" behind the user's back.
+    void outOfRangeValuesAreShownAndKept()
+    {
+        const QByteArray before = "[alerts]\ncritical = 120\nthresholds = [0, 50]\nhysteresis = 25\n[notifications]\nconnection = true\n";
+        writeFile(configPath(), before);
+        QVERIFY(open(QStringLiteral("notifications")));
+        QVERIFY(waitAlertsReady());
+        QVERIFY2(!m_module->needsSave(), "opened as modified");
+        QCOMPARE(item(QStringLiteral("alerts_critical"))->property("value").toInt(), 120);
+        QCOMPARE(text(QStringLiteral("alerts_thresholds")), QStringLiteral("0, 50"));
+        QCOMPARE(text(QStringLiteral("alerts_hysteresis")), QStringLiteral("25"));
+        QVERIFY(shown(QStringLiteral("alertsRangeWarning")));
+        const QString warning = text(QStringLiteral("alertsRangeWarning"));
+        QVERIFY2(warning.contains(QLatin1String("critical = 120")) && warning.contains(QLatin1String("thresholds")) && warning.contains(QLatin1String("hysteresis")), qPrintable(warning));
+        QVERIFY(click(QStringLiteral("alerts_connection")));
+        apply();
+        QByteArray after = before;
+        after.replace("connection = true", "connection = false");
+        QCOMPARE(readFile(configPath()), after);
+    }
+
+    // #286 (K2): the page takes what the daemon takes (decimal hysteresis,
+    // thresholds up to 99) and writes exactly what was typed.
+    void typedValuesAreWritten()
+    {
+        writeFile(configPath(), "[alerts]\nhysteresis = 3\nthresholds = [30, 15, 5]\n");
+        QVERIFY(open(QStringLiteral("notifications")));
+        QVERIFY(waitAlertsReady());
+        QVERIFY(typeInto(QStringLiteral("alerts_hysteresis"), QStringLiteral("2.5"), true));
+        QVERIFY(typeInto(QStringLiteral("alerts_thresholds"), QStringLiteral("97, 50"), true));
+        QVERIFY(m_module->needsSave());
+        apply();
+        QCOMPARE(readFile(configPath()), QByteArray("[alerts]\nhysteresis = 2.5\nthresholds = [97, 50]\n"));
+        QVERIFY(!m_module->needsSave());
+        // a value out of the daemon's range, once typed, is refused
+        QVERIFY(typeInto(QStringLiteral("alerts_hysteresis"), QStringLiteral("25"), true));
+        apply();
+        QVERIFY2(text(QStringLiteral("alertsResult")).startsWith(QStringLiteral("Non enregistré")), qPrintable(text(QStringLiteral("alertsResult"))));
+        QVERIFY(m_module->needsSave());
+    }
 };
 
 QTEST_MAIN(TestKcmModule)
