@@ -189,7 +189,10 @@ mod tests {
         };
         let conn = crate::testbus::connect(&bus.addr).unwrap();
         let err = toggle(&conn).unwrap_err();
-        assert!(err.contains("systemctl --user start apple-kb-monitord"), "{err}");
+        assert!(
+            err.contains("systemctl --user start apple-kb-monitord"),
+            "{err}"
+        );
     }
 
     /// #99: the shortcut is visible in System Settings > Shortcuts and has

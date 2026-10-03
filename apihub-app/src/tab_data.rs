@@ -98,12 +98,9 @@ fn batteries(ui: &mut Ui, th: &Theme, snap: &Snapshot, kb: &KbReport, now: u64) 
         let dash = || view::DASH.to_string();
         // Measured: reports 0x46 / 0xFF, in mV (#139).
         let volts = b.voltage.filter(|v| v.is_finite() && *v > 0.0);
-        th.kv(
-            ui,
-            tr("Voltage"),
-            &volts.map_or_else(dash, view::volts_text),
-            volts.map_or(Level::Unknown, view::voltage_level),
-        );
+        // The daemon flags a voltage its two readings disagree on (#280).
+        let (volt_text, volt_level) = view::voltage_cell(b);
+        th.kv(ui, tr("Voltage"), &volt_text, volt_level);
         threshold_scale(ui, th, b);
         // Thresholds the keyboard reports (0x60, read once per connection).
         th.kv(
@@ -130,6 +127,17 @@ fn batteries(ui: &mut Ui, th: &Theme, snap: &Snapshot, kb: &KbReport, now: u64) 
             ui,
             tr("Chemistry"),
             &view::chemistry_text(b).unwrap_or_else(dash),
+            Level::Unknown,
+        );
+        // Age of the set of batteries (#280).
+        th.kv(
+            ui,
+            tr("Batteries installed"),
+            &view::age_text(
+                snap.batteries_installed_at
+                    .filter(|t| *t > 0 && *t <= now)
+                    .map(|t| now - t),
+            ),
             Level::Unknown,
         );
         // The kernel % steps down only at reconnections (#179).

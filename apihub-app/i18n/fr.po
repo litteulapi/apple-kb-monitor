@@ -744,3 +744,18 @@ msgstr "réaffectée avant hid_apple : plus de couche Fn sur cette touche"
 
 msgid "iso_layout=-1: hid_apple swaps these two keys when the keyboard reports the ISO country code"
 msgstr "iso_layout=-1 : hid_apple échange ces deux touches quand le clavier annonce le code pays ISO"
+
+msgid "doubtful"
+msgstr "douteuse"
+
+msgid "Batteries installed"
+msgstr "Piles installées"
+
+msgid "Keyboard reading"
+msgstr "Lecture du clavier"
+
+msgid "no error reported by the service"
+msgstr "aucune erreur signalée par le service"
+
+msgid "last error of the service: {}"
+msgstr "dernière erreur du service : {}"

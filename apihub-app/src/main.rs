@@ -219,6 +219,7 @@ impl ApiHubApp {
             ),
             Tab::Diag => {
                 self.diag.signal = signal_issue(snap);
+                self.diag.last_error = snap.last_error.clone();
                 self.diag.show(ui, &self.theme)
             }
         }
@@ -255,7 +256,9 @@ impl ApiHubApp {
             }
             Tab::Data => history_chart::reload(ctx, &self.history),
             Tab::Diag => {
-                self.diag.signal = signal_issue(&self.state.get());
+                let snap = self.state.get();
+                self.diag.signal = signal_issue(&snap);
+                self.diag.last_error = snap.last_error.clone();
                 self.diag.run()
             }
         }

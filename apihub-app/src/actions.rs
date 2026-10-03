@@ -339,7 +339,10 @@ mod tests {
         };
         let conn = crate::testbus::connect(&bus.addr).unwrap();
         let err = reconnect_on(&conn).unwrap_err();
-        assert!(err.contains("systemctl --user start apple-kb-monitord"), "{err}");
+        assert!(
+            err.contains("systemctl --user start apple-kb-monitord"),
+            "{err}"
+        );
     }
 
     #[test]

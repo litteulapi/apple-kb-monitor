@@ -24,6 +24,8 @@ pub struct DiagTab {
     /// Why the daemon does not measure the signal (`radio.rssi_error` of
     /// the last snapshot, #269), set by the window before each run.
     pub signal: Option<akm_core::rssi::RssiIssue>,
+    /// The daemon's last acquisition error (`last_error`, #280).
+    pub last_error: Option<String>,
 }
 
 impl DiagTab {
@@ -32,6 +34,7 @@ impl DiagTab {
             results: Arc::new(Mutex::new(Vec::new())),
             running: Arc::new(AtomicBool::new(false)),
             signal: None,
+            last_error: None,
         }
     }
 
@@ -48,6 +51,7 @@ impl DiagTab {
         let results = self.results.clone();
         let running = self.running.clone();
         let signal = self.signal.clone();
+        let last_error = self.last_error.clone();
 
         /// Clears the "running" flag even if the diagnostics thread panics.
         struct RunningGuard(Arc<AtomicBool>);
@@ -228,6 +232,7 @@ impl DiagTab {
             // Signal (#269): the daemon's last real attempt first, else can
             // this account run the helper at all (`root:akm 0750`).
             out.push(signal_row(&HelperProbe::system(), signal.as_ref()));
+            out.push(acquisition_row(last_error.as_deref()));
 
             // Store results (the guard clears the running flag on drop)
             if let Ok(mut r) = results.lock() {
@@ -328,6 +333,22 @@ impl HelperProbe {
             executable: unsafe { libc::access(c.as_ptr(), libc::X_OK) } == 0,
             listed_in_akm: akm_core::rssi::user_listed_in_akm(),
         }
+    }
+}
+
+/// The daemon's last acquisition error (#280): never hidden any more.
+fn acquisition_row(err: Option<&str>) -> DiagResult {
+    match err.map(str::trim).filter(|e| !e.is_empty()) {
+        None => DiagResult {
+            label: tr("Keyboard reading").into(),
+            ok: true,
+            detail: tr("no error reported by the service").into(),
+        },
+        Some(e) => DiagResult {
+            label: tr("Keyboard reading").into(),
+            ok: false,
+            detail: crate::i18n::trf("last error of the service: {}", &[&e]),
+        },
     }
 }
 
@@ -454,6 +475,14 @@ mod tests {
         assert!(signal_row(&probe(true, true, false), None).ok);
         let r = signal_row(&probe(false, false, false), None);
         assert!(!r.ok && r.detail.contains("not installed"));
+    }
+
+    #[test]
+    fn the_last_acquisition_error_is_a_row() {
+        assert!(acquisition_row(None).ok);
+        assert!(acquisition_row(Some("  ")).ok);
+        let r = acquisition_row(Some("HID diagnostics unavailable (stale)"));
+        assert!(!r.ok && r.detail.contains("HID diagnostics unavailable"));
     }
 
     /// The daemon's own failure wins: its groups are not the window's.

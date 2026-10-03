@@ -329,6 +329,19 @@ pub fn chemistry_text(b: &akm_core::report::KbBattery) -> Option<String> {
     })
 }
 
+/// The voltage of DATA: value and level, marked "(doubtful)" in amber when
+/// the daemon's two readings disagree (#280).
+pub fn voltage_cell(b: &akm_core::report::KbBattery) -> (String, Level) {
+    match b.voltage.filter(|v| v.is_finite() && *v > 0.0) {
+        None => (DASH.to_string(), Level::Unknown),
+        Some(v) if b.voltage_doubtful => (
+            format!("{} ({})", volts_text(v), tr("doubtful")),
+            Level::Warn,
+        ),
+        Some(v) => (volts_text(v), voltage_level(v)),
+    }
+}
+
 /// The chemistry words of akm-core, translated (#273); others unchanged.
 pub fn chemistry_word(w: &str) -> String {
     match w {
@@ -1397,5 +1410,18 @@ mod tests {
         for c in [C::Alkaline, C::Nimh, C::Lithium, C::Unknown] {
             assert_ne!(chemistry_word(c.as_str()), "", "{c:?}");
         }
+    }
+
+    #[test]
+    fn a_doubtful_voltage_is_marked() {
+        let mut b = akm_core::report::KbBattery {
+            voltage: Some(2.91),
+            ..Default::default()
+        };
+        assert!(!voltage_cell(&b).0.contains("doubtful"));
+        b.voltage_doubtful = true;
+        let (t, l) = voltage_cell(&b);
+        assert!(t.contains("doubtful"), "{t}");
+        assert_eq!(l, Level::Warn);
     }
 }
