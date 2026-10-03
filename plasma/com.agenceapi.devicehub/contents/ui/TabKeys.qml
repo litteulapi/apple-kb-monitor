@@ -1,0 +1,155 @@
+import QtQuick
+import QtQuick.Layouts
+import "Pip.js" as Pip
+import "FnMode.js" as Fn
+
+// KEYS: the Fn mode switch (hid_apple.fnmode, changed by the daemon after
+// the administrator authentication) and the lock lamps drawn as key caps.
+// The table of the special keys and the manual mapping stay in the window.
+ColumnLayout {
+    id: page
+    property var applet
+    // Popup at the tray's own size: smaller figures.
+    property bool compact: false
+    spacing: Pip.GAP * 1.5
+
+    readonly property string kind: Fn.kind(applet.fnMode)
+
+    PipPanel {
+        title: i18n("Function keys")
+        PipChoice {
+            Layout.fillWidth: true
+            text: i18n("Media keys first")
+            chosen: page.kind === "media"
+            enabled: !applet.fnBusy && applet.kbMac !== "" && Fn.next(applet.fnMode) > 0
+            onClicked: if (!chosen) applet.toggleFnMode()
+        }
+        PipChoice {
+            Layout.fillWidth: true
+            text: i18n("F1–F12 first")
+            chosen: page.kind === "fkeys"
+            enabled: !applet.fnBusy && applet.kbMac !== "" && Fn.next(applet.fnMode) > 0
+            onClicked: if (!chosen) applet.toggleFnMode()
+        }
+        PipText {
+            Layout.fillWidth: true
+            visible: page.kind === "off" || page.kind === "nofkeys"
+            text: i18n("Current mode: %1", applet.fnModeText)
+            color: Pip.AMBER
+        }
+        PipText {
+            Layout.fillWidth: true
+            visible: applet.fnMode < 0
+            text: applet.connected ? i18n("Fn mode not read yet.") : i18n("Fn mode unknown: the keyboard is not connected.")
+            color: Pip.GREEN_MID
+        }
+        PipText {
+            Layout.fillWidth: true
+            visible: applet.fnBusy
+            text: i18n("Administrator authentication requested…")
+            color: Pip.AMBER
+        }
+        PipText {
+            Layout.fillWidth: true
+            visible: applet.fnError !== ""
+            text: i18n("Fn mode not changed: %1", applet.fnError)
+            color: Pip.RED
+        }
+        PipText {
+            Layout.fillWidth: true
+            text: i18n("hid_apple applies to every Apple keyboard of this computer.")
+            font.pixelSize: Pip.SMALL
+            color: Pip.GREEN_MID
+        }
+    }
+
+    PipPanel {
+        title: i18n("Locks")
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Pip.GAP * 2
+            Repeater {
+                model: [[i18n("Caps Lock"), applet.capsLock], [i18n("Num Lock"), applet.numLock]]
+                delegate: Rectangle {
+                    id: cap
+                    required property var modelData
+                    readonly property bool on: applet.connected && modelData[1]
+                    Layout.fillWidth: true
+                    implicitHeight: 74
+                    color: Pip.BG
+                    border.color: cap.on ? Pip.PHOSPHOR : Pip.GREEN_MID
+                    border.width: 2
+                    radius: 3
+                    Accessible.role: Accessible.Indicator
+                    Accessible.name: modelData[0] + " " + (cap.on ? i18n("on") : i18n("off"))
+                    // Key cap: inner bevel, lamp, legend.
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 5
+                        color: "transparent"
+                        border.color: Pip.GREEN_FRAME
+                        border.width: 1
+                        radius: 2
+                    }
+                    Rectangle {
+                        x: 14
+                        y: 14
+                        width: 12
+                        height: 12
+                        radius: 6
+                        color: cap.on ? Pip.PHOSPHOR : "transparent"
+                        border.color: cap.on ? Pip.PHOSPHOR : Pip.GREEN_FRAME
+                        border.width: 1
+                        Rectangle {
+                            anchors.centerIn: parent
+                            visible: cap.on
+                            width: 22
+                            height: 22
+                            radius: 11
+                            color: Qt.rgba(0.08, 1, 0, 0.22)
+                        }
+                    }
+                    PipText {
+                        x: 34
+                        y: 8
+                        width: parent.width - 42
+                        text: cap.modelData[0].toUpperCase()
+                        color: cap.on ? Pip.PHOSPHOR : Pip.GREEN_MID
+                        glow: cap.on
+                        Accessible.ignored: true
+                    }
+                    PipText {
+                        x: 14
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 8
+                        text: !applet.connected ? "---" : (cap.on ? i18n("ON") : i18n("OFF"))
+                        font.pixelSize: Pip.TITLE
+                        color: cap.on ? Pip.PHOSPHOR : Pip.GREEN_MID
+                        glow: cap.on
+                        wrapMode: Text.NoWrap
+                        Accessible.ignored: true
+                    }
+                }
+            }
+        }
+        PipText {
+            Layout.fillWidth: true
+            text: i18n("Read from the keyboard's LEDs at each reading.")
+            font.pixelSize: Pip.SMALL
+            color: Pip.GREEN_MID
+        }
+    }
+
+    PipPanel {
+        title: i18n("Special keys")
+        PipText {
+            Layout.fillWidth: true
+            text: i18n("The table of the special keys (code and KDE action with and without Fn) and the manual mapping are in the ApiHub window, KEYS tab.")
+            color: Pip.GREEN_MID
+        }
+        PipButton {
+            text: i18n("Open window")
+            onClicked: applet.openWindow()
+        }
+    }
+}

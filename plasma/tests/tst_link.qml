@@ -21,6 +21,7 @@ Item {
     property string health: ""
     property int refreshed: 0
     property int reconnected: 0
+    property int checks: 0
 
     DaemonLink {
         id: link
@@ -57,6 +58,9 @@ Item {
         onLinkStatusReceived: function (json) { t.health = JSON.parse(json)[0].health; }
         onRefreshDone: function (ok, m) { if (ok) t.refreshed++; }
         onReconnectDone: function (ok, m) { if (ok) t.reconnected++; }
+        // Diagnose(): the DIAG tab of the popup (#120).
+        onDiagnoseReceived: function (json) { t.checks = JSON.parse(json).total; }
+        onDiagnoseFailed: function (m) { console.log("FAIL diagnose: " + m); Qt.exit(1); }
         onAliasSet: function (n) { t.alias = n; }
         onAliasFailed: function (m) { console.log("FAIL alias: " + m); Qt.exit(1); }
         onWindowFailed: function (m) { console.log("FAIL window: " + m); Qt.exit(1); }
@@ -75,6 +79,7 @@ Item {
             link.fetchLinkStatus();
             link.refresh();
             link.reconnect();
+            link.diagnose();
             // Not an address: no call at all (no object path built from it).
             link.setFnMode("../../x", 2);
             link.releaseTray();
@@ -90,10 +95,10 @@ Item {
             // 3 readings in the 7 days, 2 with a measured voltage; Fn 1 -> 2.
             var more = t.histTag === "spark" && t.histCount === 3 && t.histVolts === 2
                 && t.fnBefore === 1 && t.fnAfter === 2 && t.version === "9.8.7"
-                && t.health === "unreachable" && t.refreshed === 1 && t.reconnected === 1;
+                && t.health === "unreachable" && t.refreshed === 1 && t.reconnected === 1 && t.checks === 9;
             console.log("RESULT states=" + t.states + " activated=" + t.activated + " pct=" + t.pct + " alias=" + t.alias + " volt=" + t.volt);
             console.log("RESULT history=" + t.histCount + "/" + t.histVolts + " tag=" + t.histTag + " fn=" + t.fnBefore + "->" + t.fnAfter
-                + " version=" + t.version + " link=" + t.health + " refresh=" + t.refreshed + " reconnect=" + t.reconnected);
+                + " version=" + t.version + " link=" + t.health + " refresh=" + t.refreshed + " reconnect=" + t.reconnected + " checks=" + t.checks);
             ok = ok && more;
             console.log(ok ? "PASS" : "FAIL");
             Qt.exit(ok ? 0 : 1);
