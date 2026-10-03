@@ -170,10 +170,19 @@ fn spawn(tag: &str) -> Fake {
     // the parent copies are closed: only the child holds the remote ends now
     drop(ctrl_remote);
     drop(intr_remote);
-    let exe = fs::read_link(format!("/proc/{}/exe", child.id()))
-        .unwrap()
-        .to_string_lossy()
-        .into_owned();
+    // Right after fork, /proc/<pid>/exe can still be this test binary (exec
+    // not done yet): wait for the exec, or the helper would not recognise
+    // the fake bluetoothd and the test failed about once in three runs.
+    let me = std::env::current_exe().unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let exe = loop {
+        let e = fs::read_link(format!("/proc/{}/exe", child.id())).unwrap();
+        if e != me {
+            break e.to_string_lossy().into_owned();
+        }
+        assert!(std::time::Instant::now() < deadline, "sleep never exec'd");
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    };
     let hid_root = std::env::temp_dir().join(format!("akm-hidctl-{tag}-{}", std::process::id()));
     let _ = fs::remove_dir_all(&hid_root);
     let dev = hid_root.join("0005:05AC:0256.0001");
