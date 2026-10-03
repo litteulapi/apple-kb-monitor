@@ -400,13 +400,21 @@ mod tests {
             let cmd = device_name_command(evil);
             assert!(!cmd.contains('\n'), "{cmd}");
             // What a real shell sees: exactly 4 words, the name intact.
+            // Run in a private temporary directory: a regression must never
+            // leave a file in the repository.
+            let dir = std::env::temp_dir().join(format!("akm-quote-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
             let out = std::process::Command::new("sh")
+                .current_dir(&dir)
                 .arg("-c")
                 .arg(format!("set -- {cmd}; printf '%s\\n' \"$#\" \"$4\""))
                 .output()
                 .unwrap();
             let out = String::from_utf8_lossy(&out.stdout);
             let want: String = evil.trim().chars().filter(|c| !c.is_control()).collect();
+            let pwned = dir.join("PWNED").exists();
+            let _ = std::fs::remove_dir_all(&dir);
+            assert!(!pwned, "the name ran a command: {cmd}");
             assert_eq!(out, format!("4\n{want}\n"), "{cmd}");
         }
     }

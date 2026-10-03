@@ -441,13 +441,38 @@ pub fn command_line(ui: &mut Ui, cmd: &str) {
             .show(ui, |ui| {
                 theme::text(ui, &format!("$ {cmd}"), theme::BODY, theme::PHOSPHOR);
             });
+        // Feedback (#277): the copy used to be silent, so a lost copy went
+        // unnoticed.
+        let id = egui::Id::new(("copied", cmd));
+        let now = ui.input(|i| i.time);
         if theme::action(ui, tr("Copy"), true)
             .on_hover_text(tr("Copy the command to the clipboard"))
             .clicked()
         {
             ui.ctx().copy_text(cmd.to_string());
+            ui.ctx().data_mut(|d| d.insert_temp(id, now));
+        }
+        let at = ui.ctx().data(|d| d.get_temp::<f64>(id));
+        if let Some(left) = copied_left(at, now) {
+            theme::text(
+                ui,
+                tr("Copied: paste it in a terminal"),
+                theme::BODY,
+                theme::PHOSPHOR,
+            );
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_secs_f64(left));
         }
     });
+}
+
+/// How long the "Copied" note stays (seconds).
+const COPIED_FOR: f64 = 4.0;
+
+/// Seconds left to show "Copied", `None` once gone (or never copied).
+pub fn copied_left(at: Option<f64>, now: f64) -> Option<f64> {
+    let left = COPIED_FOR - (now - at?);
+    (left > 0.0).then_some(left)
 }
 
 /// The Reconnect button of STAT and RADIO.
@@ -469,6 +494,14 @@ pub fn reconnect_button(ui: &mut Ui, link: &crate::actions::Job) {
 mod tests {
     use super::*;
     use egui::{Key, Modifiers};
+
+    #[test]
+    fn a_copy_is_confirmed_for_a_few_seconds() {
+        assert_eq!(copied_left(None, 10.0), None);
+        assert_eq!(copied_left(Some(10.0), 10.0), Some(COPIED_FOR));
+        assert!(copied_left(Some(10.0), 12.0).is_some());
+        assert_eq!(copied_left(Some(10.0), 10.0 + COPIED_FOR), None);
+    }
 
     #[test]
     fn tabs_are_five_short_capital_words() {

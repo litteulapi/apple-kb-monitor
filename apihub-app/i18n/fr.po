@@ -684,3 +684,6 @@ msgstr "non mesuré"
 
 msgid "{}/{} characters: shorten the name"
 msgstr "{}/{} caractères : raccourcissez le nom"
+
+msgid "Copied: paste it in a terminal"
+msgstr "Copié : collez-la dans un terminal"
