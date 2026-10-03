@@ -29,6 +29,19 @@ pub const SLOW_READ_PERIOD: Duration = APPLE.battery_period;
 /// (#206 : sinon toute appli de la session declenche des salves GET_REPORT
 /// pendant la frappe, cause de coupures de liaison).
 pub const FORCE_REFRESH_FLOOR: Duration = Duration::from_secs(5 * 60);
+
+/// Answer to an explicit refresh request (D-Bus `Refresh()`, menu; C15).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefreshOutcome {
+    /// A read is due now.
+    Accepted,
+    /// No keyboard connected: nothing is read.
+    Disconnected,
+    /// A read was made (or asked) less than [`FORCE_REFRESH_FLOOR`] ago;
+    /// the next request is taken in `wait`.
+    TooSoon { wait: Duration },
+}
+
 /// Floor between two re-reads of the name asked by `RereadName()` (D-Bus): a
 /// name written by `akmctl rename --device-name` is read again by the daemon
 /// (`0x51`-`0x54` only, never the routine reports) at most this often. A
@@ -187,14 +200,25 @@ impl Machine {
     /// less than `FORCE_REFRESH_FLOOR` ago, so repeated calls never turn into a
     /// burst of HID reports. Returns whether the request was accepted.
     pub fn force_refresh(&mut self, now: Instant) -> bool {
+        self.request_refresh(now) == RefreshOutcome::Accepted
+    }
+
+    /// [`Self::force_refresh`] with the reason of a refusal (C15): the caller
+    /// is told the request was not taken, and when the next one will be.
+    pub fn request_refresh(&mut self, now: Instant) -> RefreshOutcome {
         if !self.connected {
-            return false;
+            return RefreshOutcome::Disconnected;
         }
-        let recent = |t: Option<Instant>| {
-            t.is_some_and(|t| now.saturating_duration_since(t) < FORCE_REFRESH_FLOOR)
+        let left = |t: Option<Instant>| {
+            t.and_then(|t| FORCE_REFRESH_FLOOR.checked_sub(now.saturating_duration_since(t)))
+                .filter(|d| !d.is_zero())
         };
-        if recent(self.last_forced) || (self.acquired && recent(self.last_read)) {
-            return false;
+        let wait = left(self.last_forced)
+            .into_iter()
+            .chain(left(self.last_read).filter(|_| self.acquired))
+            .max();
+        if let Some(wait) = wait {
+            return RefreshOutcome::TooSoon { wait };
         }
         self.last_forced = Some(now);
         if self.acquired {
@@ -204,7 +228,7 @@ impl Machine {
             self.attempt = 0;
             self.next_acquire = Some(now);
         }
-        true
+        RefreshOutcome::Accepted
     }
 
     /// D-Bus `RereadName()`: the name stored in the keyboard was just rewritten
@@ -752,6 +776,24 @@ mod tests {
         assert_eq!(m.due(t0), vec![Action::Acquire]);
         m.acquire_done(false, t0);
         assert!(m.next_deadline().unwrap() > t0);
+    }
+
+    #[test]
+    fn a_refused_refresh_says_why_and_how_long_to_wait() {
+        // C15: the refusal was silent for 5 min.
+        let t0 = Instant::now();
+        let mut m = Machine::new();
+        assert_eq!(m.request_refresh(t0), RefreshOutcome::Disconnected);
+        m.on_event(&Event::Connected(MAC.into()), t0);
+        m.acquire_done(true, t0);
+        assert_eq!(
+            m.request_refresh(t0 + s(30)),
+            RefreshOutcome::TooSoon {
+                wait: FORCE_REFRESH_FLOOR - s(30)
+            }
+        );
+        let t1 = t0 + FORCE_REFRESH_FLOOR;
+        assert_eq!(m.request_refresh(t1), RefreshOutcome::Accepted);
     }
 
     #[test]

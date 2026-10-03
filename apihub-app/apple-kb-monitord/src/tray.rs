@@ -773,9 +773,30 @@ impl Tray {
     fn action(&mut self, a: Action, conn: &Connection) {
         match a {
             Action::Refresh => {
-                if !self.mailbox.send(Msg::Refresh) {
+                let (reply, rx) = apple_kb_monitord::actor::RefreshReply::channel();
+                if !self.mailbox.send(Msg::Refresh(reply)) {
                     tracing::warn!("tray: refresh ignored, acquisition thread not running");
+                    return;
                 }
+                // C15: a refused refresh is said, not swallowed.
+                let fr = matches!(self.cfg.lang, Lang::Fr);
+                let _ = std::thread::Builder::new()
+                    .name("tray-refresh".into())
+                    .spawn(move || {
+                        let Ok(o) = rx.recv_timeout(Duration::from_secs(30)) else {
+                            return;
+                        };
+                        if let Some(text) = apple_kb_monitord::actor::refresh_text(o, fr) {
+                            tracing::info!("tray: refresh not taken: {text}");
+                            apple_kb_monitord::notify::send_with(
+                                if fr { "Lecture non relancée" } else { "No new reading" },
+                                &text,
+                                "dialog-information",
+                                akm_core::alerts::Urgency::Normal,
+                                true,
+                            );
+                        }
+                    });
             }
             Action::Hide => {
                 tracing::info!(

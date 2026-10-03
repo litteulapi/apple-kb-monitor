@@ -35,8 +35,9 @@ use crate::{bluez, notify, powerdevil, watcher};
 pub enum Msg {
     /// From the BlueZ / UPower watcher.
     Bus(Event),
-    /// Explicit refresh (D-Bus `Refresh()`).
-    Refresh,
+    /// Explicit refresh (D-Bus `Refresh()`, menu); the outcome (taken, or
+    /// why not) goes back through the reply slot (C15).
+    Refresh(RefreshReply),
     /// The name stored in the keyboard was rewritten (D-Bus `RereadName()`);
     /// the answer of the machine goes back through the reply slot.
     RereadName(NameReply),
@@ -46,28 +47,50 @@ pub enum Msg {
     Quit,
 }
 
-/// Where the actor answers a `RereadName()` (`none()` = nobody waits). All
-/// replies compare equal: the message is what matters to `Msg: PartialEq`.
-#[derive(Debug, Clone, Default)]
-pub struct NameReply(Option<mpsc::SyncSender<NameReread>>);
+/// Where the actor answers a request (`none()` = nobody waits). All replies
+/// compare equal: the message is what matters to `Msg: PartialEq`.
+pub struct Reply<T>(Option<mpsc::SyncSender<T>>);
 
-impl PartialEq for NameReply {
+/// Where the actor answers a `RereadName()`.
+pub type NameReply = Reply<NameReread>;
+/// Where the actor answers a `Refresh()` (C15).
+pub type RefreshReply = Reply<akm_core::machine::RefreshOutcome>;
+
+impl<T> PartialEq for Reply<T> {
     fn eq(&self, _: &Self) -> bool {
         true
     }
 }
 
-impl NameReply {
+impl<T> Clone for Reply<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T> Default for Reply<T> {
+    fn default() -> Self {
+        Self(None)
+    }
+}
+
+impl<T> std::fmt::Debug for Reply<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() { "Reply" } else { "Reply(none)" })
+    }
+}
+
+impl<T> Reply<T> {
     pub fn none() -> Self {
         Self(None)
     }
     /// A reply slot and the end the caller waits on.
-    pub fn channel() -> (Self, mpsc::Receiver<NameReread>) {
+    pub fn channel() -> (Self, mpsc::Receiver<T>) {
         let (tx, rx) = mpsc::sync_channel(1);
         (Self(Some(tx)), rx)
     }
     /// Give the answer (never blocks; a caller gone is not an error).
-    pub fn answer(&self, r: NameReread) {
+    pub fn answer(&self, r: T) {
         if let Some(tx) = &self.0 {
             let _ = tx.try_send(r);
         }
@@ -300,6 +323,27 @@ pub(crate) fn reread_name(
         tracing::info!("RereadName: 0x51-0x54 forgotten, {}", name_reread_text(r));
     }
     r
+}
+
+/// What a refused refresh tells its caller (C15); `None` when it was taken.
+pub fn refresh_text(o: akm_core::machine::RefreshOutcome, fr: bool) -> Option<String> {
+    use akm_core::machine::RefreshOutcome as R;
+    match o {
+        R::Accepted => None,
+        R::Disconnected => Some(if fr {
+            "aucun clavier connecté : rien à lire".into()
+        } else {
+            "no keyboard connected: nothing to read".into()
+        }),
+        R::TooSoon { wait } => {
+            let s = wait.as_secs().max(1);
+            Some(if fr {
+                format!("trop tôt : le clavier vient d'être lu, prochaine lecture possible dans {s} s")
+            } else {
+                format!("too soon: the keyboard was just read, next read possible in {s} s")
+            })
+        }
+    }
 }
 
 /// What `RereadName()` answers on D-Bus (second value of `(bs)`).
@@ -1294,8 +1338,12 @@ fn run(watch: Arc<Watch>, mailbox: Arc<Mailbox>, quit: Arc<AtomicBool>, opts: Op
                     woke_at = None;
                 }
             }
-            Ok(Msg::Refresh) => {
-                let _ = machine.force_refresh(Instant::now());
+            Ok(Msg::Refresh(reply)) => {
+                let o = machine.request_refresh(Instant::now());
+                if o != akm_core::machine::RefreshOutcome::Accepted {
+                    tracing::info!("refresh not taken: {}", refresh_text(o, false).unwrap_or_default());
+                }
+                reply.answer(o);
             }
             Ok(Msg::RereadName(reply)) => {
                 reply.answer(reread_name(&mut machine, Instant::now(), &mut || {
@@ -2248,13 +2296,13 @@ mod tests {
     #[test]
     fn mailbox_without_actor_reports_failure() {
         let mb = Mailbox::new();
-        assert!(!mb.send(Msg::Refresh));
+        assert!(!mb.send(Msg::Refresh(RefreshReply::none())));
         let (tx, rx) = mpsc::channel();
         mb.install(tx);
-        assert!(mb.send(Msg::Refresh));
-        assert_eq!(rx.recv().unwrap(), Msg::Refresh);
+        assert!(mb.send(Msg::Refresh(RefreshReply::none())));
+        assert_eq!(rx.recv().unwrap(), Msg::Refresh(RefreshReply::none()));
         drop(rx);
-        assert!(!mb.send(Msg::Refresh));
+        assert!(!mb.send(Msg::Refresh(RefreshReply::none())));
     }
 
     static ASKED: Mutex<Vec<String>> = Mutex::new(Vec::new());

@@ -141,13 +141,26 @@ impl Shared {
             .collect()
     }
 
+    /// `Refresh()`: an error says honestly when nothing will be read (no
+    /// keyboard, or read less than 5 min ago, with the wait; C15). The actor
+    /// in the middle of a read answers late: the request is queued, `Ok`.
     pub fn refresh(&self) -> zbus::fdo::Result<()> {
-        if self.mailbox.send(Msg::Refresh) {
-            Ok(())
-        } else {
-            Err(zbus::fdo::Error::Failed(
+        use akm_core::machine::RefreshOutcome as R;
+        let (reply, rx) = crate::actor::RefreshReply::channel();
+        if !self.mailbox.send(Msg::Refresh(reply)) {
+            return Err(zbus::fdo::Error::Failed(
                 "acquisition thread not running".into(),
-            ))
+            ));
+        }
+        let fr = crate::notify::Lang::detect() == crate::notify::Lang::Fr;
+        match rx.recv_timeout(NAME_REPLY_WAIT) {
+            Ok(o @ R::TooSoon { .. }) => Err(zbus::fdo::Error::LimitsExceeded(
+                crate::actor::refresh_text(o, fr).unwrap_or_default(),
+            )),
+            Ok(o @ R::Disconnected) => Err(zbus::fdo::Error::Failed(
+                crate::actor::refresh_text(o, fr).unwrap_or_default(),
+            )),
+            Ok(R::Accepted) | Err(_) => Ok(()),
         }
     }
 

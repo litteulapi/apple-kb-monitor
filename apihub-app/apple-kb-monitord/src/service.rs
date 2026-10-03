@@ -227,7 +227,9 @@ impl Monitor {
         true
     }
 
-    /// Ask for a full read now (no effect while the keyboard is disconnected).
+    /// Ask for a full read now. Refused with an error that says why: no
+    /// keyboard connected (Failed), or read less than 5 min ago with the wait
+    /// before the next read (LimitsExceeded).
     fn refresh(&self) -> zbus::fdo::Result<()> {
         self.shared.refresh()
     }
