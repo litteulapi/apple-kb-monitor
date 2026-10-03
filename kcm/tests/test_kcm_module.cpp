@@ -134,9 +134,16 @@ class TestKcmModule : public QObject
             qWarning() << "cannot click" << name << (it ? "disabled or hidden" : "missing");
             return false;
         }
+        // the layout settles first (an inline message may have just appeared)
+        QTest::qWait(100);
         const QPointF p = it->mapToScene(QPointF(it->width() / 2, it->height() / 2));
+        const QVariant before = it->property("checked");
         QTest::mouseClick(m_view, Qt::LeftButton, Qt::NoModifier, p.toPoint());
         QTest::qWait(50);
+        if (before.isValid() && it->property("checked") == before && it->property("checkable").toBool()) {
+            qWarning() << "click on" << name << "at" << p << "did not toggle it";
+            return false;
+        }
         return true;
     }
     // Real key presses at the end of a text field.
@@ -250,6 +257,73 @@ private Q_SLOTS:
         QVERIFY(waitAlertsReady());
         QVERIFY(!m_module->needsSave());
         QCOMPARE(text(QStringLiteral("alerts_thresholds")), QStringLiteral("30, 15, 5"));
+    }
+
+    // #284 (K3): a config.toml that could not be read is never written over,
+    // even after "Defaults" + "Apply"; the refusal is said on the page.
+    void unreadableFileIsNeverRewritten_data()
+    {
+        QTest::addColumn<QByteArray>("content");
+        QTest::addColumn<bool>("noAccess");
+        const QByteArray head = "[alerts]\nenabled = false\n";
+        const QByteArray tail = "\n[ddc]\nbrightness = 40\n";
+        QTest::newRow("too-large") << (head + "# " + QByteArray(300 * 1024, 'x') + tail) << false;
+        QTest::newRow("no-read-access") << (head + tail) << true;
+        QTest::newRow("invalid-utf8") << (head + "# caf\xe9" + tail) << false;
+    }
+    void unreadableFileIsNeverRewritten()
+    {
+        QFETCH(QByteArray, content);
+        QFETCH(bool, noAccess);
+        writeFile(configPath(), content);
+        if (noAccess) {
+            QFile::setPermissions(configPath(), QFileDevice::WriteOwner);
+        }
+        QVERIFY(open(QStringLiteral("notifications")));
+        QVERIFY(waitAlertsReady());
+        QVERIFY(shown(QStringLiteral("alertsFileWarning")));
+        m_module->defaults();
+        click(QStringLiteral("alerts_connection")); // refused or not, nothing may be written
+        apply();
+        QFile::setPermissions(configPath(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        QVERIFY2(readFile(configPath()) == content, "config.toml was rewritten");
+        QVERIFY(shown(QStringLiteral("alertsResult")));
+        QVERIFY2(text(QStringLiteral("alertsResult")).startsWith(QStringLiteral("Non enregistré")), qPrintable(text(QStringLiteral("alertsResult"))));
+    }
+
+    // #284 (K3): the file changed on disk after it was read: not overwritten.
+    void fileChangedSinceReadIsNotOverwritten()
+    {
+        writeFile(configPath(), "[alerts]\nenabled = true\n");
+        QVERIFY(open(QStringLiteral("notifications")));
+        QVERIFY(waitAlertsReady());
+        const QByteArray other = "[alerts]\nenabled = true\n\n[ddc]\nbrightness = 41\n";
+        writeFile(configPath(), other);
+        QVERIFY(click(QStringLiteral("alerts_connection")));
+        QVERIFY(m_module->needsSave());
+        apply();
+        QCOMPARE(readFile(configPath()), other);
+        QVERIFY2(text(QStringLiteral("alertsResult")).startsWith(QStringLiteral("Non enregistré")), qPrintable(text(QStringLiteral("alertsResult"))));
+    }
+
+    // #284 (K3): only the changed key is written; every other byte is kept
+    // (foreign sections, CRLF, missing final newline, comments).
+    void onlyTheChangedLineIsRewritten()
+    {
+        const QByteArray before =
+            "# shared file\r\n[mqtt]\r\npassword = \"bench-not-a-secret\" # x\r\n\r\n[notifications]\r\n"
+            "connection = true   # mine\r\nbattery_replaced = true\r\n[ddc]\r\nbrightness = 40";
+        writeFile(configPath(), before);
+        QVERIFY(open(QStringLiteral("notifications")));
+        QVERIFY(waitAlertsReady());
+        QVERIFY(!m_module->needsSave());
+        QVERIFY(click(QStringLiteral("alerts_connection")));
+        QVERIFY(m_module->needsSave());
+        apply();
+        QByteArray after = before;
+        after.replace("connection = true   # mine", "connection = false  # mine");
+        QCOMPARE(readFile(configPath()), after);
+        QVERIFY(!m_module->needsSave());
     }
 };
 

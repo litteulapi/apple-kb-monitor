@@ -570,16 +570,74 @@ function unquote(k) {
     return k;
 }
 
-// Set section.key = value in text; returns the new text. Line endings (LF or
-// CRLF) are kept. Throws UnsupportedForm when `section` is an array of tables
+// The lines of `src`, each with its own terminator ("\n", "\r\n", or ""
+// for a last line without one), so that every line not edited is given back
+// byte for byte (#284).
+function splitLines(src) {
+    const out = [];
+    let i = 0;
+    while (i < src.length) {
+        const n = src.indexOf("\n", i);
+        if (n < 0) {
+            out.push({ body: src.slice(i), eol: "" });
+            break;
+        }
+        let body = src.slice(i, n);
+        let eol = "\n";
+        if (body.length > 0 && body[body.length - 1] === "\r") {
+            body = body.slice(0, -1);
+            eol = "\r\n";
+        }
+        out.push({ body: body, eol: eol });
+        i = n + 1;
+    }
+    return out;
+}
+
+// Last line of the `key = value` statement that starts at line i: the
+// shortest run of lines the strict reader takes as one statement (a value
+// may span lines: array, multi-line string). i when none does (a bad line).
+function statementEnd(lines, i) {
+    let text = "";
+    for (let end = i; end < lines.length && end < i + 400; ++end) {
+        text += lines[end].body + "\n";
+        try {
+            document(text);
+            return end;
+        } catch (e) {
+            // not complete yet
+        }
+    }
+    return i;
+}
+
+function parsesAlone(body) {
+    try {
+        document(body + "\n");
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+function sameValues(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
+}
+
+// Set section.key = value in text; returns the new text. Only the lines of
+// that one statement change (or one line is added); every other byte is
+// kept: line endings line by line (LF, CRLF, none at the end), comments,
+// other sections. The result is read back: if any other value changed, or
+// the value is not the one asked, nothing is returned (UnsupportedForm).
+// Throws UnsupportedForm when `section` is an array of tables
 // ([[section]]), an inline table or dotted keys (`section = {...}`,
-// `section.key = ...`), a quoted header, or when `key` is quoted in it: the
-// file must then be edited by hand (#258).
+// `section.key = ...`), a quoted header, when `key` is quoted in it, or
+// when its value is a string written on several lines (#287): the file must
+// then be edited by hand (#258).
 function set(text, section, key, value) {
     const src = String(text);
     const eol = src.indexOf("\r\n") >= 0 ? "\r\n" : "\n";
-    const lines = src.replace(/\r\n/g, "\n").split("\n");
-    if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+    const lines = splitLines(src);
     const refuse = function (i, what) {
         throw new UnsupportedForm("line " + (i + 1) + ": " + what + " — edit the file by hand");
     };
@@ -587,8 +645,9 @@ function set(text, section, key, value) {
     let sectionStart = -1;
     let lastInSection = -1;
     let found = -1;
+    let foundEnd = -1;
     for (let i = 0; i < lines.length; ++i) {
-        const t = stripComment(lines[i]).trim();
+        const t = stripComment(lines[i].body).trim();
         if (t === "") continue;
         if (t[0] === "[" && t[1] === "[") {
             const inner = t.replace(/^\[\[|\]\]$/g, "").split(".").map(unquote).join(".");
@@ -612,36 +671,61 @@ function set(text, section, key, value) {
         const eq = t.indexOf("=");
         const rawKey = eq > 0 ? t.slice(0, eq).trim() : "";
         const parts = rawKey.split(".").map(unquote);
+        // the lines of a value written on several lines are not statements
+        const end = eq > 0 ? statementEnd(lines, i) : i;
         if (cur === "" && parts[0] === section && rawKey !== "") {
             refuse(i, "inline table or dotted keys for [" + section + "]");
         }
-        if (cur !== section) continue;
-        lastInSection = i;
-        if (found >= 0) continue;
-        if (parts.length === 1 && parts[0] === key && rawKey !== key) refuse(i, "quoted key " + rawKey);
-        if (parts.length > 1 && parts[0] === key) refuse(i, "dotted key " + rawKey);
-        if (rawKey === key) found = i;
+        if (cur === section) {
+            lastInSection = end;
+            if (found < 0) {
+                if (parts.length === 1 && parts[0] === key && rawKey !== key) refuse(i, "quoted key " + rawKey);
+                if (parts.length > 1 && parts[0] === key) refuse(i, "dotted key " + rawKey);
+                if (rawKey === key) { found = i; foundEnd = end; }
+            }
+        }
+        i = end;
     }
+    const lineOf = function (body, ending) { return { body: body, eol: ending }; };
     if (found >= 0) {
         const i = found;
-        const m = /^(\s*)([A-Za-z0-9_-]+)(\s*=\s*)(.*)$/.exec(lines[i]);
-        const rest = lines[i].slice(m[1].length + m[2].length + m[3].length);
-        const bare = stripComment(rest);
-        let end = i;
-        // a multi-line array value ends at the line holding "]"
-        if (bare.trim()[0] === "[" && bare.indexOf("]") < 0) {
-            while (end + 1 < lines.length && stripComment(lines[end]).indexOf("]") < 0) end += 1;
-        }
-        // keep the comment after the value (on the line of "]" for a multi-line array)
-        const last = end === i ? rest : lines[end];
+        const m = /^(\s*)([A-Za-z0-9_-]+)(\s*=\s*)(.*)$/.exec(lines[i].body);
+        const rest = lines[i].body.slice(m[1].length + m[2].length + m[3].length);
+        // keep the comment after the value (on the last line of a value
+        // written on several lines; the comments inside it are not kept)
+        const last = foundEnd === i ? rest : lines[foundEnd].body;
         const comment = last.slice(stripComment(last).length).trim();
-        lines.splice(i, end - i + 1, m[1] + m[2] + m[3] + literal(value) + (comment !== "" ? "  " + comment : ""));
+        lines.splice(i, foundEnd - i + 1,
+                     lineOf(m[1] + m[2] + m[3] + literal(value) + (comment !== "" ? "  " + comment : ""), lines[foundEnd].eol));
     } else if (sectionStart >= 0) {
-        lines.splice(lastInSection + 1, 0, key + " = " + literal(value));
+        const after = lines[lastInSection];
+        const ending = after.eol;
+        if (after.eol === "") after.eol = eol;
+        lines.splice(lastInSection + 1, 0, lineOf(key + " = " + literal(value), ending));
     } else {
-        if (lines.length > 0 && lines[lines.length - 1].trim() !== "") lines.push("");
-        lines.push("[" + section + "]");
-        lines.push(key + " = " + literal(value));
+        const ending = lines.length > 0 ? lines[lines.length - 1].eol : eol;
+        if (lines.length > 0 && lines[lines.length - 1].eol === "") lines[lines.length - 1].eol = eol;
+        if (lines.length > 0 && lines[lines.length - 1].body.trim() !== "") lines.push(lineOf("", eol));
+        lines.push(lineOf("[" + section + "]", eol));
+        lines.push(lineOf(key + " = " + literal(value), ending));
     }
-    return lines.join(eol) + eol;
+    const out = lines.map(function (l) { return l.body + l.eol; }).join("");
+    // Read back (#284): every other value as before, this one as asked.
+    const before = parse(src);
+    const after = parse(out);
+    const name = section + "." + key;
+    for (const k in before.values) {
+        if (k !== name && !sameValues(before.values[k], after.values[k])) {
+            throw new UnsupportedForm(k + " would change too — edit the file by hand");
+        }
+    }
+    for (const k in after.values) {
+        if (k !== name && !(k in before.values)) {
+            throw new UnsupportedForm(k + " would appear — edit the file by hand");
+        }
+    }
+    if (!sameValues(after.values[name], value) || (before.strict && !after.strict)) {
+        throw new UnsupportedForm(name + " could not be written safely — edit the file by hand");
+    }
+    return out;
 }

@@ -220,20 +220,24 @@ QtObject {
         }
     }
 
+    // configText is what the file holds, exactly; configLoaded is false when
+    // it could not be read whole (#284): nothing may then be written.
     function readConfig(cb) {
         const id = bridge.readConfig();
         _files[id] = function (ok, text, error) {
             configLoaded = ok;
             configError = ok ? "" : error;
-            if (ok) configText = text;
+            configText = ok ? text : "";
             if (cb) cb(ok, text, error);
         };
     }
+    // Written only over the very text that was read (the bridge compares it
+    // with the file first); error "changed" = the file changed since.
     function writeConfig(text, cb) {
-        const id = bridge.writeConfig(text);
+        if (!configLoaded) { cb(false, "unread"); return; }
+        const id = bridge.writeConfig(text, configText);
         _files[id] = function (ok, t, error) {
             if (ok) configText = text;
-            configError = ok ? "" : error;
             if (cb) cb(ok, error);
         };
     }

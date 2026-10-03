@@ -135,6 +135,14 @@ ColumnLayout {
         });
     }
     function save() {
+        if (saving) return;
+        // #284: a file that could not be read whole is never written over.
+        if (!root.store.configLoaded) {
+            result.type = Kirigami.MessageType.Error;
+            result.text = i18n("Not saved: the settings file could not be read (%1), so it is not written over. Fix the file or move it away, then reopen this page.", root.store.configError);
+            result.visible = true;
+            return;
+        }
         const c = current();
         if (c["alerts.thresholds"] === null) {
             result.type = Kirigami.MessageType.Error;
@@ -171,7 +179,9 @@ ColumnLayout {
                     : i18n("Saved. They will be used when the service starts.");
             } else {
                 result.type = Kirigami.MessageType.Error;
-                result.text = i18n("Not saved: %1", error);
+                result.text = error === "changed"
+                    ? i18n("Not saved: the settings file was changed by another program since this page read it. Nothing was written; use Reset to read it again.")
+                    : i18n("Not saved: %1", error);
             }
             result.visible = true;
         });
@@ -211,13 +221,14 @@ ColumnLayout {
         visible: root.store.configError !== "" || root.parseWarnings.length > 0
         type: Kirigami.MessageType.Warning
         text: root.store.configError !== ""
-            ? i18n("The settings file could not be read (%1): the defaults are shown.", root.store.configError)
+            ? i18n("The settings file could not be read (%1): the defaults are shown and nothing can be saved, so that the file is never written over.", root.store.configError)
             : i18n("Some lines of the settings file are not understood (%1); they are kept as they are.", root.parseWarnings.join(", "))
     }
 
     Kirigami.FormLayout {
         Layout.fillWidth: true
-        enabled: root.ready && !root.saving
+        // #284: nothing to edit when the file could not be read
+        enabled: root.ready && !root.saving && root.store.configLoaded
 
         Kirigami.Separator {
             Kirigami.FormData.isSection: true

@@ -21,6 +21,7 @@
 #include <QProcess>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QStringDecoder>
 #include <QTimer>
 #include <QtConcurrentRun>
 
@@ -160,6 +161,56 @@ struct FileResult {
     QString text;
     QString error;
 };
+
+// The whole file, exactly: ok = false when it cannot be read whole (too
+// large, no access, I/O error) or is not valid UTF-8. A missing file reads as
+// an empty text (#284: a file read partly or with replaced bytes would be
+// written back damaged).
+struct FileRead {
+    bool ok = false;
+    bool exists = false;
+    QByteArray bytes;
+    QString text;
+    QString error;
+};
+FileRead readWhole(const QString &path)
+{
+    FileRead r;
+    QFile f(path);
+    if (!f.exists()) {
+        r.ok = true;
+        return r;
+    }
+    r.exists = true;
+    if (f.size() > kMaxConfig) {
+        r.error = QStringLiteral("%1: file too large (%2 bytes, at most %3)").arg(path).arg(f.size()).arg(kMaxConfig);
+        return r;
+    }
+    if (!f.open(QIODevice::ReadOnly)) {
+        r.error = QStringLiteral("%1: %2").arg(path, f.errorString());
+        return r;
+    }
+    r.bytes = f.read(kMaxConfig + 1);
+    if (f.error() != QFileDevice::NoError) {
+        r.error = QStringLiteral("%1: %2").arg(path, f.errorString());
+        return r;
+    }
+    if (r.bytes.size() > kMaxConfig) {
+        r.error = QStringLiteral("%1: file too large").arg(path);
+        return r;
+    }
+    // The BOM is kept as U+FEFF, so that the text written back starts with it.
+    QStringDecoder utf8(QStringDecoder::Utf8, QStringDecoder::Flag::Stateless | QStringDecoder::Flag::ConvertInitialBom);
+    r.text = utf8.decode(r.bytes);
+    if (utf8.hasError()) {
+        r.error = QStringLiteral("%1: not valid UTF-8").arg(path);
+        r.text.clear();
+        return r;
+    }
+    r.ok = true;
+    return r;
+}
+
 } // namespace
 
 AkmBridge::AkmBridge(QObject *parent)
@@ -385,28 +436,17 @@ int AkmBridge::readConfig()
         w->deleteLater();
     });
     w->setFuture(QtConcurrent::run([path] {
+        const FileRead in = readWhole(path);
         FileResult r;
-        QFile f(path);
-        if (!f.exists()) {
-            r.ok = true;
-            return r;
-        }
-        if (f.size() > kMaxConfig) {
-            r.error = QStringLiteral("%1: file too large").arg(path);
-            return r;
-        }
-        if (!f.open(QIODevice::ReadOnly)) {
-            r.error = f.errorString();
-            return r;
-        }
-        r.text = QString::fromUtf8(f.readAll());
-        r.ok = true;
+        r.ok = in.ok;
+        r.text = in.text;
+        r.error = in.error;
         return r;
     }));
     return id;
 }
 
-int AkmBridge::writeConfig(const QString &text)
+int AkmBridge::writeConfig(const QString &text, const QString &expected)
 {
     const int id = nextId();
     const QString path = configPath();
@@ -416,11 +456,21 @@ int AkmBridge::writeConfig(const QString &text)
         Q_EMIT fileFinished(id, r.ok, r.text, r.error);
         w->deleteLater();
     });
-    w->setFuture(QtConcurrent::run([path, text] {
+    w->setFuture(QtConcurrent::run([path, text, expected] {
         FileResult r;
         const QByteArray data = text.toUtf8();
         if (data.size() > kMaxConfig) {
             r.error = QStringLiteral("text too large");
+            return r;
+        }
+        // #284: the file must still be the one the page read and edited.
+        const FileRead now = readWhole(path);
+        if (!now.ok) {
+            r.error = now.error;
+            return r;
+        }
+        if (now.bytes != expected.toUtf8()) {
+            r.error = QStringLiteral("changed");
             return r;
         }
         if (!QDir().mkpath(QFileInfo(path).absolutePath())) {

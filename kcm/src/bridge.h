@@ -59,9 +59,13 @@ public:
 
     // config.toml of the daemon, read / written atomically (QSaveFile) on a
     // worker thread. Answer: fileFinished(id, ok, text, error); a missing file
-    // reads as ok with an empty text.
+    // reads as ok with an empty text. A file that cannot be read whole and
+    // exactly (too large, no access, I/O error, not UTF-8) is an error (#284).
     Q_INVOKABLE int readConfig();
-    Q_INVOKABLE int writeConfig(const QString &text);
+    // Writes `text` only if the file still holds exactly `expected` (what
+    // readConfig gave; "" for a missing file): a file changed or made
+    // unreadable since it was read is never written over (#284).
+    Q_INVOKABLE int writeConfig(const QString &text, const QString &expected);
 
     Q_INVOKABLE void copyText(const QString &text);
     // "Name" tab (#248): run `akmctl rename --device-name=<name> --yes`
