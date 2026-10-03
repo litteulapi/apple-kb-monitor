@@ -291,13 +291,9 @@ pub fn want_visible(mode: Mode, hidden_by_user: bool, claimed: bool, plasma_widg
     match mode {
         Mode::Never => false,
         Mode::Always => !hidden_by_user,
-        // The widget being in the system tray no longer hides the icon: its
-        // popup has neither the window nor the menu, and the icon is what
-        // the user clicks (#267). Only an explicit claim still hides it.
-        Mode::Auto => {
-            let _ = plasma_widget;
-            !hidden_by_user && !claimed
-        }
+        // The widget in the system tray is the icon (#268: popup on a click,
+        // the daemon's menu on a right click): the daemon's own icon leaves.
+        Mode::Auto => !hidden_by_user && !claimed && !plasma_widget,
     }
 }
 
@@ -946,8 +942,8 @@ mod tests {
         assert!(want_visible(Mode::Auto, false, false, false));
         assert!(!want_visible(Mode::Auto, false, true, false), "claimed");
         assert!(
-            want_visible(Mode::Auto, false, false, true),
-            "the widget in the system tray does not hide the icon (#267)"
+            !want_visible(Mode::Auto, false, false, true),
+            "widget in systray"
         );
         assert!(
             !want_visible(Mode::Auto, true, false, false),
@@ -1071,11 +1067,29 @@ mod tests {
         assert!(!on_bus(), "renewed claim holds beyond its TTL");
         wait_until("lapsed without renewal", 6, on_bus);
 
-        // 4. The widget listed in the system tray configuration no longer
-        // withdraws the icon (#267): it has neither the window nor the menu.
+        // 3c. The widget's right-click menu (#268): entries as JSON, an
+        // entry run by id, "Quit (hide icon)" and information rows refused.
+        let items: String = widget
+            .call_method(Some("com.agenceapi.AppleKbMonitor1"), CONTROL_PATH,
+                Some("com.agenceapi.AppleKbMonitor1.Tray"), "MenuItems", &())
+            .unwrap()
+            .body()
+            .deserialize()
+            .unwrap();
+        let items: serde_json::Value = serde_json::from_str(&items).unwrap();
+        assert!(items.as_array().unwrap().iter().any(|i| i["id"] == view::id::OPEN), "{items}");
+        let run = |id: i32| widget.call_method(Some("com.agenceapi.AppleKbMonitor1"), CONTROL_PATH,
+            Some("com.agenceapi.AppleKbMonitor1.Tray"), "ActivateMenuItem", &(id, "")).is_ok();
+        assert!(run(view::id::REFRESH));
+        assert!(!run(view::id::QUIT), "hiding the icon from the widget");
+        assert!(!run(view::id::BATTERY), "information row");
+
+        // 4. The user ticks the widget in the system tray configuration.
         std::fs::write(&rc, "[Containments][3][General]\nextraItems=org.kde.plasma.battery,com.agenceapi.devicehub\n").unwrap();
-        std::thread::sleep(Duration::from_secs(3));
-        assert!(on_bus(), "the widget in the system tray hid the icon");
+        wait_until("withdrawn by the configuration", 8, || !on_bus());
+        // ... and unticks it.
+        std::fs::write(&rc, "[Containments][3][General]\nextraItems=org.kde.plasma.battery,org.kde.kscreen,\n").unwrap();
+        wait_until("back after unticking", 8, on_bus);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

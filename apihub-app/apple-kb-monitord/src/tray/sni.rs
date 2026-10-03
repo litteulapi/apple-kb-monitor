@@ -179,6 +179,23 @@ impl Control {
     fn release_tray_for(&self, instance: String, #[zbus(header)] hdr: Header<'_>) {
         self.release(&hdr, &instance);
     }
+    /// The current menu, for the Plasma widget's right-click menu (#268):
+    /// JSON from `View::menu_json`, same labels and states as the icon's menu.
+    fn menu_items(&self) -> String {
+        lock(&self.shared).view.menu_json()
+    }
+    /// Run a menu entry as if clicked in the icon's menu (#268). "Quit (hide
+    /// icon)" is refused: it only makes sense on the daemon's own icon.
+    fn activate_menu_item(&self, id: i32, token: String) -> zbus::fdo::Result<()> {
+        let action = super::menu::action_for(id)
+            .filter(|a| !matches!(a, Action::Hide))
+            .ok_or_else(|| zbus::fdo::Error::InvalidArgs(format!("no action for menu item {id}")))?;
+        if !token.is_empty() {
+            lock(&self.shared).xdg_token = Some(token);
+        }
+        let _ = self.tx.send(Event::Action(action));
+        Ok(())
+    }
     /// Show the icon again after "Quit (hide icon)".
     fn show_tray(&self) {
         let _ = self.tx.send(Event::Unhide);

@@ -161,6 +161,50 @@ PlasmoidItem {
         : (daemonRunning ? i18n("Waiting for the Apple keyboard…")
                          : i18n("apple-kb-monitord is not on the session bus"))
 
+    // ── Right-click menu: the daemon's menu (Tray.MenuItems), #268 ──
+    // Only the entries that do something; the information rows are in the
+    // popup. Rebuilt on every state change, so labels and states follow.
+    readonly property var menuIds: [11, 12, 13, 14, 15, 16, 23, 24, 25, 19, 22]
+    Component {
+        id: menuAction
+        PlasmaCore.Action {
+            property int itemId: 0
+            onTriggered: link.activateMenuItem(itemId, "")
+        }
+    }
+    Component {
+        id: menuSeparator
+        PlasmaCore.Action { isSeparator: true }
+    }
+    function applyMenu(json) {
+        let items;
+        try {
+            items = JSON.parse(json);
+        } catch (e) {
+            console.warn("apple-kb-monitor: bad MenuItems reply", e);
+            return;
+        }
+        const old = Plasmoid.contextualActions;
+        const list = [];
+        let group = -1;
+        for (let i = 0; i < items.length; ++i) {
+            const it = items[i];
+            if (root.menuIds.indexOf(it.id) < 0 || !it.visible) continue;
+            // Groups: window/information actions, link actions, Fn mode.
+            const g = it.id >= 23 ? 1 : (it.id === 19 || it.id === 22 ? 2 : 0);
+            if (group >= 0 && g !== group) list.push(menuSeparator.createObject(root));
+            group = g;
+            const a = menuAction.createObject(root, { itemId: it.id, text: it.label, enabled: it.enabled });
+            if (it.checked !== null) {
+                a.checkable = true;
+                a.checked = it.checked;
+            }
+            list.push(a);
+        }
+        Plasmoid.contextualActions = list;
+        for (let j = 0; j < old.length; ++j) old[j].destroy();
+    }
+
     DaemonLink {
         id: link
         busName: root.busName
@@ -168,6 +212,12 @@ PlasmoidItem {
         onRegisteredChanged: {
             if (registered) root.fetchData(); else root.clear();
             if (registered && root.expanded) root.fetchDetails();
+        }
+        onMenuReceived: function (json) {
+            root.applyMenu(json);
+        }
+        onMenuItemFailed: function (message) {
+            console.warn("apple-kb-monitor: menu action refused", message);
         }
         onStateReceived: function (json) {
             try {
@@ -231,11 +281,14 @@ PlasmoidItem {
 
     // The popup opens: read what only it shows (history, Fn mode, link).
     // Nothing of this is polled while it is closed.
-    onExpandedChanged: if (expanded) root.fetchDetails()
+    onExpandedChanged: if (root.expanded) root.fetchDetails()
 
     Component.onCompleted: {
-        // No claim on the notification area (#267): the daemon's icon stays,
-        // it opens the window on a left click and has the full menu.
+        // The widget is the notification-area icon (#268): a click opens and
+        // closes its popup, like the volume or network ones, and its
+        // right-click menu is the daemon's menu. The daemon withdraws its own
+        // icon while this claim holds, so there is one icon, not two.
+        link.claimId = String(Plasmoid.id);
         if (link.registered) fetchData();
     }
 
@@ -413,6 +466,7 @@ PlasmoidItem {
             return;
         }
         link.fetch();
+        link.fetchMenu();
     }
 
     // ── Open the ApiHub window ──

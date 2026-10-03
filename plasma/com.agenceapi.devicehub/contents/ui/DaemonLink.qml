@@ -54,6 +54,9 @@ Item {
     // DaemonVersion property, Link.Status() JSON, outcome of Refresh/Reconnect.
     signal versionReceived(string version)
     signal linkStatusReceived(string json)
+    // Tray.MenuItems() JSON (the icon's menu, #268), outcome of ActivateMenuItem.
+    signal menuReceived(string json)
+    signal menuItemFailed(string message)
     signal refreshDone(bool ok, string message)
     signal reconnectDone(bool ok, string message)
 
@@ -69,6 +72,33 @@ Item {
             link.stateReceived(String(reply.value));
         }, function (error) {
             link.failed(error && error.error ? String(error.error.message) : String(error));
+        });
+    }
+
+    function fetchMenu() {
+        if (!watcher.registered) return;
+        DBus.SessionBus.asyncCall({
+            service: link.trayName,
+            path: link.trayPath,
+            iface: link.trayIface,
+            member: "MenuItems",
+            arguments: []
+        }, function (reply) {
+            link.menuReceived(String(reply.value));
+        }, function (error) {
+            console.warn("apple-kb-monitor: MenuItems failed", link.errorText(error));
+        });
+    }
+
+    function activateMenuItem(id, token) {
+        DBus.SessionBus.asyncCall({
+            service: link.trayName,
+            path: link.trayPath,
+            iface: link.trayIface,
+            member: "ActivateMenuItem",
+            arguments: [new DBus.int32(id), new DBus.string(token || "")]
+        }, function () {}, function (error) {
+            link.menuItemFailed(link.errorText(error));
         });
     }
 

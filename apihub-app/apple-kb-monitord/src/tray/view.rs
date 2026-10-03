@@ -350,6 +350,53 @@ impl Entry {
     }
 }
 
+/// Plain text of a dbusmenu label: `_x` mnemonic markers dropped, `__` = `_`.
+pub fn plain_label(label: &str) -> String {
+    let mut out = String::with_capacity(label.len());
+    let mut it = label.chars().peekable();
+    while let Some(c) = it.next() {
+        if c == '_' {
+            if it.peek() == Some(&'_') {
+                it.next();
+                out.push('_');
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+impl View {
+    /// The menu as JSON for the Plasma widget's right-click menu (#268):
+    /// `[{"id", "label", "enabled", "visible", "separator", "checked"}]`, in
+    /// menu order; `checked` is null unless the entry is a radio item.
+    pub fn menu_json(&self) -> String {
+        let items: Vec<serde_json::Value> = self
+            .menu
+            .iter()
+            .map(|e| {
+                let label = match e.get("label") {
+                    Some(Prop::Str(l)) => plain_label(l),
+                    _ => String::new(),
+                };
+                serde_json::json!({
+                    "id": e.id,
+                    "label": label,
+                    "enabled": e.get("enabled") != Some(&Prop::Bool(false)),
+                    "visible": e.visible(),
+                    "separator": e.get("type") == Some(&Prop::Str("separator".into())),
+                    "checked": match e.get("toggle-state") {
+                        Some(Prop::Int(n)) => serde_json::Value::Bool(*n == 1),
+                        _ => serde_json::Value::Null,
+                    },
+                })
+            })
+            .collect();
+        serde_json::Value::Array(items).to_string()
+    }
+}
+
 /// dbusmenu labels use `_` as mnemonic marker: escape data.
 fn esc(s: &str) -> String {
     s.replace('_', "__")
@@ -886,6 +933,34 @@ pub fn clipboard_text(snap: &Snapshot, charging: bool, lang: Lang, now: u64) -> 
 mod tests {
     use super::*;
     use akm_core::KbReport;
+
+    #[test]
+    fn plain_label_drops_mnemonics_and_keeps_escaped_underscores() {
+        assert_eq!(plain_label("_Ouvrir la fenêtre…"), "Ouvrir la fenêtre…");
+        assert_eq!(plain_label("Re_nommer"), "Renommer");
+        assert_eq!(plain_label("my__kbd"), "my_kbd");
+        assert_eq!(plain_label(""), "");
+    }
+
+    /// #268: the widget's right-click menu gets the same entries, labels and
+    /// states as the icon's dbusmenu.
+    #[test]
+    fn menu_json_lists_every_entry_with_plain_labels() {
+        let mut k = KbReport::default();
+        k.battery.percentage_fine = Some(80.0);
+        let s = Snapshot { connected: true, keyboard: Some(k), ..Default::default() };
+        let v = View::build_with_fn(&s, false, None, Lang::Fr, Some(2));
+        let j: serde_json::Value = serde_json::from_str(&v.menu_json()).unwrap();
+        let items = j.as_array().unwrap();
+        assert_eq!(items.len(), v.menu.len());
+        let open = items.iter().find(|i| i["id"] == id::OPEN).unwrap();
+        assert_eq!(open["label"], "Ouvrir la fenêtre…");
+        assert_eq!(open["enabled"], true);
+        assert_eq!(open["checked"], serde_json::Value::Null);
+        assert!(items.iter().any(|i| i["separator"] == true));
+        let fkeys = items.iter().find(|i| i["id"] == id::FN_FKEYS).unwrap();
+        assert!(fkeys["checked"].is_boolean(), "{fkeys}");
+    }
 
     /// #94 / #119: with two keyboards the tray shows the weakest connected
     /// one and lists both; one leaving does not change the other's line.

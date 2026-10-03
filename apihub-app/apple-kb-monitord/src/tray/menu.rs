@@ -149,9 +149,9 @@ pub struct Menu {
     pub tx: Sender<Event>,
 }
 
-impl Menu {
-    fn click(&self, item: i32) {
-        let action = match item {
+/// The action of a clickable menu entry (`None` for information rows).
+pub fn action_for(item: i32) -> Option<Action> {
+    Some(match item {
             id::OPEN => Action::Open,
             id::REFRESH => Action::Refresh,
             id::COPY => Action::Copy,
@@ -164,9 +164,15 @@ impl Menu {
             id::FN_MEDIA => Action::FnMode(super::view::FN_MEDIA_FIRST),
             id::FN_FKEYS => Action::FnMode(super::view::FN_FKEYS_FIRST),
             id::QUIT => Action::Hide,
-            _ => return,
-        };
-        let _ = self.tx.send(Event::Action(action));
+            _ => return None,
+    })
+}
+
+impl Menu {
+    fn click(&self, item: i32) {
+        if let Some(action) = action_for(item) {
+            let _ = self.tx.send(Event::Action(action));
+        }
     }
 }
 

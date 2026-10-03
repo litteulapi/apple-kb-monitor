@@ -20,5 +20,7 @@
     "X-Plasma-API": "declarativeappletscript",
     "X-Plasma-API-Minimum-Version": "6.1",
     "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-NotificationArea": "true",
+    "X-Plasma-NotificationAreaCategory": "Hardware",
     "X-Plasma-DBusActivationService": "com.agenceapi.AppleKbMonitor1"
 }
