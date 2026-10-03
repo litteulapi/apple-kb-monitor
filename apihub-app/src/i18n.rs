@@ -242,7 +242,11 @@ mod tests {
     /// unless it is listed in `i18n/same-in-french.txt` (proper nouns, units).
     #[test]
     fn every_window_text_has_a_french_translation() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        // The crate root that holds `src/` and `i18n/`: this file's
+        // grandparent, so that the test also runs when `src/i18n.rs` is
+        // included by `#[path]` from another crate (audit-ui).
+        let here = Path::new(env!("CARGO_MANIFEST_DIR")).join(file!());
+        let root = here.parent().and_then(Path::parent).unwrap();
         let same: Vec<String> = std::fs::read_to_string(root.join("i18n/same-in-french.txt"))
             .unwrap_or_default()
             .lines()

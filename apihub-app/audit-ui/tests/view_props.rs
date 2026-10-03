@@ -14,6 +14,10 @@
 
 #![allow(dead_code)]
 
+// `src/view.rs` imports `crate::i18n` (gettext catalogue embedded at build).
+#[path = "../../src/i18n.rs"]
+mod i18n;
+
 #[path = "../../src/view.rs"]
 mod view;
 
@@ -226,7 +230,15 @@ proptest! {
         prop_assert!(chars(&v.tooltip_title) <= bound, "{}", v.tooltip_title);
         for l in &v.tooltip_lines {
             prop_assert!(chars(l) <= bound, "{l}");
-            prop_assert!(!l.contains("NaN") && !l.contains("inf"), "{l}");
+            // Only the numbers are checked: the model and the alias are
+            // shown verbatim and may themselves spell « inf » or « NaN ».
+            let mut nums = l.clone();
+            for user in [&model, &name] {
+                if !user.is_empty() {
+                    nums = nums.replace(user.as_str(), "");
+                }
+            }
+            prop_assert!(!nums.contains("NaN") && !nums.contains("inf"), "{l}");
         }
         for e in &v.menu {
             if let Some(tray_view::Prop::Str(s)) = e.get("label") {

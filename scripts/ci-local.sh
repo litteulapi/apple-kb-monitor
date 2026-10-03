@@ -135,6 +135,10 @@ s_test() {
   return "$rc"
 }
 
+# audit-ui is a separate workspace (it compiles src/view.rs and src/i18n.rs by
+# #[path]): outside `--workspace`, it stopped compiling unnoticed (#265 review).
+s_audit_ui() { (cd apihub-app/audit-ui && timeout 1200 cargo test --locked 2>&1 | grep -E '^(test result|error)|panicked' | tail -20; exit "${PIPESTATUS[0]}"); }
+
 s_deny() {
   have cargo-deny || { echo "cargo-deny not installed"; return 77; }
   (cd apihub-app && cargo deny --log-level error check advisories bans sources 2>&1 | tail -30; exit "${PIPESTATUS[0]}")
@@ -261,6 +265,7 @@ step secrets    1 fast -- s_secrets
 step fmt        1 fast -- s_fmt
 step clippy     1 fast -- s_clippy
 step test       1 fast -- s_test
+step audit-ui   1 ""   -- s_audit_ui
 step claims     1 ""   -- s_claims
 step redaction  1 ""   -- s_redaction
 step deny       1 ""   -- s_deny
