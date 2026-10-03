@@ -269,3 +269,28 @@ d'état, navigation au clavier, réglage `crt_effects`.
 - Les textes venus du démon (notes de la table des touches, titres des
   présets) ne sont pas traduits par la fenêtre.
 - Les intitulés d'onglets ne sont pas traduits, par choix.
+
+## 12. Le panneau de la zone de notification (widget Plasma)
+
+Le popup du widget `com.agenceapi.devicehub` reprend le même écran : VT323
+embarquée (`contents/fonts/`, chargée par `FontLoader`), palette de `Pip.js`
+(copie de `theme.rs`), cadre, scanlines et vignette statiques, en-tête,
+onglets `1 STAT` à `5 DIAG`, alertes, pied avec « Ouvrir la fenêtre ».
+Composants : `PipText`, `PipPanel`, `PipKv`, `PipButton`, `PipChoice`,
+`PipSegments`, `PipBars`, `PipCell`, `PipAlert`, `PipScroll`, onglets
+`TabStat` … `TabDiag`.
+
+La zone de notification impose la taille du popup (≈ 24 unités de grille,
+redimensionnable) : sous 30 unités de haut la coque est compacte. Ce qui
+n'est pas exposé sur D-Bus (table des touches spéciales, mapping manuel)
+renvoie vers la fenêtre. RADIO sans mesure dit pourquoi (assistant absent
+selon `Diagnose()`, sinon groupe `akm` et la commande à lancer).
+
+Captures (plasmashell imbriqué, faux démon `plasma/tests/fake_services.py`
+scénarios `demo` / `nosignal` / `offline`) :
+
+| STAT | RADIO | RADIO sans signal |
+|---|---|---|
+| ![](captures/widget-pipboy/stat.png) | ![](captures/widget-pipboy/radio.png) | ![](captures/widget-pipboy/radio-sans-signal.png) |
+| **KEYS** | **DATA** | **DIAG** |
+| ![](captures/widget-pipboy/keys.png) | ![](captures/widget-pipboy/data.png) | ![](captures/widget-pipboy/diag.png) |
