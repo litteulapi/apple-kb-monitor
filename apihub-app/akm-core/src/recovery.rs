@@ -318,6 +318,11 @@ impl Recovery {
         self.episode_start
     }
     /// Connection attempts made by the daemon in this episode.
+    /// A `Device1.Connect` is in flight (answer not received yet).
+    pub fn in_flight(&self) -> bool {
+        self.in_flight
+    }
+
     /// BlueZ last said the device is paired (bonded).
     pub fn paired(&self) -> bool {
         self.paired

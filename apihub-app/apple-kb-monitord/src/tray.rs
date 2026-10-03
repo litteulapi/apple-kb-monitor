@@ -823,7 +823,21 @@ impl Tray {
             }
             Action::Reconnect => {
                 tracing::info!("tray: reconnection asked from the menu");
-                if !apple_kb_monitord::repair::user_reconnect() {
+                if apple_kb_monitord::repair::reconnect_in_flight() {
+                    // C9: say it, instead of a click that does nothing.
+                    let lang = self.cfg.lang;
+                    tracing::info!("tray: an attempt is already waiting for BlueZ, nothing new sent");
+                    apple_kb_monitord::notify::send_with(
+                        lang.t("Reconnexion en cours", "Reconnection in progress"),
+                        lang.t(
+                            "Une tentative attend déjà la réponse de BlueZ (40 s au plus).",
+                            "An attempt is already waiting for BlueZ (40 s at most).",
+                        ),
+                        "network-bluetooth",
+                        akm_core::alerts::Urgency::Normal,
+                        true,
+                    );
+                } else if !apple_kb_monitord::repair::user_reconnect() {
                     tracing::warn!("tray: link keeper not running, nothing asked");
                 }
             }

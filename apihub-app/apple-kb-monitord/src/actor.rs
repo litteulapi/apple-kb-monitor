@@ -1775,6 +1775,7 @@ mod tests {
             connected,
             battery,
             paired: true,
+            connecting: false,
         };
         let roster = crate::repair::SharedStatus::default();
         let mut a = quiet_actor();
