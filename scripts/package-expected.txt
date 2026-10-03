@@ -103,10 +103,7 @@ usr/share/locale/fr/LC_MESSAGES/plasma_applet_com.agenceapi.devicehub.mo
 usr/share/man/man1/akmctl.1.gz
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/CompactRepresentation.qml
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/DaemonLink.qml
-usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/FnMode.js
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/FullRepresentation.qml
-usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/History.js
-usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/LineChart.qml
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/main.qml
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/contents/ui/Signal.js
 usr/share/plasma/plasmoids/com.agenceapi.devicehub/metadata.json
