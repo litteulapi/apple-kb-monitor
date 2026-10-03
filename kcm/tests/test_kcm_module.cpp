@@ -10,6 +10,7 @@
 #include <KPluginMetaData>
 
 #include <QApplication>
+#include <QClipboard>
 #include <QDir>
 #include <QFile>
 #include <QQuickItem>
@@ -499,6 +500,24 @@ private Q_SLOTS:
             QVERIFY2(!verdict.startsWith(QStringLiteral("Non écrit")), qPrintable(verdict));
             QVERIFY2(verdict.contains(QStringLiteral("a pu être écrit ou non")), qPrintable(verdict));
         }
+    }
+
+    // #290 (K7): no command to copy holds a stand-in name ("NOM"): copying
+    // stays off until a valid name is typed.
+    void noCommandToCopyWithoutAName()
+    {
+        QVERIFY(open(QStringLiteral("name")));
+        QTest::qWait(200);
+        for (int i = 0; i < 3; ++i) {
+            const QString cmd = text(QStringLiteral("nameCmd%1").arg(i));
+            QVERIFY2(!cmd.contains(QLatin1String("NOM")) && !cmd.contains(QLatin1String("NAME")) && !cmd.contains(QLatin1String("rename")), qPrintable(cmd));
+            QVERIFY2(!item(QStringLiteral("nameCopy%1").arg(i))->isEnabled(), "copy enabled without a name");
+        }
+        QVERIFY(item(QStringLiteral("nameCopy3"))->isEnabled()); // akmctl repair --force needs no name
+        QVERIFY(typeInto(QStringLiteral("nameDeviceField"), QStringLiteral("Bureau")));
+        QCOMPARE(text(QStringLiteral("nameCmd2")), QStringLiteral("akmctl rename --device-name='Bureau'"));
+        QVERIFY(click(QStringLiteral("nameCopy2")));
+        QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("akmctl rename --device-name='Bureau'"));
     }
 };
 
