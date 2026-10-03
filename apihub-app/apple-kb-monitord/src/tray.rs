@@ -291,7 +291,13 @@ pub fn want_visible(mode: Mode, hidden_by_user: bool, claimed: bool, plasma_widg
     match mode {
         Mode::Never => false,
         Mode::Always => !hidden_by_user,
-        Mode::Auto => !hidden_by_user && !claimed && !plasma_widget,
+        // The widget being in the system tray no longer hides the icon: its
+        // popup has neither the window nor the menu, and the icon is what
+        // the user clicks (#267). Only an explicit claim still hides it.
+        Mode::Auto => {
+            let _ = plasma_widget;
+            !hidden_by_user && !claimed
+        }
     }
 }
 
@@ -940,8 +946,8 @@ mod tests {
         assert!(want_visible(Mode::Auto, false, false, false));
         assert!(!want_visible(Mode::Auto, false, true, false), "claimed");
         assert!(
-            !want_visible(Mode::Auto, false, false, true),
-            "widget in systray"
+            want_visible(Mode::Auto, false, false, true),
+            "the widget in the system tray does not hide the icon (#267)"
         );
         assert!(
             !want_visible(Mode::Auto, true, false, false),
@@ -1065,12 +1071,11 @@ mod tests {
         assert!(!on_bus(), "renewed claim holds beyond its TTL");
         wait_until("lapsed without renewal", 6, on_bus);
 
-        // 4. The user ticks the widget in the system tray configuration.
+        // 4. The widget listed in the system tray configuration no longer
+        // withdraws the icon (#267): it has neither the window nor the menu.
         std::fs::write(&rc, "[Containments][3][General]\nextraItems=org.kde.plasma.battery,com.agenceapi.devicehub\n").unwrap();
-        wait_until("withdrawn by the configuration", 8, || !on_bus());
-        // ... and unticks it.
-        std::fs::write(&rc, "[Containments][3][General]\nextraItems=org.kde.plasma.battery,org.kde.kscreen,\n").unwrap();
-        wait_until("back after unticking", 8, on_bus);
+        std::thread::sleep(Duration::from_secs(3));
+        assert!(on_bus(), "the widget in the system tray hid the icon");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

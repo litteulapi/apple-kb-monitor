@@ -25,23 +25,24 @@ Bluetooth, `bluetoothctl remove`) disparaît du démon **aussitôt** :
 Test : `apple-kb-monitord/tests/bluez_forget.rs` (bus privé, faux `org.bluez`,
 faux serveur de notifications) et les tests `repair::tests::forgetting_from_plasma…`.
 
-## 2. Une seule icône (#253)
+## 2. Une seule icône : celle du démon (#253, revu par #267)
 
-Deux mécanismes, tous deux en temps réel :
+L'icône de la zone de notification est celle du démon : clic gauche = fenêtre
+ApiHub, clic du milieu = relecture, clic droit = menu complet (Ouvrir,
+Actualiser, Copier, Bluetooth, Renommer, Réparer, Reconnecter, Déconnecter,
+Oublier, mode Fn).
 
-* **Réclamation par le widget.** Le widget `com.agenceapi.devicehub` appelle
-  `Tray.ClaimTrayFor(<id d'instance>)` à son chargement, à chaque réapparition du
-  démon et toutes les 2 min (renouvellement) ; `ReleaseTrayFor` à sa destruction.
-  Tant qu'une instance tient la réclamation, le démon libère son nom SNI (l'icône
-  quitte la zone de notification) ; il la remet quand la dernière instance est
-  libérée, que plasmashell quitte le bus, ou qu'une réclamation n'est plus
-  renouvelée depuis 5 min (une libération perdue ne laisse donc jamais le bureau
-  sans icône). Plusieurs instances (plusieurs panneaux) : chacune a la sienne.
-  `ClaimTray()` / `ReleaseTray()` (sans argument) restent valables.
-* **Configuration de plasmashell.** `plasma-org.kde.plasma.desktop-appletsrc` est
-  surveillé (un `stat` toutes les 2 s, lecture seulement si le fichier change) :
-  cocher ou décocher « ApiHub » dans Configurer la zone de notification › Entrées
-  retire ou remet l'icône sans redémarrer ni plasmashell ni le démon.
+De 3.1.0-22 à 3.1.0-25, le widget `com.agenceapi.devicehub` s'ajoutait de lui-même
+à la zone de notification (`X-Plasma-NotificationArea`), y réclamait l'icône
+(`Tray.ClaimTrayFor`) et le démon se retirait aussi dès que l'appletsrc de
+plasmashell listait le widget. Résultat : un petit popup au clic gauche, ni
+fenêtre ni menu au clic droit (#267). Depuis 3.1.0-26 :
+
+* le widget n'est plus un élément de la zone de notification et ne réclame plus
+  l'icône ; il reste disponible pour un panneau ou le bureau ;
+* le démon ne se retire plus pour la configuration de plasmashell ; seule une
+  réclamation explicite `ClaimTray()` / `ClaimTrayFor(id)` le fait encore
+  (même règles qu'avant : libération, départ du client, péremption après 5 min).
 
 Mode `APPLE_KB_MONITOR_TRAY` = `auto` (défaut) | `always` | `never` inchangé.
 Test : `tray::tests::widget_claim_and_configuration_…` (bus privé, faux

@@ -234,9 +234,8 @@ PlasmoidItem {
     onExpandedChanged: if (expanded) root.fetchDetails()
 
     Component.onCompleted: {
-        // Take over the notification area: the daemon withdraws its own icon
-        // (#253). Setting the id sends the claim when the daemon is on the bus.
-        link.claimId = String(Plasmoid.id);
+        // No claim on the notification area (#267): the daemon's icon stays,
+        // it opens the window on a left click and has the full menu.
         if (link.registered) fetchData();
     }
 

@@ -67,7 +67,7 @@ Every `doctor` finding comes with the command that fixes it. The System Settings
 |---|---|---|
 | No tray icon, no alerts after login | `apple-kb-monitord.service` not running (masked, failed, or an upgrade left the old binary) | `systemctl --user status apple-kb-monitord.service`; `systemctl --user restart apple-kb-monitord.service`; the package enables the unit for every user (`systemctl --global`) |
 | Self-check `versions`: daemon ≠ akmctl ≠ package | The daemon was not restarted after the upgrade | `systemctl --user restart apple-kb-monitord.service` |
-| Two icons in the notification area | Both the daemon and the widget claimed the area (fixed in 3.1.0-11, #253: the widget claims it, the daemon's icon is the only one) | update; if the widget is on a panel, the daemon icon hides |
+| The icon opens a small popup instead of the window, right click has no menu (3.1.0-22 to 25) | The widget had taken over the notification area (#253, reverted by #267) | update to 3.1.0-26 or later, then restart plasmashell (`systemctl --user restart plasma-plasmashell`) |
 | Tray icon gone after `plasmashell` restarted | The daemon re-registers when the StatusNotifierWatcher reappears | wait a few seconds; `systemctl --user restart apple-kb-monitord.service` otherwise |
 | The window says "Not responding" / the self-check reports `ui-heartbeat` | Fixed in 3.1.0-8 (#230-#236): vsync, D-Bus calls bounded, history off the UI thread; the window writes a heartbeat file the self-check watches | update; `akmctl selftest` reports `ui-heartbeat` grave when the heartbeat is older than 10 s |
 | `akmctl` exit code 2 | Daemon not on the session bus | `systemctl --user start apple-kb-monitord.service` (the unit) or just open the window / widget (D-Bus activation) |
