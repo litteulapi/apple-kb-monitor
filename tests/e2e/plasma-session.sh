@@ -41,7 +41,8 @@ until [ -s "$dir/display" ]; do
   fi
   sleep 0.1
 done
-export DISPLAY=:$(head -n1 "$dir/display")
+DISPLAY=:$(head -n1 "$dir/display")
+export DISPLAY
 echo $$ > "$dir/pid"
 trap 'kill $xpid 2>/dev/null' EXIT
 # shellcheck disable=SC2016  # expanded by the inner shell
