@@ -1,0 +1,660 @@
+# Czech translation of the Plasma widget com.agenceapi.devicehub.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Czech\n"
+"Language: cs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
+
+msgid "alkaline"
+msgstr "alkalické"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "lithiové"
+
+msgid "not declared"
+msgstr "neuvedeno"
+
+msgid "State"
+msgstr "Stav"
+
+msgid "Radio"
+msgstr "Rádio"
+
+msgid "Keys"
+msgstr "Klávesy"
+
+msgid "Data"
+msgstr "Data"
+
+msgid "Diag"
+msgstr "Diag"
+
+msgid "Apple keyboard monitor"
+msgstr "Monitor klávesnice Apple"
+
+msgid "Settings"
+msgstr "Nastavení"
+
+msgid "READ %1"
+msgstr "ČTENO %1"
+
+msgid "NO DAEMON"
+msgstr "BEZ SLUŽBY"
+
+msgid "ONLINE"
+msgstr "PŘIPOJENO"
+
+msgid "OFFLINE"
+msgstr "ODPOJENO"
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr "Monitor apple-kb-monitord není na sběrnici sezení: nelze nic číst."
+
+msgid "Reading error: %1"
+msgstr "Chyba čtení: %1"
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr ""
+"Klávesnice odpojena. Stiskněte klávesu, abyste ji probudili, nebo ji znovu "
+"připojte na kartě RADIO."
+
+msgid "Waiting for the keyboard data…"
+msgstr "Čekání na data klávesnice…"
+
+msgid "Batteries critical: replace them now."
+msgstr "Baterie kriticky vybité: vyměňte je hned."
+
+msgid "Batteries low: plan to replace them."
+msgstr "Baterie slabé: naplánujte výměnu."
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] "Nestabilní spojení: %1 odpojení za poslední hodinu."
+msgstr[1] "Nestabilní spojení: %1 odpojení za poslední hodinu."
+msgstr[2] "Nestabilní spojení: %1 odpojení za poslední hodinu."
+
+msgid "%1%"
+msgstr "%1 %"
+
+msgid "rssi-helper not installed"
+msgstr "rssi-helper není nainstalován"
+
+msgid "see akmctl doctor"
+msgstr "viz akmctl doctor"
+
+msgid "not measured (%1)"
+msgstr "neměřeno (%1)"
+
+msgid "the rssi-helper utility is not installed"
+msgstr "nástroj rssi-helper není nainstalován"
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr "nástroj rssi-helper selhal (chybí capability, Bluetooth odmítnut)"
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr "nástroj rssi-helper neodpovídá včas"
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "adaptér Bluetooth pro toto spojení neposkytuje měření"
+
+msgid "the signal cannot be measured"
+msgstr "signál nelze změřit"
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr "přeinstalujte balíček apple-kb-monitor"
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr "přeinstalujte balíček apple-kb-monitor a poté spusťte akmctl doctor"
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "zkontrolujte službu Bluetooth: systemctl status bluetooth"
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "přibližte klávesnici nebo ji znovu připojte"
+
+msgid "run akmctl doctor"
+msgstr "spusťte akmctl doctor"
+
+msgid "Battery history"
+msgstr "Historie baterií"
+
+msgid "24 h"
+msgstr "24 h"
+
+msgid "7 d"
+msgstr "7 d"
+
+msgid "30 d"
+msgstr "30 d"
+
+msgid "90 d"
+msgstr "90 d"
+
+msgid "Refresh"
+msgstr "Obnovit"
+
+msgid "LOADING…"
+msgstr "NAČÍTÁNÍ…"
+
+msgid "Readings: %1"
+msgstr "Měření: %1"
+
+msgid "%1 V"
+msgstr "%1 V"
+
+msgid "Batteries %"
+msgstr "Baterie %"
+
+msgid "Voltage %1 to %2 V"
+msgstr "Napětí %1 až %2 V"
+
+msgid "History not available: %1"
+msgstr "Historie není dostupná: %1"
+
+msgid "Monitor stopped: no history."
+msgstr "Monitor zastaven: žádná historie."
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr "V tomto období není dost měření k vykreslení křivky."
+
+msgid "Batteries"
+msgstr "Baterie"
+
+msgid "Voltage"
+msgstr "Napětí"
+
+msgid "EMPTY"
+msgstr "PRÁZDNÉ"
+
+msgid "CRITICAL"
+msgstr "KRITICKÉ"
+
+msgid "LOW"
+msgstr "NÍZKÉ"
+
+msgid "FULL"
+msgstr "PLNÉ"
+
+msgid "Thresholds"
+msgstr "Prahy"
+
+msgid "Estimate"
+msgstr "Odhad"
+
+msgid "Apple display"
+msgstr "Údaj Apple"
+
+msgid "Chemistry"
+msgstr "Chemie"
+
+msgid "Installed on"
+msgstr "Vloženy"
+
+msgid "Trend"
+msgstr "Trend"
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] "−%2 % za den během %1 dne"
+msgstr[1] "−%2 % za den během %1 dnů"
+msgstr[2] "−%2 % za den během %1 dnů"
+
+msgid "Empty around"
+msgstr "Vybité kolem"
+
+msgid "Last reading"
+msgstr "Poslední měření"
+
+msgid "The last reading missed a report of the keyboard."
+msgstr "Při posledním měření chyběla zpráva z klávesnice."
+
+msgid "Device"
+msgstr "Zařízení"
+
+msgid "Model"
+msgstr "Model"
+
+msgid "Name"
+msgstr "Název"
+
+msgid "Address"
+msgstr "Adresa"
+
+msgid "Chip"
+msgstr "Čip"
+
+msgid "Driver"
+msgstr "Ovladač"
+
+msgid "Firmware"
+msgstr "Firmware"
+
+msgid "System diagnostic"
+msgstr "Diagnostika systému"
+
+msgid "Checking…"
+msgstr "Kontrola…"
+
+msgid "Run the full check"
+msgstr "Spustit úplnou kontrolu"
+
+msgid "%1/%2 PASSED"
+msgstr "%1/%2 ÚSPĚŠNĚ"
+
+msgid "PROBLEMS: %1"
+msgstr "PROBLÉMY: %1"
+
+msgid "Check not run: %1"
+msgstr "Kontrola nespuštěna: %1"
+
+msgid "Monitor"
+msgstr "Monitor"
+
+msgid "RUNNING"
+msgstr "BĚŽÍ"
+
+msgid "STOPPED"
+msgstr "ZASTAVENO"
+
+msgid "Version"
+msgstr "Verze"
+
+msgid "Keyboard"
+msgstr "Klávesnice"
+
+msgid "Link"
+msgstr "Spojení"
+
+msgid "Last error"
+msgstr "Poslední chyba"
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr "Spusťte jej příkazem: systemctl --user start apple-kb-monitord"
+
+msgid "Log"
+msgstr "Záznam"
+
+msgid "[FAIL]"
+msgstr "[CHYBA]"
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr "Kontrolu provádí monitor (asi deset testů, nikdy na klávesnici)."
+
+msgid "Function keys"
+msgstr "Funkční klávesy"
+
+msgid "Media keys first"
+msgstr "Nejprve multimediální klávesy"
+
+msgid "F1–F12 first"
+msgstr "Nejprve F1–F12"
+
+msgid "Current mode: %1"
+msgstr "Aktuální režim: %1"
+
+msgid "Fn mode not read yet."
+msgstr "Režim Fn ještě nebyl přečten."
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr "Režim Fn neznámý: klávesnice není připojena."
+
+msgid "Administrator authentication requested…"
+msgstr "Vyžádáno ověření správce…"
+
+msgid "Fn mode not changed: %1"
+msgstr "Režim Fn nezměněn: %1"
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr "hid_apple platí pro všechny klávesnice Apple tohoto počítače."
+
+msgid "Locks"
+msgstr "Zámky"
+
+msgid "Caps Lock"
+msgstr "Caps Lock"
+
+msgid "Num Lock"
+msgstr "Num Lock"
+
+msgid "on"
+msgstr "zap."
+
+msgid "off"
+msgstr "vyp."
+
+msgid "ON"
+msgstr "ZAP."
+
+msgid "OFF"
+msgstr "VYP."
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr "Čteno z kontrolek klávesnice při každém měření."
+
+msgid "Special keys"
+msgstr "Speciální klávesy"
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+"Tabulka speciálních kláves (kód a akce KDE s Fn i bez) a editor kláves jsou "
+"v Nastavení systému, modul Klávesnice Apple, stránka Klávesy."
+
+msgid "Edit the keys"
+msgstr "Upravit klávesy"
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] "před %1 s"
+msgstr[1] "před %1 s"
+msgstr[2] "před %1 s"
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "před %1 min"
+msgstr[1] "před %1 min"
+msgstr[2] "před %1 min"
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "před %1 h"
+msgstr[1] "před %1 h"
+msgstr[2] "před %1 h"
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "před %1 dnem"
+msgstr[1] "před %1 dny"
+msgstr[2] "před %1 dny"
+
+msgid "EXCELLENT"
+msgstr "VÝBORNÝ"
+
+msgid "GOOD"
+msgstr "DOBRÝ"
+
+msgid "WEAK"
+msgstr "SLABÝ"
+
+msgid "Signal"
+msgstr "Signál"
+
+msgid "Not measured"
+msgstr "Neměřeno"
+
+msgid "Measured"
+msgstr "Změřeno"
+
+msgid "at %1"
+msgstr "v %1"
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr "dB vůči ideálnímu rozsahu příjmu adaptéru (0 = ideál), ne dBm."
+
+msgid "Correction: %1"
+msgstr "Korekce: %1"
+
+msgid "No measurement: the keyboard is not connected."
+msgstr "Žádné měření: klávesnice není připojena."
+
+msgid "Connected"
+msgstr "Připojeno"
+
+msgid "Yes"
+msgstr "Ano"
+
+msgid "No"
+msgstr "Ne"
+
+msgid "Paired"
+msgstr "Spárováno"
+
+msgid "TX power"
+msgstr "Vysílací výkon"
+
+msgid "%1 dBm"
+msgstr "%1 dBm"
+
+msgid "Last wake-up"
+msgstr "Poslední probuzení"
+
+msgid "Paired host"
+msgstr "Spárovaný hostitel"
+
+msgid "Monitor's link"
+msgstr "Spojení monitoru"
+
+msgid "connected"
+msgstr "připojeno"
+
+msgid "asleep"
+msgstr "spí"
+
+msgid "unreachable"
+msgstr "nedostupné"
+
+msgid "Attempts / failures"
+msgstr "Pokusy / selhání"
+
+msgid "%1 / %2"
+msgstr "%1 / %2"
+
+msgid "Link quality"
+msgstr "Kvalita spojení"
+
+msgid "Disconnections"
+msgstr "Odpojení"
+
+msgid "1 h"
+msgstr "1 h"
+
+msgid "7 days"
+msgstr "7 dní"
+
+msgid "today"
+msgstr "dnes"
+
+msgid "D-%1"
+msgstr "D-%1"
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr "Monitor zatím nezaznamenal žádné odpojení."
+
+msgid "Restore the link"
+msgstr "Obnovit spojení"
+
+msgid "Reconnect"
+msgstr "Znovu připojit"
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr ""
+"Párování ztraceno nebo odmítnuto? Spárujte ji znovu z terminálu (vyžaduje "
+"potvrzení): akmctl repair"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Autonomy"
+msgstr "Výdrž"
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 den"
+msgstr[1] "≈ %1 dny"
+msgstr[2] "≈ %1 dní"
+
+msgid "≈ %1 h"
+msgstr "≈ %1 h"
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr ""
+"Údaj klávesnice: její vlastní procento, mění se po skocích (často při "
+"opětovném připojení)."
+
+msgid "not enough history yet"
+msgstr "zatím nedostatek historie"
+
+msgid "%1, up to date"
+msgstr "%1, aktuální"
+
+msgid "%1, update %2 at Apple"
+msgstr "%1, aktualizace %2 u Apple"
+
+msgid "%1, not in the table"
+msgstr "%1, není v tabulce"
+
+msgid "Keyboard name"
+msgstr "Název klávesnice"
+
+msgid "Apply"
+msgstr "Použít"
+
+msgid "Keyboard's own name"
+msgstr "Vlastní název klávesnice"
+
+msgid "Cancel"
+msgstr "Zrušit"
+
+msgid "Rename refused: %1"
+msgstr "Přejmenování odmítnuto: %1"
+
+msgid "Actions"
+msgstr "Činnosti"
+
+msgid "Fn: waiting for authorisation…"
+msgstr "Fn: čekání na oprávnění…"
+
+msgid "Rename"
+msgstr "Přejmenovat"
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr "%1 — aktuální (nejnovější veřejná verze známá Apple)"
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr "%1 — od Apple je dostupná aktualizace (nejnovější známá: %2)"
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr "%1 — neznámé (model nebo verze nejsou v tabulce)"
+
+msgid "Autonomy: %1"
+msgstr "Výdrž: %1"
+
+msgid "media keys first"
+msgstr "nejprve multimediální klávesy"
+
+msgid "Fn key has no effect"
+msgstr "klávesa Fn bez účinku"
+
+msgid "F-keys disabled"
+msgstr "klávesy F vypnuty"
+
+msgid "Switch to F1–F12 first"
+msgstr "Přepnout na nejprve F1–F12"
+
+msgid "Switch to media keys first"
+msgstr "Přepnout na nejprve multimediální klávesy"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1 (pokusy: %2, selhání: %3)"
+
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+msgid "new batteries, no estimate yet"
+msgstr "nové baterie, zatím bez odhadu"
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr "≈ %1 % (%2 až %3 %), %4"
+
+msgid "Keyboard not connected"
+msgstr "Klávesnice nepřipojena"
+
+msgid "Monitor stopped"
+msgstr "Monitor zastaven"
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr "Klávesnice Apple, baterie %1 procent"
+
+msgid "Apple keyboard, battery level unknown"
+msgstr "Klávesnice Apple, úroveň baterie neznámá"
+
+msgid "Apple keyboard, %1"
+msgstr "Klávesnice Apple, %1"
+
+msgid "Keyboard indication %1"
+msgstr "Údaj klávesnice %1"
+
+msgid "Estimate: %1"
+msgstr "Odhad: %1"
+
+msgid "Apple display: %1%"
+msgstr "Údaj Apple: %1 %"
+
+msgid "Signal: %1"
+msgstr "Signál: %1"
+
+msgid "Firmware: %1"
+msgstr "Firmware: %1"
+
+msgid "Waiting for the Apple keyboard…"
+msgstr "Čekání na klávesnici Apple…"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord není na sběrnici sezení"
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr "&Nastavit klávesnici Apple…"
+
+msgid "New reading requested."
+msgstr "Vyžádáno nové měření."
+
+msgid "Reading not requested: %1"
+msgstr "Měření nevyžádáno: %1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+"Opětovné připojení vyžádáno. Stiskněte klávesu na klávesnici, pokud spí."
+
+msgid "refused by the monitor"
+msgstr "odmítnuto monitorem"
+
+msgid "Reconnection not requested: %1"
+msgstr "Opětovné připojení nevyžádáno: %1"
+
+msgid "excellent"
+msgstr "výborný"
+
+msgid "good"
+msgstr "dobrý"
+
+msgid "weak"
+msgstr "slabý"
+
+msgid "Apple Keyboard"
+msgstr "Klávesnice Apple"
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr "Plné %1 / Nízké %2 / Kritické %3 / Prázdné %4 mV"

@@ -1,0 +1,16 @@
+# A1314 ISO (PID 0x0256), AA:BB:CC:DD:EE:F1, round A 2026-10-01 03:58, exact ioctl lengths.
+# 0x4C payload zeroed (paired host address + key material). Format: Fixture::from_hex_dump.
+09010000
+46af0b
+4763
+49890b
+4c03000000000000000000000000000000000000
+4f5000
+51436c617669657220
+52646520616c696365
+532023310000000000
+5a0b8a09ca09640806
+ea62
+f406cc
+f50384
+ff0baf01

@@ -1,0 +1,639 @@
+# Chinese (Simplified) translation of the Plasma widget com.agenceapi.devicehub.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Chinese (Simplified)\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "alkaline"
+msgstr "碱性"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "锂"
+
+msgid "not declared"
+msgstr "未声明"
+
+msgid "State"
+msgstr "状态"
+
+msgid "Radio"
+msgstr "无线"
+
+msgid "Keys"
+msgstr "按键"
+
+msgid "Data"
+msgstr "数据"
+
+msgid "Diag"
+msgstr "诊断"
+
+msgid "Apple keyboard monitor"
+msgstr "Apple 键盘监视器"
+
+msgid "Settings"
+msgstr "设置"
+
+msgid "READ %1"
+msgstr "已读取 %1"
+
+msgid "NO DAEMON"
+msgstr "无服务"
+
+msgid "ONLINE"
+msgstr "在线"
+
+msgid "OFFLINE"
+msgstr "离线"
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr "监视器 apple-kb-monitord 不在会话总线上：无法读取任何内容。"
+
+msgid "Reading error: %1"
+msgstr "读取错误：%1"
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr "键盘已断开。按任意键唤醒，或在 RADIO 中重新连接。"
+
+msgid "Waiting for the keyboard data…"
+msgstr "正在等待键盘数据…"
+
+msgid "Batteries critical: replace them now."
+msgstr "电池电量严重不足：请立即更换。"
+
+msgid "Batteries low: plan to replace them."
+msgstr "电池电量低：请准备更换。"
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] "连接不稳定：最近一小时断开 %1 次。"
+
+msgid "%1%"
+msgstr "%1%"
+
+msgid "rssi-helper not installed"
+msgstr "rssi-helper 未安装"
+
+msgid "see akmctl doctor"
+msgstr "参见 akmctl doctor"
+
+msgid "not measured (%1)"
+msgstr "未测量（%1）"
+
+msgid "the rssi-helper utility is not installed"
+msgstr "未安装 rssi-helper 工具"
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr "rssi-helper 工具失败（缺少 capability，蓝牙拒绝）"
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr "rssi-helper 工具未及时响应"
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "蓝牙适配器未提供此连接的测量值"
+
+msgid "the signal cannot be measured"
+msgstr "无法测量信号"
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr "请重新安装 apple-kb-monitor 软件包"
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr "请重新安装 apple-kb-monitor 软件包，然后运行 akmctl doctor"
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "请检查蓝牙服务：systemctl status bluetooth"
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "请将键盘靠近，或重新连接"
+
+msgid "run akmctl doctor"
+msgstr "请运行 akmctl doctor"
+
+msgid "Battery history"
+msgstr "电池历史"
+
+msgid "24 h"
+msgstr "24 小时"
+
+msgid "7 d"
+msgstr "7 天"
+
+msgid "30 d"
+msgstr "30 天"
+
+msgid "90 d"
+msgstr "90 天"
+
+msgid "Refresh"
+msgstr "刷新"
+
+msgid "LOADING…"
+msgstr "正在加载…"
+
+msgid "Readings: %1"
+msgstr "读数：%1"
+
+msgid "%1 V"
+msgstr "%1 V"
+
+msgid "Batteries %"
+msgstr "电池 %"
+
+msgid "Voltage %1 to %2 V"
+msgstr "电压 %1 至 %2 V"
+
+msgid "History not available: %1"
+msgstr "历史不可用：%1"
+
+msgid "Monitor stopped: no history."
+msgstr "监视器已停止：没有历史。"
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr "此期间读数不足，无法绘制曲线。"
+
+msgid "Batteries"
+msgstr "电池"
+
+msgid "Voltage"
+msgstr "电压"
+
+msgid "EMPTY"
+msgstr "耗尽"
+
+msgid "CRITICAL"
+msgstr "严重"
+
+msgid "LOW"
+msgstr "低"
+
+msgid "FULL"
+msgstr "充满"
+
+msgid "Thresholds"
+msgstr "阈值"
+
+msgid "Estimate"
+msgstr "估算"
+
+msgid "Apple display"
+msgstr "Apple 显示"
+
+msgid "Chemistry"
+msgstr "类型"
+
+msgid "Installed on"
+msgstr "安装于"
+
+msgid "Trend"
+msgstr "趋势"
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] "%1 天内每天 −%2%"
+
+msgid "Empty around"
+msgstr "预计耗尽"
+
+msgid "Last reading"
+msgstr "最近读数"
+
+msgid "The last reading missed a report of the keyboard."
+msgstr "最近一次读数缺少键盘报告。"
+
+msgid "Device"
+msgstr "设备"
+
+msgid "Model"
+msgstr "型号"
+
+msgid "Name"
+msgstr "名称"
+
+msgid "Address"
+msgstr "地址"
+
+msgid "Chip"
+msgstr "芯片"
+
+msgid "Driver"
+msgstr "驱动程序"
+
+msgid "Firmware"
+msgstr "固件"
+
+msgid "System diagnostic"
+msgstr "系统诊断"
+
+msgid "Checking…"
+msgstr "正在检查…"
+
+msgid "Run the full check"
+msgstr "运行完整检查"
+
+msgid "%1/%2 PASSED"
+msgstr "%1/%2 通过"
+
+msgid "PROBLEMS: %1"
+msgstr "问题：%1"
+
+msgid "Check not run: %1"
+msgstr "检查未运行：%1"
+
+msgid "Monitor"
+msgstr "监视器"
+
+msgid "RUNNING"
+msgstr "运行中"
+
+msgid "STOPPED"
+msgstr "已停止"
+
+msgid "Version"
+msgstr "版本"
+
+msgid "Keyboard"
+msgstr "键盘"
+
+msgid "Link"
+msgstr "连接"
+
+msgid "Last error"
+msgstr "最近错误"
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr "使用以下命令启动：systemctl --user start apple-kb-monitord"
+
+msgid "Log"
+msgstr "日志"
+
+msgid "[FAIL]"
+msgstr "[失败]"
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr "检查由监视器执行（约十项测试，从不写入键盘）。"
+
+msgid "Function keys"
+msgstr "功能键"
+
+msgid "Media keys first"
+msgstr "媒体键优先"
+
+msgid "F1–F12 first"
+msgstr "F1–F12 优先"
+
+msgid "Current mode: %1"
+msgstr "当前模式：%1"
+
+msgid "Fn mode not read yet."
+msgstr "尚未读取 Fn 模式。"
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr "Fn 模式未知：键盘未连接。"
+
+msgid "Administrator authentication requested…"
+msgstr "已请求管理员认证…"
+
+msgid "Fn mode not changed: %1"
+msgstr "Fn 模式未更改：%1"
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr "hid_apple 作用于本计算机的所有 Apple 键盘。"
+
+msgid "Locks"
+msgstr "锁定键"
+
+msgid "Caps Lock"
+msgstr "Caps Lock"
+
+msgid "Num Lock"
+msgstr "Num Lock"
+
+msgid "on"
+msgstr "开"
+
+msgid "off"
+msgstr "关"
+
+msgid "ON"
+msgstr "开"
+
+msgid "OFF"
+msgstr "关"
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr "每次读数时从键盘指示灯读取。"
+
+msgid "Special keys"
+msgstr "特殊键"
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+"特殊键表（带 Fn 和不带 Fn 的代码及 KDE 动作）和按键编辑器位于系统设置"
+"的“Apple 键盘”模块的“按键”页面。"
+
+msgid "Edit the keys"
+msgstr "编辑按键"
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] "%1 秒前"
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "%1 分钟前"
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "%1 小时前"
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "%1 天前"
+
+msgid "EXCELLENT"
+msgstr "极佳"
+
+msgid "GOOD"
+msgstr "良好"
+
+msgid "WEAK"
+msgstr "弱"
+
+msgid "Signal"
+msgstr "信号"
+
+msgid "Not measured"
+msgstr "未测量"
+
+msgid "Measured"
+msgstr "测量值"
+
+msgid "at %1"
+msgstr "于 %1"
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr "相对于适配器理想接收范围的 dB（0 = 理想），不是 dBm。"
+
+msgid "Correction: %1"
+msgstr "校正：%1"
+
+msgid "No measurement: the keyboard is not connected."
+msgstr "无测量：键盘未连接。"
+
+msgid "Connected"
+msgstr "已连接"
+
+msgid "Yes"
+msgstr "是"
+
+msgid "No"
+msgstr "否"
+
+msgid "Paired"
+msgstr "已配对"
+
+msgid "TX power"
+msgstr "发射功率"
+
+msgid "%1 dBm"
+msgstr "%1 dBm"
+
+msgid "Last wake-up"
+msgstr "最近唤醒"
+
+msgid "Paired host"
+msgstr "配对主机"
+
+msgid "Monitor's link"
+msgstr "监视器连接"
+
+msgid "connected"
+msgstr "已连接"
+
+msgid "asleep"
+msgstr "休眠中"
+
+msgid "unreachable"
+msgstr "无法访问"
+
+msgid "Attempts / failures"
+msgstr "尝试 / 失败"
+
+msgid "%1 / %2"
+msgstr "%1 / %2"
+
+msgid "Link quality"
+msgstr "连接质量"
+
+msgid "Disconnections"
+msgstr "断开"
+
+msgid "1 h"
+msgstr "1 小时"
+
+msgid "7 days"
+msgstr "7 天"
+
+msgid "today"
+msgstr "今天"
+
+msgid "D-%1"
+msgstr "%1 天前"
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr "监视器尚未记录任何断开。"
+
+msgid "Restore the link"
+msgstr "恢复连接"
+
+msgid "Reconnect"
+msgstr "重新连接"
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr "配对丢失或被拒绝？请在终端中重新配对（需要确认）：akmctl repair"
+
+msgid "OK"
+msgstr "确定"
+
+msgid "Autonomy"
+msgstr "续航"
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 天"
+
+msgid "≈ %1 h"
+msgstr "≈ %1 小时"
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr "键盘显示：键盘自身的百分比，按档位变化（通常在重新连接时）。"
+
+msgid "not enough history yet"
+msgstr "历史数据尚不足"
+
+msgid "%1, up to date"
+msgstr "%1，已是最新"
+
+msgid "%1, update %2 at Apple"
+msgstr "%1，Apple 有更新 %2"
+
+msgid "%1, not in the table"
+msgstr "%1，不在表中"
+
+msgid "Keyboard name"
+msgstr "键盘名称"
+
+msgid "Apply"
+msgstr "应用"
+
+msgid "Keyboard's own name"
+msgstr "键盘自身名称"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Rename refused: %1"
+msgstr "重命名被拒绝：%1"
+
+msgid "Actions"
+msgstr "操作"
+
+msgid "Fn: waiting for authorisation…"
+msgstr "Fn：正在等待授权…"
+
+msgid "Rename"
+msgstr "重命名"
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr "%1 — 已是最新（Apple 已知的最新公开版本）"
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr "%1 — Apple 提供更新（已知最新：%2）"
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr "%1 — 未知（型号或版本不在表中）"
+
+msgid "Autonomy: %1"
+msgstr "续航：%1"
+
+msgid "media keys first"
+msgstr "媒体键优先"
+
+msgid "Fn key has no effect"
+msgstr "Fn 键无效"
+
+msgid "F-keys disabled"
+msgstr "F 键已禁用"
+
+msgid "Switch to F1–F12 first"
+msgstr "切换为 F1–F12 优先"
+
+msgid "Switch to media keys first"
+msgstr "切换为媒体键优先"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1（尝试：%2，失败：%3）"
+
+msgid "%1 (%2)"
+msgstr "%1（%2）"
+
+msgid "new batteries, no estimate yet"
+msgstr "新电池，尚无估算"
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr "≈ %1%（%2 至 %3%），%4"
+
+msgid "Keyboard not connected"
+msgstr "键盘未连接"
+
+msgid "Monitor stopped"
+msgstr "监视器已停止"
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr "Apple 键盘，电量百分之 %1"
+
+msgid "Apple keyboard, battery level unknown"
+msgstr "Apple 键盘，电量未知"
+
+msgid "Apple keyboard, %1"
+msgstr "Apple 键盘，%1"
+
+msgid "Keyboard indication %1"
+msgstr "键盘显示 %1"
+
+msgid "Estimate: %1"
+msgstr "估算：%1"
+
+msgid "Apple display: %1%"
+msgstr "Apple 显示：%1%"
+
+msgid "Signal: %1"
+msgstr "信号：%1"
+
+msgid "Firmware: %1"
+msgstr "固件：%1"
+
+msgid "Waiting for the Apple keyboard…"
+msgstr "正在等待 Apple 键盘…"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord 不在会话总线上"
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr "配置 Apple 键盘(&C)…"
+
+msgid "New reading requested."
+msgstr "已请求新的读数。"
+
+msgid "Reading not requested: %1"
+msgstr "未请求读数：%1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr "已请求重新连接。如果键盘处于休眠状态，请按一个键。"
+
+msgid "refused by the monitor"
+msgstr "被监视器拒绝"
+
+msgid "Reconnection not requested: %1"
+msgstr "未请求重新连接：%1"
+
+msgid "excellent"
+msgstr "极佳"
+
+msgid "good"
+msgstr "良好"
+
+msgid "weak"
+msgstr "弱"
+
+msgid "Apple Keyboard"
+msgstr "Apple 键盘"
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr "充满 %1 / 低 %2 / 严重 %3 / 耗尽 %4 mV"

@@ -1,0 +1,15 @@
+[package]
+name = "akm-helper"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Minimal privileged helpers (run through pkexec): hid_apple parameters, udev hwdb key mapping"
+
+# Runs as root: only `libc` (O_NOFOLLOW, fchown, geteuid), nothing else. The
+# whitelists of akm-core are compiled in by path (src/lib.rs), not as a crate.
+[dependencies]
+libc = "0.2"
+
+[lints]
+workspace = true

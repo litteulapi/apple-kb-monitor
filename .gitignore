@@ -1,0 +1,12 @@
+apihub-app/target/
+config.toml
+*.log
+pkg/
+*.pkg.tar.xz
+*.pkg.tar.zst
+__pycache__/
+.pytest_cache/
+rssi-helper
+scripts/out/
+apihub-app/target-*/
+dist/

@@ -1,0 +1,1926 @@
+# Chinese (Simplified) translation of the System Settings module kcm_applekeyboard.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:57+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Chinese (Simplified)\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: ui/AlertsPage.qml:50 ui/StatePage.qml:104
+msgid ""
+"The keyboard service did not answer within 5 seconds. It is busy or stuck; "
+"the values shown may be old."
+msgstr "键盘服务未在 5 秒内响应。它正忙或已卡住；显示的值可能已过时。"
+
+#: ui/AlertsPage.qml:51 ui/StatePage.qml:105
+msgid "The keyboard service answered with an error: %1"
+msgstr "键盘服务返回错误：%1"
+
+#: ui/AlertsPage.qml:230 ui/main.qml:27
+msgid ""
+"The keyboard service (apple-kb-monitord) is not running: every setting is "
+"read and written by it, nothing can be shown or changed until it starts."
+msgstr ""
+"键盘服务（apple-kb-monitord）未运行：所有设置都由它读写，在它启动之前无法显示"
+"或更改任何内容。"
+
+#: ui/AlertsPage.qml:235
+msgid ""
+"Not saved: the keyboard service did not answer in time, the settings could "
+"not be read. Try again in a moment."
+msgstr "未保存：键盘服务未及时响应，无法读取设置。请稍后重试。"
+
+#: ui/AlertsPage.qml:236
+msgid ""
+"Not saved: the keyboard service could not read the settings (%1). Try again "
+"in a moment."
+msgstr "未保存：键盘服务无法读取设置（%1）。请稍后重试。"
+
+#: ui/AlertsPage.qml:240
+msgid ""
+"Not saved: the settings file could not be read (%1), so it is not written "
+"over. Fix the file or move it away, then reopen this page."
+msgstr ""
+"未保存：无法读取设置文件（%1），因此不会覆盖它。请修复或移走该文件，然后重新"
+"打开此页面。"
+
+#: ui/AlertsPage.qml:245
+msgid ""
+"Not saved: the thresholds must be whole numbers between 1 and 99, separated "
+"by commas."
+msgstr "未保存：阈值必须是 1 到 99 之间的整数，用逗号分隔。"
+
+#: ui/AlertsPage.qml:249
+msgid "Not saved: the critical level must be a whole number between 0 and 99."
+msgstr "未保存：严重级别必须是 0 到 99 之间的整数。"
+
+#: ui/AlertsPage.qml:253
+msgid ""
+"Not saved: the re-arm margin must be a number between 1 and 20 (for example "
+"3 or 2.5)."
+msgstr "未保存：重新启用余量必须是 1 到 20 之间的数字（例如 3 或 2.5）。"
+
+#: ui/AlertsPage.qml:278
+msgid ""
+"Saved. The service reads these settings when it starts: restart it to use "
+"them now."
+msgstr "已保存。服务在启动时读取这些设置：请重启服务以立即使用。"
+
+#: ui/AlertsPage.qml:279
+msgid "Saved. They will be used when the service starts."
+msgstr "已保存。将在服务启动时使用。"
+
+#: ui/AlertsPage.qml:283
+msgid ""
+"Not saved: the settings file was changed by another program since this page "
+"read it. Nothing was written; use Reset to read it again."
+msgstr ""
+"未保存：自此页面读取后，设置文件已被其他程序修改。未写入任何内容；请使用“重"
+"置”重新读取。"
+
+#: ui/AlertsPage.qml:284
+msgid "Not saved: %1"
+msgstr "未保存：%1"
+
+#: ui/AlertsPage.qml:307
+msgid "Restart the service"
+msgstr "重启服务"
+
+#: ui/AlertsPage.qml:312
+msgid "Service restarted with the new settings."
+msgstr "服务已使用新设置重启。"
+
+#: ui/AlertsPage.qml:312
+msgid "The service could not be restarted: %1"
+msgstr "无法重启服务：%1"
+
+#: ui/AlertsPage.qml:326
+msgid ""
+"The settings file could not be read (%1): the defaults are shown and nothing "
+"can be saved, so that the file is never written over."
+msgstr ""
+"无法读取设置文件（%1）：显示的是默认值，且无法保存任何内容，以免覆盖该文件。"
+
+#: ui/AlertsPage.qml:328
+msgid ""
+"Some lines of the settings file are not understood (%1); they are kept as "
+"they are."
+msgstr "设置文件中有些行无法识别（%1）；这些行将原样保留。"
+
+#: ui/AlertsPage.qml:337
+msgid ""
+"The service does not take these values of the settings file as they are "
+"written: %1. They are shown as written and kept unless you change them."
+msgstr ""
+"服务不接受设置文件中按原样书写的这些值：%1。它们按原样显示，并在您修改前保"
+"留。"
+
+#: ui/AlertsPage.qml:346
+msgctxt "@title:group"
+msgid "Low battery"
+msgstr "电量低"
+
+#: ui/AlertsPage.qml:351
+msgid "Alerts:"
+msgstr "警报："
+
+#: ui/AlertsPage.qml:352
+msgid "Notify when the battery is low"
+msgstr "电量低时通知"
+
+#: ui/AlertsPage.qml:358
+msgid "Thresholds (%):"
+msgstr "阈值（%）："
+
+#: ui/AlertsPage.qml:362
+msgid "Alert thresholds in percent, separated by commas"
+msgstr "警报阈值（百分比，逗号分隔）"
+
+#: ui/AlertsPage.qml:365
+msgid "Whole numbers from 1 to 99"
+msgstr "1 到 99 的整数"
+
+#: ui/AlertsPage.qml:373
+msgid "One notification per threshold crossed, on the estimated charge."
+msgstr "根据估算电量，每越过一个阈值通知一次。"
+
+#: ui/AlertsPage.qml:378
+msgid "With KDE:"
+msgstr "与 KDE："
+
+#: ui/AlertsPage.qml:380
+msgid "When KDE already warns about this keyboard, send only one reminder"
+msgstr "当 KDE 已对此键盘发出警告时，只发送一次提醒"
+
+#: ui/AlertsPage.qml:386
+msgid "Critical at or below (%):"
+msgstr "严重阈值（%）及以下："
+
+#: ui/AlertsPage.qml:390
+msgid "Critical threshold in percent"
+msgstr "严重阈值（百分比）"
+
+#: ui/AlertsPage.qml:396
+msgid "Re-arm after (points):"
+msgstr "重新启用余量（点）："
+
+#: ui/AlertsPage.qml:400
+msgid "Points above a threshold before it can notify again"
+msgstr "高于阈值多少点后才能再次通知"
+
+#: ui/AlertsPage.qml:401
+msgid "A number from 1 to 20, decimals allowed"
+msgstr "1 到 20 的数字，允许小数"
+
+#: ui/AlertsPage.qml:408
+msgctxt "@title:group"
+msgid "Batteries"
+msgstr "电池"
+
+#: ui/AlertsPage.qml:413
+msgid "Battery type:"
+msgstr "电池类型："
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:56
+msgctxt "battery chemistry"
+msgid "alkaline"
+msgstr "碱性"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:57
+msgctxt "battery chemistry"
+msgid "NiMH (rechargeable)"
+msgstr "NiMH（可充电）"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:58
+msgctxt "battery chemistry"
+msgid "lithium"
+msgstr "锂"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:59
+msgctxt "battery chemistry"
+msgid "unknown"
+msgstr "未知"
+
+#: ui/AlertsPage.qml:415
+msgid "Battery type"
+msgstr "电池类型"
+
+#: ui/AlertsPage.qml:424
+msgid ""
+"Used for the estimated charge and its range; the keyboard's own indication "
+"does not depend on it."
+msgstr "用于估算电量及其范围；键盘自身的显示不受其影响。"
+
+#: ui/AlertsPage.qml:429
+msgid "Display:"
+msgstr "显示："
+
+#: ui/AlertsPage.qml:430
+msgid "Also show the percentage as macOS shows it"
+msgstr "同时按 macOS 的方式显示百分比"
+
+#: ui/AlertsPage.qml:436
+msgctxt "@title:group"
+msgid "Other notifications"
+msgstr "其他通知"
+
+#: ui/AlertsPage.qml:441 ui/StatePage.qml:152
+msgid "Connection:"
+msgstr "连接："
+
+#: ui/AlertsPage.qml:442
+msgid "Notify on disconnection and reconnection"
+msgstr "断开和重新连接时通知"
+
+#: ui/AlertsPage.qml:448
+msgid "New batteries:"
+msgstr "新电池："
+
+#: ui/AlertsPage.qml:449
+msgid "Notify when new batteries are detected"
+msgstr "检测到新电池时通知"
+
+#: ui/AlertsPage.qml:455
+msgctxt "@title:group"
+msgid "Shutdown"
+msgstr "关机"
+
+#: ui/AlertsPage.qml:460
+msgid "WillShutdown:"
+msgstr "WillShutdown："
+
+#: ui/AlertsPage.qml:461
+msgid "Tell the keyboard when the computer shuts down or restarts"
+msgstr "计算机关机或重启时通知键盘"
+
+#: ui/AlertsPage.qml:470
+msgid ""
+"What macOS sends at every shutdown (one message, nothing else is written). "
+"Off = the keyboard is left untouched."
+msgstr ""
+"macOS 每次关机时发送的内容（一条消息，不写入其他内容）。关闭 = 不触碰键盘。"
+
+#: ui/AlertsPage.qml:478
+msgid "File:"
+msgstr "文件："
+
+#: ui/DiagPage.qml:39
+msgctxt "diagnosis level"
+msgid "OK"
+msgstr "确定"
+
+#: ui/DiagPage.qml:40
+msgctxt "diagnosis level"
+msgid "information"
+msgstr "信息"
+
+#: ui/DiagPage.qml:41
+msgctxt "diagnosis level"
+msgid "warning"
+msgstr "警告"
+
+#: ui/DiagPage.qml:42
+msgctxt "diagnosis level"
+msgid "problem"
+msgstr "问题"
+
+#: ui/DiagPage.qml:47
+msgctxt "doctor topic"
+msgid "adapter"
+msgstr "适配器"
+
+#: ui/DiagPage.qml:48
+msgctxt "doctor topic"
+msgid "adapter power"
+msgstr "适配器电源"
+
+#: ui/DiagPage.qml:49
+msgctxt "doctor topic"
+msgid "BlueZ settings"
+msgstr "BlueZ 设置"
+
+#: ui/DiagPage.qml:50
+msgctxt "doctor topic"
+msgid "service"
+msgstr "服务"
+
+#: ui/DiagPage.qml:51
+msgctxt "doctor topic"
+msgid "HID access"
+msgstr "HID 访问"
+
+#: ui/DiagPage.qml:52
+msgctxt "doctor topic"
+msgid "journal"
+msgstr "日志"
+
+#: ui/DiagPage.qml:53
+msgctxt "doctor topic"
+msgid "link"
+msgstr "连接"
+
+#: ui/DiagPage.qml:54
+msgctxt "doctor topic"
+msgid "link key"
+msgstr "链接密钥"
+
+#: ui/DiagPage.qml:55
+msgctxt "doctor topic"
+msgid "link quality"
+msgstr "连接质量"
+
+#: ui/DiagPage.qml:56
+msgctxt "doctor topic"
+msgid "pairing"
+msgstr "配对"
+
+#: ui/DiagPage.qml:57
+msgctxt "doctor topic"
+msgid "signal"
+msgstr "信号"
+
+#: ui/DiagPage.qml:58
+msgctxt "doctor topic"
+msgid "UPower"
+msgstr "UPower"
+
+#: ui/DiagPage.qml:59
+msgctxt "doctor topic"
+msgid "versions"
+msgstr "版本"
+
+#: ui/DiagPage.qml:66
+msgctxt "doctor verdict"
+msgid "the pairing is refused or missing: run `akmctl repair`"
+msgstr "配对被拒绝或缺失：请运行 `akmctl repair`"
+
+#: ui/DiagPage.qml:67
+msgctxt "doctor verdict"
+msgid "no usable pairing: run `akmctl repair`"
+msgstr "没有可用的配对：请运行 `akmctl repair`"
+
+#. i18n: %1 = the doctor topics to check, comma-separated
+#: ui/DiagPage.qml:69
+msgctxt "doctor verdict"
+msgid "Link up; to check: %1 (akmctl doctor)"
+msgstr "连接已建立；需检查：%1（akmctl doctor）"
+
+#: ui/DiagPage.qml:70
+msgctxt "doctor verdict"
+msgid "link up and configuration sound"
+msgstr "连接已建立，配置正常"
+
+#: ui/DiagPage.qml:71
+msgctxt "doctor verdict"
+msgid ""
+"keyboard not connected: press a key and wait 10 s; the service pages it on "
+"its own. Pair it again only if `akmctl doctor` reports auth-failed"
+msgstr ""
+"键盘未连接：请按一个键并等待 10 秒；服务会自行呼叫键盘。仅当 `akmctl doctor` "
+"报告 auth-failed 时才重新配对"
+
+#: ui/DiagPage.qml:78
+msgctxt "doctor finding"
+msgid "rssi-helper executable, capability cap_net_admin present"
+msgstr "rssi-helper 可执行，具备 capability cap_net_admin"
+
+#: ui/DiagPage.qml:79
+msgctxt "doctor finding"
+msgid "the rssi-helper utility is not installed"
+msgstr "未安装 rssi-helper 工具"
+
+#: ui/DiagPage.qml:80
+msgctxt "doctor finding"
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr "rssi-helper 工具失败（缺少 capability，蓝牙拒绝）"
+
+#: ui/DiagPage.qml:81
+msgctxt "doctor finding"
+msgid "the rssi-helper utility does not answer in time"
+msgstr "rssi-helper 工具未及时响应"
+
+#: ui/DiagPage.qml:82
+msgctxt "doctor finding"
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "蓝牙适配器未提供此连接的测量值"
+
+#: ui/DiagPage.qml:83
+msgctxt "doctor finding"
+msgid "the signal cannot be measured"
+msgstr "无法测量信号"
+
+#: ui/DiagPage.qml:84
+msgctxt "doctor finding, %1 = settings"
+msgid "ignored by bluetoothd: %1"
+msgstr "被 bluetoothd 忽略：%1"
+
+#: ui/DiagPage.qml:85
+msgctxt "doctor finding"
+msgid "[Policy] Reconnect* in place"
+msgstr "[Policy] Reconnect* 已设置"
+
+#: ui/DiagPage.qml:86
+msgctxt "doctor finding"
+msgid "FastConnectable = true"
+msgstr "FastConnectable = true"
+
+#: ui/DiagPage.qml:87
+msgctxt "doctor finding"
+msgid ""
+"FastConnectable off: slower answer to the keyboard's page after a key press"
+msgstr "FastConnectable 关闭：按键后对键盘呼叫的响应较慢"
+
+#: ui/DiagPage.qml:88
+msgctxt "doctor finding, %1 = file, %2 = error"
+msgid "%1: %2"
+msgstr "%1：%2"
+
+#: ui/DiagPage.qml:89
+msgctxt "doctor finding"
+msgid "NoPollBatteries = true (no 30 s HID polling)"
+msgstr "NoPollBatteries = true（不每 30 秒轮询 HID）"
+
+#: ui/DiagPage.qml:90
+msgctxt "doctor finding"
+msgid ""
+"UPower reads the keyboard battery every 30 s (2 GET_REPORT over the air): "
+"the keyboard never sleeps"
+msgstr ""
+"UPower 每 30 秒读取一次键盘电池（通过无线发送 2 次 GET_REPORT）：键盘永远不会"
+"休眠"
+
+#: ui/DiagPage.qml:91
+msgctxt "doctor finding"
+msgid "adapter is not on USB (or not found)"
+msgstr "适配器不在 USB 上（或未找到）"
+
+#: ui/DiagPage.qml:92
+msgctxt "doctor finding, %1 = USB id"
+msgid "%1 autosuspend off (power/control=on)"
+msgstr "%1 USB 自动挂起已关闭（power/control=on）"
+
+#: ui/DiagPage.qml:94
+msgctxt "doctor finding"
+msgid ""
+"%1 USB autosuspend active (control=%2, delay %3 ms, now %4, %5 s suspended "
+"since boot)"
+msgstr ""
+"%1 USB 自动挂起已启用（control=%2，延迟 %3 ms，当前 %4，自启动以来挂起 %5 "
+"秒）"
+
+#: ui/DiagPage.qml:95
+msgctxt "doctor finding, appended"
+msgid "; rule installed but not applied yet"
+msgstr "；规则已安装但尚未应用"
+
+#: ui/DiagPage.qml:96
+msgctxt "doctor finding"
+msgid "btusb enable_autosuspend = %1"
+msgstr "btusb enable_autosuspend = %1"
+
+#: ui/DiagPage.qml:97
+msgctxt "doctor finding"
+msgid "Bluetooth adapter powered"
+msgstr "蓝牙适配器已开启"
+
+#: ui/DiagPage.qml:98
+msgctxt "doctor finding"
+msgid "Bluetooth adapter off"
+msgstr "蓝牙适配器已关闭"
+
+#: ui/DiagPage.qml:99
+msgctxt "doctor finding"
+msgid "BlueZ unreachable (bluetooth.service stopped?)"
+msgstr "无法访问 BlueZ（bluetooth.service 已停止？）"
+
+#: ui/DiagPage.qml:100
+msgctxt "doctor finding"
+msgid "no paired Apple keyboard known to BlueZ"
+msgstr "BlueZ 不知道任何已配对的 Apple 键盘"
+
+#: ui/DiagPage.qml:101
+msgctxt "doctor finding, %1 = address"
+msgid "%1 is not paired"
+msgstr "%1 未配对"
+
+#: ui/DiagPage.qml:103
+msgctxt "doctor finding, %1 = address, %2 = name"
+msgid "%1 “%2” paired"
+msgstr "%1“%2”已配对"
+
+#: ui/DiagPage.qml:104
+msgctxt "doctor finding, appended"
+msgid ", bonded"
+msgstr "，已绑定"
+
+#: ui/DiagPage.qml:105
+msgctxt "doctor finding, appended"
+msgid ", legacy PIN pairing"
+msgstr "，旧式 PIN 配对"
+
+#: ui/DiagPage.qml:106
+msgctxt "doctor finding"
+msgid "not trusted: BlueZ may refuse the keyboard's own reconnection"
+msgstr "未受信任：BlueZ 可能拒绝键盘发起的重新连接"
+
+#: ui/DiagPage.qml:107
+msgctxt "doctor finding"
+msgid "blocked in BlueZ"
+msgstr "在 BlueZ 中被阻止"
+
+#: ui/DiagPage.qml:108
+msgctxt "doctor finding"
+msgid "connected"
+msgstr "已连接"
+
+#: ui/DiagPage.qml:109
+msgctxt "doctor finding"
+msgid "not connected (asleep? press a key)"
+msgstr "未连接（休眠中？请按一个键）"
+
+#: ui/DiagPage.qml:110
+msgctxt "doctor finding"
+msgid "link key not checked (needs root: sudo akmctl doctor)"
+msgstr "未检查链接密钥（需要 root：sudo akmctl doctor）"
+
+#: ui/DiagPage.qml:111
+msgctxt "doctor finding"
+msgid "no [LinkKey] stored for the keyboard"
+msgstr "未为键盘保存 [LinkKey]"
+
+#: ui/DiagPage.qml:112
+msgctxt "doctor finding"
+msgid "stored key == kernel key (fingerprint %1)"
+msgstr "保存的密钥 == 内核密钥（指纹 %1）"
+
+#: ui/DiagPage.qml:113
+msgctxt "doctor finding"
+msgid "stored key %1 != kernel key %2: will change at next restart"
+msgstr "保存的密钥 %1 != 内核密钥 %2：将在下次重启时改变"
+
+#: ui/DiagPage.qml:114
+msgctxt "doctor finding"
+msgid "stored key %1; kernel copy not readable (debugfs not mounted?)"
+msgstr "保存的密钥 %1；内核副本不可读（debugfs 未挂载？）"
+
+#: ui/DiagPage.qml:116
+msgctxt "doctor finding"
+msgid ""
+"link quality: %1 disconnection in the last hour, %2 in 24 h, %3 in 7 days"
+msgid_plural ""
+"link quality: %1 disconnections in the last hour, %2 in 24 h, %3 in 7 days"
+msgstr[0] "连接质量：最近一小时断开 %1 次，24 小时 %2 次，7 天 %3 次"
+
+#: ui/DiagPage.qml:117
+msgctxt "doctor finding, appended"
+msgid "; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurement)"
+msgid_plural ""
+"; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurements)"
+msgstr[0] "；7 天相对信号：平均 %2 dB，最低 %3 dB（%1 次测量）"
+
+#: ui/DiagPage.qml:118
+msgctxt "doctor finding, appended"
+msgid " — UNSTABLE: %1 unexpected within the hour"
+msgstr " — 不稳定：一小时内意外断开 %1 次"
+
+#: ui/DiagPage.qml:119
+msgctxt "doctor finding, %1 = device"
+msgid "%1 readable"
+msgstr "%1 可读"
+
+#: ui/DiagPage.qml:120
+msgctxt "doctor finding, %1 = device"
+msgid "%1 not readable by this user"
+msgstr "%1 对此用户不可读"
+
+#: ui/DiagPage.qml:121
+msgctxt "doctor finding"
+msgid "connected but no hidraw node (uhid not created yet?)"
+msgstr "已连接但没有 hidraw 节点（uhid 尚未创建？）"
+
+#: ui/DiagPage.qml:122
+msgctxt "doctor finding"
+msgid "no bluetoothd error in the last 6 hours of this boot"
+msgstr "本次启动的最近 6 小时内没有 bluetoothd 错误"
+
+#: ui/DiagPage.qml:123
+msgctxt "doctor finding"
+msgid ""
+"bluetoothd journal not readable (add yourself to group systemd-journal, or "
+"use sudo)"
+msgstr "bluetoothd 日志不可读（请将自己加入 systemd-journal 组，或使用 sudo）"
+
+#: ui/DiagPage.qml:124
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 page timeout (keyboard asleep or not listening), last %2"
+msgid_plural "%1 page timeouts (keyboard asleep or not listening), last %2"
+msgstr[0] "%1 次寻呼超时（键盘休眠或未在监听），最近一次 %2"
+
+#: ui/DiagPage.qml:125
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 HIDP GET_REPORT timeout, last %2"
+msgid_plural "%1 HIDP GET_REPORT timeouts, last %2"
+msgstr[0] "%1 次 HIDP GET_REPORT 超时，最近一次 %2"
+
+#: ui/DiagPage.qml:126
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 authentication / key error, last %2"
+msgid_plural "%1 authentication / key errors, last %2"
+msgstr[0] "%1 次认证 / 密钥错误，最近一次 %2"
+
+#: ui/DiagPage.qml:127
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 connection reset/refused by the keyboard, last %2"
+msgid_plural "%1 connections reset/refused by the keyboard, last %2"
+msgstr[0] "%1 次连接被键盘重置/拒绝，最近一次 %2"
+
+#: ui/DiagPage.qml:128
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 main.conf key ignored by bluetoothd at start, last %2"
+msgid_plural "%1 main.conf keys ignored by bluetoothd at start, last %2"
+msgstr[0] "%1 个 main.conf 键在启动时被 bluetoothd 忽略，最近一次 %2"
+
+#: ui/DiagPage.qml:129
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid ""
+"%1 BlueZ storage write failure (a new link key may be lost at reboot), last "
+"%2"
+msgid_plural ""
+"%1 BlueZ storage write failures (a new link key may be lost at reboot), last "
+"%2"
+msgstr[0] ""
+"%1 次 BlueZ 存储写入失败（新的链接密钥可能在重启时丢失），最近一次 %2"
+
+#: ui/DiagPage.qml:130
+msgctxt "doctor finding"
+msgid "apple-kb-monitord link keeper not reachable (no automatic reconnection)"
+msgstr "无法访问 apple-kb-monitord 的连接守护（不会自动重新连接）"
+
+#: ui/DiagPage.qml:131
+msgctxt "doctor finding, %1 = state"
+msgid "link health: %1"
+msgstr "连接状态：%1"
+
+#: ui/DiagPage.qml:132
+msgctxt "doctor finding"
+msgid "keeper running, keyboard not tracked"
+msgstr "守护正在运行，未跟踪键盘"
+
+#: ui/DiagPage.qml:133
+msgctxt "doctor finding, %1 = program, %2 = pid, %3 = path"
+msgid ""
+"%1 (pid %2) still runs the replaced binary %3 (deleted): the old version"
+msgstr "%1（pid %2）仍在运行已被替换的二进制文件 %3（已删除）：旧版本"
+
+#: ui/DiagPage.qml:134
+msgctxt "doctor finding, %1 = pid"
+msgid ""
+"plasmashell (pid %1) started before the widget was installed: it shows the "
+"old widget"
+msgstr "plasmashell（pid %1）在安装小部件之前启动：它显示的是旧小部件"
+
+#: ui/DiagPage.qml:141
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package"
+msgstr "请重新安装 apple-kb-monitor 软件包"
+
+#: ui/DiagPage.qml:142
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr "请重新安装 apple-kb-monitor 软件包，然后运行 akmctl doctor"
+
+#: ui/DiagPage.qml:143
+msgctxt "doctor fix"
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "请检查蓝牙服务：systemctl status bluetooth"
+
+#: ui/DiagPage.qml:144
+msgctxt "doctor fix"
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "请将键盘靠近，或重新连接"
+
+#: ui/DiagPage.qml:145
+msgctxt "doctor fix"
+msgid "run akmctl doctor"
+msgstr "请运行 akmctl doctor"
+
+#: ui/DiagPage.qml:146
+msgctxt "doctor fix, %1 = command"
+msgid "optional: %1"
+msgstr "可选：%1"
+
+#: ui/DiagPage.qml:147
+msgctxt "doctor fix"
+msgid "akmctl repair (pairing assistant)"
+msgstr "akmctl repair（配对助手）"
+
+#: ui/DiagPage.qml:148
+msgctxt "doctor fix"
+msgid "check disk space, then akmctl repair if the keyboard is refused"
+msgstr "请检查磁盘空间，如果键盘被拒绝，再运行 akmctl repair"
+
+#: ui/DiagPage.qml:149
+msgctxt "doctor fix"
+msgid "check the batteries, the distance, USB 3 devices near the adapter"
+msgstr "请检查电池、距离以及适配器附近的 USB 3 设备"
+
+#: ui/DiagPage.qml:150
+msgctxt "doctor fix"
+msgid "install udev/70-apple-kb-hidraw.rules (uaccess)"
+msgstr "请安装 udev/70-apple-kb-hidraw.rules（uaccess）"
+
+#: ui/DiagPage.qml:151
+msgctxt "doctor fix"
+msgid ""
+"avoid HID scanning tools while measuring; see docs/RECONNECTION-PAIRING.md "
+"§3.5"
+msgstr ""
+"测量期间请避免使用 HID 扫描工具；参见 docs/RECONNECTION-PAIRING.md §3.5"
+
+#: ui/DiagPage.qml:152
+msgctxt "doctor fix"
+msgid ""
+"free disk space (btrfs: check metadata), then verify with sudo akmctl doctor"
+msgstr "请释放磁盘空间（btrfs：检查元数据），然后用 sudo akmctl doctor 验证"
+
+#. i18n: %1 = daemon version, %2 = akmctl version, %3 = package version
+#: ui/DiagPage.qml:161
+msgctxt "selftest check"
+msgid ""
+"versions differ: daemon %1, akmctl %2, package %3: restart the daemon after "
+"an upgrade (systemctl --user restart apple-kb-monitord.service)"
+msgstr ""
+"版本不一致：服务 %1，akmctl %2，软件包 %3：升级后请重启服务（systemctl --"
+"user restart apple-kb-monitord.service）"
+
+#. i18n: %1 = daemon version, %2 = package version
+#: ui/DiagPage.qml:163
+msgctxt "selftest check"
+msgid "daemon %1 = akmctl, package %2"
+msgstr "服务 %1 = akmctl，软件包 %2"
+
+#: ui/DiagPage.qml:164
+msgctxt "selftest check"
+msgid "daemon version unknown (old interface)"
+msgstr "服务版本未知（旧接口）"
+
+#: ui/DiagPage.qml:167
+msgctxt "selftest check"
+msgid "keyboard alias as last set through this monitor"
+msgstr "键盘别名与通过本监控最后设置的一致"
+
+#. i18n: %1 = current alias, %2 = alias set last, %3 = by whom, %4 = Unix time
+#: ui/DiagPage.qml:169
+msgctxt "selftest check"
+msgid ""
+"keyboard alias is %1, last set to %2 by %3 at %4 (unix): changed elsewhere "
+"(KDE Bluetooth settings, bluetoothctl) or the pairing was removed (akmctl "
+"repair, Plasma Forget); see the daemon journal for \"BlueZ alias\" lines"
+msgstr ""
+"键盘别名为 %1，最后由 %3 于 %4（unix）设置为 %2：已在其他地方更改（KDE 蓝牙设"
+"置、bluetoothctl）或配对已被移除（akmctl repair、Plasma 的“忘记”）；请查看服"
+"务日志中的 \"BlueZ alias\" 行"
+
+#: ui/DiagPage.qml:170
+msgctxt "selftest check"
+msgid ""
+"apple-kb-monitord restarted %1 time by systemd since the last pass (crash "
+"loop?)"
+msgid_plural ""
+"apple-kb-monitord restarted %1 times by systemd since the last pass (crash "
+"loop?)"
+msgstr[0] ""
+"自上次检查以来 apple-kb-monitord 被 systemd 重启了 %1 次（崩溃循环？）"
+
+#. i18n: %1 = old process id, %2 = new process id
+#: ui/DiagPage.qml:172
+msgctxt "selftest check"
+msgid "daemon pid changed %1 -> %2 (restart)"
+msgstr "服务 pid 已变化 %1 -> %2（重启）"
+
+#: ui/DiagPage.qml:173
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon answered GetState in %1 ms (> 1 s)"
+msgstr "服务在 %1 ms 内响应 GetState（> 1 秒）"
+
+#: ui/DiagPage.qml:174
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon on the bus, GetState in %1 ms"
+msgstr "服务在总线上，GetState 用时 %1 ms"
+
+#. i18n: %1 = error, %2 = systemd unit state
+#: ui/DiagPage.qml:176
+msgctxt "selftest check"
+msgid "daemon unreachable (%1); unit state: %2"
+msgstr "服务不可访问（%1）；单元状态：%2"
+
+#: ui/DiagPage.qml:177
+msgctxt "selftest check, %1 = error"
+msgid "daemon last_error: %1"
+msgstr "服务 last_error：%1"
+
+#: ui/DiagPage.qml:178
+msgctxt "selftest check"
+msgid "keyboard connected but never acquired"
+msgstr "键盘已连接但从未采集"
+
+#: ui/DiagPage.qml:179
+msgctxt "selftest check, %1 = hours"
+msgid "keyboard connected, last acquisition %1 h ago"
+msgstr "键盘已连接，最近一次采集在 %1 小时前"
+
+#: ui/DiagPage.qml:180
+msgctxt "selftest check, %1 = minutes"
+msgid "last acquisition %1 min ago"
+msgstr "最近一次采集在 %1 分钟前"
+
+#: ui/DiagPage.qml:181
+msgctxt "selftest check"
+msgid "keyboard not connected (nothing to acquire)"
+msgstr "键盘未连接（无可采集内容）"
+
+#: ui/DiagPage.qml:182
+msgctxt "selftest check"
+msgid "no daemon warning since the last pass"
+msgstr "自上次检查以来没有服务警告"
+
+#: ui/DiagPage.qml:183
+msgctxt "selftest check, %2 = journal line"
+msgid "%1 daemon warning/error line since the last pass, last: %2"
+msgid_plural "%1 daemon warning/error lines since the last pass, last: %2"
+msgstr[0] "自上次检查以来服务有 %1 行警告/错误，最后一行：%2"
+
+#: ui/DiagPage.qml:184
+msgctxt "selftest check"
+msgid "user journal not readable"
+msgstr "用户日志不可读"
+
+#: ui/DiagPage.qml:185
+msgctxt "selftest check"
+msgid "no bluetoothd error since the last pass"
+msgstr "自上次检查以来没有 bluetoothd 错误"
+
+#: ui/DiagPage.qml:186
+msgctxt "selftest check"
+msgid "%1 bluetoothd error line since the last pass"
+msgid_plural "%1 bluetoothd error lines since the last pass"
+msgstr[0] "自上次检查以来 bluetoothd 有 %1 行错误"
+
+#: ui/DiagPage.qml:187
+msgctxt "selftest check"
+msgid "system journal not readable (group systemd-journal)"
+msgstr "系统日志不可读（systemd-journal 组）"
+
+#: ui/DiagPage.qml:188
+msgctxt "selftest check"
+msgid "no crash of our programs since the last pass"
+msgstr "自上次检查以来我们的程序没有崩溃"
+
+#. i18n: %1 = program, %2 = signal, %3 = process id
+#: ui/DiagPage.qml:190
+msgctxt "selftest check"
+msgid "%1 crashed (%2, pid %3): coredumpctl info %3"
+msgstr "%1 崩溃（%2，pid %3）：coredumpctl info %3"
+
+#: ui/DiagPage.qml:191
+msgctxt "selftest check"
+msgid "coredump journal not readable"
+msgstr "coredump 日志不可读"
+
+#. i18n: %1 = directory, %2 = free MiB, %3 = total MiB
+#: ui/DiagPage.qml:193
+msgctxt "selftest check"
+msgid "%1: %2 MiB free of %3 MiB"
+msgstr "%1：可用 %2 MiB，共 %3 MiB"
+
+#: ui/DiagPage.qml:194
+msgctxt "selftest check, %1 = directory"
+msgid "%1: statvfs failed"
+msgstr "%1：statvfs 失败"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check, history size"
+msgid "%1 line"
+msgid_plural "%1 lines"
+msgstr[0] "%1 行"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check"
+msgid "%2: %3, %4 KiB, %1 unreadable line in the last 1000"
+msgid_plural "%2: %3, %4 KiB, %1 unreadable lines in the last 1000"
+msgstr[0] "%2：%3，%4 KiB，最近 1000 行中有 %1 行无法读取"
+
+#: ui/DiagPage.qml:197
+msgctxt "selftest check"
+msgid "no history yet"
+msgstr "尚无历史"
+
+#: ui/DiagPage.qml:198
+msgctxt "selftest check, %1 = doctor verdict"
+msgid "akmctl doctor: %1"
+msgstr "akmctl doctor：%1"
+
+#: ui/DiagPage.qml:199
+msgctxt "selftest check, %1 = seconds"
+msgid ""
+"akmctl doctor did not finish within %1 s (BlueZ or the daemon does not "
+"answer)"
+msgstr "akmctl doctor 未在 %1 秒内完成（BlueZ 或服务无响应）"
+
+#: ui/DiagPage.qml:208 ui/DiagPage.qml:223
+msgid "no answer within 60 seconds"
+msgstr "60 秒内无响应"
+
+#: ui/DiagPage.qml:259
+msgid "Check the link"
+msgstr "检查连接"
+
+#: ui/DiagPage.qml:262
+msgid ""
+"Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. "
+"Reads only."
+msgstr "运行 akmctl doctor：蓝牙、配对、配置、日志、服务。只读。"
+
+#: ui/DiagPage.qml:266
+msgid "Self-check"
+msgstr "自检"
+
+#: ui/DiagPage.qml:268
+msgid ""
+"Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
+msgstr "运行 akmctl selftest：服务、连接、日志、崩溃、磁盘。只读。"
+
+#: ui/DiagPage.qml:273
+msgid "Reconnect"
+msgstr "重新连接"
+
+#: ui/DiagPage.qml:276
+msgid ""
+"Asks the service to page the keyboard now (at most once every 20 seconds)"
+msgstr "请求服务立即呼叫键盘（最多每 20 秒一次）"
+
+#: ui/DiagPage.qml:282
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr "已请求重新连接。如果键盘处于休眠状态，请按一个键。"
+
+#: ui/DiagPage.qml:283
+msgid "refused by the service (asleep, too soon, or pairing refused)"
+msgstr "被服务拒绝（休眠、过早或配对被拒绝）"
+
+#: ui/DiagPage.qml:283
+msgid "Reconnection not requested: %1"
+msgstr "未请求重新连接：%1"
+
+#: ui/DiagPage.qml:289
+msgid "Copy the diagnosis"
+msgstr "复制诊断结果"
+
+#: ui/DiagPage.qml:294
+msgid "Diagnosis copied: paste it into a bug report."
+msgstr "诊断结果已复制：请粘贴到错误报告中。"
+
+#: ui/DiagPage.qml:299
+msgid "Documentation"
+msgstr "文档"
+
+#: ui/DiagPage.qml:310
+msgctxt "@title:group"
+msgid "Link check (akmctl doctor)"
+msgstr "连接检查（akmctl doctor）"
+
+#: ui/DiagPage.qml:316
+msgid "Link check running"
+msgstr "正在检查连接"
+
+#: ui/DiagPage.qml:327
+msgctxt "level, advice"
+msgid "Verdict: %1 — %2"
+msgstr "结论：%1 — %2"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379 ui/KeysPage.qml:38
+msgid "Failed: %1"
+msgstr "失败：%1"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379
+msgid "Not run yet."
+msgstr "尚未运行。"
+
+#: ui/DiagPage.qml:364
+msgctxt "@title:group"
+msgid "Self-check (akmctl selftest)"
+msgstr "自检（akmctl selftest）"
+
+#: ui/DiagPage.qml:370
+msgid "Self-check running"
+msgstr "正在自检"
+
+#: ui/DiagPage.qml:378
+msgid "Verdict: %1"
+msgstr "结论：%1"
+
+#: ui/KeysPage.qml:33
+msgctxt "result, then the detail"
+msgid "%1 — %2"
+msgstr "%1 — %2"
+
+#: ui/KeysPage.qml:35
+msgid ""
+"No answer in time: nothing was confirmed. Check the state before trying "
+"again."
+msgstr "未及时响应：没有任何内容得到确认。请在重试前检查状态。"
+
+#: ui/KeysPage.qml:37 ui/main.qml:38
+msgid "unknown error"
+msgstr "未知错误"
+
+#: ui/KeysPage.qml:38
+msgctxt "parameter, error"
+msgid "%1: %2"
+msgstr "%1：%2"
+
+#: ui/KeysPage.qml:45
+msgctxt "fnmode 0"
+msgid "0 — Fn key disabled"
+msgstr "0 — Fn 键禁用"
+
+#: ui/KeysPage.qml:46
+msgctxt "fnmode 1"
+msgid "1 — special functions first (Apple legend), F1-F12 with fn"
+msgstr "1 — 特殊功能优先（Apple 键帽标识），配合 Fn 为 F1-F12"
+
+#: ui/KeysPage.qml:47
+msgctxt "fnmode 2"
+msgid "2 — F1-F12 first, special functions with fn"
+msgstr "2 — F1-F12 优先，配合 Fn 为特殊功能"
+
+#: ui/KeysPage.qml:48
+msgctxt "fnmode 3"
+msgid "3 — automatic (same as 1 on this keyboard)"
+msgstr "3 — 自动（在此键盘上同 1）"
+
+#: ui/KeysPage.qml:49
+msgctxt "fnmode 4"
+msgid "4 — F1-F12 only, special functions disabled"
+msgstr "4 — 仅 F1-F12，特殊功能禁用"
+
+#: ui/KeysPage.qml:50
+msgid "unknown"
+msgstr "未知"
+
+#: ui/KeysPage.qml:60
+msgctxt "KDE shortcut action"
+msgid "KDE: %1"
+msgstr "KDE：%1"
+
+#: ui/KeysPage.qml:61
+msgid "no KDE shortcut"
+msgstr "无 KDE 快捷键"
+
+#: ui/KeysPage.qml:81
+msgid ""
+"The key table could not be read: the keyboard service did not answer in time."
+msgstr "无法读取按键表：键盘服务未及时响应。"
+
+#: ui/KeysPage.qml:82
+msgid "The key table could not be read: %1"
+msgstr "无法读取按键表：%1"
+
+#: ui/KeysPage.qml:85 ui/KeysPage.qml:101 ui/StatePage.qml:108
+msgid "Try again"
+msgstr "重试"
+
+#: ui/KeysPage.qml:98
+msgid "The key mapping could not be read: %1"
+msgstr "无法读取按键映射：%1"
+
+#: ui/KeysPage.qml:114
+msgctxt "@title:group"
+msgid "What each key does now"
+msgstr "每个按键当前的作用"
+
+#: ui/KeysPage.qml:123
+msgid ""
+"Fn mode %1. Read from the kernel and the installed mapping; no key press is "
+"read."
+msgstr "Fn 模式 %1。从内核和已安装的映射读取；不读取任何按键操作。"
+
+#: ui/KeysPage.qml:124
+msgid "Reading the key table…"
+msgstr "正在读取按键表…"
+
+#: ui/KeysPage.qml:134
+msgctxt "@title:column"
+msgid "Key"
+msgstr "按键"
+
+#: ui/KeysPage.qml:135
+msgctxt "@title:column"
+msgid "Pressed alone"
+msgstr "单独按下"
+
+#: ui/KeysPage.qml:136
+msgctxt "@title:column"
+msgid "With fn"
+msgstr "配合 Fn"
+
+#: ui/KeysPage.qml:149
+msgctxt "key, legend, alone, with fn"
+msgid "%1 (%2): alone %3; with fn %4"
+msgstr "%1（%2）：单独 %3；配合 Fn %4"
+
+#: ui/KeysPage.qml:185
+msgid "* = changed by the installed manual mapping."
+msgstr "* = 已被安装的手动映射修改。"
+
+#: ui/KeysPage.qml:185
+msgid ""
+"The active profile differs from what is installed: use “Install the mapping”."
+msgstr "当前配置文件与已安装的不同：请使用“安装映射”。"
+
+#: ui/KeysPage.qml:193
+msgctxt "@title:group"
+msgid "Fn key and modifier keys"
+msgstr "Fn 键和修饰键"
+
+#: ui/KeysPage.qml:200
+msgid ""
+"These are parameters of the kernel driver hid_apple: they apply to ALL Apple "
+"keyboards of this computer, are kept after a restart, and each change asks "
+"for the administrator password."
+msgstr ""
+"这些是内核驱动 hid_apple 的参数：它们作用于本计算机的所有 Apple 键盘，重启后"
+"保留，每次更改都需要管理员密码。"
+
+#: ui/KeysPage.qml:205
+msgid "Fn mode:"
+msgstr "Fn 模式："
+
+#: ui/KeysPage.qml:209
+msgid "Fn mode"
+msgstr "Fn 模式"
+
+#: ui/KeysPage.qml:213
+msgid "Option and Command:"
+msgstr "Option 和 Command："
+
+#: ui/KeysPage.qml:215
+msgid "Mac order (Option = Alt, Command = Meta)"
+msgstr "Mac 顺序（Option = Alt，Command = Meta）"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on both sides (PC order)"
+msgstr "两侧均交换（PC 顺序）"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on the left side only"
+msgstr "仅左侧交换"
+
+#: ui/KeysPage.qml:217
+msgid "Option and Command keys"
+msgstr "Option 和 Command 键"
+
+#: ui/KeysPage.qml:222
+msgid "Control and Command:"
+msgstr "Control 和 Command："
+
+#: ui/KeysPage.qml:223
+msgid "Swap Control and Command"
+msgstr "交换 Control 和 Command"
+
+#: ui/KeysPage.qml:228
+msgid "fn and left Control:"
+msgstr "Fn 和左 Control："
+
+#: ui/KeysPage.qml:229
+msgid "Swap fn and the left Control key"
+msgstr "交换 Fn 和左 Control 键"
+
+#: ui/KeysPage.qml:234
+msgid "ISO keys ` and <:"
+msgstr "ISO 键 ` 和 <："
+
+#: ui/KeysPage.qml:236
+msgid "automatic"
+msgstr "自动"
+
+#: ui/KeysPage.qml:236
+msgid "as engraved"
+msgstr "按键帽标识"
+
+#: ui/KeysPage.qml:236
+msgid "swapped"
+msgstr "交换"
+
+#: ui/KeysPage.qml:238
+msgid "ISO keys"
+msgstr "ISO 键"
+
+#: ui/KeysPage.qml:244
+msgid "Apply these parameters…"
+msgstr "应用这些参数…"
+
+#: ui/KeysPage.qml:257
+msgid "Asks for the administrator password once per changed parameter"
+msgstr "每个更改的参数都会询问一次管理员密码"
+
+#: ui/KeysPage.qml:264
+msgid "Parameters applied to every Apple keyboard."
+msgstr "参数已应用到所有 Apple 键盘。"
+
+#: ui/KeysPage.qml:282
+msgid "Undo changes"
+msgstr "撤销更改"
+
+#: ui/KeysPage.qml:299
+msgid "Waiting for the authentication"
+msgstr "正在等待认证"
+
+#: ui/KeysPage.qml:305
+msgctxt "@title:group"
+msgid "Manual key mapping"
+msgstr "手动按键映射"
+
+#: ui/KeysPage.qml:309
+msgid "Profile:"
+msgstr "配置文件："
+
+#: ui/KeysPage.qml:313
+msgid "Preset:"
+msgstr "预设："
+
+#: ui/KeysPage.qml:317
+msgid "none (parameters left as they are)"
+msgstr "无（参数保持不变）"
+
+#: ui/KeysPage.qml:319
+msgid "Preset of the profile"
+msgstr "配置文件的预设"
+
+#: ui/KeysPage.qml:322
+msgid "Use this preset"
+msgstr "使用此预设"
+
+#: ui/KeysPage.qml:328
+msgid "Preset saved in the profile; use “Install the mapping” to apply it."
+msgstr "预设已保存到配置文件；请使用“安装映射”应用。"
+
+#: ui/KeysPage.qml:334
+msgid "Remapped keys:"
+msgstr "已重新映射的按键："
+
+#: ui/KeysPage.qml:339
+msgid "none"
+msgstr "无"
+
+#: ui/KeysPage.qml:348
+msgctxt "key -> code"
+msgid "%1 → %2"
+msgstr "%1 → %2"
+
+#: ui/KeysPage.qml:353
+msgid "Remove"
+msgstr "移除"
+
+#: ui/KeysPage.qml:356
+msgid "Remove the mapping of %1"
+msgstr "移除 %1 的映射"
+
+#: ui/KeysPage.qml:363
+msgid "Mapping removed from the profile."
+msgstr "已从配置文件移除映射。"
+
+#: ui/KeysPage.qml:371
+msgid "Remap:"
+msgstr "重新映射："
+
+#: ui/KeysPage.qml:376
+msgid "Key to remap"
+msgstr "要重新映射的按键"
+
+#: ui/KeysPage.qml:382
+msgid "Linux key code (KEY_…)"
+msgstr "Linux 键码（KEY_…）"
+
+#: ui/KeysPage.qml:387
+msgid "Add"
+msgstr "添加"
+
+#: ui/KeysPage.qml:395
+msgid "Mapping saved in the profile; use “Install the mapping” to apply it."
+msgstr "映射已保存到配置文件；请使用“安装映射”应用。"
+
+#: ui/KeysPage.qml:402
+msgid "Install the mapping…"
+msgstr "安装映射…"
+
+#: ui/KeysPage.qml:405
+msgid ""
+"Installs the active profile (udev hwdb and its parameters); asks for the "
+"administrator password"
+msgstr "安装当前配置文件（udev hwdb 及其参数）；需要管理员密码"
+
+#: ui/KeysPage.qml:410
+msgid "Mapping installed."
+msgstr "映射已安装。"
+
+#: ui/KeysPage.qml:415
+msgid "Back to the kernel mapping…"
+msgstr "恢复内核映射…"
+
+#: ui/KeysPage.qml:422
+msgid "Kernel mapping restored."
+msgstr "已恢复内核映射。"
+
+#: ui/KeysPage.qml:430
+msgctxt "@title:group"
+msgid "KDE shortcuts"
+msgstr "KDE 快捷键"
+
+#: ui/KeysPage.qml:433
+msgid "F4 (Launchpad):"
+msgstr "F4（Launchpad）："
+
+#: ui/KeysPage.qml:435
+msgid "Bind F4 to the application launcher"
+msgstr "将 F4 绑定到应用程序启动器"
+
+#: ui/KeysPage.qml:438
+msgid ""
+"Adds the missing KDE shortcut for the Launch (D) key, never replacing an "
+"existing one"
+msgstr "为 Launch (D) 键添加缺失的 KDE 快捷键，绝不替换已有的快捷键"
+
+#: ui/KeysPage.qml:443
+msgid "KDE shortcuts updated."
+msgstr "KDE 快捷键已更新。"
+
+#: ui/KeysPage.qml:454
+msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
+msgstr "在终端中撤销：akmctl keymap kde-apply --undo"
+
+#: ui/NamePage.qml:46
+msgid "akmctl stopped abruptly before giving its verdict (crash or signal)."
+msgstr "akmctl 在给出结论之前意外退出（崩溃或信号）。"
+
+#: ui/NamePage.qml:49
+msgid ""
+"No answer in time. Nothing more is attempted; look at the stored name above "
+"in a moment."
+msgstr "未及时响应。不再尝试其他操作；请稍后查看上方保存的名称。"
+
+#: ui/NamePage.qml:52
+msgid "Check passed: “%1” can be written. Nothing was written."
+msgstr "检查通过：可以写入“%1”。未写入任何内容。"
+
+#: ui/NamePage.qml:55
+msgid ""
+"“%1” is now stored in the keyboard: written, then read back identical. This "
+"computer may show the old name until a later connection."
+msgstr ""
+"“%1”已保存到键盘：已写入并读回一致。在下次连接之前，本计算机可能仍显示旧名"
+"称。"
+
+#: ui/NamePage.qml:58
+msgid ""
+"The name was written, but it could not be read back. Look at the stored name "
+"above in a moment.\n"
+"%1"
+msgstr ""
+"名称已写入，但无法读回。请稍后查看上方保存的名称。\n"
+"%1"
+
+#: ui/NamePage.qml:61
+msgid ""
+"The name was written, but the keyboard reads back another one.\n"
+"%1"
+msgstr ""
+"名称已写入，但键盘读回的是另一个名称。\n"
+"%1"
+
+#: ui/NamePage.qml:64
+msgid ""
+"The write failed on its way: the name may or may not have been written. Look "
+"at the stored name above in a moment.\n"
+"%1"
+msgstr ""
+"写入中途失败：名称可能已写入，也可能未写入。请稍后查看上方保存的名称。\n"
+"%1"
+
+#: ui/NamePage.qml:67
+msgid ""
+"Check failed, nothing was written.\n"
+"%1"
+msgstr ""
+"检查失败，未写入任何内容。\n"
+"%1"
+
+#: ui/NamePage.qml:70
+msgid ""
+"Not written.\n"
+"%1"
+msgstr ""
+"未写入。\n"
+"%1"
+
+#: ui/NamePage.qml:81
+msgctxt "@title:window"
+msgid "Write the name into the keyboard"
+msgstr "将名称写入键盘"
+
+#: ui/NamePage.qml:86
+msgctxt "@action:button"
+msgid "Write"
+msgstr "写入"
+
+#: ui/NamePage.qml:97
+msgid "Write “%1” into the keyboard's memory?"
+msgstr "将“%1”写入键盘存储器？"
+
+#: ui/NamePage.qml:114
+msgctxt "@title:group"
+msgid "Name on this computer"
+msgstr "本计算机上的名称"
+
+#: ui/NamePage.qml:118
+msgid "Shown as:"
+msgstr "显示为："
+
+#: ui/NamePage.qml:125
+msgid "Keyboard's own name:"
+msgstr "键盘自身名称："
+
+#: ui/NamePage.qml:133
+msgid "New name:"
+msgstr "新名称："
+
+#: ui/NamePage.qml:137
+msgid "e.g. Office keyboard"
+msgstr "例如：办公室键盘"
+
+#: ui/NamePage.qml:139
+msgid "New name of the keyboard on this computer"
+msgstr "键盘在本计算机上的新名称"
+
+#: ui/NamePage.qml:145
+msgid "Rename"
+msgstr "重命名"
+
+#: ui/NamePage.qml:153
+msgid "Renamed to “%1” on this computer."
+msgstr "已在本计算机上重命名为“%1”。"
+
+#: ui/NamePage.qml:153 ui/NamePage.qml:168
+msgid "Not renamed: %1"
+msgstr "未重命名：%1"
+
+#: ui/NamePage.qml:160
+msgid "Use the keyboard's own name"
+msgstr "使用键盘自身名称"
+
+#: ui/NamePage.qml:168
+msgid "The keyboard's own name is used again."
+msgstr "已重新使用键盘自身名称。"
+
+#: ui/NamePage.qml:180
+msgid "Renaming needs the keyboard service."
+msgstr "重命名需要键盘服务。"
+
+#: ui/NamePage.qml:181
+msgid "No keyboard is known yet."
+msgstr "尚无已知键盘。"
+
+#: ui/NamePage.qml:182
+msgid ""
+"Only this computer sees this name (Bluetooth alias); the keyboard itself is "
+"not changed."
+msgstr "只有本计算机能看到此名称（蓝牙别名）；键盘本身不会被更改。"
+
+#: ui/NamePage.qml:187
+msgctxt "@title:group"
+msgid "Name stored inside the keyboard"
+msgstr "键盘内保存的名称"
+
+#: ui/NamePage.qml:191
+msgid "Stored now:"
+msgstr "当前保存："
+
+#: ui/NamePage.qml:192
+msgid "not read yet (the service reads it once per connection)"
+msgstr "尚未读取（服务在每次连接时读取一次）"
+
+#: ui/NamePage.qml:199
+msgid "Name to write:"
+msgstr "要写入的名称："
+
+#: ui/NamePage.qml:203
+msgid "1 to 32 ASCII characters"
+msgstr "1 到 32 个 ASCII 字符"
+
+#: ui/NamePage.qml:205
+msgid "Name to write into the keyboard"
+msgstr "要写入键盘的名称"
+
+#: ui/NamePage.qml:206
+msgid ""
+"1 to 32 printable ASCII characters, no leading or trailing space, no "
+"backslash"
+msgstr "1 到 32 个可打印 ASCII 字符，开头和结尾不能有空格，不能有反斜杠"
+
+#: ui/NamePage.qml:212
+msgid "Check (nothing written)"
+msgstr "检查（不写入）"
+
+#: ui/NamePage.qml:215
+msgid ""
+"Runs every check that precedes the write and saves the current name; nothing "
+"is written"
+msgstr "执行写入前的所有检查并备份当前名称；不写入任何内容"
+
+#: ui/NamePage.qml:221
+msgid "Write the name into the keyboard…"
+msgstr "将名称写入键盘…"
+
+#: ui/NamePage.qml:224
+msgid ""
+"Asks for a confirmation, then writes the name into the keyboard and reads it "
+"back"
+msgstr "请求确认，然后将名称写入键盘并读回"
+
+#: ui/NamePage.qml:244
+msgid ""
+"Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
+"no backslash."
+msgstr ""
+"已拒绝：需要 1 到 32 个可打印 ASCII 字符，开头和结尾不能有空格，不能有反斜"
+"杠。"
+
+#: ui/NamePage.qml:245
+msgid ""
+"Every computer and phone sees this name. The current name is saved first, "
+"the keyboard is checked, the name is written once and read back at once. Not "
+"measured: whether the name survives a battery change."
+msgstr ""
+"所有计算机和手机都会看到此名称。先备份当前名称，检查键盘，然后写入一次名称并"
+"立即读回。未测量：更换电池后名称是否保留。"
+
+#: ui/NamePage.qml:265
+msgctxt "@title:group"
+msgid "Same operations, to copy into a terminal"
+msgstr "相同的操作，可复制到终端"
+
+#: ui/NamePage.qml:270
+msgid ""
+"Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
+"authentication):"
+msgstr "键盘内保存的名称，预览（显示字节，不写入任何内容，无需认证）："
+
+#: ui/NamePage.qml:272
+msgid "Every check and the backup of the current name (writes nothing):"
+msgstr "所有检查以及当前名称的备份（不写入任何内容）："
+
+#: ui/NamePage.qml:274
+msgid ""
+"The write itself (checks, backup, one confirmation, one write, read back):"
+msgstr "写入本身（检查、备份、一次确认、一次写入、读回）："
+
+#: ui/NamePage.qml:276
+msgid ""
+"Forget the keyboard cleanly, as macOS does, then pair it again (only after "
+"typing the confirmation word):"
+msgstr "像 macOS 一样干净地移除键盘）："
+
+#: ui/NamePage.qml:299
+msgid "Type a valid name to write above first"
+msgstr "请先在上方输入有效的名称"
+
+#: ui/NamePage.qml:301
+msgid "Command: %1"
+msgstr "命令：%1"
+
+#: ui/NamePage.qml:305
+msgid "Copy"
+msgstr "复制"
+
+#: ui/NamePage.qml:307
+msgid "Copy the command"
+msgstr "复制命令"
+
+#: ui/NamePage.qml:312
+msgid "Command copied."
+msgstr "命令已复制。"
+
+#: ui/StatePage.qml:37
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 天"
+
+#: ui/StatePage.qml:38
+msgid "≈ %1 h"
+msgstr "≈ %1 小时"
+
+#: ui/StatePage.qml:45
+#, no-javascript-format
+msgctxt "percentage"
+msgid "%1%"
+msgstr "%1%"
+
+#: ui/StatePage.qml:49
+msgid "%1 second ago"
+msgid_plural "%1 seconds ago"
+msgstr[0] "%1 秒前"
+
+#: ui/StatePage.qml:50
+msgid "%1 minute ago"
+msgid_plural "%1 minutes ago"
+msgstr[0] "%1 分钟前"
+
+#: ui/StatePage.qml:51
+msgid "%1 hour ago"
+msgid_plural "%1 hours ago"
+msgstr[0] "%1 小时前"
+
+#: ui/StatePage.qml:52
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "%1 天前"
+
+#: ui/StatePage.qml:67
+msgid "rssi-helper not installed"
+msgstr "rssi-helper 未安装"
+
+#: ui/StatePage.qml:68
+msgid "see akmctl doctor"
+msgstr "参见 akmctl doctor"
+
+#: ui/StatePage.qml:69
+msgid "not measured (%1)"
+msgstr "未测量（%1）"
+
+#: ui/StatePage.qml:73 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "excellent"
+msgstr "极佳"
+
+#: ui/StatePage.qml:74 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "good"
+msgstr "良好"
+
+#: ui/StatePage.qml:75 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "weak"
+msgstr "弱"
+
+#: ui/StatePage.qml:78
+msgctxt "signal quality, then the relative value in dB (0 = ideal range)"
+msgid "%1 (%2)"
+msgstr "%1（%2）"
+
+#: ui/StatePage.qml:82
+msgid "up to date"
+msgstr "已是最新"
+
+#: ui/StatePage.qml:83
+msgid "a newer version exists (this module never updates the firmware)"
+msgstr "存在更新的版本（此模块从不更新固件）"
+
+#: ui/StatePage.qml:84
+msgid "model not in the table"
+msgstr "型号不在表中"
+
+#: ui/StatePage.qml:85
+msgid "not assessed yet"
+msgstr "尚未评估"
+
+#: ui/StatePage.qml:94
+msgid "No data: the keyboard service is not running"
+msgstr "无数据：键盘服务未运行"
+
+#: ui/StatePage.qml:95
+msgid ""
+"Use “Start the service” above, or run: systemctl --user start apple-kb-"
+"monitord.service"
+msgstr ""
+"请使用上方的“启动服务”，或运行：systemctl --user start apple-kb-"
+"monitord.service"
+
+#: ui/StatePage.qml:119
+msgid "Loading the keyboard state"
+msgstr "正在加载键盘状态"
+
+#: ui/StatePage.qml:128
+msgctxt "@title:group"
+msgid "Keyboard"
+msgstr "键盘"
+
+#: ui/StatePage.qml:132
+msgid "Name:"
+msgstr "名称："
+
+#: ui/StatePage.qml:136
+msgid "Name: %1"
+msgstr "名称：%1"
+
+#: ui/StatePage.qml:140
+msgid "Model:"
+msgstr "型号："
+
+#: ui/StatePage.qml:147
+msgid "Address:"
+msgstr "地址："
+
+#: ui/StatePage.qml:161
+msgid "connected"
+msgstr "已连接"
+
+#: ui/StatePage.qml:161
+msgid "disconnected"
+msgstr "已断开"
+
+#: ui/StatePage.qml:162
+msgid "Connection: %1"
+msgstr "连接：%1"
+
+#: ui/StatePage.qml:167
+msgid "Problem:"
+msgstr "问题："
+
+#: ui/StatePage.qml:176
+msgctxt "@title:group"
+msgid "Battery"
+msgstr "电池"
+
+#: ui/StatePage.qml:180
+msgid "Keyboard indication:"
+msgstr "键盘显示："
+
+#: ui/StatePage.qml:182
+msgid "Keyboard indication: %1"
+msgstr "键盘显示：%1"
+
+#: ui/StatePage.qml:186
+msgid "Apple display:"
+msgstr "Apple 显示："
+
+#: ui/StatePage.qml:188
+msgctxt "percentage as macOS shows it"
+msgid "%1 (as macOS shows it)"
+msgstr "%1（与 macOS 显示一致）"
+
+#: ui/StatePage.qml:192
+msgid "Estimated charge:"
+msgstr "估算电量："
+
+#: ui/StatePage.qml:195
+msgid "new batteries: no estimate during the first two days"
+msgstr "新电池：前两天不估算"
+
+#: ui/StatePage.qml:196
+msgctxt "estimate, low bound, high bound, chemistry"
+msgid "%1 (between %2 and %3, %4 batteries)"
+msgstr "%1（%2 至 %3，电池：%4）"
+
+#: ui/StatePage.qml:198
+msgid "not available"
+msgstr "不可用"
+
+#: ui/StatePage.qml:201
+msgid "Estimated charge: %1"
+msgstr "估算电量：%1"
+
+#: ui/StatePage.qml:205
+msgid "Voltage:"
+msgstr "电压："
+
+#: ui/StatePage.qml:207
+msgctxt "volts"
+msgid "%1 V"
+msgstr "%1 V"
+
+#: ui/StatePage.qml:211
+msgid "Remaining:"
+msgstr "剩余："
+
+#: ui/StatePage.qml:217
+msgid "Batteries installed:"
+msgstr "电池安装于："
+
+#: ui/StatePage.qml:225
+msgctxt "@title:group"
+msgid "Link"
+msgstr "连接"
+
+#: ui/StatePage.qml:229
+msgid "Signal:"
+msgstr "信号："
+
+#: ui/StatePage.qml:231
+msgid "Signal: %1"
+msgstr "信号：%1"
+
+#: ui/StatePage.qml:236
+msgid "Last measurement:"
+msgstr "最近测量："
+
+#: ui/StatePage.qml:237
+msgid "never"
+msgstr "从未"
+
+#: ui/StatePage.qml:238
+msgid "Last measurement: %1"
+msgstr "最近测量：%1"
+
+#: ui/StatePage.qml:243
+msgctxt "@title:group"
+msgid "Firmware"
+msgstr "固件"
+
+#: ui/StatePage.qml:247 ui/StatePage.qml:272
+msgid "Version:"
+msgstr "版本："
+
+#: ui/StatePage.qml:253
+msgid "Latest known:"
+msgstr "已知最新："
+
+#: ui/StatePage.qml:260
+msgid "Status:"
+msgstr "状态："
+
+#: ui/StatePage.qml:268
+msgctxt "@title:group"
+msgid "Service"
+msgstr "服务"
+
+#: ui/StatePage.qml:277
+msgid "Last error:"
+msgstr "最近错误："
+
+#: ui/Store.qml:158
+msgid "The keyboard service (apple-kb-monitord) is not running"
+msgstr "键盘服务（apple-kb-monitord）未运行"
+
+#: ui/Store.qml:159
+msgid "command not allowed"
+msgstr "命令不被允许"
+
+#: ui/Store.qml:160
+msgid "no answer in time"
+msgstr "未及时响应"
+
+#: ui/Store.qml:161
+msgctxt "%1 is a JSON parser error"
+msgid "unreadable reply: %1"
+msgstr "无法读取的回复：%1"
+
+#: ui/main.qml:26
+msgid "The service could not be started: %1"
+msgstr "无法启动服务：%1"
+
+#: ui/main.qml:31
+msgid "Starting…"
+msgstr "正在启动…"
+
+#: ui/main.qml:31
+msgid "Start the service"
+msgstr "启动服务"
+
+#: ui/main.qml:49
+msgid "Sections of the Apple keyboard settings"
+msgstr "Apple 键盘设置的各部分"
+
+#: ui/main.qml:50
+msgctxt "@title:tab"
+msgid "State"
+msgstr "状态"
+
+#: ui/main.qml:51
+msgctxt "@title:tab"
+msgid "Keys"
+msgstr "按键"
+
+#: ui/main.qml:52
+msgctxt "@title:tab"
+msgid "Notifications"
+msgstr "通知"
+
+#: ui/main.qml:53
+msgctxt "@title:tab"
+msgid "Name"
+msgstr "名称"
+
+#: ui/main.qml:54
+msgctxt "@title:tab"
+msgid "Diagnostics"
+msgstr "诊断"

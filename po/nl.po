@@ -1,0 +1,4827 @@
+# Dutch translation of apple-kb-monitor.
+# This file is distributed under the same license as the apple-kb-monitor package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:57+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Dutch\n"
+"Language: nl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: apihub-app/akm-core/src/advice.rs
+#, rust-format
+msgid "Batteries replaced too often: {first} d then {second} d (under 30 d)"
+msgstr ""
+"Batterijen te vaak vervangen: {first} d en daarna {second} d (minder dan "
+"30 d)"
+
+#: apihub-app/akm-core/src/advice.rs
+msgid ""
+"Check the declared chemistry ([battery] chemistry), try fresh cells of "
+"another batch or low self-discharge NiMH cells, and switch the keyboard off "
+"when it is not used."
+msgstr ""
+"Controleer de opgegeven chemie ([battery] chemistry), probeer nieuwe cellen "
+"uit een andere partij of NiMH-cellen met lage zelfontlading, en zet het "
+"toetsenbord uit wanneer het niet gebruikt wordt."
+
+#: apihub-app/akm-core/src/alias.rs
+#, rust-format
+msgid "name too long (max {max_chars} characters, {max_bytes} bytes)"
+msgstr "naam te lang (maximaal {max_chars} tekens, {max_bytes} bytes)"
+
+#: apihub-app/akm-core/src/alias.rs
+msgid "name must not start with '-'"
+msgstr "de naam mag niet met '-' beginnen"
+
+#: apihub-app/akm-core/src/alias.rs
+#, rust-format
+msgid "name contains a forbidden character (U+{code})"
+msgstr "de naam bevat een verboden teken (U+{code})"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "no battery history"
+msgstr "geen batterijgeschiedenis"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "#  installed            days   from  ->  to    state"
+msgstr "#  geplaatst op         dagen  van   ->  tot   status"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "replaced"
+msgstr "vervangen"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "in use"
+msgstr "in gebruik"
+
+#: apihub-app/akm-core/src/batteries.rs
+#, rust-format
+msgid "Keyboard {mac}:"
+msgstr "Toetsenbord {mac}:"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "Samples recorded without a keyboard address:"
+msgstr "Metingen opgeslagen zonder toetsenbordadres:"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "empty name"
+msgstr "lege naam"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "{n} characters, at most {max} (what 0x51-0x54 can show back)"
+msgstr "{n} tekens, maximaal {max} (wat 0x51-0x54 kunnen teruggeven)"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "leading or trailing space"
+msgstr "spatie aan het begin of einde"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "control character U+{code}"
+msgstr "stuurteken U+{code}"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "non-ASCII character {c} (the keyboard stores ASCII)"
+msgstr "niet-ASCII-teken {c} (het toetsenbord slaat ASCII op)"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "character {c} refused (escape character of BlueZ's key file)"
+msgstr "teken {c} geweigerd (escapeteken van het sleutelbestand van BlueZ)"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "backup schema {schema} unknown"
+msgstr "back-upschema {schema} onbekend"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "fragment {i} is not hex"
+msgstr "fragment {i} is niet hexadecimaal"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "fragment {i} has {n} bytes, expected {expected}"
+msgstr "fragment {i} heeft {n} bytes, verwacht {expected}"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "bytes after the NUL terminator: refused (not a name this tool restores)"
+msgstr ""
+"bytes na het NUL-einde: geweigerd (geen naam die dit hulpmiddel herstelt)"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "the saved name is empty: refused"
+msgstr "de opgeslagen naam is leeg: geweigerd"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "the fragments do not spell the saved name"
+msgstr "de fragmenten vormen niet de opgeslagen naam"
+
+#: apihub-app/akm-core/src/devname.rs apihub-app/crates/akmctl/src/forget.rs
+msgid "keyboard not connected"
+msgstr "toetsenbord niet verbonden"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "battery below 20 % and state not 'normal' (or unknown)"
+msgstr "batterij onder 20 % en status niet 'normal' (of onbekend)"
+
+#: apihub-app/akm-core/src/devname.rs apihub-app/crates/akmctl/src/forget.rs
+msgid "circuit breaker open: the keyboard stopped answering"
+msgstr "stroomonderbreker open: het toetsenbord antwoordt niet meer"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "the last hardware read failed or was incomplete"
+msgstr "de laatste uitlezing van de hardware is mislukt of was onvolledig"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "`akmctl doctor` is not green (link health, pairing, configuration)"
+msgstr ""
+"`akmctl doctor` staat niet op groen (verbindingsstatus, koppeling, "
+"configuratie)"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid ""
+"outgoing MTU of the L2CAP control channel unknown: it must be read (akm-"
+"helper hid-inspect, read-only) and be >= {min} before a 66-byte frame is sent"
+msgstr ""
+"uitgaande MTU van het L2CAP-besturingskanaal onbekend: deze moet worden "
+"gelezen (akm-helper hid-inspect, alleen lezen) en >= {min} zijn voordat een "
+"frame van 66 bytes wordt verzonden"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid ""
+"outgoing MTU of the L2CAP control channel is {m}, below {min}: a 66-byte "
+"frame cannot be sent in one piece (Linux hidp does not fragment; the HID "
+"session would be terminated)"
+msgstr ""
+"uitgaande MTU van het L2CAP-besturingskanaal is {m}, lager dan {min}: een "
+"frame van 66 bytes kan niet in één stuk worden verzonden (Linux-hidp "
+"fragmenteert niet; de HID-sessie zou worden beëindigd)"
+
+#: apihub-app/akm-core/src/firmware.rs
+#, rust-format
+msgid "Firmware: {v} - up to date (latest public version known)"
+msgstr "Firmware: {v} - actueel (nieuwste bekende openbare versie)"
+
+#: apihub-app/akm-core/src/firmware.rs
+#, rust-format
+msgid "Firmware: {v} - update available from Apple (latest known: {l})"
+msgstr "Firmware: {v} - update beschikbaar van Apple (nieuwste bekende: {l})"
+
+#: apihub-app/akm-core/src/firmware.rs
+#, rust-format
+msgid "Firmware: {v} - no public Apple update for this model"
+msgstr "Firmware: {v} - geen openbare Apple-update voor dit model"
+
+#: apihub-app/akm-core/src/firmware.rs
+#, rust-format
+msgid "Firmware: {v} - unknown (model or version not in the table)"
+msgstr "Firmware: {v} - onbekend (model of versie niet in de tabel)"
+
+#: apihub-app/akm-core/src/forecast.rs
+#, rust-format
+msgid "≈ {n} day"
+msgid_plural "≈ {n} days"
+msgstr[0] "≈ {n} dag"
+msgstr[1] "≈ {n} dagen"
+
+#: apihub-app/akm-core/src/forecast.rs
+#, rust-format
+msgid "≈ {h} h"
+msgstr "≈ {h} u"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "Fn key has no effect"
+msgstr "Fn-toets heeft geen effect"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "disabled (Fn key has no effect)"
+msgstr "disabled (Fn-toets heeft geen effect)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "media keys first"
+msgstr "mediatoetsen eerst"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "fkeyslast (media keys by default, Fn+Fx = F-key)"
+msgstr "fkeyslast (standaard mediatoetsen, Fn+Fx = F-toets)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "F1–F12 first"
+msgstr "F1–F12 eerst"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "fkeysfirst (F-keys by default, Fn+Fx = media key)"
+msgstr "fkeysfirst (standaard F-toetsen, Fn+Fx = mediatoets)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "media keys first (auto)"
+msgstr "mediatoetsen eerst (auto)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "auto (media keys by default on Apple keyboards, Fn+Fx = F-key)"
+msgstr "auto (standaard mediatoetsen op Apple-toetsenborden, Fn+Fx = F-toets)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "F-keys disabled"
+msgstr "F-toetsen uitgeschakeld"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "fkeysdisabled (F-keys disabled, media keys only)"
+msgstr "fkeysdisabled (F-toetsen uitgeschakeld, alleen mediatoetsen)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Brightness −"
+msgstr "Helderheid −"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Brightness +"
+msgstr "Helderheid +"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Exposé / Mission Control"
+msgstr "Exposé / Mission Control"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "(no icon)"
+msgstr "(geen pictogram)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Previous track"
+msgstr "Vorige track"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Play / Pause"
+msgstr "Afspelen / Pauze"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Next track"
+msgstr "Volgende track"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Mute"
+msgstr "Dempen"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Eject ⏏"
+msgstr "Uitwerpen ⏏"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Delete ⌫"
+msgstr "Verwijderen ⌫"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Return ↩"
+msgstr "Return ↩"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Caps Lock ⇪"
+msgstr "Caps Lock ⇪"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "left control"
+msgstr "linker Control"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "left Shift ⇧"
+msgstr "linker Shift ⇧"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "left Option ⌥"
+msgstr "linker Option ⌥"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "left Command ⌘"
+msgstr "linker Command ⌘"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "right Shift ⇧"
+msgstr "rechter Shift ⇧"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "right Option ⌥"
+msgstr "rechter Option ⌥"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "right Command ⌘"
+msgstr "rechter Command ⌘"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"unknown key {key}: use a key name (F1..F12, Eject, Fn, LeftCmd...; see "
+"`akmctl keys --all`) or a HID usage like 0x7003a"
+msgstr ""
+"onbekende toets {key}: gebruik een toetsnaam (F1..F12, Eject, Fn, "
+"LeftCmd...; zie `akmctl keys --all`) of een HID-usage zoals 0x7003a"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"scancode {code} is not remappable (allowed: keyboard page 0x7xxxx with a "
+"kernel default, Eject 0xc00b8, Fn 0xff0003)"
+msgstr ""
+"scancode {code} kan niet opnieuw worden toegewezen (toegestaan: "
+"toetsenbordpagina 0x7xxxx met een standaard kernelcode, Eject 0xc00b8, Fn "
+"0xff0003)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "did you mean {key}?"
+msgstr "bedoelde u {key}?"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"unknown key code {code}: expected a KEY_* name of linux/input-event-"
+"codes.h{hint}"
+msgstr ""
+"onbekende toetscode {code}: verwacht een KEY_*-naam uit linux/input-event-"
+"codes.h{hint}"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"bad model {s}: expected 05ac:PPPP with PPPP an Apple Wireless Keyboard "
+"(aluminium) product id"
+msgstr ""
+"ongeldig model {s}: verwacht 05ac:PPPP, met PPPP een product-ID van een "
+"Apple Wireless Keyboard (aluminium)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "invalid {name} value {s} (expected {min}..={max}: {help})"
+msgstr "ongeldige waarde {s} voor {name} (verwacht {min}..={max}: {help})"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid ""
+"NumLock: with the NumLock LED on, hid_apple turns J K L U I O 7 8 9 M 0 ; / "
+"P - into keypad keys (APPLE_NUMLOCK_EMULATION); press again to leave"
+msgstr ""
+"NumLock: met de NumLock-led aan maakt hid_apple van J K L U I O 7 8 9 M "
+"0 ; / P - numerieke toetsen (APPLE_NUMLOCK_EMULATION); druk nogmaals om te "
+"stoppen"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Fn remapped: the Fn layer of hid_apple is lost"
+msgstr "Fn opnieuw toegewezen: de Fn-laag van hid_apple gaat verloren"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "remapped before hid_apple: no Fn layer on this key any more"
+msgstr "opnieuw toegewezen vóór hid_apple: deze toets heeft geen Fn-laag meer"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid ""
+"iso_layout=-1: hid_apple swaps these two keys when the keyboard reports the "
+"ISO country code"
+msgstr ""
+"iso_layout=-1: hid_apple verwisselt deze twee toetsen wanneer het "
+"toetsenbord de ISO-landcode meldt"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "line {line}: {m}"
+msgstr "regel {line}: {m}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Apple (key legends)"
+msgstr "Apple (toetsopschriften)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Classic F1-F12"
+msgstr "Klassiek F1-F12"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Linux PC (Cmd↔Alt)"
+msgstr "Linux-pc (Cmd↔Alt)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unknown preset {preset} (apple, fkeys, linux-pc)"
+msgstr "onbekende voorinstelling {preset} (apple, fkeys, linux-pc)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected a quoted string"
+msgstr "tekenreeks tussen aanhalingstekens verwacht"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "unterminated string"
+msgstr "onafgesloten tekenreeks"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "escapes and control characters are not allowed in strings"
+msgstr "escapes en besturingstekens zijn niet toegestaan in tekenreeksen"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unexpected text {r}"
+msgstr "onverwachte tekst {r}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected , or ] in array"
+msgstr ", of ] verwacht in array"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "bad value {tok} (string, integer or array of strings)"
+msgstr ""
+"ongeldige waarde {tok} (tekenreeks, geheel getal of array van tekenreeksen)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "bad integer {tok}"
+msgstr "ongeldig geheel getal {tok}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected a key"
+msgstr "sleutel verwacht"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "duplicate key {key}"
+msgstr "dubbele sleutel {key}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "unterminated section header"
+msgstr "onafgesloten sectiekop"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"unknown section [{section}] (profile.NAME, profile.NAME.keys, "
+"profile.NAME.params)"
+msgstr ""
+"onbekende sectie [{section}] (profile.NAAM, profile.NAAM.keys, "
+"profile.NAAM.params)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "bad profile name {name} (a-z 0-9 - _, 1-32 characters)"
+msgstr "ongeldige profielnaam {name} (a-z 0-9 - _, 1-32 tekens)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "models: 1 to 9 entries"
+msgstr "models: 1 tot 9 items"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "duplicate model {m}"
+msgstr "dubbel model {m}"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"unknown or ill-typed key {k} in [profile.{n}] (preset = \"apple\", models = "
+"[\"05ac:0256\"])"
+msgstr ""
+"onbekende sleutel of sleutel van verkeerd type {k} in [profile.{n}] (preset "
+"= \"apple\", models = [\"05ac:0256\"])"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unknown hid_apple parameter {key} ({known})"
+msgstr "onbekende hid_apple-parameter {key} ({known})"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "{key} must be an integer"
+msgstr "{key} moet een geheel getal zijn"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "{key} = {v} out of range {min}..={max} ({help})"
+msgstr "{key} = {v} buiten het bereik {min}..={max} ({help})"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "{key} must be a \"KEY_*\" string"
+msgstr "{key} moet een \"KEY_*\"-tekenreeks zijn"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "key {key} mapped twice (same scancode 0x{sc})"
+msgstr "toets {key} twee keer toegewezen (zelfde scancode 0x{sc})"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "file larger than {MAX_FILE} bytes"
+msgstr "bestand groter dan {MAX_FILE} bytes"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "duplicate section"
+msgstr "dubbele sectie"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected ="
+msgstr "= verwacht"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unsupported schema {n} (expected 1)"
+msgstr "niet-ondersteund schema {n} (verwacht 1)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "bad profile name {s}"
+msgstr "ongeldige profielnaam {s}"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unknown or ill-typed top-level key {k} (schema = 1, active = \"NAME\")"
+msgstr ""
+"onbekende sleutel of sleutel van verkeerd type {k} op het hoogste niveau "
+"(schema = 1, active = \"NAAM\")"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "missing `schema = 1`"
+msgstr "`schema = 1` ontbreekt"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "at most 16 profiles"
+msgstr "maximaal 16 profielen"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "active profile {active} is not defined"
+msgstr "actief profiel {active} is niet gedefinieerd"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "hwdb file larger than {MAX_HWDB} bytes"
+msgstr "hwdb-bestand groter dan {MAX_HWDB} bytes"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid ""
+"hwdb file: only printable ASCII and \\n are allowed (no \\r, tab, NUL, UTF-8)"
+msgstr ""
+"hwdb-bestand: alleen afdrukbare ASCII en \\n zijn toegestaan (geen \\r, tab, "
+"NUL, UTF-8)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "hwdb file must end with a newline"
+msgstr "hwdb-bestand moet eindigen met een regeleinde"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "match line without any KEYBOARD_KEY_ property"
+msgstr "match-regel zonder KEYBOARD_KEY_-eigenschap"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "PID {pid} matched twice"
+msgstr "PID {pid} twee keer gematcht"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected KEYBOARD_KEY_<scancode>=<name>"
+msgstr "KEYBOARD_KEY_<scancode>=<naam> verwacht"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "scancode not allowed: {sc}"
+msgstr "scancode niet toegestaan: {sc}"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unknown key name {name}"
+msgstr "onbekende toetsnaam {name}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "hwdb file: first line is not the apple-kb-monitor header"
+msgstr "hwdb-bestand: de eerste regel is niet de kop van apple-kb-monitor"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "hwdb file: more than 512 lines"
+msgstr "hwdb-bestand: meer dan 512 regels"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "match line not allowed: {l}"
+msgstr "match-regel niet toegestaan: {l}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "duplicate match line"
+msgstr "dubbele match-regel"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "property outside a record"
+msgstr "eigenschap buiten een record"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "scancode {sc} set twice"
+msgstr "scancode {sc} twee keer ingesteld"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "line not allowed: {l}"
+msgstr "regel niet toegestaan: {l}"
+
+#: apihub-app/akm-core/src/keytable.rs
+msgid "another keymap apply is in progress"
+msgstr "er wordt al een andere toetsindeling toegepast"
+
+#: apihub-app/akm-core/src/led.rs
+msgid "no Apple keyboard evdev found"
+msgstr "geen evdev van een Apple-toetsenbord gevonden"
+
+#: apihub-app/akm-core/src/led.rs
+#, rust-format
+msgid "unsupported LED code {l}"
+msgstr "niet-ondersteunde LED-code {l}"
+
+#: apihub-app/akm-core/src/led.rs
+msgid ""
+"refusing to switch NumLock on (hid-apple would turn letters into keypad keys)"
+msgstr ""
+"NumLock wordt niet ingeschakeld (hid-apple zou letters in numerieke toetsen "
+"veranderen)"
+
+#: apihub-app/akm-core/src/led.rs
+#, rust-format
+msgid "cannot open {path}: {e}"
+msgstr "kan {path} niet openen: {e}"
+
+#: apihub-app/akm-core/src/led.rs
+#, rust-format
+msgid "cannot write {path}: {e}"
+msgstr "kan niet naar {path} schrijven: {e}"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "Apple Keyboard — switched off"
+msgstr "Apple-toetsenbord — uitgeschakeld"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "The keyboard was switched off (not a lost connection)"
+msgstr "Het toetsenbord is uitgeschakeld (geen verbroken verbinding)"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "Apple Keyboard — disconnected"
+msgstr "Apple-toetsenbord — verbinding verbroken"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "The keyboard is no longer connected"
+msgstr "Het toetsenbord is niet meer verbonden"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "Apple Keyboard — reconnected"
+msgstr "Apple-toetsenbord — opnieuw verbonden"
+
+#: apihub-app/akm-core/src/link.rs
+#, rust-format
+msgid "Reconnected ({pct}%)"
+msgstr "Opnieuw verbonden ({pct}%)"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "Reconnected"
+msgstr "Opnieuw verbonden"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "no answer to the page (keyboard asleep or out of range)"
+msgstr "geen antwoord op de oproep (toetsenbord slaapt of buiten bereik)"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "BlueZ busy (connection already in progress)"
+msgstr "BlueZ bezet (verbinding al bezig)"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "already connected"
+msgstr "al verbonden"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "pairing refused (link key missing or rejected)"
+msgstr "koppeling geweigerd (koppelingssleutel ontbreekt of afgewezen)"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "adapter off or not ready"
+msgstr "adapter uit of niet gereed"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "device unknown to BlueZ (unpaired?)"
+msgstr "apparaat onbekend bij BlueZ (niet gekoppeld?)"
+
+#: apihub-app/akm-core/src/recovery.rs apihub-app/crates/akmctl/src/repair.rs
+msgid "the keyboard is not paired with this computer"
+msgstr "het toetsenbord is niet met deze computer gekoppeld"
+
+#: apihub-app/akm-core/src/recovery.rs apihub-app/crates/akmctl/src/repair.rs
+msgid "the keyboard refused the stored pairing"
+msgstr "het toetsenbord heeft de opgeslagen koppeling geweigerd"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "BlueZ reports the pairing as refused"
+msgstr "BlueZ meldt de koppeling als geweigerd"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "the keyboard is no longer known to BlueZ"
+msgstr "het toetsenbord is niet meer bekend bij BlueZ"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "the pairing was removed"
+msgstr "de koppeling is verwijderd"
+
+#: apihub-app/akm-core/src/registry.rs
+msgid "0x40 WillShutdown (id only, what macOS sends)"
+msgstr "0x40 WillShutdown (alleen de id, wat macOS stuurt)"
+
+#: apihub-app/akm-core/src/registry.rs
+msgid ""
+"0x55 LongDeviceName (64 bytes, Lion; akmctl rename --device-name: pre-"
+"flight, backup, one confirmation, read back)"
+msgstr ""
+"0x55 LongDeviceName (64 bytes, Lion; akmctl rename --device-name: "
+"voorcontrole, back-up, één bevestiging, teruglezen)"
+
+#: apihub-app/akm-core/src/registry.rs
+msgid "0x41 RecantConnection (id only, akmctl repair)"
+msgstr "0x41 RecantConnection (alleen de id, akmctl repair)"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the rssi-helper utility is not installed"
+msgstr "het hulpprogramma rssi-helper is niet geïnstalleerd"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "reinstall the apple-kb-monitor package"
+msgstr "installeer het pakket apple-kb-monitor opnieuw"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+"het hulpprogramma rssi-helper is mislukt (capability ontbreekt, Bluetooth "
+"geweigerd)"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr ""
+"installeer het pakket apple-kb-monitor opnieuw en voer daarna akmctl doctor "
+"uit"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the rssi-helper utility does not answer in time"
+msgstr "het hulpprogramma rssi-helper antwoordt niet op tijd"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "controleer de Bluetooth-dienst: systemctl status bluetooth"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "de Bluetooth-adapter geeft geen meting voor deze verbinding"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "breng het toetsenbord dichterbij of verbind het opnieuw"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the signal cannot be measured"
+msgstr "het signaal kan niet worden gemeten"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "run akmctl doctor"
+msgstr "voer akmctl doctor uit"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "rssi-helper not installed"
+msgstr "rssi-helper niet geïnstalleerd"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "see akmctl doctor"
+msgstr "zie akmctl doctor"
+
+#: apihub-app/akm-core/src/rssi.rs
+#, rust-format
+msgid "Signal: not measured ({why})"
+msgstr "Signaal: niet gemeten ({why})"
+
+#: apihub-app/akm-core/src/signal.rs
+msgid "excellent"
+msgstr "uitstekend"
+
+#: apihub-app/akm-core/src/signal.rs
+msgid "good"
+msgstr "goed"
+
+#: apihub-app/akm-core/src/signal.rs
+msgid "weak"
+msgstr "zwak"
+
+#: apihub-app/akm-core/src/signal.rs
+#, rust-format
+msgid "Signal: {quality} ({value})"
+msgstr "Signaal: {quality} ({value})"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "no keyboard connected: nothing to read"
+msgstr "geen toetsenbord verbonden: niets te lezen"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+#, rust-format
+msgid "too soon: the keyboard was just read, next read possible in {s} s"
+msgstr ""
+"te vroeg: het toetsenbord is net gelezen, volgende lezing mogelijk over {s} s"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "no keyboard connected: nothing to read again"
+msgstr "geen toetsenbord verbonden: niets opnieuw te lezen"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "name read again now (0x51-0x54 only)"
+msgstr "naam nu opnieuw gelezen (alleen 0x51-0x54)"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "name read again as soon as the keyboard can be read (0x51-0x54 only)"
+msgstr ""
+"naam opnieuw gelezen zodra het toetsenbord leesbaar is (alleen 0x51-0x54)"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+#, rust-format
+msgid "name read again in {s} s (0x51-0x54 only, at most once per {floor} s)"
+msgstr ""
+"naam over {s} s opnieuw gelezen (alleen 0x51-0x54, hoogstens eens per "
+"{floor} s)"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid ""
+"HID diagnostics unavailable (hidraw not readable or keyboard asleep): kernel "
+"battery only"
+msgstr ""
+"HID-diagnose niet beschikbaar (hidraw niet leesbaar of toetsenbord slaapt): "
+"alleen batterijniveau van de kernel"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "keyboard not reachable (no hidraw answer, no kernel battery)"
+msgstr ""
+"toetsenbord niet bereikbaar (geen antwoord via hidraw, geen batterijniveau "
+"van de kernel)"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "keyboard silent: battery level kept from the last read"
+msgstr "toetsenbord stil: batterijniveau van de laatste uitlezing behouden"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "Keyboard disconnected"
+msgstr "Toetsenbord losgekoppeld"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+#: apihub-app/apple-kb-monitord/src/client.rs
+msgid "Keyboard: not found"
+msgstr "Toetsenbord: niet gevonden"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "keyboard thread crashed, restarting"
+msgstr "toetsenbordthread gecrasht, wordt herstart"
+
+#: apihub-app/apple-kb-monitord/src/alias.rs
+#, rust-format
+msgid "BlueZ: {e}"
+msgstr "BlueZ: {e}"
+
+#: apihub-app/apple-kb-monitord/src/alias.rs
+#, rust-format
+msgid "no paired Apple device {mac} in BlueZ"
+msgstr "geen gekoppeld Apple-apparaat {mac} in BlueZ"
+
+#: apihub-app/apple-kb-monitord/src/client.rs
+msgid "HID diagnostics unavailable (hidraw not readable): kernel battery only"
+msgstr ""
+"HID-diagnose niet beschikbaar (hidraw niet leesbaar): alleen batterijniveau "
+"van de kernel"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: not a setting of the module"
+msgstr "{key}: geen instelling van deze module"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: true or false"
+msgstr "{key}: true of false"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: integer from 0 to 99"
+msgstr "{key}: geheel getal van 0 tot 99"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: number from 1 to 20"
+msgstr "{key}: getal van 1 tot 20"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: one of {list}"
+msgstr "{key}: een van {list}"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: 1 to 10 integers from 1 to 99"
+msgstr "{key}: 1 tot 10 gehele getallen van 1 tot 99"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "config.toml is not valid TOML (line {line})"
+msgstr "config.toml is geen geldige TOML (regel {line})"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: config.toml uses a form this module cannot edit safely"
+msgstr ""
+"{key}: config.toml gebruikt een vorm die deze module niet veilig kan bewerken"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: writing it would change other settings, nothing written"
+msgstr "{key}: schrijven zou andere instellingen wijzigen, niets geschreven"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+msgid "config.toml changed since it was read"
+msgstr "config.toml is gewijzigd sinds het werd gelezen"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "akmctl {cmd}: not allowed"
+msgstr "akmctl {cmd}: niet toegestaan"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "config.toml is larger than {n} KiB"
+msgstr "config.toml is groter dan {n} KiB"
+
+#: apihub-app/apple-kb-monitord/src/devices.rs
+msgid ""
+"request queued: the daemon is reading the keyboard, the name is read again "
+"after that"
+msgstr ""
+"verzoek in de wachtrij: de dienst leest het toetsenbord, daarna wordt de "
+"naam opnieuw gelezen"
+
+#: apihub-app/apple-kb-monitord/src/devices.rs
+#, rust-format
+msgid "no thread for the request: {e}"
+msgstr "geen thread beschikbaar voor het verzoek: {e}"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "OK"
+msgstr "OK"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "installed"
+msgstr "geïnstalleerd"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#, rust-format
+msgid "{bin}: exit code {code}"
+msgstr "{bin}: afsluitcode {code}"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#, rust-format
+msgid "{bin}: no answer within {secs} s (killed)"
+msgstr "{bin}: geen antwoord binnen {secs} s (beëindigd)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "NOT FOUND"
+msgstr "NIET GEVONDEN"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "Monitor daemon"
+msgstr "Bewakingsdienst"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "BlueZ CLI"
+msgstr "BlueZ-CLI"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "active (running)"
+msgstr "actief (draait)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "inactive / not found (daemon started by hand?)"
+msgstr "inactief / niet gevonden (dienst met de hand gestart?)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "daemon reachable on the session bus"
+msgstr "dienst bereikbaar op de sessiebus"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "daemon without its session interface"
+msgstr "dienst zonder zijn sessie-interface"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "no Apple hidraw device found (keyboard off or not paired?)"
+msgstr ""
+"geen Apple-hidraw-apparaat gevonden (toetsenbord uit of niet gekoppeld?)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "readable"
+msgstr "leesbaar"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "check the udev uaccess rule"
+msgstr "controleer de udev-regel uaccess"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "hidraw readable"
+msgstr "hidraw leesbaar"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "kernel mapping, no hwdb installed (optional: akmctl keymap)"
+msgstr "kerneltoewijzing, geen hwdb geïnstalleerd (optioneel: akmctl keymap)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#, rust-format
+msgid "{hwdb}: {count} model remapped"
+msgid_plural "{hwdb}: {count} models remapped"
+msgstr[0] "{hwdb}: {count} model hertoegewezen"
+msgstr[1] "{hwdb}: {count} modellen hertoegewezen"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "reinstall: akmctl keymap apply, or remove: akmctl keymap reset"
+msgstr ""
+"opnieuw installeren: akmctl keymap apply, of verwijderen: akmctl keymap reset"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid " · keyd also active with /etc/keyd/apple-keyboard.conf (optional)"
+msgstr " · keyd ook actief met /etc/keyd/apple-keyboard.conf (optioneel)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "Key mapping"
+msgstr "Toetstoewijzing"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "udev rules"
+msgstr "udev-regels"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "70-apple-kb-hidraw.rules installed"
+msgstr "70-apple-kb-hidraw.rules geïnstalleerd"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#, rust-format
+msgid "applied (sysfs) = {} · configured (modprobe.d) = {}"
+msgstr "toegepast (sysfs) = {} · geconfigureerd (modprobe.d) = {}"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "unreadable (hid_apple not loaded?)"
+msgstr "niet leesbaar (hid_apple niet geladen?)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "none"
+msgstr "geen"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "differ: reload hid_apple or reboot"
+msgstr "verschillen: laad hid_apple opnieuw of herstart"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "not persistent: akmctl set fnmode N --persist"
+msgstr "niet blijvend: akmctl set fnmode N --persist"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "Signal measure"
+msgstr "Signaalmeting"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "rssi-helper executable, capability cap_net_admin present"
+msgstr "rssi-helper uitvoerbaar, capability cap_net_admin aanwezig"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "Fix:"
+msgstr "Oplossing:"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+msgid "an authentication is already pending"
+msgstr "er wacht al een authenticatie"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+msgid "too many requests, retry shortly"
+msgstr "te veel verzoeken, probeer het zo opnieuw"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "privileged helper not installed ({program})"
+msgstr "geprivilegieerd hulpprogramma niet geïnstalleerd ({program})"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "Nothing to do: profile {} is already applied."
+msgstr "Niets te doen: profiel {} is al toegepast."
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+msgid "key mapping installed"
+msgstr "toetstoewijzing geïnstalleerd"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+msgid "key mapping removed"
+msgstr "toetstoewijzing verwijderd"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+#, rust-format
+msgid "hid_apple {params} (all Apple keyboards)"
+msgstr "hid_apple {params} (alle Apple-toetsenborden)"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Open"
+msgstr "Openen"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Repair…"
+msgstr "Repareren…"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Ignore this reminder"
+msgstr "Deze herinnering negeren"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Remind me tomorrow"
+msgstr "Morgen herinneren"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Forget"
+msgstr "Vergeten"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apply"
+msgstr "Toepassen"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "{pct}%"
+msgstr "{pct}%"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — Low Battery"
+msgstr "Apple-toetsenbord — batterij bijna leeg"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "Battery at {pct} — charge soon"
+msgstr "Batterij op {pct} — binnenkort opladen"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Estimated charge"
+msgstr "Geschatte lading"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Keyboard indication"
+msgstr "Aanduiding van het toetsenbord"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "{what} {pct} — replace the batteries now"
+msgstr "{what} {pct} — vervang de batterijen nu"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "{what} {pct} (below {threshold}%) — plan to replace the batteries"
+msgstr ""
+"{what} {pct} (onder {threshold}%) — plan het vervangen van de batterijen"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — battery low (keyboard alert)"
+msgstr ""
+"Apple-toetsenbord — batterij bijna leeg (waarschuwing van het toetsenbord)"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid ""
+"The keyboard itself reports a low battery — plan to replace the batteries"
+msgstr ""
+"Het toetsenbord meldt zelf een bijna lege batterij — plan het vervangen van "
+"de batterijen"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — battery critical (keyboard alert)"
+msgstr ""
+"Apple-toetsenbord — batterij kritiek (waarschuwing van het toetsenbord)"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid ""
+"The keyboard itself reports a critically low battery — replace the batteries "
+"now"
+msgstr ""
+"Het toetsenbord meldt zelf een kritiek lege batterij — vervang de batterijen "
+"nu"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — new batteries"
+msgstr "Apple-toetsenbord — nieuwe batterijen"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "Battery {before} → {after}; low-battery alerts re-armed"
+msgstr ""
+"Batterij {before} → {after}; waarschuwingen voor lege batterij opnieuw "
+"ingeschakeld"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — batteries changed too often"
+msgstr "Apple-toetsenbord — batterijen te vaak gewisseld"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Critical"
+msgstr "Kritiek"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Low"
+msgstr "Laag"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "; keyboard indication {pct}"
+msgstr "; aanduiding van het toetsenbord {pct}"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "change the batteries now"
+msgstr "vervang de batterijen nu"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "plan to change the batteries"
+msgstr "plan het vervangen van de batterijen"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"Voltage {mv} mV, under the keyboard's {level} threshold ({t} mV){indication} "
+"— {todo}"
+msgstr ""
+"Spanning {mv} mV, onder de drempel {level} van het toetsenbord ({t} mV)"
+"{indication} — {todo}"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — change the batteries now"
+msgstr "Apple-toetsenbord — vervang de batterijen nu"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — time to change the batteries"
+msgstr "Apple-toetsenbord — tijd om de batterijen te vervangen"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"Estimate from your batteries: about {pct} left. KDE warns separately at {low}"
+"% of the keyboard's own indication."
+msgstr ""
+"Schatting op basis van uw batterijen: nog ongeveer {pct}. KDE waarschuwt "
+"apart bij {low}% van de eigen aanduiding van het toetsenbord."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — batteries getting low"
+msgstr "Apple-toetsenbord — batterijen raken leeg"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"“{name}” reconnected. Fn mode remembered for it: {want}; in effect: {live}. "
+"This setting (hid_apple) is common to every Apple keyboard of this computer; "
+"applying it asks for an authentication."
+msgstr ""
+"„{name}” opnieuw verbonden. Onthouden Fn-modus hiervoor: {want}; actief: "
+"{live}. Deze instelling (hid_apple) geldt voor alle Apple-toetsenborden van "
+"deze computer; toepassen vraagt om authenticatie."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — remembered Fn mode"
+msgstr "Apple-toetsenbord — onthouden Fn-modus"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"“{name}” will be removed from this computer. To use it again you will have "
+"to switch it off and on and pair it again. Nothing is written to the "
+"keyboard. Press “Forget” within one minute to confirm."
+msgstr ""
+"„{name}” wordt van deze computer verwijderd. Om het weer te gebruiken moet u "
+"het uit- en aanzetten en opnieuw koppelen. Er wordt niets naar het "
+"toetsenbord geschreven. Druk binnen een minuut op „Vergeten” om te "
+"bevestigen."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Forget the keyboard?"
+msgstr "Toetsenbord vergeten?"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"“{name}” disconnected {count} time within the last hour. Check the "
+"batteries, the distance and USB 3 devices near the Bluetooth adapter; "
+"details: akmctl doctor."
+msgid_plural ""
+"“{name}” disconnected {count} times within the last hour. Check the "
+"batteries, the distance and USB 3 devices near the Bluetooth adapter; "
+"details: akmctl doctor."
+msgstr[0] ""
+"„{name}” is in het afgelopen uur {count} keer losgekoppeld. Controleer de "
+"batterijen, de afstand en USB 3-apparaten bij de Bluetooth-adapter; details: "
+"akmctl doctor."
+msgstr[1] ""
+"„{name}” is in het afgelopen uur {count} keer losgekoppeld. Controleer de "
+"batterijen, de afstand en USB 3-apparaten bij de Bluetooth-adapter; details: "
+"akmctl doctor."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Keyboard: unstable link"
+msgstr "Toetsenbord: instabiele verbinding"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"“{name}” was removed from this computer: switch it off and on to pair it "
+"again (button Repair, or “akmctl repair”)."
+msgstr ""
+"„{name}” is van deze computer verwijderd: zet het uit en aan om het opnieuw "
+"te koppelen (knop Repareren, of „akmctl repair”)."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Keyboard removed from this computer"
+msgstr "Toetsenbord van deze computer verwijderd"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "Firmware {current}; latest version known: {latest}"
+msgstr "Firmware {current}; nieuwste bekende versie: {latest}"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — firmware update known"
+msgstr "Apple-toetsenbord — firmware-update bekend"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+#, rust-format
+msgid "Fn mode: {what}"
+msgstr "Fn-modus: {what}"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+msgid "automatic"
+msgstr "automatisch"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+#, rust-format
+msgid "Keyboard layout: {what}"
+msgstr "Toetsenbordindeling: {what}"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Caps Lock on"
+msgstr "Caps Lock aan"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+msgid "Caps Lock off"
+msgstr "Caps Lock uit"
+
+#: apihub-app/apple-kb-monitord/src/privileged.rs
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "cannot run pkexec: {e}"
+msgstr "kan pkexec niet uitvoeren: {e}"
+
+#: apihub-app/apple-kb-monitord/src/privileged.rs
+#, rust-format
+msgid "helper failed ({st}): {err}"
+msgstr "hulpprogramma mislukt ({st}): {err}"
+
+#: apihub-app/apple-kb-monitord/src/privileged.rs
+msgid "helper timed out"
+msgstr "time-out van het hulpprogramma"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+msgid "Keyboard unreachable"
+msgstr "Toetsenbord onbereikbaar"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+#, rust-format
+msgid ""
+"“{name}” has not answered for {min} min. Press a key; otherwise switch it "
+"off and on (the pairing is not at fault). Then: akmctl doctor"
+msgstr ""
+"„{name}” reageert al {min} min niet. Druk op een toets; zet het anders uit "
+"en aan (de koppeling is niet de oorzaak). Daarna: akmctl doctor"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+msgid "Keyboard: re-pairing needed"
+msgstr "Toetsenbord: opnieuw koppelen nodig"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+#, rust-format
+msgid "“{name}”: {why}. Run “akmctl repair” (or tray menu › Repair the link…)."
+msgstr ""
+"„{name}”: {why}. Voer „akmctl repair” uit (of systeemvakmenu › Verbinding "
+"repareren…)."
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+msgid "Keyboard reconnected"
+msgstr "Toetsenbord opnieuw verbonden"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+#, rust-format
+msgid "“{name}” is connected again."
+msgstr "„{name}” is weer verbonden."
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+msgid "a change of the Fn mode is already waiting for authentication"
+msgstr "een wijziging van de Fn-modus wacht al op authenticatie"
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "a change of the Fn mode just ended, retry in {s} s"
+msgstr ""
+"een wijziging van de Fn-modus is net afgerond, probeer opnieuw over {s} s"
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "{v} is not a valid {param}"
+msgstr "{v} is geen geldige waarde voor {param}"
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "{name} cannot be changed (read-only)"
+msgstr "{name} kan niet worden gewijzigd (alleen-lezen)"
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "the helper ended without error but the Fn mode in effect is still {now}"
+msgstr ""
+"het hulpprogramma eindigde zonder fout, maar de actieve Fn-modus is nog "
+"steeds {now}"
+
+#: apihub-app/apple-kb-monitord/src/sleep.rs
+msgid "Pause keyboard reads before the Bluetooth link goes down"
+msgstr "Toetsenbordlezingen pauzeren voordat de Bluetooth-verbinding wegvalt"
+
+#: apihub-app/apple-kb-monitord/src/sleep.rs
+msgid "Tell the keyboard the computer is shutting down (WillShutdown)"
+msgstr "Het toetsenbord laten weten dat de computer afsluit (WillShutdown)"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "Rename keyboard"
+msgstr "Toetsenbord hernoemen"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "New name (empty = the keyboard's own name):"
+msgstr "Nieuwe naam (leeg = eigen naam van het toetsenbord):"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "No new reading"
+msgstr "Geen nieuwe meting"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "Reconnection in progress"
+msgstr "Opnieuw verbinden bezig"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "An attempt is already waiting for BlueZ (40 s at most)."
+msgstr "Er wacht al een poging op BlueZ (maximaal 40 s)."
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "Fn mode not changed"
+msgstr "Fn-modus niet gewijzigd"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+#, rust-format
+msgid "A Fn mode change just finished: try again in {w}."
+msgstr ""
+"Een wijziging van de Fn-modus is net voltooid: probeer het over {w} opnieuw."
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "A Fn mode change is already waiting for authentication."
+msgstr "Een wijziging van de Fn-modus wacht al op authenticatie."
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "{volts} V"
+msgstr "{volts} V"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "New batteries: no estimate yet"
+msgstr "Nieuwe batterijen: nog geen schatting"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "alkaline"
+msgstr "alkaline"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "lithium"
+msgstr "lithium"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "Estimate ({chem}): ≈ {pct}% ({low} to {high}%)"
+msgstr "Schatting ({chem}): ≈ {pct}% ({low} tot {high}%)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Never updated"
+msgstr "Nooit bijgewerkt"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "{n} d"
+msgstr "{n} d"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "Updated {d} ago"
+msgstr "{d} geleden bijgewerkt"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Media keys first (Fn + F1 = F1)"
+msgstr "_Mediatoetsen eerst (Fn + F1 = F1)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "F1–F12 _first (Fn + F1 = media)"
+msgstr "F1–F12 _eerst (Fn + F1 = media)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Refresh"
+msgstr "_Vernieuwen"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Copy information"
+msgstr "Informatie _kopiëren"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Bluetooth settings…"
+msgstr "_Bluetooth-instellingen…"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Re_name keyboard…"
+msgstr "Toetsenbord _hernoemen…"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Re_pair the link…"
+msgstr "Verbinding re_pareren…"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Reconnec_t"
+msgstr "Opnieuw verbin_den"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Disconnect"
+msgstr "_Loskoppelen"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "For_get this keyboard…"
+msgstr "Dit toetsenbord ver_geten…"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Apple keyboard"
+msgstr "Apple-toetsenbord"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "offline"
+msgstr "offline"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Keyboard indication:"
+msgstr "Aanduiding van het toetsenbord:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "charging"
+msgstr "wordt opgeladen"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Apple display:"
+msgstr "Apple-beeldscherm:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Estimated runtime:"
+msgstr "Geschatte gebruiksduur:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Last value:"
+msgstr "Laatste waarde:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "No keyboard found"
+msgstr "Geen toetsenbord gevonden"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "level unknown"
+msgstr "niveau onbekend"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "connected"
+msgstr "verbonden"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "{name} — {level} · {link} · weakest"
+msgstr "{name} — {level} · {link} · zwakste"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "MAC:"
+msgstr "MAC:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Last error:"
+msgstr "Laatste fout:"
+
+#: apihub-app/crates/akm-helper/src/cmd/hid_control.rs
+#, rust-format
+msgid ""
+"unknown command {v}\n"
+"{USAGE}"
+msgstr ""
+"onbekende opdracht {v}\n"
+"{USAGE}"
+
+#: apihub-app/crates/akm-helper/src/cmd/hid_control.rs
+msgid "--mac needs a value"
+msgstr "--mac heeft een waarde nodig"
+
+#: apihub-app/crates/akm-helper/src/cmd/hid_control.rs
+#: apihub-app/crates/akm-helper/src/cmd/hid_inspect.rs
+#, rust-format
+msgid ""
+"unexpected argument {o}\n"
+"{USAGE}"
+msgstr ""
+"onverwacht argument {o}\n"
+"{USAGE}"
+
+#: apihub-app/crates/akm-helper/src/cmd/hid_inspect.rs
+#, rust-format
+msgid ""
+"--mac needs a value\n"
+"{USAGE}"
+msgstr ""
+"--mac vereist een waarde\n"
+"{USAGE}"
+
+#: apihub-app/crates/akm-helper/src/cmd/keymap_helper.rs
+msgid "PKEXEC_UID missing: run through pkexec"
+msgstr "PKEXEC_UID ontbreekt: start via pkexec"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: would rewrite {}"
+msgstr "{}: zou {} herschrijven"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "  previous content would be kept as {}"
+msgstr "  vorige inhoud zou bewaard worden als {}"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: {} already in place, nothing to write"
+msgstr "{}: {} is al aanwezig, niets te schrijven"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "  would run: {}"
+msgstr "  zou uitvoeren: {}"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: {} rewritten; previous content kept as {}"
+msgstr "{}: {} herschreven; vorige inhoud bewaard als {}"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: {} created"
+msgstr "{}: {} aangemaakt"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: {} already in place, nothing written"
+msgstr "{}: {} is al aanwezig, niets geschreven"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "  ran: {}"
+msgstr "  uitgevoerd: {}"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid ""
+"  read by {unit} at its next start (reboot, or akmctl doctor --fix --restart-"
+"services)"
+msgstr ""
+"  gelezen door {unit} bij de volgende start (herstart, of akmctl doctor --"
+"fix --restart-services)"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+msgid ""
+"BlueZ main.conf: FastConnectable and [Policy] Reconnect* in their sections"
+msgstr "BlueZ main.conf: FastConnectable en [Policy] Reconnect* in hun secties"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+msgid "UPower.conf: NoPollBatteries = true (no 30 s battery polling)"
+msgstr "UPower.conf: NoPollBatteries = true (geen batterijpeiling elke 30 s)"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+msgid "udev rule keeping the Bluetooth adapter out of USB autosuspend"
+msgstr "udev-regel die de Bluetooth-adapter buiten de USB-autosuspend houdt"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+#, rust-format
+msgid "unknown correction {word}; {USAGE}"
+msgstr "onbekende correctie {word}; {USAGE}"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+#, rust-format
+msgid "{word} given twice"
+msgstr "{word} twee keer opgegeven"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+msgid "--restart: none of these corrections has a service to restart"
+msgstr "--restart: geen van deze correcties heeft een dienst om te herstarten"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{path} (symlink refused?): {e}"
+msgstr "{path} (symbolische koppeling geweigerd?): {e}"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} is not a regular file"
+msgstr "{} is geen gewoon bestand"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{path} is larger than {max} bytes"
+msgstr "{path} is groter dan {max} bytes"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} is not owned by the requesting user"
+msgstr "{} is niet in bezit van de aanvragende gebruiker"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} has several hard links"
+msgstr "{} heeft meerdere harde koppelingen"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} is group or world writable"
+msgstr "{} is schrijfbaar voor groep of iedereen"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} is not a regular file (symlink?)"
+msgstr "{} is geen gewoon bestand (symbolische koppeling?)"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "expected NAME=VALUE, got {s}"
+msgstr "NAAM=WAARDE verwacht, {s} ontvangen"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "parameter {n} not allowed"
+msgstr "parameter {n} niet toegestaan"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "bad PKEXEC_UID {s}"
+msgstr "ongeldige PKEXEC_UID {s}"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+msgid ""
+"usage: akm-helper install-keymap install|remove|rollback (the file is read "
+"from /run/user/$PKEXEC_UID/apple-kb-monitor/keymap.hwdb)"
+msgstr ""
+"gebruik: akm-helper install-keymap install|remove|rollback (het bestand "
+"wordt gelezen uit /run/user/$PKEXEC_UID/apple-kb-monitor/keymap.hwdb)"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{value} failed ({st})"
+msgstr "{value} mislukt ({st})"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{source} refused: {e}"
+msgstr "{source} geweigerd: {e}"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+msgid ""
+"nothing to install (no KEYBOARD_KEY_ line); use `remove` to go back to the "
+"kernel mapping"
+msgstr ""
+"niets te installeren (geen KEYBOARD_KEY_-regel); gebruik `remove` om terug "
+"te gaan naar de kerneltoewijzing"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} installed ({} model); previous file kept as {}"
+msgid_plural "{} installed ({} models); previous file kept as {}"
+msgstr[0] "{} geïnstalleerd ({} model); vorig bestand bewaard als {}"
+msgstr[1] "{} geïnstalleerd ({} modellen); vorig bestand bewaard als {}"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+msgid "nothing installed: the kernel mapping is already in use"
+msgstr "niets geïnstalleerd: de kerneltoewijzing is al in gebruik"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} removed (kept as {}); kernel mapping restored"
+msgstr "{} verwijderd (bewaard als {}); kerneltoewijzing hersteld"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+msgid "no previous mapping saved"
+msgstr "geen vorige toewijzing opgeslagen"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{backup} refused: {e}"
+msgstr "{backup} geweigerd: {e}"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "previous mapping restored in {}"
+msgstr "vorige toewijzing hersteld in {}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "unknown option {f}"
+msgstr "onbekende optie {f}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "unknown command {verb}"
+msgstr "onbekende opdracht {verb}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "invalid fnmode {val} (expected 0, 1, 2, 3 or 4)"
+msgstr "ongeldige fnmode {val} (verwacht 0, 1, 2, 3 of 4)"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "parameter {n} given twice"
+msgstr "parameter {n} twee keer opgegeven"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "{path} not updated: {e}"
+msgstr "{path} niet bijgewerkt: {e}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "{path} updated but cannot write {dir}/{name}: {e}"
+msgstr "{path} bijgewerkt maar kan {dir}/{name} niet schrijven: {e}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "cannot write {dir}/{name}: {e}"
+msgstr "kan {dir}/{name} niet schrijven: {e}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "unknown command {verb} (expected {list})"
+msgstr "onbekende opdracht {verb} (verwacht: {list})"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "hid_apple not loaded: {params} saved, applied at next module load"
+msgstr ""
+"hid_apple niet geladen: {params} opgeslagen, toegepast bij de volgende keer "
+"dat de module laadt"
+
+#: apihub-app/crates/akmctl/src/bus.rs
+#, rust-format
+msgid "no session bus: {e}"
+msgstr "geen sessiebus: {e}"
+
+#: apihub-app/crates/akmctl/src/bus.rs
+#, rust-format
+msgid "bad snapshot JSON: {e}"
+msgstr "ongeldige snapshot-JSON: {e}"
+
+#: apihub-app/crates/akmctl/src/bus.rs
+#, rust-format
+msgid "daemon not running ({name} absent on the session bus)"
+msgstr "dienst draait niet ({name} ontbreekt op de sessiebus)"
+
+#: apihub-app/crates/akmctl/src/cli.rs
+msgid "empty name (use --reset to restore the keyboard's own name)"
+msgstr ""
+"lege naam (gebruik --reset om de eigen naam van het toetsenbord terug te "
+"zetten)"
+
+#: apihub-app/crates/akmctl/src/cli_i18n.rs
+msgid "Options"
+msgstr "Opties"
+
+#: apihub-app/crates/akmctl/src/cli_i18n.rs
+msgid "Arguments"
+msgstr "Argumenten"
+
+#: apihub-app/crates/akmctl/src/cli_i18n.rs
+msgid "Usage:"
+msgstr "Gebruik:"
+
+#: apihub-app/crates/akmctl/src/cli_i18n.rs
+msgid "Commands"
+msgstr "Opdrachten"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Control and query the Apple keyboard monitor"
+msgstr "De Apple-toetsenbordmonitor besturen en bevragen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Control and query the Apple keyboard monitor (apple-kb-monitord).\n"
+"\n"
+"The Fn mode is a parameter of the hid_apple kernel module: it applies to ALL "
+"Apple keyboards connected to this computer, not to a single one. Changing it "
+"requires administrator rights (polkit authentication)."
+msgstr ""
+"De Apple-toetsenbordmonitor (apple-kb-monitord) besturen en bevragen.\n"
+"\n"
+"De Fn-modus is een parameter van de kernelmodule hid_apple: hij geldt voor "
+"ALLE Apple-toetsenborden die op deze computer zijn aangesloten, niet voor "
+"één. Wijzigen vereist beheerdersrechten (polkit-authenticatie)."
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"EXIT CODES:\n"
+"  0   success\n"
+"  1   error (D-Bus failure, write refused, bad data)\n"
+"  2   daemon absent (apple-kb-monitord not on the session bus)\n"
+"  64  usage error (invalid arguments)\n"
+"\n"
+"FN MODES (hid_apple.fnmode, global to every Apple keyboard):\n"
+"  0  disabled   Fn key has no effect\n"
+"  1  fkeyslast  media keys by default, Fn+Fx = F-key\n"
+"  2  fkeysfirst F-keys by default, Fn+Fx = media key\n"
+"  3  auto       kernel default: = 1 on an Apple keyboard\n"
+"  4  fkeysdisabled F-keys disabled (media keys only)"
+msgstr ""
+"AFSLUITCODES:\n"
+"  0   succes\n"
+"  1   fout (D-Bus-fout, schrijven geweigerd, ongeldige gegevens)\n"
+"  2   dienst afwezig (apple-kb-monitord niet op de sessiebus)\n"
+"  64  gebruiksfout (ongeldige argumenten)\n"
+"\n"
+"FN-MODI (hid_apple.fnmode, globaal voor alle Apple-toetsenborden):\n"
+"  0  disabled   Fn-toets heeft geen effect\n"
+"  1  fkeyslast  standaard mediatoetsen, Fn+Fx = F-toets\n"
+"  2  fkeysfirst standaard F-toetsen, Fn+Fx = mediatoets\n"
+"  3  auto       kernelstandaard: = 1 op een Apple-toetsenbord\n"
+"  4  fkeysdisabled F-toetsen uitgeschakeld (alleen mediatoetsen)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print help (see more with '--help')"
+msgstr "Hulp tonen (meer met '--help')"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print help (see a summary with '-h')"
+msgstr "Hulp tonen (samenvatting met '-h')"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print version"
+msgstr "Versie tonen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Show keyboard state (battery, connection, RSSI, Fn mode)"
+msgstr "Toetsenbordstatus tonen (batterij, verbinding, RSSI, Fn-modus)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Machine-readable JSON (schema 1) on a single line"
+msgstr "Machineleesbare JSON (schema 1) op één regel"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print help"
+msgstr "Hulp tonen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Read a setting"
+msgstr "Een instelling lezen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Current Fn mode (0-4), read from /sys/module/hid_apple/parameters/fnmode"
+msgstr ""
+"Huidige Fn-modus (0-4), gelezen uit /sys/module/hid_apple/parameters/fnmode"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "hid_apple parameters (all of them, or one)"
+msgstr "hid_apple-parameters (allemaal, of één)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print this message or the help of the given subcommand(s)"
+msgstr "Dit bericht of de hulp van de opgegeven subopdracht(en) tonen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Change a setting (administrator authentication required)"
+msgstr "Een instelling wijzigen (beheerdersauthenticatie vereist)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Set the Fn mode of hid_apple (0-4). Global to ALL Apple keyboards; asks for "
+"administrator authentication through polkit (pkexec akm-helper)"
+msgstr ""
+"De Fn-modus van hid_apple instellen (0-4). Globaal voor ALLE Apple-"
+"toetsenborden; vraagt om beheerdersauthenticatie via polkit (pkexec akm-"
+"helper)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "0 disabled, 1 fkeyslast, 2 fkeysfirst, 3 auto, 4 fkeysdisabled"
+msgstr "0 disabled, 1 fkeyslast, 2 fkeysfirst, 3 auto, 4 fkeysdisabled"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Also write it to /etc/modprobe.d/hid_apple.conf so it survives reboots"
+msgstr ""
+"Ook naar /etc/modprobe.d/hid_apple.conf schrijven zodat het herstarts "
+"overleeft"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Set a hid_apple parameter (fnmode 0-4, iso_layout -1..1, swap_opt_cmd 0-2, "
+"swap_ctrl_cmd 0-1, swap_fn_leftctrl 0-1). Global to ALL Apple keyboards"
+msgstr ""
+"Een hid_apple-parameter instellen (fnmode 0-4, iso_layout -1..1, "
+"swap_opt_cmd 0-2, swap_ctrl_cmd 0-1, swap_fn_leftctrl 0-1). Globaal voor "
+"ALLE Apple-toetsenborden"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Also write it to /etc/modprobe.d/hid_apple.conf"
+msgstr "Ook naar /etc/modprobe.d/hid_apple.conf schrijven"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Rename the keyboard on this computer (BlueZ alias; nothing is written into "
+"the keyboard). With --device-name: the name stored IN the keyboard"
+msgstr ""
+"Het toetsenbord op deze computer hernoemen (BlueZ-alias; er wordt niets in "
+"het toetsenbord geschreven). Met --device-name: de naam die IN het "
+"toetsenbord is opgeslagen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"TWO NAMES:\n"
+"  akmctl rename <name>                 alias of THIS computer (BlueZ Alias): "
+"nothing written into the keyboard\n"
+"  akmctl rename --device-name <name>   WRITES the name stored IN the "
+"keyboard (seen by every host):\n"
+"                                       pre-flight, backup of the current "
+"name, ONE confirmation [y/N]\n"
+"                                       (--yes skips it and works without a "
+"terminal), one write, immediate\n"
+"                                       read-back, verdict. No password in "
+"the active local session.\n"
+"                                       --check: whole pre-flight and backup, "
+"nothing written, nothing asked\n"
+"                                       --dry-run: shows the bytes, no "
+"pkexec, nothing written\n"
+"                                       --verbose: frames, wire bytes, proof, "
+"[devname] journal\n"
+"  akmctl rename --device-name --show   name stored in the keyboard, from the "
+"daemon's cache\n"
+"  akmctl rename --device-name --restore <backup.json> [--yes]   write a "
+"backup back (same flow)\n"
+"Exit codes of --device-name: 0 written and read back identical (or --check "
+"green), 10 no terminal and\n"
+"no --yes, 11 pre-flight refused, 12 cancelled, 13 written but not read back "
+"(check with --show),\n"
+"14 read back different (rollback command printed), 15 write uncertain (the "
+"write failed on its way:\n"
+"a frame may have been sent, check with --show). Persistence across a battery "
+"change is not measured\n"
+"(docs/RENAME-KEYBOARD.md)."
+msgstr ""
+"TWEE NAMEN:\n"
+"  akmctl rename <name>                 alias van DEZE computer (BlueZ "
+"Alias): niets in het toetsenbord geschreven\n"
+"  akmctl rename --device-name <name>   SCHRIJFT de naam die IN het "
+"toetsenbord is opgeslagen (zichtbaar voor elke host):\n"
+"                                       voorcontrole, back-up van de huidige "
+"naam, ÉÉN bevestiging [y/N]\n"
+"                                       (--yes slaat die over en werkt zonder "
+"terminal), één schrijfactie, direct\n"
+"                                       teruglezen, oordeel. Geen wachtwoord "
+"in de actieve lokale sessie.\n"
+"                                       --check: volledige voorcontrole en "
+"back-up, niets geschreven, niets gevraagd\n"
+"                                       --dry-run: toont de bytes, geen "
+"pkexec, niets geschreven\n"
+"                                       --verbose: frames, bytes op de lijn, "
+"bewijs, journaal [devname]\n"
+"  akmctl rename --device-name --show   naam opgeslagen in het toetsenbord, "
+"uit de cache van de dienst\n"
+"  akmctl rename --device-name --restore <backup.json> [--yes]   een back-up "
+"terugschrijven (zelfde verloop)\n"
+"Afsluitcodes van --device-name: 0 geschreven en identiek teruggelezen (of --"
+"check groen), 10 geen terminal en\n"
+"geen --yes, 11 voorcontrole geweigerd, 12 geannuleerd, 13 geschreven maar "
+"niet teruggelezen (controleer met --show),\n"
+"14 anders teruggelezen (terugdraaiopdracht getoond), 15 schrijven onzeker "
+"(het schrijven mislukte onderweg:\n"
+"er is mogelijk een frame verzonden, controleer met --show). Behoud na een "
+"batterijwissel is niet gemeten\n"
+"(docs/RENAME-KEYBOARD.md)."
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "New alias (max 64 characters, no control characters)"
+msgstr "Nieuwe alias (max. 64 tekens, geen stuurtekens)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Restore the keyboard's own name"
+msgstr "De eigen naam van het toetsenbord herstellen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Keyboard to rename (default: the one the daemon reports)"
+msgstr ""
+"Te hernoemen toetsenbord (standaard: het toetsenbord dat de dienst meldt)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Write the name stored IN the keyboard (printable ASCII, 1-32 characters); "
+"without a value: with --show or --restore"
+msgstr ""
+"De naam schrijven die IN het toetsenbord is opgeslagen (afdrukbare ASCII, "
+"1-32 tekens); zonder waarde: met --show of --restore"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Do not ask the confirmation (works without a terminal)"
+msgstr "Niet om bevestiging vragen (werkt zonder terminal)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Show the bytes that would be sent, write nothing, no pkexec"
+msgstr ""
+"De bytes tonen die verzonden zouden worden, niets schrijven, geen pkexec"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Whole pre-flight (control-channel MTU read via ONE pkexec, read-only) and "
+"backup; nothing written, nothing asked"
+msgstr ""
+"Volledige voorcontrole (MTU van het besturingskanaal gelezen via ÉÉN pkexec, "
+"alleen-lezen) en back-up; niets geschreven, niets gevraagd"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Accepted for compatibility, no effect: --device-name writes by default"
+msgstr ""
+"Geaccepteerd voor compatibiliteit, geen effect: --device-name schrijft "
+"standaard"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Show the name stored in the keyboard (daemon cache, no hardware read)"
+msgstr ""
+"De in het toetsenbord opgeslagen naam tonen (cache van de dienst, geen "
+"hardware-lezing)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Write back a backup made by a previous --device-name run"
+msgstr ""
+"Een back-up terugschrijven die door een eerdere --device-name-uitvoering is "
+"gemaakt"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Byte-by-byte detail (frames, wire, proof, [devname] journal)"
+msgstr "Byte-voor-byte-details (frames, lijn, bewijs, journaal [devname])"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Follow StateChanged signals: one JSON line per change, until interrupted"
+msgstr ""
+"StateChanged-signalen volgen: één JSON-regel per wijziging, tot onderbreking"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Battery history (single store: $XDG_STATE_HOME/apple-kb-monitor/"
+"history.jsonl)"
+msgstr ""
+"Batterijgeschiedenis (enkele opslag: $XDG_STATE_HOME/apple-kb-monitor/"
+"history.jsonl)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Oldest entry: 90m, 24h, 7d, 2w, YYYY-MM-DD or \"YYYY-MM-DD HH:MM\" (UTC)"
+msgstr ""
+"Oudste item: 90m, 24h, 7d, 2w, YYYY-MM-DD of \"YYYY-MM-DD HH:MM\" (UTC)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Newest entry (same formats)"
+msgstr "Nieuwste item (zelfde formaten)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Keep only the last N entries"
+msgstr "Alleen de laatste N items behouden"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "JSON array on one line instead of the table"
+msgstr "JSON-array op één regel in plaats van de tabel"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Export the history on stdout"
+msgstr "De geschiedenis naar stdout exporteren"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "CSV format (the only one; header included)"
+msgstr "CSV-formaat (het enige; met kopregel)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Import a history file of the former Python CLI into the single store. The "
+"source is not modified; existing lines are not duplicated"
+msgstr ""
+"Een geschiedenisbestand van de vroegere Python-CLI in de enkele opslag "
+"importeren. De bron wordt niet gewijzigd; bestaande regels worden niet "
+"gedupliceerd"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "File to import (history.jsonl of the Python CLI)"
+msgstr "Te importeren bestand (history.jsonl van de Python-CLI)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Terminal chart of the battery (percentage and voltage) over 24 h or 7 days"
+msgstr ""
+"Terminalgrafiek van de batterij (percentage en spanning) over 24 u of 7 dagen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Time window"
+msgstr "Tijdvenster"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"JSON for a waybar/polybar custom module (classes: good, warning, critical, "
+"disconnected)"
+msgstr ""
+"JSON voor een aangepaste waybar/polybar-module (klassen: good, warning, "
+"critical, disconnected)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Prometheus text exposition of the keyboard state (one page)"
+msgstr "Prometheus-tekstuitvoer van de toetsenbordstatus (één pagina)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Switch a keyboard LED (NumLock can only be switched off)"
+msgstr ""
+"Een toetsenbord-led schakelen (NumLock kan alleen worden uitgeschakeld)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Ask the daemon to send WillShutdown (Feature 0x40, id only) to the keyboard, "
+"as macOS does at shutdown: once, only if connected and `[apple] "
+"will_shutdown` is on. Run by the shutdown unit"
+msgstr ""
+"De dienst vragen WillShutdown (Feature 0x40, alleen id) naar het toetsenbord "
+"te sturen, zoals macOS bij het afsluiten doet: één keer, alleen als "
+"verbonden en `[apple] will_shutdown` aan staat. Uitgevoerd door de afsluit-"
+"unit"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Do nothing unless the system is shutting down or restarting (`systemctl is-"
+"system-running` = stopping): used by the unit, so that a logout or a service "
+"restart never sends it"
+msgstr ""
+"Niets doen tenzij het systeem afsluit of herstart (`systemctl is-system-"
+"running` = stopping): gebruikt door de unit, zodat afmelden of een herstart "
+"van de dienst het nooit verstuurt"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Send HID_CONTROL SUSPEND (0x13) or EXIT_SUSPEND (0x14) to the connected "
+"Apple keyboards, as macOS bluetoothd does at sleep and wake: one byte on the "
+"HID control channel of bluetoothd, administrator authentication. The system "
+"units send it by themselves at every sleep/wake; this is the manual test. --"
+"dry-run writes nothing"
+msgstr ""
+"HID_CONTROL SUSPEND (0x13) of EXIT_SUSPEND (0x14) naar de verbonden Apple-"
+"toetsenborden sturen, zoals bluetoothd van macOS bij slaap en ontwaken doet: "
+"één byte op het HID-besturingskanaal van bluetoothd, "
+"beheerdersauthenticatie. De systeem-units sturen het zelf bij elke slaap/"
+"ontwaking; dit is de handmatige test. --dry-run schrijft niets"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"suspend: HID_CONTROL SUSPEND, byte 0x13 (what the suspend unit sends before "
+"sleep); exit-suspend: HID_CONTROL EXIT_SUSPEND, byte 0x14 (what the resume "
+"unit sends at wake)"
+msgstr ""
+"suspend: HID_CONTROL SUSPEND, byte 0x13 (wat de slaapstand-unit vóór de "
+"slaapstand stuurt); exit-suspend: HID_CONTROL EXIT_SUSPEND, byte 0x14 (wat "
+"de hervat-unit bij het ontwaken stuurt)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Only this keyboard (must be a connected Apple keyboard)"
+msgstr "Alleen dit toetsenbord (moet een verbonden Apple-toetsenbord zijn)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Show the bluetoothd socket that would be used (pid, fd, MAC, PSM, state) and "
+"send nothing"
+msgstr ""
+"De bluetoothd-socket tonen die gebruikt zou worden (pid, fd, MAC, PSM, "
+"status) en niets versturen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Register map of the keyboard (every known HID report: name, size, safety "
+"class) with the values the daemon has cached, \"never read\" otherwise. "
+"Never reads the keyboard"
+msgstr ""
+"Registerkaart van het toetsenbord (elk bekend HID-rapport: naam, grootte, "
+"veiligheidsklasse) met de waarden in de cache van de dienst, anders \"nooit "
+"gelezen\". Leest het toetsenbord nooit"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Machine-readable JSON"
+msgstr "Machineleesbare JSON"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Firmware version of the keyboard against the embedded table of Apple's "
+"public firmware updates, where one exists (read once per connection by the "
+"daemon; no network, never flashes)"
+msgstr ""
+"Firmwareversie van het toetsenbord vergeleken met de ingebouwde tabel van "
+"openbare firmware-updates van Apple, waar die bestaat (één keer per "
+"verbinding door de dienst gelezen; geen netwerk, flasht nooit)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Read the 3 allowed HID reports (0x47, 0x46, 0x49) with the safe read policy: "
+"no scan, never 0x4C / 0xFE / 0x01. Press a key first (an idle keyboard is "
+"left alone)"
+msgstr ""
+"De 3 toegestane HID-rapporten (0x47, 0x46, 0x49) lezen met het veilige "
+"leesbeleid: geen scan, nooit 0x4C / 0xFE / 0x01. Druk eerst op een toets "
+"(een inactief toetsenbord wordt met rust gelaten)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Diagnose the Bluetooth link in one command (BlueZ, pairing, adapter power "
+"management, BlueZ/UPower configuration, journal, hidraw, daemon). Read-only "
+"unless --fix; run with sudo to also compare the stored and kernel link keys"
+msgstr ""
+"De Bluetooth-verbinding met één opdracht diagnosticeren (BlueZ, koppeling, "
+"energiebeheer van de adapter, BlueZ/UPower-configuratie, journaal, hidraw, "
+"dienst). Alleen-lezen behalve met --fix; voer uit met sudo om ook de "
+"opgeslagen en kernel-koppelingssleutels te vergelijken"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Keyboard to check (default: the paired one)"
+msgstr "Te controleren toetsenbord (standaard: het gekoppelde)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Apply the corrections of the system files the diagnostic proposes (BlueZ "
+"main.conf, udev rule of the adapter), through the privileged helper: one "
+"administrator authentication, the previous file kept as <name>.akm-bak"
+msgstr ""
+"De correcties van systeembestanden toepassen die de diagnose voorstelt "
+"(BlueZ main.conf, udev-regel van de adapter), via het geprivilegieerde "
+"hulpprogramma: één beheerdersauthenticatie, het vorige bestand wordt bewaard "
+"als <name>.akm-bak"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "With --fix: show what would change, write nothing (no password)"
+msgstr ""
+"Met --fix: tonen wat er zou veranderen, niets schrijven (geen wachtwoord)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"With --fix: also restart bluetooth / upower so the corrected file is read "
+"now (drops every Bluetooth link for a few seconds)"
+msgstr ""
+"Met --fix: ook bluetooth / upower herstarten zodat het gecorrigeerde bestand "
+"meteen wordt gelezen (verbreekt alle Bluetooth-verbindingen enkele seconden)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "With --fix: also apply the corrections marked \"optional\" (UPower)"
+msgstr ""
+"Met --fix: ook de als \"optional\" gemarkeerde correcties toepassen (UPower)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Guided repair of the link: wake + reconnect first; re-pair only after a "
+"typed confirmation (the pairing is never removed otherwise)"
+msgstr ""
+"Begeleide reparatie van de verbinding: eerst wekken + opnieuw verbinden; "
+"opnieuw koppelen alleen na een getypte bevestiging (anders wordt de "
+"koppeling nooit verwijderd)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Keyboard to repair (default: the paired one)"
+msgstr "Te repareren toetsenbord (standaard: het gekoppelde)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Offer re-pairing even if the link looks healthy"
+msgstr "Opnieuw koppelen aanbieden, ook als de verbinding gezond lijkt"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Effective table of the special keys (F1-F12, Eject; --all: every known key): "
+"physical key -> evdev code (after hwdb and hid_apple, per fnmode) -> keysym "
+"-> KDE global shortcut. Never reads a key press, except with --live"
+msgstr ""
+"Effectieve tabel van de speciale toetsen (F1-F12, Eject; --all: alle bekende "
+"toetsen): fysieke toets -> evdev-code (na hwdb en hid_apple, per fnmode) -> "
+"keysym -> globale KDE-sneltoets. Leest nooit een toetsaanslag, behalve met --"
+"live"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Verdict per key ([ok] = a KDE shortcut is bound) and what to test"
+msgstr ""
+"Oordeel per toets ([ok] = er is een KDE-sneltoets toegewezen) en wat te "
+"testen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "All known keys (modifiers, arrows, Fn...), not only the top row"
+msgstr ""
+"Alle bekende toetsen (modificatietoetsen, pijlen, Fn...), niet alleen de "
+"bovenste rij"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Machine-readable JSON (with the KDE actions)"
+msgstr "Machineleesbare JSON (met de KDE-acties)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Live view of the key events of the Apple keyboard instead of the table: HID "
+"usage, evdev code, name, one line per press and release. Reads the evdev "
+"node (read-only, group \"input\"), records nothing. Leave with Escape held 2 "
+"s, or Ctrl-C"
+msgstr ""
+"Live weergave van de toetsgebeurtenissen van het Apple-toetsenbord in plaats "
+"van de tabel: HID-usage, evdev-code, naam, één regel per indrukken en "
+"loslaten. Leest de evdev-node (alleen-lezen, groep \"input\"), registreert "
+"niets. Verlaten door Escape 2 s ingedrukt te houden, of Ctrl-C"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Manual key mapping without keyd ($XDG_CONFIG_HOME/apple-kb-monitor/"
+"keymap.toml -> udev hwdb, installed with administrator authentication)"
+msgstr ""
+"Handmatige toetstoewijzing zonder keyd ($XDG_CONFIG_HOME/apple-kb-monitor/"
+"keymap.toml -> udev-hwdb, geïnstalleerd met beheerdersauthenticatie)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Show the profiles of keymap.toml (--hwdb: the file `apply` would install)"
+msgstr ""
+"De profielen van keymap.toml tonen (--hwdb: het bestand dat `apply` zou "
+"installeren)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Remap a key: KEY = F1..F12, Eject, Fn, LeftCmd... or a HID usage (0x7003a); "
+"CODE = a KEY_* name of linux/input-event-codes.h. Applied by `apply`"
+msgstr ""
+"Een toets hertoewijzen: KEY = F1..F12, Eject, Fn, LeftCmd... of een HID-"
+"usage (0x7003a); CODE = een KEY_*-naam uit linux/input-event-codes.h. "
+"Toegepast door `apply`"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Profile to edit (default: the active one)"
+msgstr "Te bewerken profiel (standaard: het actieve)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Back to the kernel mapping for one key (in keymap.toml)"
+msgstr "Voor één toets terug naar de kerneltoewijzing (in keymap.toml)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Preset of a profile (hid_apple parameters): apple (Apple legend, fnmode=1 "
+"swap_opt_cmd=0), fkeys (F1-F12 first, fnmode=2), linux-pc (Cmd<->Alt, "
+"swap_opt_cmd=1), none (parameters left as they are, the default)"
+msgstr ""
+"Voorinstelling van een profiel (hid_apple-parameters): apple (Apple-"
+"opschrift, fnmode=1 swap_opt_cmd=0), fkeys (F1-F12 eerst, fnmode=2), linux-"
+"pc (Cmd<->Alt, swap_opt_cmd=1), none (parameters blijven ongewijzigd, de "
+"standaard)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Select the active profile (created with the apple preset if new)"
+msgstr ""
+"Het actieve profiel kiezen (aangemaakt met de voorinstelling apple als het "
+"nieuw is)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Install the active profile: udev hwdb (akm-helper install-keymap) and "
+"hid_apple parameters (akm-helper, persistent, ALL Apple keyboards)"
+msgstr ""
+"Het actieve profiel installeren: udev-hwdb (akm-helper install-keymap) en "
+"hid_apple-parameters (akm-helper, blijvend, ALLE Apple-toetsenborden)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Show what would change, change nothing"
+msgstr "Tonen wat er zou veranderen, niets wijzigen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Remove the installed hwdb (kernel mapping back at once) and clear the keys "
+"of the active profile"
+msgstr ""
+"De geïnstalleerde hwdb verwijderen (kerneltoewijzing direct terug) en de "
+"toetsen van het actieve profiel wissen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Restore the previously installed hwdb file"
+msgstr "Het eerder geïnstalleerde hwdb-bestand herstellen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Add the KDE shortcuts the Apple legend needs and KDE lacks (F4 = Launch (D) "
+"-> application launcher), never replacing a binding"
+msgstr ""
+"De KDE-sneltoetsen toevoegen die het Apple-opschrift nodig heeft en die KDE "
+"mist (F4 = Launch (D) -> programmastarter), zonder ooit een toewijzing te "
+"vervangen"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Remove exactly the keys kde-apply added"
+msgstr "Precies de toetsen verwijderen die kde-apply heeft toegevoegd"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Health self-check (daemon, link, journal, crashes, disk), run by apple-kb-"
+"monitor-selfcheck.timer"
+msgstr ""
+"Gezondheidszelftest (dienst, verbinding, journaal, crashes, schijf), "
+"uitgevoerd door apple-kb-monitor-selfcheck.timer"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print the result as JSON (the same object as selfcheck.json)"
+msgstr "Het resultaat als JSON tonen (hetzelfde object als selfcheck.json)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Desktop notification for each NEW grave problem (deduplicated)"
+msgstr "Bureaubladmelding voor elk NIEUW ernstig probleem (ontdubbeld)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Also open one Gitea issue per new grave problem (deduplicated; needs "
+"AKM_GITEA_API, AKM_GITEA_REPO and ~/.config/gitea/token). Off by default"
+msgstr ""
+"Ook één Gitea-issue per nieuw ernstig probleem openen (ontdubbeld; vereist "
+"AKM_GITEA_API, AKM_GITEA_REPO en ~/.config/gitea/token). Standaard uit"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Result file (default: $XDG_STATE_HOME/apple-kb-monitor/selfcheck.json)"
+msgstr ""
+"Resultaatbestand (standaard: $XDG_STATE_HOME/apple-kb-monitor/selfcheck.json)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Do not write the result file (dry run)"
+msgstr "Het resultaatbestand niet schrijven (proefdraai)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print a shell completion script on stdout"
+msgstr "Een shell-aanvullingsscript naar stdout schrijven"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print the manual page (roff) on stdout"
+msgstr "De handleidingpagina (roff) naar stdout schrijven"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Two names exist:\n"
+"* alias on THIS computer (BlueZ Alias): `akmctl rename <name>`, the default, "
+"no risk, nothing written into the keyboard;\n"
+"* name stored IN the keyboard (firmware, reports 0x51-0x54 / 0x55), seen by "
+"every host: `akmctl rename --device-name`.\n"
+msgstr ""
+"Er bestaan twee namen:\n"
+"* alias op DEZE computer (BlueZ Alias): `akmctl rename <name>`, de "
+"standaard, zonder risico, er wordt niets in het toetsenbord geschreven;\n"
+"* naam opgeslagen IN het toetsenbord (firmware, rapporten 0x51-0x54 / 0x55), "
+"zichtbaar voor elke host: `akmctl rename --device-name`.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Refused: --mac {mac} is not the keyboard the daemon follows ({daemon}), so "
+"its pre-flight state and current name are unknown. Nothing was touched.\n"
+msgstr ""
+"Geweigerd: --mac {mac} is niet het toetsenbord dat de dienst volgt "
+"({daemon}), dus de voorafgaande toestand en de huidige naam zijn onbekend. "
+"Er is niets aangeraakt.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Alias (this computer):"
+msgstr "Alias (deze computer):"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "(none)"
+msgstr "(geen)"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Stored in the keyboard (0x51-0x54, daemon cache):"
+msgstr "Opgeslagen in het toetsenbord (0x51-0x54, cache van de dienst):"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "bytes:"
+msgstr "bytes:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Stored in the keyboard: not read yet in this connection (the daemon reads "
+"0x51-0x54 once per connection; no new hardware read is made here)\n"
+msgstr ""
+"Opgeslagen in het toetsenbord: nog niet gelezen in deze verbinding (de "
+"dienst leest 0x51-0x54 één keer per verbinding; hier wordt geen nieuwe "
+"hardware-lezing gedaan)\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Proof of the sequence:"
+msgstr "Bewijs van de reeks:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Settled by disassembly (docs/RENAME-KEYBOARD.md):"
+msgstr "Vastgesteld door disassemblage (docs/RENAME-KEYBOARD.md):"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Measured on the keyboard (firmware 0x0050):\n"
+msgstr "Gemeten op het toetsenbord (firmware 0x0050):\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Not measured:\n"
+msgstr "Niet gemeten:\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Experiments:\n"
+msgstr "Experimenten:\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Frame sent (the one of Lion 10.7.5 setDeviceName:, established by "
+"disassembly):"
+msgstr ""
+"Verzonden frame (dat van Lion 10.7.5 setDeviceName:, vastgesteld door "
+"disassemblage):"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Pre-flight: ok (doctor green, battery {battery} %, breaker closed, outgoing "
+"MTU {mtu} >= {min})\n"
+msgstr ""
+"Voorcontrole: ok (doctor groen, batterij {battery} %, stroomonderbreker "
+"gesloten, uitgaande MTU {mtu} >= {min})\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Pre-flight: ok (doctor green, battery {battery} %, breaker closed)\n"
+msgstr ""
+"Voorcontrole: ok (doctor groen, batterij {battery} %, stroomonderbreker "
+"gesloten)\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Pre-flight: ok (doctor green, breaker closed, outgoing MTU {mtu} >= {min})\n"
+msgstr ""
+"Voorcontrole: ok (doctor groen, stroomonderbreker gesloten, uitgaande MTU "
+"{mtu} >= {min})\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Pre-flight: ok (doctor green, breaker closed)\n"
+msgstr "Voorcontrole: ok (doctor groen, stroomonderbreker gesloten)\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Refused: no terminal to confirm. Add --yes to write without the question. "
+"Nothing was touched.\n"
+msgstr ""
+"Geweigerd: geen terminal om te bevestigen. Voeg --yes toe om zonder vraag te "
+"schrijven. Er is niets aangeraakt.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "name refused:"
+msgstr "naam geweigerd:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "New name stored in the keyboard:"
+msgstr "Nieuwe naam opgeslagen in het toetsenbord:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"\n"
+"DRY RUN: nothing is written to the keyboard.\n"
+msgstr ""
+"\n"
+"PROEFDRAAI: er wordt niets naar het toetsenbord geschreven.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Pre-flight: FAILED -"
+msgstr "Voorcontrole: MISLUKT -"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Pre-flight: control-channel MTU not probed in a dry run (needs pkexec); with "
+"--check or when writing it is probed and must be >= {min}\n"
+msgstr ""
+"Voorcontrole: MTU van het besturingskanaal niet gepeild in een proefdraai "
+"(vereist pkexec); met --check of bij het schrijven wordt die gepeild en moet "
+">= {min} zijn\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Backup of the current name:"
+msgstr "Back-up van de huidige naam:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Backup: FAILED -"
+msgstr "Back-up: MISLUKT -"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Backup: not possible yet (the daemon has not read 0x51-0x54 in this "
+"connection)\n"
+msgstr ""
+"Back-up: nog niet mogelijk (de dienst heeft 0x51-0x54 in deze verbinding "
+"niet gelezen)\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Pre-flight: daemon unavailable"
+msgstr "Voorcontrole: dienst niet beschikbaar"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"\n"
+"To write: the same command without --dry-run (one confirmation [y/N], or --"
+"yes). To check everything without writing: --check.\n"
+msgstr ""
+"\n"
+"Om te schrijven: dezelfde opdracht zonder --dry-run (één bevestiging [y/N], "
+"of --yes). Om alles te controleren zonder te schrijven: --check.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "backup refused:"
+msgstr "back-up geweigerd:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Backup {file}: name {name}, keyboard {mac}, saved at {when}\n"
+msgstr "Back-up {file}: naam {name}, toetsenbord {mac}, opgeslagen op {when}\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"DRY RUN: nothing written. Without --dry-run, the backup is written back into "
+"the keyboard (one confirmation [y/N], or --yes).\n"
+msgstr ""
+"PROEFDRAAI: niets geschreven. Zonder --dry-run wordt de back-up "
+"teruggeschreven in het toetsenbord (één bevestiging [y/N], of --yes).\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "daemon unavailable:"
+msgstr "dienst niet beschikbaar:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "control-channel MTU unknown:"
+msgstr "MTU van het besturingskanaal onbekend:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Name stored in the keyboard:"
+msgstr "Naam opgeslagen in het toetsenbord:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "(not read yet)"
+msgstr "(nog niet gelezen)"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Write “{target}” into the keyboard's memory? [y/N] "
+msgstr "„{target}” naar het geheugen van het toetsenbord schrijven? [y/N] "
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Stopped: the hidraw node did not open ({d}). Nothing was written.\n"
+msgstr ""
+"Gestopt: de hidraw-node ging niet open ({d}). Er is niets geschreven.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "RereadName refused by the daemon:"
+msgstr "RereadName geweigerd door de dienst:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"  BlueZ may show the old name until a later connection; persistence across a "
+"battery change is not measured.\n"
+msgstr ""
+"  BlueZ toont mogelijk de oude naam tot een latere verbinding; behoud na een "
+"batterijwissel is niet gemeten.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Pre-flight refused, nothing was written:\n"
+msgstr "Voorcontrole geweigerd, er is niets geschreven:\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Refused: this backup is of keyboard {backup}, the target keyboard is "
+"{target}. Nothing was touched.\n"
+msgstr ""
+"Geweigerd: deze back-up is van toetsenbord {backup}, het doeltoetsenbord is "
+"{target}. Er is niets gewijzigd.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"✓ --check: pre-flight green, backup made, nothing was written, nothing was "
+"asked.\n"
+msgstr ""
+"✓ --check: voorcontrole groen, back-up gemaakt, er is niets geschreven, er "
+"is niets gevraagd.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Cancelled: nothing was written into the keyboard.\n"
+msgstr "Geannuleerd: er is niets in het toetsenbord geschreven.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Name written into the keyboard and read back identical:"
+msgstr "Naam in het toetsenbord geschreven en identiek teruggelezen:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Written, but the name read back differs:"
+msgstr "Geschreven, maar de teruggelezen naam wijkt af:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "(not printable)"
+msgstr "(niet afdrukbaar)"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Rollback:"
+msgstr "Terugdraaien:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "  Rollback: run --restore again with the original backup.\n"
+msgstr ""
+"  Terugdraaien: voer --restore opnieuw uit met de oorspronkelijke back-up.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Name written, but the read-back was not possible"
+msgstr "Naam geschreven, maar teruglezen was niet mogelijk"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Check later:"
+msgstr "Later controleren:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Rollback if needed:"
+msgstr "Indien nodig terugdraaien:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Stopped: the daemon has not read the current name (0x51-0x54) in this "
+"connection yet, no backup is possible. Try again in a moment. Nothing was "
+"written.\n"
+msgstr ""
+"Gestopt: de dienst heeft de huidige naam (0x51-0x54) in deze verbinding nog "
+"niet gelezen, geen back-up mogelijk. Probeer het zo meteen opnieuw. Er is "
+"niets geschreven.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Write uncertain: the write failed on its way, not retried"
+msgstr ""
+"Schrijven onzeker: het schrijven mislukte onderweg, niet opnieuw geprobeerd"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"A frame may have been sent: the name stored in the keyboard is not known."
+msgstr ""
+"Er is mogelijk een frame verzonden: de in het toetsenbord opgeslagen naam is "
+"onbekend."
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Check in a moment:"
+msgstr "Controleer zo meteen:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Stopped: name or backup refused ({e}). Nothing was written.\n"
+msgstr "Gestopt: naam of back-up geweigerd ({e}). Er is niets geschreven.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Stopped: the current name could not be saved ({e}). Nothing was written.\n"
+msgstr ""
+"Gestopt: de huidige naam kon niet worden opgeslagen ({e}). Er is niets "
+"geschreven.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Stopped: the keyboard disconnected before the write. Nothing was written.\n"
+msgstr ""
+"Gestopt: het toetsenbord werd vóór het schrijven losgekoppeld. Er is niets "
+"geschreven.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Stopped: the write was refused before sending ({e}). Nothing was written.\n"
+msgstr ""
+"Gestopt: het schrijven werd vóór het verzenden geweigerd ({e}). Er is niets "
+"geschreven.\n"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "the service reports: {}"
+msgstr "de dienst meldt: {}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "ignored by bluetoothd: {}"
+msgstr "genegeerd door bluetoothd: {}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "[Policy] Reconnect* in place"
+msgstr "[Policy] Reconnect* aanwezig"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"FastConnectable off: slower answer to the keyboard's page after a key press"
+msgstr ""
+"FastConnectable uit: trager antwoord op de page van het toetsenbord na een "
+"toetsaanslag"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "NoPollBatteries = true (no 30 s HID polling)"
+msgstr "NoPollBatteries = true (geen HID-polling elke 30 s)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"UPower reads the keyboard battery every 30 s (2 GET_REPORT over the air): "
+"the keyboard never sleeps"
+msgstr ""
+"UPower leest de toetsenbordbatterij elke 30 s (2 GET_REPORT draadloos): het "
+"toetsenbord slaapt nooit"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "optional:"
+msgstr "optioneel:"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "adapter is not on USB (or not found)"
+msgstr "adapter zit niet op USB (of niet gevonden)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} autosuspend off (power/control=on)"
+msgstr "{} autosuspend uit (power/control=on)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "; rule installed but not applied yet"
+msgstr "; regel geïnstalleerd maar nog niet toegepast"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid ""
+"{} USB autosuspend active (control={}, delay {} ms, now {}, {} s suspended "
+"since boot){}"
+msgstr ""
+"{} USB-autosuspend actief (control={}, vertraging {} ms, nu {}, {} s in "
+"slaap sinds opstarten){}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} page timeout (keyboard asleep or not listening), last {last}"
+msgid_plural ""
+"{n} page timeouts (keyboard asleep or not listening), last {last}"
+msgstr[0] ""
+"{n} page-time-out (toetsenbord slaapt of luistert niet), laatste {last}"
+msgstr[1] ""
+"{n} page-time-outs (toetsenbord slaapt of luistert niet), laatste {last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} HIDP GET_REPORT timeout, last {last}"
+msgid_plural "{n} HIDP GET_REPORT timeouts, last {last}"
+msgstr[0] "{n} HIDP GET_REPORT-time-out, laatste {last}"
+msgstr[1] "{n} HIDP GET_REPORT-time-outs, laatste {last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"avoid HID scanning tools while measuring; see docs/RECONNECTION-PAIRING.md "
+"§3.5"
+msgstr ""
+"vermijd HID-scantools tijdens het meten; zie docs/RECONNECTION-PAIRING.md "
+"§3.5"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} authentication / key error, last {last}"
+msgid_plural "{n} authentication / key errors, last {last}"
+msgstr[0] "{n} authenticatie-/sleutelfout, laatste {last}"
+msgstr[1] "{n} authenticatie-/sleutelfouten, laatste {last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} connection reset/refused by the keyboard, last {last}"
+msgid_plural "{n} connections reset/refused by the keyboard, last {last}"
+msgstr[0] ""
+"{n} verbinding gereset/geweigerd door het toetsenbord, laatste {last}"
+msgstr[1] ""
+"{n} verbindingen gereset/geweigerd door het toetsenbord, laatste {last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} main.conf key ignored by bluetoothd at start, last {last}"
+msgid_plural "{n} main.conf keys ignored by bluetoothd at start, last {last}"
+msgstr[0] ""
+"{n} main.conf-sleutel genegeerd door bluetoothd bij het starten, laatste "
+"{last}"
+msgstr[1] ""
+"{n} main.conf-sleutels genegeerd door bluetoothd bij het starten, laatste "
+"{last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid ""
+"{n} BlueZ storage write failure (a new link key may be lost at reboot), last "
+"{last}"
+msgid_plural ""
+"{n} BlueZ storage write failures (a new link key may be lost at reboot), "
+"last {last}"
+msgstr[0] ""
+"{n} schrijffout in de BlueZ-opslag (een nieuwe koppelingssleutel kan bij "
+"herstart verloren gaan), laatste {last}"
+msgstr[1] ""
+"{n} schrijffouten in de BlueZ-opslag (een nieuwe koppelingssleutel kan bij "
+"herstart verloren gaan), laatste {last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"free disk space (btrfs: check metadata), then verify with sudo akmctl doctor"
+msgstr ""
+"maak schijfruimte vrij (btrfs: controleer metadata) en controleer daarna met "
+"sudo akmctl doctor"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "Bluetooth adapter powered"
+msgstr "Bluetooth-adapter ingeschakeld"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "Bluetooth adapter off"
+msgstr "Bluetooth-adapter uit"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "BlueZ unreachable (bluetooth.service stopped?)"
+msgstr "BlueZ onbereikbaar (bluetooth.service gestopt?)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "no paired Apple keyboard known to BlueZ"
+msgstr "BlueZ kent geen gekoppeld Apple-toetsenbord"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "akmctl repair (pairing assistant)"
+msgstr "akmctl repair (koppelingsassistent)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} “{}” paired{}{}"
+msgstr "{} „{}” gekoppeld{}{}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ", bonded"
+msgstr ", gebonden"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ", legacy PIN pairing"
+msgstr ", verouderde PIN-koppeling"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} is not paired"
+msgstr "{} is niet gekoppeld"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "not trusted: BlueZ may refuse the keyboard's own reconnection"
+msgstr ""
+"niet vertrouwd: BlueZ kan het opnieuw verbinden door het toetsenbord zelf "
+"weigeren"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "blocked in BlueZ"
+msgstr "geblokkeerd in BlueZ"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "not connected (asleep? press a key)"
+msgstr "niet verbonden (slaapt? druk op een toets)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "link key not checked (needs root: sudo akmctl doctor)"
+msgstr ""
+"koppelingssleutel niet gecontroleerd (vereist root: sudo akmctl doctor)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "no [LinkKey] stored for the keyboard"
+msgstr "geen [LinkKey] opgeslagen voor het toetsenbord"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "stored key == kernel key (fingerprint {s})"
+msgstr "opgeslagen sleutel == kernelsleutel (vingerafdruk {s})"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "stored key {s} != kernel key {k}: will change at next restart"
+msgstr ""
+"opgeslagen sleutel {s} != kernelsleutel {k}: verandert bij de volgende "
+"herstart"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "check disk space, then akmctl repair if the keyboard is refused"
+msgstr ""
+"controleer de schijfruimte, daarna akmctl repair als het toetsenbord wordt "
+"geweigerd"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "stored key {s}; kernel copy not readable (debugfs not mounted?)"
+msgstr ""
+"opgeslagen sleutel {s}; kernelkopie niet leesbaar (debugfs niet gekoppeld?)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "the pairing is refused or missing: run `akmctl repair`"
+msgstr "de koppeling wordt geweigerd of ontbreekt: voer `akmctl repair` uit"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "no usable pairing: run `akmctl repair`"
+msgstr "geen bruikbare koppeling: voer `akmctl repair` uit"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "link up and configuration sound"
+msgstr "verbinding actief en configuratie in orde"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "link up; to check: {} (akmctl doctor)"
+msgstr "verbinding actief; te controleren: {} (akmctl doctor)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"keyboard not connected: press a key and wait 10 s; the daemon pages it on "
+"its own. Re-pair only if `akmctl doctor` reports auth-failed"
+msgstr ""
+"toetsenbord niet verbonden: druk op een toets en wacht 10 s; de dienst roept "
+"het zelf op. Alleen opnieuw koppelen als `akmctl doctor` auth-failed meldt"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid ""
+"link quality: {} disconnection in the last hour, {} in 24 h, {} in 7 days"
+msgid_plural ""
+"link quality: {} disconnections in the last hour, {} in 24 h, {} in 7 days"
+msgstr[0] ""
+"verbindingskwaliteit: {} verbroken verbinding in het afgelopen uur, {} in 24 "
+"u, {} in 7 dagen"
+msgstr[1] ""
+"verbindingskwaliteit: {} verbroken verbindingen in het afgelopen uur, {} in "
+"24 u, {} in 7 dagen"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "; relative signal over 7 days: mean {} dB, min {} dB ({} measurement)"
+msgid_plural ""
+"; relative signal over 7 days: mean {} dB, min {} dB ({} measurements)"
+msgstr[0] ""
+"; relatief signaal over 7 dagen: gemiddeld {} dB, min {} dB ({} meting)"
+msgstr[1] ""
+"; relatief signaal over 7 dagen: gemiddeld {} dB, min {} dB ({} metingen)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid " — UNSTABLE: {} unexpected within the hour"
+msgstr " — INSTABIEL: {} onverwacht binnen het uur"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "check the batteries, the distance, USB 3 devices near the adapter"
+msgstr "controleer de batterijen, de afstand, USB 3-apparaten bij de adapter"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} readable"
+msgstr "{} leesbaar"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} not readable by this user"
+msgstr "{} niet leesbaar voor deze gebruiker"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "install udev/70-apple-kb-hidraw.rules (uaccess)"
+msgstr "udev/70-apple-kb-hidraw.rules installeren (uaccess)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "connected but no hidraw node (uhid not created yet?)"
+msgstr "verbonden maar geen hidraw-node (uhid nog niet aangemaakt?)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "btusb enable_autosuspend = {value}"
+msgstr "btusb enable_autosuspend = {value}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "no bluetoothd error in the last 6 hours of this boot"
+msgstr "geen bluetoothd-fout in de laatste 6 uur sinds het opstarten"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"bluetoothd journal not readable (add yourself to group systemd-journal, or "
+"use sudo)"
+msgstr ""
+"bluetoothd-journaal niet leesbaar (voeg uzelf toe aan de groep systemd-"
+"journal, of gebruik sudo)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "apple-kb-monitord link keeper not reachable (no automatic reconnection)"
+msgstr ""
+"verbindingsbewaker van apple-kb-monitord onbereikbaar (geen automatisch "
+"opnieuw verbinden)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "link health: {h}"
+msgstr "verbindingsgezondheid: {h}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "keeper running, keyboard not tracked"
+msgstr "bewaker draait, toetsenbord niet gevolgd"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "verdict:"
+msgstr "oordeel:"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "{HELPER} is not installed (package older than this akmctl?)"
+msgstr "{HELPER} is niet geïnstalleerd (pakket ouder dan deze akmctl?)"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "cannot start the helper: {e}"
+msgstr "kan het hulpprogramma niet starten: {e}"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "{HELPER} failed (exit {c})"
+msgstr "{HELPER} mislukt (afsluitcode {c})"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "{HELPER} killed by a signal"
+msgstr "{HELPER} beëindigd door een signaal"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "optional, not applied (add --optional): {}"
+msgstr "optioneel, niet toegepast (voeg --optional toe): {}"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+msgid ""
+"nothing here can be corrected by the helper (see the → lines above for the "
+"rest)"
+msgstr ""
+"niets hier kan door het hulpprogramma worden gecorrigeerd (zie de →-regels "
+"hierboven voor de rest)"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+msgid "corrections that --fix would apply:"
+msgstr "correcties die --fix zou toepassen:"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+msgid "corrections:"
+msgstr "correcties:"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+msgid ""
+"\n"
+"after the corrections:"
+msgstr ""
+"\n"
+"na de correcties:"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "battery {p} %"
+msgstr "batterij {p} %"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "cell voltage {mv} mV (measured)"
+msgstr "celspanning {mv} mV (gemeten)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "filtered voltage {mv} mV (measured)"
+msgstr "gefilterde spanning {mv} mV (gemeten)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "battery state {} (GET Input, Apple R2)"
+msgstr "batterijstatus {} (GET Input, Apple R2)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid "complete"
+msgstr "volledig"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid "partial (stopped at the first failure)"
+msgstr "gedeeltelijk (gestopt bij de eerste fout)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid "skipped"
+msgstr "overgeslagen"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "Safe read of reports {reports} + Input {inputs}: {outcome}"
+msgstr "Veilige lezing van rapporten {reports} + Input {inputs}: {outcome}"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "  {id}  (not read)\n"
+msgstr "  {id}  (niet gelezen)\n"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid "no Apple keyboard found (hidraw)"
+msgstr "geen Apple-toetsenbord gevonden (hidraw)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "{dev} is not a BCM2042 keyboard: nothing to read"
+msgstr "{dev} is geen BCM2042-toetsenbord: niets te lezen"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid ""
+"another reader holds the HID lock (the daemon is reading): retry in a moment"
+msgstr ""
+"een andere lezer heeft de HID-vergrendeling (de dienst leest): probeer het "
+"zo meteen opnieuw"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "cannot open {dev}: {e}"
+msgstr "kan {dev} niet openen: {e}"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "up to date (latest public version known)"
+msgstr "actueel (nieuwste bekende openbare versie)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#, rust-format
+msgid ""
+"update available from Apple (latest known: {l}); this program never flashes"
+msgstr ""
+"update beschikbaar van Apple (nieuwste bekende: {l}); dit programma flasht "
+"nooit"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "update available from Apple"
+msgstr "update beschikbaar van Apple"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "no public Apple update for this model (nothing to compare with)"
+msgstr ""
+"geen openbare Apple-update voor dit model (niets om mee te vergelijken)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "unknown (model or version not in the table)"
+msgstr "onbekend (model of versie niet in de tabel)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#: apihub-app/crates/akmctl/src/keys.rs apihub-app/crates/akmctl/src/status.rs
+msgid "Keyboard:"
+msgstr "Toetsenbord:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "n/a"
+msgstr "n.v.t."
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Version:"
+msgstr "Versie:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "not read yet (read once per connection)"
+msgstr "nog niet gelezen (één keer per verbinding gelezen)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Latest known:"
+msgstr "Nieuwste bekende:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "n/a (model not in the table)"
+msgstr "n.v.t. (model niet in de tabel)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Status:"
+msgstr "Status:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Source:"
+msgstr "Bron:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Table date:"
+msgstr "Tabeldatum:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#, rust-format
+msgid "Embedded table (reviewed {date}):"
+msgstr "Ingebouwde tabel (gecontroleerd op {date}):"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#, rust-format
+msgid "{pids}: latest {latest} ({source})"
+msgstr "{pids}: nieuwste {latest} ({source})"
+
+#: apihub-app/crates/akmctl/src/fnmode.rs
+msgid "unknown"
+msgstr "onbekend"
+
+#: apihub-app/crates/akmctl/src/fnmode.rs
+#, rust-format
+msgid "invalid Fn mode {mode}: expected 0, 1, 2, 3 or 4"
+msgstr "ongeldige Fn-modus {mode}: verwacht 0, 1, 2, 3 of 4"
+
+#: apihub-app/crates/akmctl/src/fnmode.rs
+#, rust-format
+msgid "cannot read {path} (hid_apple loaded?): {e}"
+msgstr "kan {path} niet lezen (hid_apple geladen?): {e}"
+
+#: apihub-app/crates/akmctl/src/fnmode.rs
+#, rust-format
+msgid "unexpected content in {path}: {content}"
+msgstr "onverwachte inhoud in {path}: {content}"
+
+#: apihub-app/crates/akmctl/src/forget.rs
+msgid "link not healthy (`akmctl doctor`: health must be `connected`, no KO)"
+msgstr ""
+"verbinding niet gezond (`akmctl doctor`: toestand moet `connected` zijn, "
+"geen KO)"
+
+#: apihub-app/crates/akmctl/src/forget.rs
+msgid "not an interactive terminal"
+msgstr "geen interactieve terminal"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "invalid MAC {m} (expected XX:XX:XX:XX:XX:XX)"
+msgstr "ongeldig MAC {m} (verwacht XX:XX:XX:XX:XX:XX)"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid ""
+"no L2CAP control socket (PSM 0x0011) to {mac} reported by akm-helper hid-"
+"inspect"
+msgstr ""
+"geen L2CAP-besturingssocket (PSM 0x0011) naar {mac} gemeld door akm-helper "
+"hid-inspect"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "the control socket to {mac} is not connected"
+msgstr "de besturingssocket naar {mac} is niet verbonden"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "{len} connected control sockets to {mac}, exactly one expected"
+msgstr "{len} verbonden besturingssockets naar {mac}, precies één verwacht"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+msgid ""
+"akm-helper hid-inspect did not report the MTU: the installed helper is older "
+"than this akmctl, reinstall the package"
+msgstr ""
+"akm-helper hid-inspect meldde de MTU niet: het geïnstalleerde hulpprogramma "
+"is ouder dan deze akmctl, installeer het pakket opnieuw"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "unreadable outgoing MTU {v} in akm-helper hid-inspect output"
+msgstr "onleesbare uitgaande MTU {v} in de uitvoer van akm-helper hid-inspect"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "{HELPER} {INSPECT_CMD} refused or failed (exit {c}): {trim}"
+msgstr "{HELPER} {INSPECT_CMD} geweigerd of mislukt (afsluitcode {c}): {trim}"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "{HELPER} {INSPECT_CMD} killed by a signal"
+msgstr "{HELPER} {INSPECT_CMD} beëindigd door een signaal"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid ""
+"{HELPER} {CONTROL_CMD} refused or failed (exit {c}); details above and in "
+"journalctl -t akm-hid-control"
+msgstr ""
+"{HELPER} {CONTROL_CMD} geweigerd of mislukt (exit {c}); details hierboven en "
+"in journalctl -t akm-hid-control"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "{HELPER} {CONTROL_CMD} killed by a signal"
+msgstr "{HELPER} {CONTROL_CMD} gestopt door een signaal"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "Time (UTC)"
+msgstr "Tijd (UTC)"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "Bat %"
+msgstr "Bat %"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "Voltage"
+msgstr "Spanning"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "Event"
+msgstr "Gebeurtenis"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "no sample in this window"
+msgstr "geen meting in dit tijdvenster"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+#, rust-format
+msgid "min {min}{unit}  max {max}{unit}  last {last}{unit}  ({n} samples)"
+msgstr "min {min}{unit}  max {max}{unit}  laatste {last}{unit}  ({n} metingen)"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+#, rust-format
+msgid "No history sample in the last {label}."
+msgstr "Geen geschiedenismeting in de laatste {label}."
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+#, rust-format
+msgid "BATTERY % - last {label}"
+msgstr "BATTERIJ % - laatste {label}"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+#, rust-format
+msgid "VOLTAGE - last {label}"
+msgstr "SPANNING - laatste {label}"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid ""
+"Register map of the Apple A1314 (BCM2042). Values come from the daemon's "
+"cache: this command never reads the keyboard.\n"
+"\n"
+msgstr ""
+"Registerkaart van de Apple A1314 (BCM2042). De waarden komen uit de cache "
+"van de dienst: deze opdracht leest het toetsenbord nooit.\n"
+"\n"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Dir"
+msgstr "Richt"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Len"
+msgstr "Lengte"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Class"
+msgstr "Klasse"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Name"
+msgstr "Naam"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Value"
+msgstr "Waarde"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "never read"
+msgstr "nooit gelezen"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "routine read"
+msgstr "routinematige uitlezing"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "read once per connection"
+msgstr "eenmaal per verbinding gelezen"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid ""
+"Input report requested once per battery read, right after 0x47 (Apple R2)"
+msgstr ""
+"Input-rapport eenmaal per batterij-uitlezing opgevraagd, direct na 0x47 "
+"(Apple R2)"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "listened to, never requested"
+msgstr "beluisterd, nooit opgevraagd"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "readable, never requested by the daemon"
+msgstr "leesbaar, nooit door de dienst opgevraagd"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "never requested (secret or freezes the firmware)"
+msgstr "nooit opgevraagd (geheim of laat de firmware vastlopen)"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "written only by a named Apple operation:"
+msgstr "alleen geschreven door een benoemde Apple-bewerking:"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "command / write-only register, no write path exists"
+msgstr "opdracht / alleen-schrijven-register, er bestaat geen schrijfpad"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "not understood"
+msgstr "niet begrepen"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Classes:"
+msgstr "Klassen:"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid ""
+"Details per report: akmctl info --json (meaning, unit, endianness, decoder, "
+"proof, source)."
+msgstr ""
+"Details per rapport: akmctl info --json (betekenis, eenheid, bytevolgorde, "
+"decoder, bewijs, bron)."
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{program} failed (exit {c})"
+msgstr "{program} mislukt (afsluitcode {c})"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{program} killed by a signal"
+msgstr "{program} beëindigd door een signaal"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "session bus: {e}"
+msgstr "sessiebus: {e}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "akmctl: {e} (default profile used)"
+msgstr "akmctl: {e} (standaardprofiel gebruikt)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "File:"
+msgstr "Bestand:"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "Active:"
+msgstr "Actief:"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "none (hid_apple parameters left as they are)"
+msgstr "geen (hid_apple-parameters blijven ongewijzigd)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "preset {preset}"
+msgstr "voorinstelling {preset}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "models: {models}"
+msgstr "modellen: {models}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "unchanged"
+msgstr "ongewijzigd"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "keys: none (kernel mapping)"
+msgstr "toetsen: geen (kerneltoewijzing)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "hwdb: nothing to install"
+msgstr "hwdb: niets te installeren"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{} back to the kernel mapping"
+msgstr "{} terug naar de kerneltoewijzing"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{} is not remapped in this profile"
+msgstr "{} is in dit profiel niet hertoegewezen"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "preset {} ({}): {}"
+msgstr "voorinstelling {} ({}): {}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "no preset: hid_apple parameters left as they are"
+msgstr "geen voorinstelling: hid_apple-parameters blijven ongewijzigd"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "active profile: {profile} (not applied yet: akmctl keymap apply)"
+msgstr "actief profiel: {profile} (nog niet toegepast: akmctl keymap apply)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid ""
+"[{name}] {msg}\n"
+"saved in {path}; nothing changes until `akmctl keymap apply`"
+msgstr ""
+"[{name}] {msg}\n"
+"opgeslagen in {path}; er verandert niets tot `akmctl keymap apply`"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "akmctl: {e}: it will be replaced"
+msgstr "akmctl: {e}: wordt vervangen"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid ""
+"hwdb to install in {path}:\n"
+"{h}"
+msgstr ""
+"Te installeren hwdb in {path}:\n"
+"{h}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "hwdb {} to remove (profile without remapped key)"
+msgstr "Te verwijderen hwdb {} (profiel zonder hertoegewezen toets)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "hid_apple parameters to set (persistent, ALL Apple keyboards): {}"
+msgstr ""
+"In te stellen hid_apple-parameters (blijvend, ALLE Apple-toetsenborden): {}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "Applied. Check with: akmctl keys --check"
+msgstr "Toegepast. Controleer met: akmctl keys --check"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "keys of profile {active} cleared ({path} kept as .bak)"
+msgstr "toetsen van profiel {active} gewist ({path} bewaard als .bak)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid ""
+"Kernel key mapping restored. hid_apple parameters are unchanged (akmctl "
+"keymap preset apple && akmctl keymap apply)."
+msgstr ""
+"Kernel-toetstoewijzing hersteld. De hid_apple-parameters zijn ongewijzigd "
+"(akmctl keymap preset apple && akmctl keymap apply)."
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{e} (KDE Plasma session required)"
+msgstr "{e} (KDE Plasma-sessie vereist)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{shortcut} already bound to {action} - left alone"
+msgstr "{shortcut} al toegewezen aan {action} - ongemoeid gelaten"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "would add {shortcut} to {target} ({existing} existing key kept) - {why}"
+msgid_plural ""
+"would add {shortcut} to {target} ({existing} existing keys kept) - {why}"
+msgstr[0] ""
+"zou {shortcut} toevoegen aan {target} ({existing} bestaande toets behouden) "
+"- {why}"
+msgstr[1] ""
+"zou {shortcut} toevoegen aan {target} ({existing} bestaande toetsen "
+"behouden) - {why}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "added {shortcut} to {target} ({existing} existing key kept) - {why}"
+msgid_plural ""
+"added {shortcut} to {target} ({existing} existing keys kept) - {why}"
+msgstr[0] ""
+"{shortcut} toegevoegd aan {target} ({existing} bestaande toets behouden) - "
+"{why}"
+msgstr[1] ""
+"{shortcut} toegevoegd aan {target} ({existing} bestaande toetsen behouden) - "
+"{why}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "would remove {shortcut} from {target}"
+msgstr "zou {shortcut} verwijderen uit {target}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "removed {shortcut} from {target}"
+msgstr "{shortcut} verwijderd uit {target}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{shortcut} not bound by us - nothing to undo"
+msgstr "{shortcut} niet door ons toegewezen - niets ongedaan te maken"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "note: hid_apple.{name} applies to ALL Apple keyboards of this computer"
+msgstr ""
+"let op: hid_apple.{name} geldt voor ALLE Apple-toetsenborden van deze "
+"computer"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "note: not persistent across reboots (use --persist)"
+msgstr "let op: niet blijvend na herstart (gebruik --persist)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "write accepted but {name} reads {v}, expected {value}"
+msgstr "schrijven geaccepteerd maar {name} leest {v}, verwacht {value}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid ""
+"{name} = {value} saved; hid_apple is not loaded, applied at next module load"
+msgstr ""
+"{name} = {value} opgeslagen; hid_apple is niet geladen, toegepast bij de "
+"volgende keer dat de module laadt"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "cannot read {name} back"
+msgstr "kan {name} niet teruglezen"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "bad profile name {s} (a-z 0-9 - _, 1-32 characters)"
+msgstr "ongeldige profielnaam {s} (a-z 0-9 - _, 1-32 tekens)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "unknown hid_apple parameter {s} ({known})"
+msgstr "onbekende hid_apple-parameter {s} ({known})"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid ""
+"nothing in KDE (Launch (D) unbound) - `akmctl keymap kde-apply` binds it to "
+"the application launcher"
+msgstr ""
+"niets in KDE (Launch (D) niet toegewezen) - `akmctl keymap kde-apply` wijst "
+"het toe aan de programmastarter"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid ""
+"nothing in KDE (no shortcut uses Eject); remappable: akmctl keymap set Eject "
+"KEY_..."
+msgstr ""
+"niets in KDE (geen sneltoets gebruikt Eject); hertoewijsbaar: akmctl keymap "
+"set Eject KEY_..."
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid ""
+"NumLock toggles (handled by KWin, not a shortcut): J K L U I O M 7 8 9 turn "
+"into keypad keys until pressed again"
+msgstr ""
+"NumLock schakelt om (afgehandeld door KWin, geen sneltoets): J K L U I O M 7 "
+"8 9 worden numerieke-bloktoetsen tot NumLock opnieuw wordt ingedrukt"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "PowerDevil keyboard backlight: the A1314 has none, nothing visible"
+msgstr ""
+"Toetsenbordverlichting van PowerDevil: de A1314 heeft die niet, niets "
+"zichtbaar"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid ""
+"sent to the focused application (e.g. F5 reload, F11 full screen in a "
+"browser)"
+msgstr ""
+"naar het actieve programma gestuurd (bijv. F5 herladen, F11 volledig scherm "
+"in een browser)"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "sent to the focused application"
+msgstr "naar het actieve programma gestuurd"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "no KDE shortcut"
+msgstr "geen KDE-sneltoets"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid " - not connected, table of the default model"
+msgstr " - niet verbonden, tabel van het standaardmodel"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "not modelled: Fn layer unknown"
+msgstr "niet gemodelleerd: Fn-laag onbekend"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "05ac:{pid}{model}  (Fn table: {table})"
+msgstr "05ac:{pid}{model}  (Fn-tabel: {table})"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "  (hid_apple not loaded)"
+msgstr "  (hid_apple niet geladen)"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "{path} ({n} key remapped)"
+msgid_plural "{path} ({n} keys remapped)"
+msgstr[0] "{path} ({n} toets hertoegewezen)"
+msgstr[1] "{path} ({n} toetsen hertoegewezen)"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "none (kernel mapping)"
+msgstr "geen (kerneltoewijzing)"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid " - NOT applied yet: akmctl keymap apply"
+msgstr " - nog NIET toegepast: akmctl keymap apply"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "Profile:"
+msgstr "Profiel:"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "{profile} (preset {preset}){pending}"
+msgstr "{profile} (voorinstelling {preset}){pending}"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "not reachable ({e}); actions not shown"
+msgstr "onbereikbaar ({e}); acties niet getoond"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "note: {n}"
+msgstr "let op: {n}"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid ""
+"{missing} legend key without a KDE shortcut. Nothing was pressed or read: "
+"press each key and tick it in docs/KEYS.md."
+msgid_plural ""
+"{missing} legend keys without a KDE shortcut. Nothing was pressed or read: "
+"press each key and tick it in docs/KEYS.md."
+msgstr[0] ""
+"{missing} toets met opschrift zonder KDE-sneltoets. Er is niets ingedrukt of "
+"gelezen: druk op elke toets en vink hem af in docs/KEYS.md."
+msgstr[1] ""
+"{missing} toetsen met opschrift zonder KDE-sneltoets. Er is niets ingedrukt "
+"of gelezen: druk op elke toets en vink hem af in docs/KEYS.md."
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "source"
+msgstr "bron"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "HID usage"
+msgstr "HID-usage"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "name"
+msgstr "naam"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "state"
+msgstr "toestand"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "key"
+msgstr "toets"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "(unnamed)"
+msgstr "(zonder naam)"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "down"
+msgstr "ingedrukt"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "up"
+msgstr "losgelaten"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "repeat"
+msgstr "herhaling"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid ""
+"no supported Apple keyboard is connected (press a key to wake it, then retry)"
+msgstr ""
+"geen ondersteund Apple-toetsenbord verbonden (druk op een toets om het te "
+"wekken en probeer opnieuw)"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+#, rust-format
+msgid ""
+"{path} is not readable by this user: {e}\n"
+"        reading key events needs the group \"input\" (sudo usermod -aG input "
+"$USER, then log in again); nothing was read"
+msgstr ""
+"{path} is niet leesbaar voor deze gebruiker: {e}\n"
+"        toetsgebeurtenissen lezen vereist de groep \"input\" (sudo usermod "
+"-aG input $USER, daarna opnieuw aanmelden); er is niets gelezen"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid ""
+"Live key events, read-only, nothing is recorded. Leave: hold Escape 2 s, or "
+"Ctrl-C."
+msgstr ""
+"Live toetsgebeurtenissen, alleen-lezen, er wordt niets vastgelegd. Stoppen: "
+"houd Escape 2 s ingedrukt, of Ctrl-C."
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid ""
+"keyd is running: if it holds the keyboard, only \"keyd\" lines appear (what "
+"keyd emits, no HID usage)"
+msgstr ""
+"keyd draait: als het het toetsenbord vasthoudt, verschijnen alleen \"keyd\"-"
+"regels (wat keyd uitstuurt, zonder HID-usage)"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "Escape held: end of the view."
+msgstr "Escape ingedrukt gehouden: einde van de weergave."
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "The keyboard is gone (disconnected or asleep): end of the view."
+msgstr ""
+"Het toetsenbord is weg (losgekoppeld of in slaap): einde van de weergave."
+
+#: apihub-app/crates/akmctl/src/ledcmd.rs
+#, rust-format
+msgid "{led} LED: on"
+msgstr "LED {led}: aan"
+
+#: apihub-app/crates/akmctl/src/ledcmd.rs
+#, rust-format
+msgid "{led} LED: off"
+msgstr "LED {led}: uit"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "--device-name NAME cannot be combined with --show or --restore"
+msgstr ""
+"--device-name NAAM kan niet worden gecombineerd met --show of --restore"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "--device-name needs a name, --show or --restore"
+msgstr "--device-name vereist een naam, --show of --restore"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "cannot render the manual page"
+msgstr "kan de handleidingpagina niet genereren"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "{m} (showing the static table, no cached values)"
+msgstr "{m} (statische tabel getoond, geen waarden uit de cache)"
+
+#: apihub-app/crates/akmctl/src/main.rs apihub-app/crates/akmctl/src/status.rs
+msgid "Daemon:"
+msgstr "Dienst:"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "not running (the version is read by the daemon)"
+msgstr "draait niet (de versie wordt door de dienst gelezen)"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "no history at {path} yet (the daemon writes it)"
+msgstr "nog geen geschiedenis in {path} (de dienst schrijft die)"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid ""
+"{added} entries imported from {src} into {dst} ({ignored} lines ignored)"
+msgstr ""
+"{added} items geïmporteerd uit {src} in {dst} ({ignored} regels genegeerd)"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "import from {src}: {e}"
+msgstr "import uit {src}: {e}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "Fn mode: {m} - {label}"
+msgstr "Fn-modus: {m} - {label}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "write accepted but fnmode reads {m}, expected {mode}"
+msgstr "schrijven geaccepteerd maar fnmode leest {m}, verwacht {mode}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid ""
+"Fn mode {mode} saved ({label}); hid_apple is not loaded, applied at next "
+"module load"
+msgstr ""
+"Fn-modus {mode} opgeslagen ({label}); hid_apple is niet geladen, toegepast "
+"bij de volgende keer dat de module laadt"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "helper failed (exit {c})"
+msgstr "hulpprogramma mislukt (afsluitcode {c})"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "helper killed by a signal"
+msgstr "hulpprogramma beëindigd door een signaal"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "no keyboard known to the daemon (use --mac)"
+msgstr "geen toetsenbord bekend bij de dienst (gebruik --mac)"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "Name restored: {now}"
+msgstr "Naam hersteld: {now}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "Name: {now}"
+msgstr "Naam: {now}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "cannot subscribe to the daemon's signals: {e}"
+msgstr "kan niet abonneren op de signalen van de dienst: {e}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "malformed StateChanged signal ignored"
+msgstr "misvormd StateChanged-signaal genegeerd"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "connection to the session bus lost"
+msgstr "verbinding met de sessiebus verloren"
+
+#: apihub-app/crates/akmctl/src/pkexec.rs
+msgid "authentication dismissed"
+msgstr "authenticatie afgebroken"
+
+#: apihub-app/crates/akmctl/src/pkexec.rs
+#, rust-format
+msgid "not authorized, authentication failed or {what} not found"
+msgstr "niet geautoriseerd, authenticatie mislukt of {what} niet gevonden"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Fresh"
+msgstr "Nieuw"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Good"
+msgstr "Goed"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Dead"
+msgstr "Leeg"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "apple-kb-monitord is not running"
+msgstr "apple-kb-monitord draait niet"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Disconnected"
+msgstr "Niet verbonden"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Battery: {p} % (keyboard indication)"
+msgstr "Batterij: {p} % (aanduiding van het toetsenbord)"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Estimate: ~{pct} % ({low} to {high} %), {chemistry}"
+msgstr "Schatting: ~{pct} % ({low} tot {high} %), {chemistry}"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Voltage: {v} V ({health})"
+msgstr "Spanning: {v} V ({health})"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Autonomy: {r}"
+msgstr "Gebruiksduur: {r}"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Error: {e}"
+msgstr "Fout: {e}"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "forced by --force"
+msgstr "afgedwongen door --force"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"→ Switch the keyboard OFF (power button, 3 s, light off), wait 5 s, switch "
+"it ON.\n"
+"  (The pairing is untouched; this is often what really fixes it.) Enter when "
+"done…"
+msgstr ""
+"→ Zet het toetsenbord UIT (aan/uit-knop, 3 s, lampje uit), wacht 5 s, zet "
+"het AAN.\n"
+"  (De koppeling blijft onaangeroerd; vaak is dit wat het echt oplost.) Enter "
+"als u klaar bent…"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "→ Press a key on “{}” now (it wakes up and calls the computer)."
+msgstr ""
+"→ Druk nu op een toets van „{}” (het wordt wakker en roept de computer op)."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "  page {i}/{ATTEMPTS} from the computer to the keyboard…"
+msgstr "  page {i}/{ATTEMPTS} van de computer naar het toetsenbord…"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "  (press a key again)"
+msgstr "  (druk nogmaals op een toets)"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid ""
+"\n"
+"RE-PAIRING ({why}).\n"
+"This REMOVES the pairing of “{name}” on this computer, then starts the "
+"pairing assistant.\n"
+"The keyboard will not work until pairing is done: keep another input device "
+"at hand.\n"
+"Type {CONFIRM} then Enter to go on, or just Enter to cancel: "
+msgstr ""
+"\n"
+"OPNIEUW KOPPELEN ({why}).\n"
+"Dit VERWIJDERT de koppeling van „{name}” op deze computer en start daarna de "
+"koppelingsassistent.\n"
+"Het toetsenbord werkt pas weer als het koppelen klaar is: houd een ander "
+"invoerapparaat bij de hand.\n"
+"Typ {CONFIRM} en dan Enter om door te gaan, of alleen Enter om te annuleren: "
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "refused: interactive confirmation required (stdin is not a terminal)."
+msgstr "geweigerd: interactieve bevestiging vereist (stdin is geen terminal)."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "  pairing removed."
+msgstr "  koppeling verwijderd."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "  pairing not removed (RemoveDevice: {e})"
+msgstr "  koppeling niet verwijderd (RemoveDevice: {e})"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"→ Switch the keyboard off (power button, 3 s) and on again: its light blinks "
+"(pairing mode).\n"
+"→ In the assistant, pick the keyboard, type the displayed code ON THE "
+"KEYBOARD, then Enter."
+msgstr ""
+"→ Zet het toetsenbord uit (aan/uit-knop, 3 s) en weer aan: het lampje "
+"knippert (koppelmodus).\n"
+"→ Kies in de assistent het toetsenbord, typ de getoonde code OP HET "
+"TOETSENBORD en daarna Enter."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"  No graphical assistant: `bluetoothctl`, then `scan on`, `pair <MAC>`, type "
+"the code on the keyboard, `trust <MAC>`, `connect <MAC>`."
+msgstr ""
+"  Geen grafische assistent: `bluetoothctl`, dan `scan on`, `pair <MAC>`, typ "
+"de code op het toetsenbord, `trust <MAC>`, `connect <MAC>`."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "  (waiting for the assistant…)"
+msgstr "  (wachten op de assistent…)"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "✓ Keyboard re-paired, connected and trusted."
+msgstr "✓ Toetsenbord opnieuw gekoppeld, verbonden en vertrouwd."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✗ No paired + connected keyboard after 4 min. Run `akmctl repair` again."
+msgstr ""
+"✗ Geen gekoppeld + verbonden toetsenbord na 4 min. Voer `akmctl repair` "
+"opnieuw uit."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"\n"
+"CLEAN FORGET, like macOS: the keyboard is connected, the computer first "
+"sends it “RecantConnection”\n"
+"(SET Feature 0x41, one byte, wire 53 41), waits 2 s for the link to drop, "
+"then ONLY removes the pairing.\n"
+"The exact effect of 0x41 on the keyboard was never measured (simple drop or "
+"forgetting this computer).\n"
+"Then, to re-pair: switch the keyboard off (3 s) and on (blinking light = "
+"pairing mode),\n"
+"pick it in the assistant and type the displayed code ON THE KEYBOARD, then "
+"Enter."
+msgstr ""
+"\n"
+"NETJES VERGETEN, zoals macOS: het toetsenbord is verbonden, de computer "
+"stuurt het eerst „RecantConnection”\n"
+"(SET Feature 0x41, één byte, lijn 53 41), wacht 2 s tot de verbinding "
+"wegvalt en verwijdert dan ALLEEN de koppeling.\n"
+"Het precieze effect van 0x41 op het toetsenbord is nooit gemeten (gewoon "
+"verbreken of deze computer vergeten).\n"
+"Daarna, om opnieuw te koppelen: zet het toetsenbord uit (3 s) en aan "
+"(knipperend lampje = koppelmodus),\n"
+"kies het in de assistent en typ de getoonde code OP HET TOETSENBORD, daarna "
+"Enter."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "  pairing removed (link dropped: {}), backup: {}"
+msgstr "  koppeling verwijderd (verbinding verbroken: {}), back-up: {}"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "no"
+msgstr "nee"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "yes"
+msgstr "ja"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid ""
+"✗ RecantConnection not sent or refused ({e}): NOTHING was removed. Back to "
+"wake + reconnect."
+msgstr ""
+"✗ RecantConnection niet verzonden of geweigerd ({e}): er is NIETS "
+"verwijderd. Terug naar wekken + opnieuw verbinden."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "✓ Keyboard connected, pairing intact."
+msgstr "✓ Toetsenbord verbonden, koppeling intact."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✗ Circuit breaker open: the keyboard did not answer 3 requests in a row, it "
+"is mute (Apple's R3). RecantConnection (0x41) NOT sent, nothing removed. "
+"Back to wake + reconnect."
+msgstr ""
+"✗ Stroomonderbreker open: het toetsenbord beantwoordde 3 verzoeken op rij "
+"niet, het is stom (R3 van Apple). RecantConnection (0x41) NIET verzonden, "
+"niets verwijderd. Terug naar wekken + opnieuw verbinden."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✓ Keyboard reconnected, pairing intact: the breaker closes on the new "
+"connection; run `akmctl repair` again if the forget is still needed."
+msgstr ""
+"✓ Toetsenbord opnieuw verbonden, koppeling intact: de stroomonderbreker "
+"sluit bij de nieuwe verbinding; voer `akmctl repair` opnieuw uit als "
+"vergeten nog nodig is."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✗ The keyboard does not answer. Switch it off and on (light at power-on), "
+"check its batteries, then run `akmctl repair` again."
+msgstr ""
+"✗ Het toetsenbord antwoordt niet. Zet het uit en aan (lampje bij "
+"inschakelen), controleer de batterijen en voer daarna `akmctl repair` "
+"opnieuw uit."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "Cancelled: the backup could not be written ({e}); nothing was changed."
+msgstr ""
+"Geannuleerd: de back-up kon niet worden geschreven ({e}); er is niets "
+"gewijzigd."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "Cancelled: nothing was changed ({other})."
+msgstr "Geannuleerd: er is niets gewijzigd ({other})."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "Cancelled: nothing was changed."
+msgstr "Geannuleerd: er is niets gewijzigd."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"BlueZ or the adapter is down: nothing to re-pair. `systemctl status "
+"bluetooth`, `bluetoothctl power on`."
+msgstr ""
+"BlueZ of de adapter is uitgevallen: niets opnieuw te koppelen. `systemctl "
+"status bluetooth`, `bluetoothctl power on`."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "The link is healthy: nothing to repair (--force to re-pair anyway)."
+msgstr ""
+"De verbinding is gezond: niets te repareren (--force om toch opnieuw te "
+"koppelen)."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "✓ Keyboard reconnected: the pairing was fine, no re-pairing needed."
+msgstr ""
+"✓ Toetsenbord opnieuw verbonden: de koppeling was in orde, opnieuw koppelen "
+"is niet nodig."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✗ The keyboard does not answer. Check it is switched on (light at power-on) "
+"and its batteries."
+msgstr ""
+"✗ Het toetsenbord antwoordt niet. Controleer of het aan staat (lampje bij "
+"inschakelen) en de batterijen."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "the keyboard does not answer the pages"
+msgstr "het toetsenbord antwoordt niet op de pages"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "No paired Apple keyboard: starting the assistant."
+msgstr "Geen gekoppeld Apple-toetsenbord: de assistent wordt gestart."
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"versions differ: daemon {v}, akmctl {mine}, package {p}: restart the daemon "
+"after an upgrade (systemctl --user restart apple-kb-monitord.service)"
+msgstr ""
+"versies verschillen: dienst {v}, akmctl {mine}, pakket {p}: herstart de "
+"dienst na een upgrade (systemctl --user restart apple-kb-monitord.service)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon {v} = akmctl, package {p}"
+msgstr "dienst {v} = akmctl, pakket {p}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "daemon version unknown (old interface)"
+msgstr "versie van de dienst onbekend (oude interface)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "keyboard alias as last set through this monitor"
+msgstr "alias van het toetsenbord zoals laatst ingesteld via deze monitor"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"keyboard alias is {actual}, last set to {alias} by {by} at {set_at} (unix): "
+"changed elsewhere (KDE Bluetooth settings, bluetoothctl) or the pairing was "
+"removed (akmctl repair, Plasma Forget); see the daemon journal for \"BlueZ "
+"alias\" lines"
+msgstr ""
+"alias van het toetsenbord is {actual}, laatst ingesteld op {alias} door {by} "
+"om {set_at} (unix): elders gewijzigd (Bluetooth-instellingen van KDE, "
+"bluetoothctl) of de koppeling is verwijderd (akmctl repair, Vergeten in "
+"Plasma); zie de regels \"BlueZ alias\" in het journaal van de dienst"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "no answer within {} s (daemon stuck?)"
+msgstr "geen antwoord binnen {} s (dienst vastgelopen?)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"apple-kb-monitord restarted {} time by systemd since the last pass (crash "
+"loop?)"
+msgid_plural ""
+"apple-kb-monitord restarted {} times by systemd since the last pass (crash "
+"loop?)"
+msgstr[0] ""
+"apple-kb-monitord sinds de vorige ronde {} keer door systemd herstart "
+"(crashlus?)"
+msgstr[1] ""
+"apple-kb-monitord sinds de vorige ronde {} keer door systemd herstart "
+"(crashlus?)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon pid changed {prev_pid} -> {main_pid} (restart)"
+msgstr "pid van de dienst gewijzigd {prev_pid} -> {main_pid} (herstart)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon answered GetState in {ms} ms (> 1 s)"
+msgstr "dienst beantwoordde GetState in {ms} ms (> 1 s)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon on the bus, GetState in {ms} ms"
+msgstr "dienst op de bus, GetState in {ms} ms"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "keyboard connected but never acquired"
+msgstr "toetsenbord verbonden maar nooit uitgelezen"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "keyboard connected, last acquisition {hours} h ago"
+msgstr "toetsenbord verbonden, laatste uitlezing {hours} u geleden"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "last acquisition {minutes} min ago"
+msgstr "laatste uitlezing {minutes} min geleden"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "keyboard not connected (nothing to acquire)"
+msgstr "toetsenbord niet verbonden (niets uit te lezen)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon last_error: {e}"
+msgstr "last_error van de dienst: {e}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon unreachable ({e}); unit state: {state}"
+msgstr "dienst onbereikbaar ({e}); status van de unit: {state}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "no daemon warning since the last pass"
+msgstr "geen waarschuwing van de dienst sinds de vorige ronde"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{} daemon warning/error line since the last pass, last: {}"
+msgid_plural "{} daemon warning/error lines since the last pass, last: {}"
+msgstr[0] ""
+"{} waarschuwings-/foutregel van de dienst sinds de vorige ronde, laatste: {}"
+msgstr[1] ""
+"{} waarschuwings-/foutregels van de dienst sinds de vorige ronde, laatste: {}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "user journal not readable"
+msgstr "gebruikersjournaal niet leesbaar"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "no bluetoothd error since the last pass"
+msgstr "geen bluetoothd-fout sinds de vorige ronde"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{n} bluetoothd error line since the last pass"
+msgid_plural "{n} bluetoothd error lines since the last pass"
+msgstr[0] "{n} bluetoothd-foutregel sinds de vorige ronde"
+msgstr[1] "{n} bluetoothd-foutregels sinds de vorige ronde"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "system journal not readable (group systemd-journal)"
+msgstr "systeemjournaal niet leesbaar (groep systemd-journal)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "no crash of our programs since the last pass"
+msgstr "geen crash van onze programma's sinds de vorige ronde"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{exe} crashed ({sig}, pid {pid}): coredumpctl info {pid}"
+msgstr "{exe} gecrasht ({sig}, pid {pid}): coredumpctl info {pid}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "coredump journal not readable"
+msgstr "coredump-journaal niet leesbaar"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{}: {} MiB free of {} MiB"
+msgstr "{}: {} MiB vrij van {} MiB"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{}: statvfs failed"
+msgstr "{}: statvfs mislukt"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{hist}: {lines}, {kib} KiB, {bad} unreadable line in the last 1000"
+msgid_plural ""
+"{hist}: {lines}, {kib} KiB, {bad} unreadable lines in the last 1000"
+msgstr[0] ""
+"{hist}: {lines}, {kib} KiB, {bad} onleesbare regel in de laatste 1000"
+msgstr[1] ""
+"{hist}: {lines}, {kib} KiB, {bad} onleesbare regels in de laatste 1000"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{n} line"
+msgid_plural "{n} lines"
+msgstr[0] "{n} regel"
+msgstr[1] "{n} regels"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "no history yet"
+msgstr "nog geen geschiedenis"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "akmctl doctor: {text}"
+msgstr "akmctl doctor: {text}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"akmctl doctor did not finish within {} s (BlueZ or the daemon does not "
+"answer)"
+msgstr ""
+"akmctl doctor is niet binnen {} s klaar (BlueZ of de dienst antwoordt niet)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "Apple keyboard monitor: problem detected"
+msgstr "Apple-toetsenbordmonitor: probleem gedetecteerd"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "cannot write {}"
+msgstr "kan {} niet schrijven"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"\n"
+"verdict: {}{}"
+msgstr ""
+"\n"
+"oordeel: {}{}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid " ({} new grave problem)"
+msgid_plural " ({} new grave problems)"
+msgstr[0] " ({} nieuw ernstig probleem)"
+msgstr[1] " ({} nieuwe ernstige problemen)"
+
+#: apihub-app/crates/akmctl/src/shutdown_notify.rs
+msgid ""
+"on (WillShutdown sent once at shutdown, as macOS; [apple] will_shutdown)"
+msgstr ""
+"aan (WillShutdown één keer verstuurd bij afsluiten, zoals macOS; [apple] "
+"will_shutdown)"
+
+#: apihub-app/crates/akmctl/src/shutdown_notify.rs
+msgid "off ([apple] will_shutdown = false in config.toml)"
+msgstr "uit ([apple] will_shutdown = false in config.toml)"
+
+#: apihub-app/crates/akmctl/src/shutdown_notify.rs
+msgid "system is not shutting down: nothing sent"
+msgstr "het systeem sluit niet af: niets verzonden"
+
+#: apihub-app/crates/akmctl/src/shutdown_notify.rs
+#, rust-format
+msgid "daemon not running ({name} absent on the session bus): nothing sent"
+msgstr "dienst draait niet ({name} ontbreekt op de sessiebus): niets verzonden"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "not measured; fix: {fix}"
+msgstr "niet gemeten; oplossing: {fix}"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{short}; fix: {fix}"
+msgstr "{short}; oplossing: {fix}"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Name:"
+msgstr "Naam:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "On kb:"
+msgstr "Intern:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "n/a (not read yet)"
+msgstr "n.v.t. (nog niet gelezen)"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{n} (name stored in the keyboard)"
+msgstr "{n} (naam opgeslagen in het toetsenbord)"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Kernel:"
+msgstr "Kernel:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Connected:"
+msgstr "Verbonden:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Battery:"
+msgstr "Batterij:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{p} % (keyboard indication, kept from the last read)"
+msgstr "{p} % (aanduiding van het toetsenbord, bewaard van de laatste lezing)"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{p} % (keyboard indication)"
+msgstr "{p} % (aanduiding van het toetsenbord)"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Estimate:"
+msgstr "Schatting:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "new batteries, no estimate yet"
+msgstr "nieuwe batterijen, nog geen schatting"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "~{pct} % ({low} to {high} %) from the voltage, {chemistry}"
+msgstr "~{pct} % ({low} tot {high} %) op basis van de spanning, {chemistry}"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Limits:"
+msgstr "Grenzen:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "Full {full} / Low {low} / Critical {critical} / Empty {empty} mV"
+msgstr "Vol {full} / Laag {low} / Kritiek {critical} / Leeg {empty} mV"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Firmware:"
+msgstr "Firmware:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Voltage:"
+msgstr "Spanning:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Signal:"
+msgstr "Signaal:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Updated:"
+msgstr "Bijgewerkt:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{age} s ago"
+msgstr "{age} s geleden"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Fn mode:"
+msgstr "Fn-modus:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Shutdown:"
+msgstr "Afsluiten:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Error:"
+msgstr "Fout:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid ""
+"{kernel} - KWin and System Settings > Keyboard show this kernel name; "
+"Bluetooth and Battery show the alias \"{alias}\". The kernel name changes "
+"only after the keyboard reconnects (switch it off and on)."
+msgstr ""
+"{kernel} - KWin en Systeeminstellingen > Toetsenbord tonen deze kernelnaam; "
+"Bluetooth en Batterij tonen de alias \"{alias}\". De kernelnaam verandert "
+"pas nadat het toetsenbord opnieuw verbindt (zet het uit en aan)."
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "not running ({name} absent on the session bus)"
+msgstr "draait niet ({name} ontbreekt op de sessiebus)"
+
+#: apihub-app/crates/akmctl/src/when.rs
+#, rust-format
+msgid ""
+"invalid date {s}: use 90m, 24h, 7d, 2w, YYYY-MM-DD or \"YYYY-MM-DD HH:MM\" "
+"(UTC)"
+msgstr ""
+"ongeldige datum {s}: gebruik 90m, 24h, 7d, 2w, JJJJ-MM-DD of \"JJJJ-MM-DD "
+"UU:MM\" (UTC)"

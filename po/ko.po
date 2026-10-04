@@ -1,0 +1,4630 @@
+# Korean translation of apple-kb-monitor.
+# This file is distributed under the same license as the apple-kb-monitor package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:57+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Korean\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: apihub-app/akm-core/src/advice.rs
+#, rust-format
+msgid "Batteries replaced too often: {first} d then {second} d (under 30 d)"
+msgstr "배터리 교체가 너무 잦습니다: {first}일, 그다음 {second}일 (30일 미만)"
+
+#: apihub-app/akm-core/src/advice.rs
+msgid ""
+"Check the declared chemistry ([battery] chemistry), try fresh cells of "
+"another batch or low self-discharge NiMH cells, and switch the keyboard off "
+"when it is not used."
+msgstr ""
+"설정한 배터리 종류([battery] chemistry)를 확인하고, 다른 생산분의 새 전지나 "
+"자가 방전이 적은 NiMH 전지를 사용해 보고, 사용하지 않을 때는 키보드를 끄십시"
+"오."
+
+#: apihub-app/akm-core/src/alias.rs
+#, rust-format
+msgid "name too long (max {max_chars} characters, {max_bytes} bytes)"
+msgstr "이름이 너무 깁니다 (최대 {max_chars}자, {max_bytes}바이트)"
+
+#: apihub-app/akm-core/src/alias.rs
+msgid "name must not start with '-'"
+msgstr "이름은 '-'로 시작할 수 없습니다"
+
+#: apihub-app/akm-core/src/alias.rs
+#, rust-format
+msgid "name contains a forbidden character (U+{code})"
+msgstr "이름에 금지된 문자가 있습니다 (U+{code})"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "no battery history"
+msgstr "배터리 기록 없음"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "#  installed            days   from  ->  to    state"
+msgstr "#  장착일                  일수     시작    ->  끝     상태"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "replaced"
+msgstr "교체됨"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "in use"
+msgstr "사용 중"
+
+#: apihub-app/akm-core/src/batteries.rs
+#, rust-format
+msgid "Keyboard {mac}:"
+msgstr "키보드 {mac}:"
+
+#: apihub-app/akm-core/src/batteries.rs
+msgid "Samples recorded without a keyboard address:"
+msgstr "키보드 주소 없이 기록된 샘플:"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "empty name"
+msgstr "이름이 비어 있음"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "{n} characters, at most {max} (what 0x51-0x54 can show back)"
+msgstr "{n}자, 최대 {max}자 (0x51-0x54로 다시 읽을 수 있는 길이)"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "leading or trailing space"
+msgstr "앞이나 뒤에 공백이 있음"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "control character U+{code}"
+msgstr "제어 문자 U+{code}"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "non-ASCII character {c} (the keyboard stores ASCII)"
+msgstr "ASCII가 아닌 문자 {c} (키보드는 ASCII를 저장함)"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "character {c} refused (escape character of BlueZ's key file)"
+msgstr "문자 {c} 거부됨 (BlueZ 키 파일의 이스케이프 문자)"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "backup schema {schema} unknown"
+msgstr "알 수 없는 백업 스키마 {schema}"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "fragment {i} is not hex"
+msgstr "조각 {i}이(가) 16진수가 아님"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid "fragment {i} has {n} bytes, expected {expected}"
+msgstr "조각 {i}은(는) {n}바이트, 예상 {expected}바이트"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "bytes after the NUL terminator: refused (not a name this tool restores)"
+msgstr "NUL 종결자 뒤에 바이트가 있음: 거부됨 (이 도구가 복원하는 이름이 아님)"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "the saved name is empty: refused"
+msgstr "저장된 이름이 비어 있음: 거부됨"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "the fragments do not spell the saved name"
+msgstr "조각이 저장된 이름과 일치하지 않음"
+
+#: apihub-app/akm-core/src/devname.rs apihub-app/crates/akmctl/src/forget.rs
+msgid "keyboard not connected"
+msgstr "키보드가 연결되지 않음"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "battery below 20 % and state not 'normal' (or unknown)"
+msgstr "배터리 20 % 미만이고 상태가 'normal'이 아님 (또는 알 수 없음)"
+
+#: apihub-app/akm-core/src/devname.rs apihub-app/crates/akmctl/src/forget.rs
+msgid "circuit breaker open: the keyboard stopped answering"
+msgstr "차단기 열림: 키보드가 응답하지 않습니다"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "the last hardware read failed or was incomplete"
+msgstr "마지막 하드웨어 읽기가 실패했거나 불완전했습니다"
+
+#: apihub-app/akm-core/src/devname.rs
+msgid "`akmctl doctor` is not green (link health, pairing, configuration)"
+msgstr "`akmctl doctor`가 정상(녹색)이 아님 (연결 상태, 페어링, 구성)"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid ""
+"outgoing MTU of the L2CAP control channel unknown: it must be read (akm-"
+"helper hid-inspect, read-only) and be >= {min} before a 66-byte frame is sent"
+msgstr ""
+"L2CAP 제어 채널의 송신 MTU를 알 수 없음: 66바이트 프레임을 보내기 전에 읽어"
+"야 하며(akm-helper hid-inspect, 읽기 전용) {min} 이상이어야 합니다"
+
+#: apihub-app/akm-core/src/devname.rs
+#, rust-format
+msgid ""
+"outgoing MTU of the L2CAP control channel is {m}, below {min}: a 66-byte "
+"frame cannot be sent in one piece (Linux hidp does not fragment; the HID "
+"session would be terminated)"
+msgstr ""
+"L2CAP 제어 채널의 송신 MTU가 {m}(으)로 {min}보다 작음: 66바이트 프레임을 한 "
+"번에 보낼 수 없습니다 (Linux hidp는 분할하지 않으며 HID 세션이 종료됩니다)"
+
+#: apihub-app/akm-core/src/firmware.rs
+#, rust-format
+msgid "Firmware: {v} - up to date (latest public version known)"
+msgstr "펌웨어: {v} - 최신 (알려진 최신 공개 버전)"
+
+#: apihub-app/akm-core/src/firmware.rs
+#, rust-format
+msgid "Firmware: {v} - update available from Apple (latest known: {l})"
+msgstr "펌웨어: {v} - Apple 업데이트 있음 (알려진 최신: {l})"
+
+#: apihub-app/akm-core/src/firmware.rs
+#, rust-format
+msgid "Firmware: {v} - no public Apple update for this model"
+msgstr "펌웨어: {v} - 이 모델에 대한 Apple 공개 업데이트 없음"
+
+#: apihub-app/akm-core/src/firmware.rs
+#, rust-format
+msgid "Firmware: {v} - unknown (model or version not in the table)"
+msgstr "펌웨어: {v} - 알 수 없음 (모델 또는 버전이 표에 없음)"
+
+#: apihub-app/akm-core/src/forecast.rs
+#, rust-format
+msgid "≈ {n} day"
+msgid_plural "≈ {n} days"
+msgstr[0] "≈ {n}일"
+
+#: apihub-app/akm-core/src/forecast.rs
+#, rust-format
+msgid "≈ {h} h"
+msgstr "≈ {h}시간"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "Fn key has no effect"
+msgstr "Fn 키 효과 없음"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "disabled (Fn key has no effect)"
+msgstr "disabled (Fn 키가 동작하지 않음)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "media keys first"
+msgstr "미디어 키 우선"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "fkeyslast (media keys by default, Fn+Fx = F-key)"
+msgstr "fkeyslast (기본은 미디어 키, Fn+Fx = F 키)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "F1–F12 first"
+msgstr "F1–F12 우선"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "fkeysfirst (F-keys by default, Fn+Fx = media key)"
+msgstr "fkeysfirst (기본은 F 키, Fn+Fx = 미디어 키)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "media keys first (auto)"
+msgstr "미디어 키 우선 (자동)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "auto (media keys by default on Apple keyboards, Fn+Fx = F-key)"
+msgstr "자동 (Apple 키보드에서는 기본적으로 미디어 키, Fn+Fx = F 키)"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "F-keys disabled"
+msgstr "F 키 비활성화됨"
+
+#: apihub-app/akm-core/src/hid_params.rs
+msgid "fkeysdisabled (F-keys disabled, media keys only)"
+msgstr "fkeysdisabled (F 키 비활성화됨, 미디어 키만)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Brightness −"
+msgstr "밝기 −"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Brightness +"
+msgstr "밝기 +"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Exposé / Mission Control"
+msgstr "Exposé / Mission Control"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "(no icon)"
+msgstr "(아이콘 없음)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Previous track"
+msgstr "이전 트랙"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Play / Pause"
+msgstr "재생 / 일시 정지"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Next track"
+msgstr "다음 트랙"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Mute"
+msgstr "음소거"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Eject ⏏"
+msgstr "꺼내기 ⏏"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Delete ⌫"
+msgstr "삭제 ⌫"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Return ↩"
+msgstr "Return ↩"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Caps Lock ⇪"
+msgstr "Caps Lock ⇪"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "left control"
+msgstr "왼쪽 Control"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "left Shift ⇧"
+msgstr "왼쪽 Shift ⇧"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "left Option ⌥"
+msgstr "왼쪽 Option ⌥"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "left Command ⌘"
+msgstr "왼쪽 Command ⌘"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "right Shift ⇧"
+msgstr "오른쪽 Shift ⇧"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "right Option ⌥"
+msgstr "오른쪽 Option ⌥"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "right Command ⌘"
+msgstr "오른쪽 Command ⌘"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"unknown key {key}: use a key name (F1..F12, Eject, Fn, LeftCmd...; see "
+"`akmctl keys --all`) or a HID usage like 0x7003a"
+msgstr ""
+"알 수 없는 키 {key}: 키 이름(F1..F12, Eject, Fn, LeftCmd...; `akmctl keys --"
+"all` 참조) 또는 0x7003a 같은 HID usage를 사용하십시오"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"scancode {code} is not remappable (allowed: keyboard page 0x7xxxx with a "
+"kernel default, Eject 0xc00b8, Fn 0xff0003)"
+msgstr ""
+"스캔 코드 {code}은(는) 다시 매핑할 수 없음 (허용: 커널 기본 코드가 있는 키보"
+"드 페이지 0x7xxxx, Eject 0xc00b8, Fn 0xff0003)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "did you mean {key}?"
+msgstr "{key}을(를) 의미했습니까?"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"unknown key code {code}: expected a KEY_* name of linux/input-event-"
+"codes.h{hint}"
+msgstr ""
+"알 수 없는 키 코드 {code}: linux/input-event-codes.h의 KEY_* 이름 필요{hint}"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"bad model {s}: expected 05ac:PPPP with PPPP an Apple Wireless Keyboard "
+"(aluminium) product id"
+msgstr ""
+"잘못된 모델 {s}: 05ac:PPPP 형식이어야 하며 PPPP는 Apple Wireless Keyboard(알"
+"루미늄)의 제품 ID여야 합니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "invalid {name} value {s} (expected {min}..={max}: {help})"
+msgstr "{name}의 값 {s}이(가) 잘못됨 ({min}..={max} 필요: {help})"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid ""
+"NumLock: with the NumLock LED on, hid_apple turns J K L U I O 7 8 9 M 0 ; / "
+"P - into keypad keys (APPLE_NUMLOCK_EMULATION); press again to leave"
+msgstr ""
+"NumLock: NumLock LED가 켜져 있으면 hid_apple이 J K L U I O 7 8 9 M 0 ; / P - "
+"를 숫자 키패드 키로 바꿉니다 (APPLE_NUMLOCK_EMULATION). 다시 누르면 해제됩니"
+"다"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Fn remapped: the Fn layer of hid_apple is lost"
+msgstr "Fn 재매핑됨: hid_apple의 Fn 레이어가 사라집니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "remapped before hid_apple: no Fn layer on this key any more"
+msgstr "hid_apple 전에 재매핑됨: 이 키에는 더 이상 Fn 레이어가 없습니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid ""
+"iso_layout=-1: hid_apple swaps these two keys when the keyboard reports the "
+"ISO country code"
+msgstr ""
+"iso_layout=-1: 키보드가 ISO 국가 코드를 보고하면 hid_apple이 이 두 키를 서로 "
+"바꿉니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "line {line}: {m}"
+msgstr "{line}행: {m}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Apple (key legends)"
+msgstr "Apple (키 각인 기준)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Classic F1-F12"
+msgstr "기본 F1-F12"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "Linux PC (Cmd↔Alt)"
+msgstr "Linux PC (Cmd↔Alt)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unknown preset {preset} (apple, fkeys, linux-pc)"
+msgstr "알 수 없는 프리셋 {preset} (apple, fkeys, linux-pc)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected a quoted string"
+msgstr "따옴표로 묶인 문자열이 필요합니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "unterminated string"
+msgstr "끝나지 않은 문자열"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "escapes and control characters are not allowed in strings"
+msgstr "문자열에는 이스케이프와 제어 문자를 쓸 수 없습니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unexpected text {r}"
+msgstr "예상치 못한 텍스트 {r}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected , or ] in array"
+msgstr "배열에 , 또는 ]가 필요합니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "bad value {tok} (string, integer or array of strings)"
+msgstr "잘못된 값 {tok} (문자열, 정수 또는 문자열 배열)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "bad integer {tok}"
+msgstr "잘못된 정수 {tok}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected a key"
+msgstr "키가 필요합니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "duplicate key {key}"
+msgstr "중복된 키 {key}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "unterminated section header"
+msgstr "끝나지 않은 섹션 머리글"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"unknown section [{section}] (profile.NAME, profile.NAME.keys, "
+"profile.NAME.params)"
+msgstr ""
+"알 수 없는 섹션 [{section}] (profile.이름, profile.이름.keys, profile.이"
+"름.params)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "bad profile name {name} (a-z 0-9 - _, 1-32 characters)"
+msgstr "잘못된 프로필 이름 {name} (a-z 0-9 - _, 1~32자)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "models: 1 to 9 entries"
+msgstr "models: 1~9개 항목"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "duplicate model {m}"
+msgstr "중복된 모델 {m}"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid ""
+"unknown or ill-typed key {k} in [profile.{n}] (preset = \"apple\", models = "
+"[\"05ac:0256\"])"
+msgstr ""
+"[profile.{n}]의 키 {k}을(를) 알 수 없거나 형식이 잘못됨 (preset = \"apple\", "
+"models = [\"05ac:0256\"])"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unknown hid_apple parameter {key} ({known})"
+msgstr "알 수 없는 hid_apple 매개변수 {key} ({known})"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "{key} must be an integer"
+msgstr "{key}은(는) 정수여야 합니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "{key} = {v} out of range {min}..={max} ({help})"
+msgstr "{key} = {v}이(가) 범위 {min}..={max}을(를) 벗어남 ({help})"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "{key} must be a \"KEY_*\" string"
+msgstr "{key}은(는) \"KEY_*\" 문자열이어야 합니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "key {key} mapped twice (same scancode 0x{sc})"
+msgstr "키 {key}이(가) 두 번 매핑됨 (같은 스캔 코드 0x{sc})"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "file larger than {MAX_FILE} bytes"
+msgstr "파일이 {MAX_FILE}바이트보다 큽니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "duplicate section"
+msgstr "중복된 섹션"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected ="
+msgstr "=가 필요합니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unsupported schema {n} (expected 1)"
+msgstr "지원하지 않는 스키마 {n} (1 필요)"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "bad profile name {s}"
+msgstr "잘못된 프로필 이름 {s}"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unknown or ill-typed top-level key {k} (schema = 1, active = \"NAME\")"
+msgstr ""
+"최상위 키 {k}을(를) 알 수 없거나 형식이 잘못됨 (schema = 1, active = \"이름"
+"\")"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "missing `schema = 1`"
+msgstr "`schema = 1` 없음"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "at most 16 profiles"
+msgstr "프로필은 최대 16개"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "active profile {active} is not defined"
+msgstr "활성 프로필 {active}이(가) 정의되지 않았습니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "hwdb file larger than {MAX_HWDB} bytes"
+msgstr "hwdb 파일이 {MAX_HWDB}바이트보다 큽니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid ""
+"hwdb file: only printable ASCII and \\n are allowed (no \\r, tab, NUL, UTF-8)"
+msgstr ""
+"hwdb 파일: 인쇄 가능한 ASCII와 \\n만 허용됩니다 (\\r, 탭, NUL, UTF-8 불가)"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "hwdb file must end with a newline"
+msgstr "hwdb 파일은 줄바꿈으로 끝나야 합니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "match line without any KEYBOARD_KEY_ property"
+msgstr "KEYBOARD_KEY_ 속성이 없는 일치 줄"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "PID {pid} matched twice"
+msgstr "PID {pid}이(가) 두 번 일치함"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "expected KEYBOARD_KEY_<scancode>=<name>"
+msgstr "KEYBOARD_KEY_<스캔 코드>=<이름> 형식이 필요합니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "scancode not allowed: {sc}"
+msgstr "허용되지 않는 스캔 코드: {sc}"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "unknown key name {name}"
+msgstr "알 수 없는 키 이름 {name}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "hwdb file: first line is not the apple-kb-monitor header"
+msgstr "hwdb 파일: 첫 줄이 apple-kb-monitor 머리글이 아닙니다"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "hwdb file: more than 512 lines"
+msgstr "hwdb 파일: 512줄 초과"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "match line not allowed: {l}"
+msgstr "허용되지 않는 일치 줄: {l}"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "duplicate match line"
+msgstr "중복된 일치 줄"
+
+#: apihub-app/akm-core/src/keymap.rs
+msgid "property outside a record"
+msgstr "레코드 밖의 속성"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "scancode {sc} set twice"
+msgstr "스캔 코드 {sc}이(가) 두 번 설정됨"
+
+#: apihub-app/akm-core/src/keymap.rs
+#, rust-format
+msgid "line not allowed: {l}"
+msgstr "허용되지 않는 줄: {l}"
+
+#: apihub-app/akm-core/src/keytable.rs
+msgid "another keymap apply is in progress"
+msgstr "다른 키맵 적용이 진행 중입니다"
+
+#: apihub-app/akm-core/src/led.rs
+msgid "no Apple keyboard evdev found"
+msgstr "Apple 키보드 evdev를 찾을 수 없음"
+
+#: apihub-app/akm-core/src/led.rs
+#, rust-format
+msgid "unsupported LED code {l}"
+msgstr "지원하지 않는 LED 코드 {l}"
+
+#: apihub-app/akm-core/src/led.rs
+msgid ""
+"refusing to switch NumLock on (hid-apple would turn letters into keypad keys)"
+msgstr ""
+"NumLock을 켜지 않습니다 (hid-apple이 문자 키를 숫자 키패드 키로 바꿉니다)"
+
+#: apihub-app/akm-core/src/led.rs
+#, rust-format
+msgid "cannot open {path}: {e}"
+msgstr "{path}을(를) 열 수 없음: {e}"
+
+#: apihub-app/akm-core/src/led.rs
+#, rust-format
+msgid "cannot write {path}: {e}"
+msgstr "{path}에 쓸 수 없음: {e}"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "Apple Keyboard — switched off"
+msgstr "Apple 키보드 — 꺼짐"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "The keyboard was switched off (not a lost connection)"
+msgstr "키보드가 꺼졌습니다 (연결 끊김이 아님)"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "Apple Keyboard — disconnected"
+msgstr "Apple 키보드 — 연결 끊김"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "The keyboard is no longer connected"
+msgstr "키보드가 더 이상 연결되어 있지 않습니다"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "Apple Keyboard — reconnected"
+msgstr "Apple 키보드 — 다시 연결됨"
+
+#: apihub-app/akm-core/src/link.rs
+#, rust-format
+msgid "Reconnected ({pct}%)"
+msgstr "다시 연결됨 ({pct}%)"
+
+#: apihub-app/akm-core/src/link.rs
+msgid "Reconnected"
+msgstr "다시 연결됨"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "no answer to the page (keyboard asleep or out of range)"
+msgstr "호출에 응답 없음 (키보드가 절전 중이거나 범위 밖)"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "BlueZ busy (connection already in progress)"
+msgstr "BlueZ 사용 중 (이미 연결 중)"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "already connected"
+msgstr "이미 연결됨"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "pairing refused (link key missing or rejected)"
+msgstr "페어링 거부됨 (링크 키가 없거나 거부됨)"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "adapter off or not ready"
+msgstr "어댑터가 꺼져 있거나 준비되지 않음"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "device unknown to BlueZ (unpaired?)"
+msgstr "BlueZ가 모르는 장치 (페어링 안 됨?)"
+
+#: apihub-app/akm-core/src/recovery.rs apihub-app/crates/akmctl/src/repair.rs
+msgid "the keyboard is not paired with this computer"
+msgstr "키보드가 이 컴퓨터와 페어링되어 있지 않습니다"
+
+#: apihub-app/akm-core/src/recovery.rs apihub-app/crates/akmctl/src/repair.rs
+msgid "the keyboard refused the stored pairing"
+msgstr "키보드가 저장된 페어링을 거부했습니다"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "BlueZ reports the pairing as refused"
+msgstr "BlueZ가 페어링을 거부됨으로 보고합니다"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "the keyboard is no longer known to BlueZ"
+msgstr "BlueZ가 더 이상 키보드를 알지 못합니다"
+
+#: apihub-app/akm-core/src/recovery.rs
+msgid "the pairing was removed"
+msgstr "페어링이 제거되었습니다"
+
+#: apihub-app/akm-core/src/registry.rs
+msgid "0x40 WillShutdown (id only, what macOS sends)"
+msgstr "0x40 WillShutdown (ID만, macOS가 보내는 것)"
+
+#: apihub-app/akm-core/src/registry.rs
+msgid ""
+"0x55 LongDeviceName (64 bytes, Lion; akmctl rename --device-name: pre-"
+"flight, backup, one confirmation, read back)"
+msgstr ""
+"0x55 LongDeviceName (64바이트, Lion; akmctl rename --device-name: 사전 점검, "
+"백업, 한 번 확인, 다시 읽기)"
+
+#: apihub-app/akm-core/src/registry.rs
+msgid "0x41 RecantConnection (id only, akmctl repair)"
+msgstr "0x41 RecantConnection (ID만, akmctl repair)"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the rssi-helper utility is not installed"
+msgstr "rssi-helper 유틸리티가 설치되어 있지 않습니다"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "reinstall the apple-kb-monitor package"
+msgstr "apple-kb-monitor 패키지를 다시 설치하십시오"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr "rssi-helper 유틸리티가 실패했습니다(capability 없음, Bluetooth 거부)"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr ""
+"apple-kb-monitor 패키지를 다시 설치한 다음 akmctl doctor를 실행하십시오"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the rssi-helper utility does not answer in time"
+msgstr "rssi-helper 유틸리티가 제때 응답하지 않습니다"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "Bluetooth 서비스를 확인하십시오: systemctl status bluetooth"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "Bluetooth 어댑터가 이 연결의 측정값을 제공하지 않습니다"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "키보드를 더 가까이 두거나 다시 연결하십시오"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "the signal cannot be measured"
+msgstr "신호를 측정할 수 없습니다"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "run akmctl doctor"
+msgstr "akmctl doctor를 실행하십시오"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "rssi-helper not installed"
+msgstr "rssi-helper가 설치되지 않음"
+
+#: apihub-app/akm-core/src/rssi.rs
+msgid "see akmctl doctor"
+msgstr "akmctl doctor 참조"
+
+#: apihub-app/akm-core/src/rssi.rs
+#, rust-format
+msgid "Signal: not measured ({why})"
+msgstr "신호: 측정 안 됨 ({why})"
+
+#: apihub-app/akm-core/src/signal.rs
+msgid "excellent"
+msgstr "매우 좋음"
+
+#: apihub-app/akm-core/src/signal.rs
+msgid "good"
+msgstr "좋음"
+
+#: apihub-app/akm-core/src/signal.rs
+msgid "weak"
+msgstr "약함"
+
+#: apihub-app/akm-core/src/signal.rs
+#, rust-format
+msgid "Signal: {quality} ({value})"
+msgstr "신호: {quality} ({value})"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "no keyboard connected: nothing to read"
+msgstr "연결된 키보드 없음: 읽을 대상이 없습니다"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+#, rust-format
+msgid "too soon: the keyboard was just read, next read possible in {s} s"
+msgstr ""
+"너무 이릅니다: 방금 키보드를 읽었습니다. {s}초 후 다시 읽을 수 있습니다"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "no keyboard connected: nothing to read again"
+msgstr "연결된 키보드 없음: 다시 읽을 것이 없습니다"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "name read again now (0x51-0x54 only)"
+msgstr "이름을 지금 다시 읽음 (0x51-0x54만)"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "name read again as soon as the keyboard can be read (0x51-0x54 only)"
+msgstr "키보드를 읽을 수 있게 되는 즉시 이름을 다시 읽음 (0x51-0x54만)"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+#, rust-format
+msgid "name read again in {s} s (0x51-0x54 only, at most once per {floor} s)"
+msgstr "{s}초 후 이름을 다시 읽음 (0x51-0x54만, {floor}초에 최대 한 번)"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid ""
+"HID diagnostics unavailable (hidraw not readable or keyboard asleep): kernel "
+"battery only"
+msgstr ""
+"HID 진단을 사용할 수 없음 (hidraw를 읽을 수 없거나 키보드가 절전 중): 커널 배"
+"터리 수준만"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "keyboard not reachable (no hidraw answer, no kernel battery)"
+msgstr "키보드에 연결할 수 없음 (hidraw 응답 없음, 커널 배터리 수준 없음)"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "keyboard silent: battery level kept from the last read"
+msgstr "키보드 응답 없음: 마지막으로 읽은 배터리 수준 유지"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "Keyboard disconnected"
+msgstr "키보드 연결 끊김"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+#: apihub-app/apple-kb-monitord/src/client.rs
+msgid "Keyboard: not found"
+msgstr "키보드: 찾을 수 없음"
+
+#: apihub-app/apple-kb-monitord/src/actor.rs
+msgid "keyboard thread crashed, restarting"
+msgstr "키보드 스레드가 충돌하여 다시 시작합니다"
+
+#: apihub-app/apple-kb-monitord/src/alias.rs
+#, rust-format
+msgid "BlueZ: {e}"
+msgstr "BlueZ: {e}"
+
+#: apihub-app/apple-kb-monitord/src/alias.rs
+#, rust-format
+msgid "no paired Apple device {mac} in BlueZ"
+msgstr "BlueZ에 페어링된 Apple 기기 {mac}이(가) 없음"
+
+#: apihub-app/apple-kb-monitord/src/client.rs
+msgid "HID diagnostics unavailable (hidraw not readable): kernel battery only"
+msgstr "HID 진단을 사용할 수 없음 (hidraw를 읽을 수 없음): 커널 배터리 수준만"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: not a setting of the module"
+msgstr "{key}: 이 모듈의 설정이 아닙니다"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: true or false"
+msgstr "{key}: true 또는 false"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: integer from 0 to 99"
+msgstr "{key}: 0에서 99 사이의 정수"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: number from 1 to 20"
+msgstr "{key}: 1에서 20 사이의 숫자"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: one of {list}"
+msgstr "{key}: {list} 중 하나"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: 1 to 10 integers from 1 to 99"
+msgstr "{key}: 1에서 99 사이의 정수 1~10개"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "config.toml is not valid TOML (line {line})"
+msgstr "config.toml이 올바른 TOML이 아닙니다({line}번째 줄)"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: config.toml uses a form this module cannot edit safely"
+msgstr ""
+"{key}: config.toml이 이 모듈이 안전하게 편집할 수 없는 형식을 사용합니다"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "{key}: writing it would change other settings, nothing written"
+msgstr "{key}: 쓰면 다른 설정이 바뀌므로 아무것도 쓰지 않았습니다"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+msgid "config.toml changed since it was read"
+msgstr "config.toml이 읽은 뒤에 변경되었습니다"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "akmctl {cmd}: not allowed"
+msgstr "akmctl {cmd}: 허용되지 않음"
+
+#: apihub-app/apple-kb-monitord/src/config_api.rs
+#, rust-format
+msgid "config.toml is larger than {n} KiB"
+msgstr "config.toml이 {n} KiB보다 큽니다"
+
+#: apihub-app/apple-kb-monitord/src/devices.rs
+msgid ""
+"request queued: the daemon is reading the keyboard, the name is read again "
+"after that"
+msgstr "요청 대기 중: 서비스가 키보드를 읽는 중이며, 그 후 이름을 다시 읽음"
+
+#: apihub-app/apple-kb-monitord/src/devices.rs
+#, rust-format
+msgid "no thread for the request: {e}"
+msgstr "요청을 처리할 스레드가 없음: {e}"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "OK"
+msgstr "정상"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "installed"
+msgstr "설치됨"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#, rust-format
+msgid "{bin}: exit code {code}"
+msgstr "{bin}: 종료 코드 {code}"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#, rust-format
+msgid "{bin}: no answer within {secs} s (killed)"
+msgstr "{bin}: {secs}초 안에 응답 없음 (종료됨)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "NOT FOUND"
+msgstr "찾을 수 없음"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "Monitor daemon"
+msgstr "모니터 서비스"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "BlueZ CLI"
+msgstr "BlueZ CLI"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "active (running)"
+msgstr "활성 (실행 중)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "inactive / not found (daemon started by hand?)"
+msgstr "비활성 / 찾을 수 없음 (서비스를 직접 시작했습니까?)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "daemon reachable on the session bus"
+msgstr "세션 버스에서 서비스에 연결 가능"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "daemon without its session interface"
+msgstr "세션 인터페이스가 없는 서비스"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "no Apple hidraw device found (keyboard off or not paired?)"
+msgstr ""
+"Apple hidraw 장치를 찾을 수 없음 (키보드가 꺼졌거나 페어링되지 않았습니까?)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "readable"
+msgstr "읽기 가능"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "check the udev uaccess rule"
+msgstr "udev uaccess 규칙을 확인하십시오"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "hidraw readable"
+msgstr "hidraw 읽기 가능"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "kernel mapping, no hwdb installed (optional: akmctl keymap)"
+msgstr "커널 매핑, hwdb 미설치 (선택 사항: akmctl keymap)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#, rust-format
+msgid "{hwdb}: {count} model remapped"
+msgid_plural "{hwdb}: {count} models remapped"
+msgstr[0] "{hwdb}: 모델 {count}개 재매핑됨"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "reinstall: akmctl keymap apply, or remove: akmctl keymap reset"
+msgstr "다시 설치: akmctl keymap apply, 제거: akmctl keymap reset"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid " · keyd also active with /etc/keyd/apple-keyboard.conf (optional)"
+msgstr " · keyd도 /etc/keyd/apple-keyboard.conf로 실행 중 (선택 사항)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "Key mapping"
+msgstr "키 매핑"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "udev rules"
+msgstr "udev 규칙"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "70-apple-kb-hidraw.rules installed"
+msgstr "70-apple-kb-hidraw.rules 설치됨"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#, rust-format
+msgid "applied (sysfs) = {} · configured (modprobe.d) = {}"
+msgstr "적용됨 (sysfs) = {} · 구성됨 (modprobe.d) = {}"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "unreadable (hid_apple not loaded?)"
+msgstr "읽을 수 없음 (hid_apple이 로드되지 않았나요?)"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "none"
+msgstr "없음"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "differ: reload hid_apple or reboot"
+msgstr "불일치: hid_apple을 다시 불러오거나 재부팅하십시오"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "not persistent: akmctl set fnmode N --persist"
+msgstr "영구 적용 안 됨: akmctl set fnmode N --persist"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "Signal measure"
+msgstr "신호 측정"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "rssi-helper executable, capability cap_net_admin present"
+msgstr "rssi-helper 실행 가능, capability cap_net_admin 있음"
+
+#: apihub-app/apple-kb-monitord/src/diagnose.rs
+msgid "Fix:"
+msgstr "해결 방법:"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+msgid "an authentication is already pending"
+msgstr "인증이 이미 대기 중입니다"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+msgid "too many requests, retry shortly"
+msgstr "요청이 너무 많습니다. 잠시 후 다시 시도하십시오"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "privileged helper not installed ({program})"
+msgstr "권한 있는 도우미가 설치되지 않음 ({program})"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "Nothing to do: profile {} is already applied."
+msgstr "할 일 없음: 프로필 {}은(는) 이미 적용되어 있습니다."
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+msgid "key mapping installed"
+msgstr "키 매핑 설치됨"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+msgid "key mapping removed"
+msgstr "키 매핑 제거됨"
+
+#: apihub-app/apple-kb-monitord/src/keymap.rs
+#, rust-format
+msgid "hid_apple {params} (all Apple keyboards)"
+msgstr "hid_apple {params} (모든 Apple 키보드)"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Open"
+msgstr "열기"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Repair…"
+msgstr "복구…"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Ignore this reminder"
+msgstr "이 알림 무시"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Remind me tomorrow"
+msgstr "내일 다시 알림"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Forget"
+msgstr "삭제"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apply"
+msgstr "적용"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "{pct}%"
+msgstr "{pct}%"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — Low Battery"
+msgstr "Apple 키보드 — 배터리 부족"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "Battery at {pct} — charge soon"
+msgstr "배터리 {pct} — 곧 충전하십시오"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Estimated charge"
+msgstr "추정 충전량"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Keyboard indication"
+msgstr "키보드 표시값"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "{what} {pct} — replace the batteries now"
+msgstr "{what} {pct} — 지금 배터리를 교체하십시오"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "{what} {pct} (below {threshold}%) — plan to replace the batteries"
+msgstr "{what} {pct} ({threshold}% 미만) — 배터리 교체를 계획하십시오"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — battery low (keyboard alert)"
+msgstr "Apple 키보드 — 배터리 부족 (키보드 경고)"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid ""
+"The keyboard itself reports a low battery — plan to replace the batteries"
+msgstr "키보드 자체가 배터리 부족을 보고합니다 — 배터리 교체를 계획하십시오"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — battery critical (keyboard alert)"
+msgstr "Apple 키보드 — 배터리 위험 (키보드 경고)"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid ""
+"The keyboard itself reports a critically low battery — replace the batteries "
+"now"
+msgstr ""
+"키보드 자체가 배터리가 매우 부족하다고 보고합니다 — 지금 배터리를 교체하십시"
+"오"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — new batteries"
+msgstr "Apple 키보드 — 새 배터리"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "Battery {before} → {after}; low-battery alerts re-armed"
+msgstr "배터리 {before} → {after}. 배터리 부족 경고가 다시 활성화되었습니다"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — batteries changed too often"
+msgstr "Apple 키보드 — 배터리 교체가 너무 잦음"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Critical"
+msgstr "위험"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Low"
+msgstr "부족"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "; keyboard indication {pct}"
+msgstr "; 키보드 표시값 {pct}"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "change the batteries now"
+msgstr "지금 배터리를 교체하십시오"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "plan to change the batteries"
+msgstr "배터리 교체를 계획하십시오"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"Voltage {mv} mV, under the keyboard's {level} threshold ({t} mV){indication} "
+"— {todo}"
+msgstr "전압 {mv} mV, 키보드의 {level} 기준({t} mV) 미만{indication} — {todo}"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — change the batteries now"
+msgstr "Apple 키보드 — 지금 배터리를 교체하십시오"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — time to change the batteries"
+msgstr "Apple 키보드 — 배터리 교체 시기"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"Estimate from your batteries: about {pct} left. KDE warns separately at {low}"
+"% of the keyboard's own indication."
+msgstr ""
+"사용 중인 배터리 기준 추정: 약 {pct} 남음. KDE는 키보드 자체 표시값이 {low}%"
+"일 때 따로 경고합니다."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — batteries getting low"
+msgstr "Apple 키보드 — 배터리가 부족해지고 있음"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"“{name}” reconnected. Fn mode remembered for it: {want}; in effect: {live}. "
+"This setting (hid_apple) is common to every Apple keyboard of this computer; "
+"applying it asks for an authentication."
+msgstr ""
+"“{name}”이(가) 다시 연결되었습니다. 이 키보드에 기억된 Fn 모드: {want}, 현재 "
+"적용: {live}. 이 설정(hid_apple)은 이 컴퓨터의 모든 Apple 키보드에 공통이며, "
+"적용하려면 인증이 필요합니다."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — remembered Fn mode"
+msgstr "Apple 키보드 — 기억된 Fn 모드"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"“{name}” will be removed from this computer. To use it again you will have "
+"to switch it off and on and pair it again. Nothing is written to the "
+"keyboard. Press “Forget” within one minute to confirm."
+msgstr ""
+"“{name}”이(가) 이 컴퓨터에서 제거됩니다. 다시 사용하려면 껐다 켜고 다시 페어"
+"링해야 합니다. 키보드에는 아무것도 쓰지 않습니다. 확인하려면 1분 안에 “삭제”"
+"를 누르십시오."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Forget the keyboard?"
+msgstr "키보드를 삭제하시겠습니까?"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"“{name}” disconnected {count} time within the last hour. Check the "
+"batteries, the distance and USB 3 devices near the Bluetooth adapter; "
+"details: akmctl doctor."
+msgid_plural ""
+"“{name}” disconnected {count} times within the last hour. Check the "
+"batteries, the distance and USB 3 devices near the Bluetooth adapter; "
+"details: akmctl doctor."
+msgstr[0] ""
+"“{name}”의 연결이 지난 1시간 동안 {count}번 끊겼습니다. 배터리, 거리, 블루투"
+"스 어댑터 근처의 USB 3 장치를 확인하십시오. 자세한 내용: akmctl doctor."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Keyboard: unstable link"
+msgstr "키보드: 연결 불안정"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid ""
+"“{name}” was removed from this computer: switch it off and on to pair it "
+"again (button Repair, or “akmctl repair”)."
+msgstr ""
+"“{name}”이(가) 이 컴퓨터에서 제거되었습니다. 다시 페어링하려면 껐다 켜십시오"
+"(복구 버튼 또는 “akmctl repair”)."
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Keyboard removed from this computer"
+msgstr "키보드가 이 컴퓨터에서 제거됨"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+#, rust-format
+msgid "Firmware {current}; latest version known: {latest}"
+msgstr "펌웨어 {current}. 알려진 최신 버전: {latest}"
+
+#: apihub-app/apple-kb-monitord/src/notify.rs
+msgid "Apple Keyboard — firmware update known"
+msgstr "Apple 키보드 — 알려진 펌웨어 업데이트 있음"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+#, rust-format
+msgid "Fn mode: {what}"
+msgstr "Fn 모드: {what}"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+msgid "automatic"
+msgstr "자동"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+#, rust-format
+msgid "Keyboard layout: {what}"
+msgstr "키보드 배열: {what}"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Caps Lock on"
+msgstr "Caps Lock 켜짐"
+
+#: apihub-app/apple-kb-monitord/src/osd.rs
+msgid "Caps Lock off"
+msgstr "Caps Lock 꺼짐"
+
+#: apihub-app/apple-kb-monitord/src/privileged.rs
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "cannot run pkexec: {e}"
+msgstr "pkexec를 실행할 수 없음: {e}"
+
+#: apihub-app/apple-kb-monitord/src/privileged.rs
+#, rust-format
+msgid "helper failed ({st}): {err}"
+msgstr "도우미 실패 ({st}): {err}"
+
+#: apihub-app/apple-kb-monitord/src/privileged.rs
+msgid "helper timed out"
+msgstr "도우미 시간 초과"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+msgid "Keyboard unreachable"
+msgstr "키보드에 연결할 수 없음"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+#, rust-format
+msgid ""
+"“{name}” has not answered for {min} min. Press a key; otherwise switch it "
+"off and on (the pairing is not at fault). Then: akmctl doctor"
+msgstr ""
+"“{name}”이(가) {min}분 동안 응답하지 않았습니다. 키를 누르고, 그래도 안 되면 "
+"껐다 켜십시오(페어링 문제가 아님). 그다음: akmctl doctor"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+msgid "Keyboard: re-pairing needed"
+msgstr "키보드: 다시 페어링 필요"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+#, rust-format
+msgid "“{name}”: {why}. Run “akmctl repair” (or tray menu › Repair the link…)."
+msgstr ""
+"“{name}”: {why}. “akmctl repair”를 실행하십시오(또는 트레이 메뉴 › 연결 복"
+"구…)."
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+msgid "Keyboard reconnected"
+msgstr "키보드 다시 연결됨"
+
+#: apihub-app/apple-kb-monitord/src/repair.rs
+#, rust-format
+msgid "“{name}” is connected again."
+msgstr "“{name}”이(가) 다시 연결되었습니다."
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+msgid "a change of the Fn mode is already waiting for authentication"
+msgstr "Fn 모드 변경이 이미 인증을 기다리고 있습니다"
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "a change of the Fn mode just ended, retry in {s} s"
+msgstr "Fn 모드 변경이 방금 끝났습니다. {s}초 후에 다시 시도하십시오"
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "{v} is not a valid {param}"
+msgstr "{v}은(는) 올바른 {param} 값이 아님"
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "{name} cannot be changed (read-only)"
+msgstr "{name}은(는) 변경할 수 없음 (읽기 전용)"
+
+#: apihub-app/apple-kb-monitord/src/settings.rs
+#, rust-format
+msgid "the helper ended without error but the Fn mode in effect is still {now}"
+msgstr "도우미가 오류 없이 끝났지만 적용된 Fn 모드는 여전히 {now}입니다"
+
+#: apihub-app/apple-kb-monitord/src/sleep.rs
+msgid "Pause keyboard reads before the Bluetooth link goes down"
+msgstr "블루투스 연결이 끊기기 전에 키보드 읽기 일시 중지"
+
+#: apihub-app/apple-kb-monitord/src/sleep.rs
+msgid "Tell the keyboard the computer is shutting down (WillShutdown)"
+msgstr "컴퓨터가 종료 중임을 키보드에 알림 (WillShutdown)"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "Rename keyboard"
+msgstr "키보드 이름 바꾸기"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "New name (empty = the keyboard's own name):"
+msgstr "새 이름 (비우면 키보드 고유 이름):"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "No new reading"
+msgstr "새 측정값 없음"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "Reconnection in progress"
+msgstr "다시 연결하는 중"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "An attempt is already waiting for BlueZ (40 s at most)."
+msgstr "이미 한 번의 시도가 BlueZ를 기다리고 있습니다(최대 40초)."
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "Fn mode not changed"
+msgstr "Fn 모드가 변경되지 않음"
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+#, rust-format
+msgid "A Fn mode change just finished: try again in {w}."
+msgstr "Fn 모드 변경이 방금 끝났습니다. {w} 후에 다시 시도하십시오."
+
+#: apihub-app/apple-kb-monitord/src/tray.rs
+msgid "A Fn mode change is already waiting for authentication."
+msgstr "Fn 모드 변경이 이미 인증을 기다리고 있습니다."
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "{volts} V"
+msgstr "{volts} V"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "New batteries: no estimate yet"
+msgstr "새 배터리: 아직 추정값 없음"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "alkaline"
+msgstr "알칼라인"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "lithium"
+msgstr "리튬"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "Estimate ({chem}): ≈ {pct}% ({low} to {high}%)"
+msgstr "추정 ({chem}): ≈ {pct}% ({low}~{high}%)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Never updated"
+msgstr "업데이트된 적 없음"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "{n} d"
+msgstr "{n}일"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "Updated {d} ago"
+msgstr "{d} 전에 업데이트됨"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Media keys first (Fn + F1 = F1)"
+msgstr "미디어 키 우선 (Fn + F1 = F1)(_M)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "F1–F12 _first (Fn + F1 = media)"
+msgstr "F1–F12 우선 (Fn + F1 = 미디어)(_F)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Refresh"
+msgstr "새로 고침(_R)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Copy information"
+msgstr "정보 복사(_C)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Bluetooth settings…"
+msgstr "블루투스 설정(_B)…"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Re_name keyboard…"
+msgstr "키보드 이름 바꾸기(_N)…"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Re_pair the link…"
+msgstr "연결 복구(_P)…"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Reconnec_t"
+msgstr "다시 연결(_T)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "_Disconnect"
+msgstr "연결 끊기(_D)"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "For_get this keyboard…"
+msgstr "이 키보드 삭제(_G)…"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Apple keyboard"
+msgstr "Apple 키보드"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "offline"
+msgstr "오프라인"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Keyboard indication:"
+msgstr "키보드 표시:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "charging"
+msgstr "충전 중"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Apple display:"
+msgstr "Apple 표시:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Estimated runtime:"
+msgstr "예상 사용 시간:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Last value:"
+msgstr "마지막 값:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "No keyboard found"
+msgstr "키보드를 찾을 수 없음"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "level unknown"
+msgstr "수준 알 수 없음"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "connected"
+msgstr "연결됨"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#, rust-format
+msgid "{name} — {level} · {link} · weakest"
+msgstr "{name} — {level} · {link} · 가장 약함"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "MAC:"
+msgstr "MAC:"
+
+#: apihub-app/apple-kb-monitord/src/tray/view.rs
+msgid "Last error:"
+msgstr "마지막 오류:"
+
+#: apihub-app/crates/akm-helper/src/cmd/hid_control.rs
+#, rust-format
+msgid ""
+"unknown command {v}\n"
+"{USAGE}"
+msgstr ""
+"알 수 없는 명령 {v}\n"
+"{USAGE}"
+
+#: apihub-app/crates/akm-helper/src/cmd/hid_control.rs
+msgid "--mac needs a value"
+msgstr "--mac에는 값이 필요합니다"
+
+#: apihub-app/crates/akm-helper/src/cmd/hid_control.rs
+#: apihub-app/crates/akm-helper/src/cmd/hid_inspect.rs
+#, rust-format
+msgid ""
+"unexpected argument {o}\n"
+"{USAGE}"
+msgstr ""
+"예상치 못한 인수 {o}\n"
+"{USAGE}"
+
+#: apihub-app/crates/akm-helper/src/cmd/hid_inspect.rs
+#, rust-format
+msgid ""
+"--mac needs a value\n"
+"{USAGE}"
+msgstr ""
+"--mac에는 값이 필요합니다\n"
+"{USAGE}"
+
+#: apihub-app/crates/akm-helper/src/cmd/keymap_helper.rs
+msgid "PKEXEC_UID missing: run through pkexec"
+msgstr "PKEXEC_UID 없음: pkexec를 통해 실행하십시오"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: would rewrite {}"
+msgstr "{}: {}을(를) 다시 쓸 예정"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "  previous content would be kept as {}"
+msgstr "  이전 내용은 {}(으)로 보관됨"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: {} already in place, nothing to write"
+msgstr "{}: {} 이미 적용됨, 쓸 내용 없음"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "  would run: {}"
+msgstr "  실행 예정: {}"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: {} rewritten; previous content kept as {}"
+msgstr "{}: {} 다시 씀; 이전 내용은 {}(으)로 보관됨"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: {} created"
+msgstr "{}: {} 생성됨"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "{}: {} already in place, nothing written"
+msgstr "{}: {} 이미 적용됨, 아무것도 쓰지 않음"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid "  ran: {}"
+msgstr "  실행됨: {}"
+
+#: apihub-app/crates/akm-helper/src/doctor_apply.rs
+#, rust-format
+msgid ""
+"  read by {unit} at its next start (reboot, or akmctl doctor --fix --restart-"
+"services)"
+msgstr ""
+"  다음 시작 시 {unit}이(가) 읽음 (재부팅 또는 akmctl doctor --fix --restart-"
+"services)"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+msgid ""
+"BlueZ main.conf: FastConnectable and [Policy] Reconnect* in their sections"
+msgstr ""
+"BlueZ main.conf: FastConnectable 및 [Policy] Reconnect*가 각 섹션에 있음"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+msgid "UPower.conf: NoPollBatteries = true (no 30 s battery polling)"
+msgstr "UPower.conf: NoPollBatteries = true (30초마다 배터리 폴링 안 함)"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+msgid "udev rule keeping the Bluetooth adapter out of USB autosuspend"
+msgstr "Bluetooth 어댑터를 USB 자동 절전에서 제외하는 udev 규칙"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+#, rust-format
+msgid "unknown correction {word}; {USAGE}"
+msgstr "알 수 없는 수정 {word}; {USAGE}"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+#, rust-format
+msgid "{word} given twice"
+msgstr "{word}이(가) 두 번 지정됨"
+
+#: apihub-app/crates/akm-helper/src/doctor_fix.rs
+msgid "--restart: none of these corrections has a service to restart"
+msgstr "--restart: 이 수정 중 다시 시작할 서비스가 있는 것이 없습니다"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{path} (symlink refused?): {e}"
+msgstr "{path} (심볼릭 링크 거부?): {e}"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} is not a regular file"
+msgstr "{}은(는) 일반 파일이 아닙니다"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{path} is larger than {max} bytes"
+msgstr "{path}이(가) {max}바이트보다 큽니다"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} is not owned by the requesting user"
+msgstr "{}의 소유자가 요청한 사용자가 아닙니다"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} has several hard links"
+msgstr "{}에 하드 링크가 여러 개 있습니다"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} is group or world writable"
+msgstr "{}은(는) 그룹 또는 모든 사용자가 쓸 수 있습니다"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} is not a regular file (symlink?)"
+msgstr "{}은(는) 일반 파일이 아닙니다 (심볼릭 링크?)"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "expected NAME=VALUE, got {s}"
+msgstr "NAME=VALUE가 필요하지만 {s}을(를) 받았습니다"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "parameter {n} not allowed"
+msgstr "매개변수 {n}은(는) 허용되지 않습니다"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "bad PKEXEC_UID {s}"
+msgstr "잘못된 PKEXEC_UID {s}"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+msgid ""
+"usage: akm-helper install-keymap install|remove|rollback (the file is read "
+"from /run/user/$PKEXEC_UID/apple-kb-monitor/keymap.hwdb)"
+msgstr ""
+"사용법: akm-helper install-keymap install|remove|rollback (파일은 /run/user/"
+"$PKEXEC_UID/apple-kb-monitor/keymap.hwdb에서 읽음)"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{value} failed ({st})"
+msgstr "{value} 실패 ({st})"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{source} refused: {e}"
+msgstr "{source} 거부됨: {e}"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+msgid ""
+"nothing to install (no KEYBOARD_KEY_ line); use `remove` to go back to the "
+"kernel mapping"
+msgstr ""
+"설치할 것이 없습니다 (KEYBOARD_KEY_ 줄 없음). 커널 매핑으로 돌아가려면 "
+"`remove`를 사용하십시오"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} installed ({} model); previous file kept as {}"
+msgid_plural "{} installed ({} models); previous file kept as {}"
+msgstr[0] "{} 설치됨 (모델 {}개). 이전 파일은 {}(으)로 보관"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+msgid "nothing installed: the kernel mapping is already in use"
+msgstr "설치한 것 없음: 커널 매핑이 이미 사용 중입니다"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{} removed (kept as {}); kernel mapping restored"
+msgstr "{} 제거됨 ({}(으)로 보관). 커널 매핑 복원됨"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+msgid "no previous mapping saved"
+msgstr "저장된 이전 매핑 없음"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "{backup} refused: {e}"
+msgstr "{backup} 거부됨: {e}"
+
+#: apihub-app/crates/akm-helper/src/lib.rs
+#, rust-format
+msgid "previous mapping restored in {}"
+msgstr "{}에 이전 매핑 복원됨"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "unknown option {f}"
+msgstr "알 수 없는 옵션 {f}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "unknown command {verb}"
+msgstr "알 수 없는 명령 {verb}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "invalid fnmode {val} (expected 0, 1, 2, 3 or 4)"
+msgstr "잘못된 fnmode {val} (0, 1, 2, 3 또는 4 필요)"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "parameter {n} given twice"
+msgstr "매개변수 {n}이(가) 두 번 지정됨"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "{path} not updated: {e}"
+msgstr "{path} 업데이트 안 됨: {e}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "{path} updated but cannot write {dir}/{name}: {e}"
+msgstr "{path} 업데이트됨, 하지만 {dir}/{name}에 쓸 수 없음: {e}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "cannot write {dir}/{name}: {e}"
+msgstr "{dir}/{name}에 쓸 수 없음: {e}"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "unknown command {verb} (expected {list})"
+msgstr "알 수 없는 명령 {verb} (사용 가능: {list})"
+
+#: apihub-app/crates/akm-helper/src/main.rs
+#, rust-format
+msgid "hid_apple not loaded: {params} saved, applied at next module load"
+msgstr "hid_apple이 로드되지 않음: {params} 저장됨, 다음 모듈 로드 시 적용됨"
+
+#: apihub-app/crates/akmctl/src/bus.rs
+#, rust-format
+msgid "no session bus: {e}"
+msgstr "세션 버스 없음: {e}"
+
+#: apihub-app/crates/akmctl/src/bus.rs
+#, rust-format
+msgid "bad snapshot JSON: {e}"
+msgstr "잘못된 스냅샷 JSON: {e}"
+
+#: apihub-app/crates/akmctl/src/bus.rs
+#, rust-format
+msgid "daemon not running ({name} absent on the session bus)"
+msgstr "서비스가 실행 중이 아닙니다 (세션 버스에 {name} 없음)"
+
+#: apihub-app/crates/akmctl/src/cli.rs
+msgid "empty name (use --reset to restore the keyboard's own name)"
+msgstr "이름이 비어 있음 (키보드 고유 이름으로 되돌리려면 --reset 사용)"
+
+#: apihub-app/crates/akmctl/src/cli_i18n.rs
+msgid "Options"
+msgstr "옵션"
+
+#: apihub-app/crates/akmctl/src/cli_i18n.rs
+msgid "Arguments"
+msgstr "인수"
+
+#: apihub-app/crates/akmctl/src/cli_i18n.rs
+msgid "Usage:"
+msgstr "사용법:"
+
+#: apihub-app/crates/akmctl/src/cli_i18n.rs
+msgid "Commands"
+msgstr "명령"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Control and query the Apple keyboard monitor"
+msgstr "Apple 키보드 모니터 제어 및 조회"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Control and query the Apple keyboard monitor (apple-kb-monitord).\n"
+"\n"
+"The Fn mode is a parameter of the hid_apple kernel module: it applies to ALL "
+"Apple keyboards connected to this computer, not to a single one. Changing it "
+"requires administrator rights (polkit authentication)."
+msgstr ""
+"Apple 키보드 모니터(apple-kb-monitord)를 제어하고 조회합니다.\n"
+"\n"
+"Fn 모드는 커널 모듈 hid_apple의 매개변수로, 하나가 아니라 이 컴퓨터에 연결된 "
+"모든 Apple 키보드에 적용됩니다. 변경하려면 관리자 권한(polkit 인증)이 필요합"
+"니다."
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"EXIT CODES:\n"
+"  0   success\n"
+"  1   error (D-Bus failure, write refused, bad data)\n"
+"  2   daemon absent (apple-kb-monitord not on the session bus)\n"
+"  64  usage error (invalid arguments)\n"
+"\n"
+"FN MODES (hid_apple.fnmode, global to every Apple keyboard):\n"
+"  0  disabled   Fn key has no effect\n"
+"  1  fkeyslast  media keys by default, Fn+Fx = F-key\n"
+"  2  fkeysfirst F-keys by default, Fn+Fx = media key\n"
+"  3  auto       kernel default: = 1 on an Apple keyboard\n"
+"  4  fkeysdisabled F-keys disabled (media keys only)"
+msgstr ""
+"종료 코드:\n"
+"  0   성공\n"
+"  1   오류 (D-Bus 실패, 쓰기 거부, 잘못된 데이터)\n"
+"  2   서비스 없음 (세션 버스에 apple-kb-monitord 없음)\n"
+"  64  사용법 오류 (잘못된 인수)\n"
+"\n"
+"FN 모드 (hid_apple.fnmode, 모든 Apple 키보드에 공통):\n"
+"  0  disabled   Fn 키가 동작하지 않음\n"
+"  1  fkeyslast  기본은 미디어 키, Fn+Fx = F 키\n"
+"  2  fkeysfirst 기본은 F 키, Fn+Fx = 미디어 키\n"
+"  3  auto       커널 기본값: Apple 키보드에서는 = 1\n"
+"  4  fkeysdisabled F 키 비활성화 (미디어 키만)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print help (see more with '--help')"
+msgstr "도움말 표시 (자세히 보려면 '--help')"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print help (see a summary with '-h')"
+msgstr "도움말 표시 (요약은 '-h')"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print version"
+msgstr "버전 표시"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Show keyboard state (battery, connection, RSSI, Fn mode)"
+msgstr "키보드 상태 표시 (배터리, 연결, RSSI, Fn 모드)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Machine-readable JSON (schema 1) on a single line"
+msgstr "기계가 읽을 수 있는 JSON (스키마 1), 한 줄로 출력"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print help"
+msgstr "도움말 표시"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Read a setting"
+msgstr "설정 읽기"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Current Fn mode (0-4), read from /sys/module/hid_apple/parameters/fnmode"
+msgstr "현재 Fn 모드 (0-4), /sys/module/hid_apple/parameters/fnmode에서 읽음"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "hid_apple parameters (all of them, or one)"
+msgstr "hid_apple 매개변수 (전체 또는 하나)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print this message or the help of the given subcommand(s)"
+msgstr "이 메시지 또는 지정한 하위 명령의 도움말 표시"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Change a setting (administrator authentication required)"
+msgstr "설정 변경 (관리자 인증 필요)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Set the Fn mode of hid_apple (0-4). Global to ALL Apple keyboards; asks for "
+"administrator authentication through polkit (pkexec akm-helper)"
+msgstr ""
+"hid_apple의 Fn 모드 설정 (0-4). 모든 Apple 키보드에 공통이며, polkit(pkexec "
+"akm-helper)을 통해 관리자 인증을 요청합니다"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "0 disabled, 1 fkeyslast, 2 fkeysfirst, 3 auto, 4 fkeysdisabled"
+msgstr "0 disabled, 1 fkeyslast, 2 fkeysfirst, 3 auto, 4 fkeysdisabled"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Also write it to /etc/modprobe.d/hid_apple.conf so it survives reboots"
+msgstr "재부팅 후에도 유지되도록 /etc/modprobe.d/hid_apple.conf에도 기록"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Set a hid_apple parameter (fnmode 0-4, iso_layout -1..1, swap_opt_cmd 0-2, "
+"swap_ctrl_cmd 0-1, swap_fn_leftctrl 0-1). Global to ALL Apple keyboards"
+msgstr ""
+"hid_apple 매개변수 설정 (fnmode 0-4, iso_layout -1..1, swap_opt_cmd 0-2, "
+"swap_ctrl_cmd 0-1, swap_fn_leftctrl 0-1). 모든 Apple 키보드에 공통"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Also write it to /etc/modprobe.d/hid_apple.conf"
+msgstr "/etc/modprobe.d/hid_apple.conf에도 기록"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Rename the keyboard on this computer (BlueZ alias; nothing is written into "
+"the keyboard). With --device-name: the name stored IN the keyboard"
+msgstr ""
+"이 컴퓨터에서 키보드 이름 바꾸기 (BlueZ 별칭, 키보드에는 아무것도 쓰지 않"
+"음). --device-name 사용 시: 키보드 내부에 저장된 이름"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"TWO NAMES:\n"
+"  akmctl rename <name>                 alias of THIS computer (BlueZ Alias): "
+"nothing written into the keyboard\n"
+"  akmctl rename --device-name <name>   WRITES the name stored IN the "
+"keyboard (seen by every host):\n"
+"                                       pre-flight, backup of the current "
+"name, ONE confirmation [y/N]\n"
+"                                       (--yes skips it and works without a "
+"terminal), one write, immediate\n"
+"                                       read-back, verdict. No password in "
+"the active local session.\n"
+"                                       --check: whole pre-flight and backup, "
+"nothing written, nothing asked\n"
+"                                       --dry-run: shows the bytes, no "
+"pkexec, nothing written\n"
+"                                       --verbose: frames, wire bytes, proof, "
+"[devname] journal\n"
+"  akmctl rename --device-name --show   name stored in the keyboard, from the "
+"daemon's cache\n"
+"  akmctl rename --device-name --restore <backup.json> [--yes]   write a "
+"backup back (same flow)\n"
+"Exit codes of --device-name: 0 written and read back identical (or --check "
+"green), 10 no terminal and\n"
+"no --yes, 11 pre-flight refused, 12 cancelled, 13 written but not read back "
+"(check with --show),\n"
+"14 read back different (rollback command printed), 15 write uncertain (the "
+"write failed on its way:\n"
+"a frame may have been sent, check with --show). Persistence across a battery "
+"change is not measured\n"
+"(docs/RENAME-KEYBOARD.md)."
+msgstr ""
+"두 가지 이름:\n"
+"  akmctl rename <name>                 이 컴퓨터의 별칭 (BlueZ Alias): 키보드"
+"에는 아무것도 쓰지 않음\n"
+"  akmctl rename --device-name <name>   키보드 내부에 저장된 이름을 씀 (모든 "
+"호스트에서 보임):\n"
+"                                       사전 점검, 현재 이름 백업, 확인 한 번 "
+"[y/N]\n"
+"                                       (--yes로 생략, 터미널 없이도 동작), 쓰"
+"기 한 번, 즉시\n"
+"                                       다시 읽기, 판정. 활성 로컬 세션에서는 "
+"암호 불필요.\n"
+"                                       --check: 전체 사전 점검과 백업, 아무것"
+"도 쓰지 않고 묻지 않음\n"
+"                                       --dry-run: 바이트 표시, pkexec 없음, "
+"아무것도 쓰지 않음\n"
+"                                       --verbose: 프레임, 전송 바이트, 증거, "
+"[devname] 저널\n"
+"  akmctl rename --device-name --show   키보드 내부에 저장된 이름, 서비스 캐시"
+"에서\n"
+"  akmctl rename --device-name --restore <backup.json> [--yes]   백업을 다시 "
+"씀 (같은 절차)\n"
+"--device-name 종료 코드: 0 쓰고 다시 읽은 값이 동일 (또는 --check 정상), 10 "
+"터미널 없음 및\n"
+"--yes 없음, 11 사전 점검 거부, 12 취소됨, 13 썼지만 다시 읽지 못함 (--show로 "
+"확인),\n"
+"14 다시 읽은 값이 다름 (롤백 명령 출력), 15 쓰기 불확실 (쓰기가 도중에 실"
+"패:\n"
+"프레임이 전송되었을 수 있음, --show로 확인). 배터리 교체 후 유지 여부는 측정"
+"하지 않음\n"
+"(docs/RENAME-KEYBOARD.md)."
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "New alias (max 64 characters, no control characters)"
+msgstr "새 별칭 (최대 64자, 제어 문자 불가)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Restore the keyboard's own name"
+msgstr "키보드 고유 이름 복원"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Keyboard to rename (default: the one the daemon reports)"
+msgstr "이름을 바꿀 키보드 (기본값: 서비스가 보고하는 키보드)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Write the name stored IN the keyboard (printable ASCII, 1-32 characters); "
+"without a value: with --show or --restore"
+msgstr ""
+"키보드 내부에 저장된 이름 쓰기 (인쇄 가능한 ASCII, 1-32자). 값 없이: --show "
+"또는 --restore와 함께"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Do not ask the confirmation (works without a terminal)"
+msgstr "확인을 묻지 않음 (터미널 없이도 동작)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Show the bytes that would be sent, write nothing, no pkexec"
+msgstr "전송될 바이트를 표시하고, 아무것도 쓰지 않음, pkexec 없음"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Whole pre-flight (control-channel MTU read via ONE pkexec, read-only) and "
+"backup; nothing written, nothing asked"
+msgstr ""
+"전체 사전 점검 (pkexec 한 번으로 제어 채널 MTU 읽기, 읽기 전용) 및 백업. 아무"
+"것도 쓰지 않고 묻지 않음"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Accepted for compatibility, no effect: --device-name writes by default"
+msgstr "호환성을 위해 허용되며 효과 없음: --device-name은 기본적으로 씀"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Show the name stored in the keyboard (daemon cache, no hardware read)"
+msgstr "키보드 내부에 저장된 이름 표시 (서비스 캐시, 하드웨어 읽기 없음)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Write back a backup made by a previous --device-name run"
+msgstr "이전 --device-name 실행에서 만든 백업을 다시 씀"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Byte-by-byte detail (frames, wire, proof, [devname] journal)"
+msgstr "바이트 단위 상세 정보 (프레임, 전송, 증거, [devname] 저널)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Follow StateChanged signals: one JSON line per change, until interrupted"
+msgstr "StateChanged 신호 추적: 변경마다 JSON 한 줄, 중단될 때까지"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Battery history (single store: $XDG_STATE_HOME/apple-kb-monitor/"
+"history.jsonl)"
+msgstr ""
+"배터리 기록 (단일 저장소: $XDG_STATE_HOME/apple-kb-monitor/history.jsonl)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Oldest entry: 90m, 24h, 7d, 2w, YYYY-MM-DD or \"YYYY-MM-DD HH:MM\" (UTC)"
+msgstr ""
+"가장 오래된 항목: 90m, 24h, 7d, 2w, YYYY-MM-DD 또는 \"YYYY-MM-DD HH:MM\" "
+"(UTC)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Newest entry (same formats)"
+msgstr "가장 최근 항목 (같은 형식)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Keep only the last N entries"
+msgstr "마지막 N개 항목만 유지"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "JSON array on one line instead of the table"
+msgstr "표 대신 한 줄짜리 JSON 배열"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Export the history on stdout"
+msgstr "기록을 표준 출력으로 내보내기"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "CSV format (the only one; header included)"
+msgstr "CSV 형식 (유일한 형식, 헤더 포함)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Import a history file of the former Python CLI into the single store. The "
+"source is not modified; existing lines are not duplicated"
+msgstr ""
+"이전 Python CLI의 기록 파일을 단일 저장소로 가져오기. 원본은 수정되지 않으며 "
+"기존 줄은 중복되지 않음"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "File to import (history.jsonl of the Python CLI)"
+msgstr "가져올 파일 (Python CLI의 history.jsonl)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Terminal chart of the battery (percentage and voltage) over 24 h or 7 days"
+msgstr "24시간 또는 7일간의 배터리(백분율 및 전압)를 터미널 차트로 표시"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Time window"
+msgstr "시간 범위"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"JSON for a waybar/polybar custom module (classes: good, warning, critical, "
+"disconnected)"
+msgstr ""
+"waybar/polybar 사용자 정의 모듈용 JSON (클래스: good, warning, critical, "
+"disconnected)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Prometheus text exposition of the keyboard state (one page)"
+msgstr "키보드 상태의 Prometheus 텍스트 형식 출력 (한 페이지)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Switch a keyboard LED (NumLock can only be switched off)"
+msgstr "키보드 LED 전환 (NumLock은 끄기만 가능)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Ask the daemon to send WillShutdown (Feature 0x40, id only) to the keyboard, "
+"as macOS does at shutdown: once, only if connected and `[apple] "
+"will_shutdown` is on. Run by the shutdown unit"
+msgstr ""
+"macOS가 종료할 때처럼 서비스가 키보드에 WillShutdown(Feature 0x40, id만)을 보"
+"내도록 요청: 한 번만, 연결되어 있고 `[apple] will_shutdown`이 켜져 있을 때"
+"만. 종료 유닛이 실행"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Do nothing unless the system is shutting down or restarting (`systemctl is-"
+"system-running` = stopping): used by the unit, so that a logout or a service "
+"restart never sends it"
+msgstr ""
+"시스템이 종료 또는 재시작 중이 아니면 아무것도 하지 않음 (`systemctl is-"
+"system-running` = stopping): 유닛이 사용하며, 로그아웃이나 서비스 재시작 시에"
+"는 절대 보내지 않도록 함"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Send HID_CONTROL SUSPEND (0x13) or EXIT_SUSPEND (0x14) to the connected "
+"Apple keyboards, as macOS bluetoothd does at sleep and wake: one byte on the "
+"HID control channel of bluetoothd, administrator authentication. The system "
+"units send it by themselves at every sleep/wake; this is the manual test. --"
+"dry-run writes nothing"
+msgstr ""
+"macOS bluetoothd가 잠자기 및 깨어날 때처럼 연결된 Apple 키보드에 HID_CONTROL "
+"SUSPEND(0x13) 또는 EXIT_SUSPEND(0x14) 전송: bluetoothd의 HID 제어 채널로 1바"
+"이트, 관리자 인증. 시스템 유닛은 잠자기/깨어나기마다 자동으로 보냅니다. 이것"
+"은 수동 테스트입니다. --dry-run은 아무것도 쓰지 않습니다"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"suspend: HID_CONTROL SUSPEND, byte 0x13 (what the suspend unit sends before "
+"sleep); exit-suspend: HID_CONTROL EXIT_SUSPEND, byte 0x14 (what the resume "
+"unit sends at wake)"
+msgstr ""
+"suspend: HID_CONTROL SUSPEND, 바이트 0x13 (절전 유닛이 절전 전에 보내는 것); "
+"exit-suspend: HID_CONTROL EXIT_SUSPEND, 바이트 0x14 (재개 유닛이 깨어날 때 보"
+"내는 것)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Only this keyboard (must be a connected Apple keyboard)"
+msgstr "이 키보드만 (연결된 Apple 키보드여야 함)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Show the bluetoothd socket that would be used (pid, fd, MAC, PSM, state) and "
+"send nothing"
+msgstr ""
+"사용될 bluetoothd 소켓 (pid, fd, MAC, PSM, 상태)을 표시하고 아무것도 보내지 "
+"않음"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Register map of the keyboard (every known HID report: name, size, safety "
+"class) with the values the daemon has cached, \"never read\" otherwise. "
+"Never reads the keyboard"
+msgstr ""
+"키보드의 레지스터 맵 (알려진 모든 HID 보고서: 이름, 크기, 안전 등급)과 서비스"
+"가 캐시한 값, 없으면 \"읽은 적 없음\". 키보드를 절대 읽지 않음"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Machine-readable JSON"
+msgstr "기계가 읽을 수 있는 JSON"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Firmware version of the keyboard against the embedded table of Apple's "
+"public firmware updates, where one exists (read once per connection by the "
+"daemon; no network, never flashes)"
+msgstr ""
+"키보드의 펌웨어 버전을 내장된 Apple 공개 펌웨어 업데이트 표와 비교 (해당하는 "
+"경우. 서비스가 연결마다 한 번 읽음. 네트워크 없음, 펌웨어를 절대 기록하지 않"
+"음)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Read the 3 allowed HID reports (0x47, 0x46, 0x49) with the safe read policy: "
+"no scan, never 0x4C / 0xFE / 0x01. Press a key first (an idle keyboard is "
+"left alone)"
+msgstr ""
+"허용된 HID 보고서 3개 (0x47, 0x46, 0x49)를 안전한 읽기 정책으로 읽기: 스캔 없"
+"음, 0x4C / 0xFE / 0x01은 절대 읽지 않음. 먼저 키를 누르십시오 (유휴 상태의 키"
+"보드는 건드리지 않음)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Diagnose the Bluetooth link in one command (BlueZ, pairing, adapter power "
+"management, BlueZ/UPower configuration, journal, hidraw, daemon). Read-only "
+"unless --fix; run with sudo to also compare the stored and kernel link keys"
+msgstr ""
+"명령 하나로 블루투스 연결 진단 (BlueZ, 페어링, 어댑터 전원 관리, BlueZ/"
+"UPower 구성, 저널, hidraw, 서비스). --fix가 없으면 읽기 전용. sudo로 실행하"
+"면 저장된 링크 키와 커널 링크 키도 비교"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Keyboard to check (default: the paired one)"
+msgstr "확인할 키보드 (기본값: 페어링된 키보드)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Apply the corrections of the system files the diagnostic proposes (BlueZ "
+"main.conf, udev rule of the adapter), through the privileged helper: one "
+"administrator authentication, the previous file kept as <name>.akm-bak"
+msgstr ""
+"진단이 제안하는 시스템 파일 수정 (BlueZ main.conf, 어댑터의 udev 규칙)을 권"
+"한 있는 도우미를 통해 적용: 관리자 인증 한 번, 이전 파일은 <name>.akm-bak으"
+"로 보관"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "With --fix: show what would change, write nothing (no password)"
+msgstr "--fix와 함께: 변경될 내용을 표시하고 아무것도 쓰지 않음 (암호 불필요)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"With --fix: also restart bluetooth / upower so the corrected file is read "
+"now (drops every Bluetooth link for a few seconds)"
+msgstr ""
+"--fix와 함께: 수정된 파일을 바로 읽도록 bluetooth / upower도 재시작 (모든 블"
+"루투스 연결이 몇 초간 끊김)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "With --fix: also apply the corrections marked \"optional\" (UPower)"
+msgstr "--fix와 함께: \"선택 사항\"으로 표시된 수정(UPower)도 적용"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Guided repair of the link: wake + reconnect first; re-pair only after a "
+"typed confirmation (the pairing is never removed otherwise)"
+msgstr ""
+"안내에 따른 연결 복구: 먼저 깨우기 + 다시 연결. 다시 페어링은 확인을 입력한 "
+"후에만 (그 외에는 페어링을 절대 제거하지 않음)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Keyboard to repair (default: the paired one)"
+msgstr "복구할 키보드 (기본값: 페어링된 키보드)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Offer re-pairing even if the link looks healthy"
+msgstr "연결이 정상으로 보여도 다시 페어링 제안"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Effective table of the special keys (F1-F12, Eject; --all: every known key): "
+"physical key -> evdev code (after hwdb and hid_apple, per fnmode) -> keysym "
+"-> KDE global shortcut. Never reads a key press, except with --live"
+msgstr ""
+"특수 키의 실제 표 (F1-F12, Eject. --all: 알려진 모든 키): 물리 키 -> evdev 코"
+"드 (hwdb 및 hid_apple 적용 후, fnmode별) -> keysym -> KDE 전역 단축키. --live"
+"가 아니면 키 입력을 읽지 않음"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Verdict per key ([ok] = a KDE shortcut is bound) and what to test"
+msgstr "키별 판정 ([ok] = KDE 단축키가 지정됨) 및 테스트할 항목"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "All known keys (modifiers, arrows, Fn...), not only the top row"
+msgstr "맨 윗줄뿐 아니라 알려진 모든 키 (수정자 키, 화살표, Fn...)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Machine-readable JSON (with the KDE actions)"
+msgstr "기계가 읽을 수 있는 JSON (KDE 동작 포함)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Live view of the key events of the Apple keyboard instead of the table: HID "
+"usage, evdev code, name, one line per press and release. Reads the evdev "
+"node (read-only, group \"input\"), records nothing. Leave with Escape held 2 "
+"s, or Ctrl-C"
+msgstr ""
+"표 대신 Apple 키보드의 키 이벤트 실시간 보기: HID usage, evdev 코드, 이름, 누"
+"름과 뗌마다 한 줄. evdev 노드를 읽으며 (읽기 전용, \"input\" 그룹) 아무것도 "
+"기록하지 않음. Escape를 2초 누르거나 Ctrl-C로 종료"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Manual key mapping without keyd ($XDG_CONFIG_HOME/apple-kb-monitor/"
+"keymap.toml -> udev hwdb, installed with administrator authentication)"
+msgstr ""
+"keyd 없는 수동 키 매핑 ($XDG_CONFIG_HOME/apple-kb-monitor/keymap.toml -> "
+"udev hwdb, 관리자 인증으로 설치)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Show the profiles of keymap.toml (--hwdb: the file `apply` would install)"
+msgstr "keymap.toml의 프로필 표시 (--hwdb: `apply`가 설치할 파일)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Remap a key: KEY = F1..F12, Eject, Fn, LeftCmd... or a HID usage (0x7003a); "
+"CODE = a KEY_* name of linux/input-event-codes.h. Applied by `apply`"
+msgstr ""
+"키 재매핑: KEY = F1..F12, Eject, Fn, LeftCmd... 또는 HID usage (0x7003a). "
+"CODE = linux/input-event-codes.h의 KEY_* 이름. `apply`로 적용"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Profile to edit (default: the active one)"
+msgstr "편집할 프로필 (기본값: 활성 프로필)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Back to the kernel mapping for one key (in keymap.toml)"
+msgstr "키 하나를 커널 매핑으로 되돌림 (keymap.toml에서)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Preset of a profile (hid_apple parameters): apple (Apple legend, fnmode=1 "
+"swap_opt_cmd=0), fkeys (F1-F12 first, fnmode=2), linux-pc (Cmd<->Alt, "
+"swap_opt_cmd=1), none (parameters left as they are, the default)"
+msgstr ""
+"프로필 사전 설정 (hid_apple 매개변수): apple (Apple 각인, fnmode=1 "
+"swap_opt_cmd=0), fkeys (F1-F12 우선, fnmode=2), linux-pc (Cmd<->Alt, "
+"swap_opt_cmd=1), none (매개변수 그대로 유지, 기본값)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Select the active profile (created with the apple preset if new)"
+msgstr "활성 프로필 선택 (새 프로필이면 apple 사전 설정으로 생성)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Install the active profile: udev hwdb (akm-helper install-keymap) and "
+"hid_apple parameters (akm-helper, persistent, ALL Apple keyboards)"
+msgstr ""
+"활성 프로필 설치: udev hwdb (akm-helper install-keymap) 및 hid_apple 매개변"
+"수 (akm-helper, 영구, 모든 Apple 키보드)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Show what would change, change nothing"
+msgstr "변경될 내용을 표시하고 아무것도 바꾸지 않음"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Remove the installed hwdb (kernel mapping back at once) and clear the keys "
+"of the active profile"
+msgstr "설치된 hwdb 제거 (즉시 커널 매핑으로 복귀) 및 활성 프로필의 키 지우기"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Restore the previously installed hwdb file"
+msgstr "이전에 설치된 hwdb 파일 복원"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Add the KDE shortcuts the Apple legend needs and KDE lacks (F4 = Launch (D) "
+"-> application launcher), never replacing a binding"
+msgstr ""
+"Apple 각인에 필요하지만 KDE에 없는 단축키 추가 (F4 = Launch (D) -> 애플리케이"
+"션 실행기), 기존 지정은 절대 바꾸지 않음"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Remove exactly the keys kde-apply added"
+msgstr "kde-apply가 추가한 키만 정확히 제거"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Health self-check (daemon, link, journal, crashes, disk), run by apple-kb-"
+"monitor-selfcheck.timer"
+msgstr ""
+"상태 자체 점검 (서비스, 연결, 저널, 충돌, 디스크), apple-kb-monitor-"
+"selfcheck.timer가 실행"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print the result as JSON (the same object as selfcheck.json)"
+msgstr "결과를 JSON으로 출력 (selfcheck.json과 같은 객체)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Desktop notification for each NEW grave problem (deduplicated)"
+msgstr "새로운 심각한 문제마다 데스크톱 알림 (중복 제거)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid ""
+"Also open one Gitea issue per new grave problem (deduplicated; needs "
+"AKM_GITEA_API, AKM_GITEA_REPO and ~/.config/gitea/token). Off by default"
+msgstr ""
+"새로운 심각한 문제마다 Gitea 이슈도 하나씩 생성 (중복 제거. AKM_GITEA_API, "
+"AKM_GITEA_REPO, ~/.config/gitea/token 필요). 기본값은 꺼짐"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Result file (default: $XDG_STATE_HOME/apple-kb-monitor/selfcheck.json)"
+msgstr "결과 파일 (기본값: $XDG_STATE_HOME/apple-kb-monitor/selfcheck.json)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Do not write the result file (dry run)"
+msgstr "결과 파일을 쓰지 않음 (시험 실행)"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print a shell completion script on stdout"
+msgstr "셸 자동 완성 스크립트를 표준 출력으로 출력"
+
+#: apihub-app/crates/akmctl/src/cli_strings.rs
+msgid "Print the manual page (roff) on stdout"
+msgstr "매뉴얼 페이지(roff)를 표준 출력으로 출력"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Two names exist:\n"
+"* alias on THIS computer (BlueZ Alias): `akmctl rename <name>`, the default, "
+"no risk, nothing written into the keyboard;\n"
+"* name stored IN the keyboard (firmware, reports 0x51-0x54 / 0x55), seen by "
+"every host: `akmctl rename --device-name`.\n"
+msgstr ""
+"이름은 두 가지입니다:\n"
+"* 이 컴퓨터의 별칭 (BlueZ Alias): `akmctl rename <name>`, 기본값, 위험 없음, "
+"키보드에는 아무것도 쓰지 않음;\n"
+"* 키보드 내부에 저장된 이름 (펌웨어, 보고서 0x51-0x54 / 0x55), 모든 호스트에"
+"서 보임: `akmctl rename --device-name`.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Refused: --mac {mac} is not the keyboard the daemon follows ({daemon}), so "
+"its pre-flight state and current name are unknown. Nothing was touched.\n"
+msgstr ""
+"거부됨: --mac {mac}은(는) 서비스가 따르는 키보드({daemon})가 아니므로 사전 점"
+"검 상태와 현재 이름을 알 수 없습니다. 아무것도 건드리지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Alias (this computer):"
+msgstr "별칭 (이 컴퓨터):"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "(none)"
+msgstr "(없음)"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Stored in the keyboard (0x51-0x54, daemon cache):"
+msgstr "키보드에 저장됨 (0x51-0x54, 서비스 캐시):"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "bytes:"
+msgstr "바이트:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Stored in the keyboard: not read yet in this connection (the daemon reads "
+"0x51-0x54 once per connection; no new hardware read is made here)\n"
+msgstr ""
+"키보드에 저장됨: 이번 연결에서 아직 읽지 않음 (서비스는 연결마다 0x51-0x54를 "
+"한 번 읽음. 여기서 새로 하드웨어를 읽지 않음)\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Proof of the sequence:"
+msgstr "순서 증거:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Settled by disassembly (docs/RENAME-KEYBOARD.md):"
+msgstr "디스어셈블로 확정 (docs/RENAME-KEYBOARD.md):"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Measured on the keyboard (firmware 0x0050):\n"
+msgstr "키보드에서 측정 (펌웨어 0x0050):\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Not measured:\n"
+msgstr "측정 안 됨:\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Experiments:\n"
+msgstr "실험:\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Frame sent (the one of Lion 10.7.5 setDeviceName:, established by "
+"disassembly):"
+msgstr ""
+"전송한 프레임 (Lion 10.7.5 setDeviceName:의 프레임, 디스어셈블로 확정):"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Pre-flight: ok (doctor green, battery {battery} %, breaker closed, outgoing "
+"MTU {mtu} >= {min})\n"
+msgstr ""
+"사전 점검: ok (doctor 정상, 배터리 {battery} %, 차단기 닫힘, 송신 MTU {mtu} "
+">= {min})\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Pre-flight: ok (doctor green, battery {battery} %, breaker closed)\n"
+msgstr "사전 점검: ok (doctor 정상, 배터리 {battery} %, 차단기 닫힘)\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Pre-flight: ok (doctor green, breaker closed, outgoing MTU {mtu} >= {min})\n"
+msgstr "사전 점검: ok (doctor 정상, 차단기 닫힘, 송신 MTU {mtu} >= {min})\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Pre-flight: ok (doctor green, breaker closed)\n"
+msgstr "사전 점검: ok (doctor 정상, 차단기 닫힘)\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Refused: no terminal to confirm. Add --yes to write without the question. "
+"Nothing was touched.\n"
+msgstr ""
+"거부됨: 확인할 터미널이 없습니다. 질문 없이 쓰려면 --yes를 추가하십시오. 아무"
+"것도 변경하지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "name refused:"
+msgstr "이름 거부됨:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "New name stored in the keyboard:"
+msgstr "키보드에 저장할 새 이름:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"\n"
+"DRY RUN: nothing is written to the keyboard.\n"
+msgstr ""
+"\n"
+"시험 실행: 키보드에 아무것도 쓰지 않습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Pre-flight: FAILED -"
+msgstr "사전 점검: 실패 -"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Pre-flight: control-channel MTU not probed in a dry run (needs pkexec); with "
+"--check or when writing it is probed and must be >= {min}\n"
+msgstr ""
+"사전 점검: 시험 실행에서는 제어 채널 MTU를 확인하지 않음 (pkexec 필요). --"
+"check 사용 시 또는 쓸 때 확인하며 {min} 이상이어야 함\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Backup of the current name:"
+msgstr "현재 이름 백업:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Backup: FAILED -"
+msgstr "백업: 실패 -"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Backup: not possible yet (the daemon has not read 0x51-0x54 in this "
+"connection)\n"
+msgstr "백업: 아직 불가 (이번 연결에서 서비스가 아직 0x51-0x54를 읽지 않음)\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Pre-flight: daemon unavailable"
+msgstr "사전 점검: 서비스를 사용할 수 없음"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"\n"
+"To write: the same command without --dry-run (one confirmation [y/N], or --"
+"yes). To check everything without writing: --check.\n"
+msgstr ""
+"\n"
+"쓰려면: --dry-run 없이 같은 명령 (확인 한 번 [y/N] 또는 --yes). 쓰지 않고 모"
+"두 확인하려면: --check.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "backup refused:"
+msgstr "백업 거부됨:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Backup {file}: name {name}, keyboard {mac}, saved at {when}\n"
+msgstr "백업 {file}: 이름 {name}, 키보드 {mac}, 저장 시각 {when}\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"DRY RUN: nothing written. Without --dry-run, the backup is written back into "
+"the keyboard (one confirmation [y/N], or --yes).\n"
+msgstr ""
+"시험 실행: 아무것도 쓰지 않았습니다. --dry-run 없이 실행하면 백업이 키보드에 "
+"다시 기록됩니다 (확인 한 번 [y/N] 또는 --yes).\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "daemon unavailable:"
+msgstr "서비스를 사용할 수 없음:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "control-channel MTU unknown:"
+msgstr "제어 채널 MTU 알 수 없음:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Name stored in the keyboard:"
+msgstr "키보드에 저장된 이름:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "(not read yet)"
+msgstr "(아직 읽지 않음)"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Write “{target}” into the keyboard's memory? [y/N] "
+msgstr "“{target}”을(를) 키보드 메모리에 쓰시겠습니까? [y/N] "
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Stopped: the hidraw node did not open ({d}). Nothing was written.\n"
+msgstr ""
+"중지됨: hidraw 노드가 열리지 않았습니다 ({d}). 아무것도 쓰지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "RereadName refused by the daemon:"
+msgstr "서비스가 RereadName을 거부함:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"  BlueZ may show the old name until a later connection; persistence across a "
+"battery change is not measured.\n"
+msgstr ""
+"  BlueZ는 이후 연결 전까지 이전 이름을 표시할 수 있습니다. 배터리 교체 후 유"
+"지 여부는 측정하지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Pre-flight refused, nothing was written:\n"
+msgstr "사전 점검 거부, 아무것도 쓰지 않음:\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Refused: this backup is of keyboard {backup}, the target keyboard is "
+"{target}. Nothing was touched.\n"
+msgstr ""
+"거부됨: 이 백업은 키보드 {backup}의 것이며 대상 키보드는 {target}입니다. 아무"
+"것도 변경하지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"✓ --check: pre-flight green, backup made, nothing was written, nothing was "
+"asked.\n"
+msgstr ""
+"✓ --check: 사전 점검 정상, 백업 완료, 아무것도 쓰지 않고 묻지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Cancelled: nothing was written into the keyboard.\n"
+msgstr "취소됨: 키보드에 아무것도 쓰지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Name written into the keyboard and read back identical:"
+msgstr "이름을 키보드에 쓰고 동일하게 다시 읽었습니다:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Written, but the name read back differs:"
+msgstr "썼지만 다시 읽은 이름이 다릅니다:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "(not printable)"
+msgstr "(인쇄 불가)"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Rollback:"
+msgstr "롤백:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "  Rollback: run --restore again with the original backup.\n"
+msgstr "  롤백: 원래 백업으로 --restore를 다시 실행하십시오.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Name written, but the read-back was not possible"
+msgstr "이름을 썼지만 다시 읽을 수 없었습니다"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Check later:"
+msgstr "나중에 확인:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Rollback if needed:"
+msgstr "필요하면 롤백:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Stopped: the daemon has not read the current name (0x51-0x54) in this "
+"connection yet, no backup is possible. Try again in a moment. Nothing was "
+"written.\n"
+msgstr ""
+"중지됨: 이번 연결에서 서비스가 아직 현재 이름(0x51-0x54)을 읽지 않아 백업할 "
+"수 없습니다. 잠시 후 다시 시도하십시오. 아무것도 쓰지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Write uncertain: the write failed on its way, not retried"
+msgstr "쓰기 불확실: 쓰기가 도중에 실패했으며 재시도하지 않았습니다"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"A frame may have been sent: the name stored in the keyboard is not known."
+msgstr ""
+"프레임이 전송되었을 수 있습니다: 키보드에 저장된 이름을 알 수 없습니다."
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid "Check in a moment:"
+msgstr "잠시 후 확인:"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid "Stopped: name or backup refused ({e}). Nothing was written.\n"
+msgstr "중지됨: 이름 또는 백업이 거부됨({e}). 아무것도 쓰지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Stopped: the current name could not be saved ({e}). Nothing was written.\n"
+msgstr "중지됨: 현재 이름을 저장할 수 없음({e}). 아무것도 쓰지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+msgid ""
+"Stopped: the keyboard disconnected before the write. Nothing was written.\n"
+msgstr ""
+"중지됨: 쓰기 전에 키보드 연결이 끊어졌습니다. 아무것도 쓰지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/devnamecmd.rs
+#, rust-format
+msgid ""
+"Stopped: the write was refused before sending ({e}). Nothing was written.\n"
+msgstr "중지됨: 전송 전에 쓰기가 거부됨({e}). 아무것도 쓰지 않았습니다.\n"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "the service reports: {}"
+msgstr "서비스 보고: {}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "ignored by bluetoothd: {}"
+msgstr "bluetoothd가 무시함: {}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "[Policy] Reconnect* in place"
+msgstr "[Policy] Reconnect* 설정됨"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"FastConnectable off: slower answer to the keyboard's page after a key press"
+msgstr "FastConnectable 꺼짐: 키를 누른 뒤 키보드 호출에 대한 응답이 느려짐"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "NoPollBatteries = true (no 30 s HID polling)"
+msgstr "NoPollBatteries = true(30초마다 HID 폴링 안 함)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"UPower reads the keyboard battery every 30 s (2 GET_REPORT over the air): "
+"the keyboard never sleeps"
+msgstr ""
+"UPower가 30초마다 키보드 배터리를 읽습니다(무선으로 GET_REPORT 2회). 키보드"
+"가 절전 모드로 들어가지 않습니다"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "optional:"
+msgstr "선택 사항:"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "adapter is not on USB (or not found)"
+msgstr "어댑터가 USB에 있지 않음(또는 찾을 수 없음)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} autosuspend off (power/control=on)"
+msgstr "{} 자동 절전 꺼짐 (power/control=on)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "; rule installed but not applied yet"
+msgstr "; 규칙이 설치되었지만 아직 적용되지 않음"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid ""
+"{} USB autosuspend active (control={}, delay {} ms, now {}, {} s suspended "
+"since boot){}"
+msgstr ""
+"{} USB 자동 절전 활성 (control={}, 지연 {} ms, 현재 {}, 부팅 후 {}초 절전){}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} page timeout (keyboard asleep or not listening), last {last}"
+msgid_plural ""
+"{n} page timeouts (keyboard asleep or not listening), last {last}"
+msgstr[0] ""
+"페이지 시간 초과 {n}회 (키보드가 잠자기 중이거나 수신 대기 안 함), 마지막 "
+"{last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} HIDP GET_REPORT timeout, last {last}"
+msgid_plural "{n} HIDP GET_REPORT timeouts, last {last}"
+msgstr[0] "HIDP GET_REPORT 시간 초과 {n}회, 마지막 {last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"avoid HID scanning tools while measuring; see docs/RECONNECTION-PAIRING.md "
+"§3.5"
+msgstr ""
+"측정 중에는 HID 스캔 도구를 사용하지 마십시오. docs/RECONNECTION-PAIRING.md "
+"§3.5 참조"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} authentication / key error, last {last}"
+msgid_plural "{n} authentication / key errors, last {last}"
+msgstr[0] "인증 / 키 오류 {n}회, 마지막 {last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} connection reset/refused by the keyboard, last {last}"
+msgid_plural "{n} connections reset/refused by the keyboard, last {last}"
+msgstr[0] "키보드가 재설정/거부한 연결 {n}회, 마지막 {last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{n} main.conf key ignored by bluetoothd at start, last {last}"
+msgid_plural "{n} main.conf keys ignored by bluetoothd at start, last {last}"
+msgstr[0] "시작 시 bluetoothd가 무시한 main.conf 키 {n}개, 마지막 {last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid ""
+"{n} BlueZ storage write failure (a new link key may be lost at reboot), last "
+"{last}"
+msgid_plural ""
+"{n} BlueZ storage write failures (a new link key may be lost at reboot), "
+"last {last}"
+msgstr[0] ""
+"BlueZ 저장소 쓰기 실패 {n}회 (새 링크 키가 재부팅 시 사라질 수 있음), 마지막 "
+"{last}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"free disk space (btrfs: check metadata), then verify with sudo akmctl doctor"
+msgstr ""
+"디스크 공간을 확보한 다음(btrfs: 메타데이터 확인) sudo akmctl doctor로 확인하"
+"십시오"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "Bluetooth adapter powered"
+msgstr "Bluetooth 어댑터 켜짐"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "Bluetooth adapter off"
+msgstr "Bluetooth 어댑터 꺼짐"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "BlueZ unreachable (bluetooth.service stopped?)"
+msgstr "BlueZ에 연결할 수 없음(bluetooth.service 중지됨?)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "no paired Apple keyboard known to BlueZ"
+msgstr "BlueZ가 알고 있는 페어링된 Apple 키보드가 없음"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "akmctl repair (pairing assistant)"
+msgstr "akmctl repair(페어링 도우미)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} “{}” paired{}{}"
+msgstr "{} “{}” 페어링됨{}{}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ", bonded"
+msgstr ", 본딩됨"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ", legacy PIN pairing"
+msgstr ", 이전 방식 PIN 페어링"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} is not paired"
+msgstr "{}은(는) 페어링되지 않음"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "not trusted: BlueZ may refuse the keyboard's own reconnection"
+msgstr "신뢰하지 않음: BlueZ가 키보드 쪽에서의 다시 연결을 거부할 수 있음"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "blocked in BlueZ"
+msgstr "BlueZ에서 차단됨"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "not connected (asleep? press a key)"
+msgstr "연결되지 않음(절전 중? 키를 누르십시오)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "link key not checked (needs root: sudo akmctl doctor)"
+msgstr "링크 키를 확인하지 않음(root 필요: sudo akmctl doctor)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "no [LinkKey] stored for the keyboard"
+msgstr "키보드의 [LinkKey]가 저장되어 있지 않음"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "stored key == kernel key (fingerprint {s})"
+msgstr "저장된 키 == 커널 키 (지문 {s})"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "stored key {s} != kernel key {k}: will change at next restart"
+msgstr "저장된 키 {s} != 커널 키 {k}: 다음 재시작 시 변경됨"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "check disk space, then akmctl repair if the keyboard is refused"
+msgstr "디스크 공간을 확인한 다음, 키보드가 거부되면 akmctl repair"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "stored key {s}; kernel copy not readable (debugfs not mounted?)"
+msgstr "저장된 키 {s}. 커널 사본을 읽을 수 없음 (debugfs가 마운트되지 않음?)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "the pairing is refused or missing: run `akmctl repair`"
+msgstr "페어링이 거부되었거나 없습니다: `akmctl repair`를 실행하십시오"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "no usable pairing: run `akmctl repair`"
+msgstr "사용 가능한 페어링이 없습니다: `akmctl repair`를 실행하십시오"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "link up and configuration sound"
+msgstr "연결됨, 구성 정상"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "link up; to check: {} (akmctl doctor)"
+msgstr "연결됨. 확인 필요: {} (akmctl doctor)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"keyboard not connected: press a key and wait 10 s; the daemon pages it on "
+"its own. Re-pair only if `akmctl doctor` reports auth-failed"
+msgstr ""
+"키보드 연결 안 됨: 키를 누르고 10초 기다리십시오. 서비스가 알아서 호출합니"
+"다. `akmctl doctor`가 auth-failed를 보고할 때만 다시 페어링하십시오"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid ""
+"link quality: {} disconnection in the last hour, {} in 24 h, {} in 7 days"
+msgid_plural ""
+"link quality: {} disconnections in the last hour, {} in 24 h, {} in 7 days"
+msgstr[0] ""
+"연결 품질: 지난 1시간 동안 {}번, 24시간 동안 {}번, 7일 동안 {}번 연결 끊김"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "; relative signal over 7 days: mean {} dB, min {} dB ({} measurement)"
+msgid_plural ""
+"; relative signal over 7 days: mean {} dB, min {} dB ({} measurements)"
+msgstr[0] "; 7일간 상대 신호: 평균 {} dB, 최소 {} dB (측정 {}회)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid " — UNSTABLE: {} unexpected within the hour"
+msgstr " — 불안정: 1시간 안에 예기치 않은 끊김 {}회"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "check the batteries, the distance, USB 3 devices near the adapter"
+msgstr "배터리, 거리, 어댑터 근처의 USB 3 장치를 확인하십시오"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} readable"
+msgstr "{} 읽기 가능"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "{} not readable by this user"
+msgstr "이 사용자가 {}을(를) 읽을 수 없음"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "install udev/70-apple-kb-hidraw.rules (uaccess)"
+msgstr "udev/70-apple-kb-hidraw.rules 설치 (uaccess)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "connected but no hidraw node (uhid not created yet?)"
+msgstr "연결되었지만 hidraw 노드 없음(uhid가 아직 생성되지 않음?)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "btusb enable_autosuspend = {value}"
+msgstr "btusb enable_autosuspend = {value}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "no bluetoothd error in the last 6 hours of this boot"
+msgstr "이번 부팅의 최근 6시간 동안 bluetoothd 오류 없음"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid ""
+"bluetoothd journal not readable (add yourself to group systemd-journal, or "
+"use sudo)"
+msgstr ""
+"bluetoothd 저널을 읽을 수 없음(systemd-journal 그룹에 자신을 추가하거나 sudo "
+"사용)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "apple-kb-monitord link keeper not reachable (no automatic reconnection)"
+msgstr "apple-kb-monitord 연결 감시자에 연결할 수 없음(자동 다시 연결 없음)"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+#, rust-format
+msgid "link health: {h}"
+msgstr "연결 상태: {h}"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "keeper running, keyboard not tracked"
+msgstr "감시자 실행 중, 키보드 추적 안 함"
+
+#: apihub-app/crates/akmctl/src/doctor.rs
+msgid "verdict:"
+msgstr "판정:"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "{HELPER} is not installed (package older than this akmctl?)"
+msgstr "{HELPER}이(가) 설치되지 않음 (이 akmctl보다 오래된 패키지?)"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "cannot start the helper: {e}"
+msgstr "도우미를 시작할 수 없음: {e}"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "{HELPER} failed (exit {c})"
+msgstr "{HELPER} 실패 (종료 코드 {c})"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "{HELPER} killed by a signal"
+msgstr "{HELPER}이(가) 신호로 종료됨"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+#, rust-format
+msgid "optional, not applied (add --optional): {}"
+msgstr "선택 사항, 적용 안 됨 (--optional 추가): {}"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+msgid ""
+"nothing here can be corrected by the helper (see the → lines above for the "
+"rest)"
+msgstr "여기서 도우미가 수정할 수 있는 것이 없음 (나머지는 위의 → 줄 참조)"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+msgid "corrections that --fix would apply:"
+msgstr "--fix가 적용할 수정:"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+msgid "corrections:"
+msgstr "수정:"
+
+#: apihub-app/crates/akmctl/src/doctorfix.rs
+msgid ""
+"\n"
+"after the corrections:"
+msgstr ""
+"\n"
+"수정 후:"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "battery {p} %"
+msgstr "배터리 {p} %"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "cell voltage {mv} mV (measured)"
+msgstr "셀 전압 {mv} mV (측정값)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "filtered voltage {mv} mV (measured)"
+msgstr "필터링된 전압 {mv} mV (측정값)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "battery state {} (GET Input, Apple R2)"
+msgstr "배터리 상태 {} (GET Input, Apple R2)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid "complete"
+msgstr "완료"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid "partial (stopped at the first failure)"
+msgstr "부분 (첫 실패에서 중지)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid "skipped"
+msgstr "건너뜀"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "Safe read of reports {reports} + Input {inputs}: {outcome}"
+msgstr "보고서 {reports} + Input {inputs} 안전 읽기: {outcome}"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "  {id}  (not read)\n"
+msgstr "  {id}  (읽지 않음)\n"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid "no Apple keyboard found (hidraw)"
+msgstr "Apple 키보드를 찾을 수 없음 (hidraw)"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "{dev} is not a BCM2042 keyboard: nothing to read"
+msgstr "{dev}은(는) BCM2042 키보드가 아님: 읽을 대상 없음"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+msgid ""
+"another reader holds the HID lock (the daemon is reading): retry in a moment"
+msgstr ""
+"다른 읽기 주체가 HID 잠금을 보유 중 (서비스가 읽는 중): 잠시 후 다시 시도하십"
+"시오"
+
+#: apihub-app/crates/akmctl/src/dump.rs
+#, rust-format
+msgid "cannot open {dev}: {e}"
+msgstr "{dev}을(를) 열 수 없음: {e}"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "up to date (latest public version known)"
+msgstr "최신 (알려진 최신 공개 버전)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#, rust-format
+msgid ""
+"update available from Apple (latest known: {l}); this program never flashes"
+msgstr ""
+"Apple 업데이트 있음 (알려진 최신: {l}). 이 프로그램은 펌웨어를 절대 기록하지 "
+"않습니다"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "update available from Apple"
+msgstr "Apple 업데이트 있음"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "no public Apple update for this model (nothing to compare with)"
+msgstr "이 모델에 대한 Apple 공개 업데이트 없음 (비교 대상 없음)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "unknown (model or version not in the table)"
+msgstr "알 수 없음 (모델 또는 버전이 표에 없음)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#: apihub-app/crates/akmctl/src/keys.rs apihub-app/crates/akmctl/src/status.rs
+msgid "Keyboard:"
+msgstr "키보드:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "n/a"
+msgstr "해당 없음"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Version:"
+msgstr "버전:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "not read yet (read once per connection)"
+msgstr "아직 읽지 않음 (연결마다 한 번 읽음)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Latest known:"
+msgstr "알려진 최신:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "n/a (model not in the table)"
+msgstr "해당 없음 (모델이 표에 없음)"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Status:"
+msgstr "상태:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Source:"
+msgstr "출처:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+msgid "Table date:"
+msgstr "표 날짜:"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#, rust-format
+msgid "Embedded table (reviewed {date}):"
+msgstr "내장 표 (검토일 {date}):"
+
+#: apihub-app/crates/akmctl/src/firmware.rs
+#, rust-format
+msgid "{pids}: latest {latest} ({source})"
+msgstr "{pids}: 최신 {latest} ({source})"
+
+#: apihub-app/crates/akmctl/src/fnmode.rs
+msgid "unknown"
+msgstr "알 수 없음"
+
+#: apihub-app/crates/akmctl/src/fnmode.rs
+#, rust-format
+msgid "invalid Fn mode {mode}: expected 0, 1, 2, 3 or 4"
+msgstr "잘못된 Fn 모드 {mode}: 0, 1, 2, 3 또는 4 필요"
+
+#: apihub-app/crates/akmctl/src/fnmode.rs
+#, rust-format
+msgid "cannot read {path} (hid_apple loaded?): {e}"
+msgstr "{path}을(를) 읽을 수 없음 (hid_apple이 로드됨?): {e}"
+
+#: apihub-app/crates/akmctl/src/fnmode.rs
+#, rust-format
+msgid "unexpected content in {path}: {content}"
+msgstr "{path}에 예상치 못한 내용: {content}"
+
+#: apihub-app/crates/akmctl/src/forget.rs
+msgid "link not healthy (`akmctl doctor`: health must be `connected`, no KO)"
+msgstr ""
+"링크 상태가 좋지 않음 (`akmctl doctor`: 상태가 `connected`이고 KO가 없어야 "
+"함)"
+
+#: apihub-app/crates/akmctl/src/forget.rs
+msgid "not an interactive terminal"
+msgstr "대화형 터미널이 아님"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "invalid MAC {m} (expected XX:XX:XX:XX:XX:XX)"
+msgstr "잘못된 MAC {m} (XX:XX:XX:XX:XX:XX 형식이어야 함)"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid ""
+"no L2CAP control socket (PSM 0x0011) to {mac} reported by akm-helper hid-"
+"inspect"
+msgstr ""
+"akm-helper hid-inspect가 {mac}에 대한 L2CAP 제어 소켓(PSM 0x0011)을 보고하지 "
+"않음"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "the control socket to {mac} is not connected"
+msgstr "{mac}에 대한 제어 소켓이 연결되지 않음"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "{len} connected control sockets to {mac}, exactly one expected"
+msgstr "{mac}에 연결된 제어 소켓이 {len}개, 정확히 하나여야 함"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+msgid ""
+"akm-helper hid-inspect did not report the MTU: the installed helper is older "
+"than this akmctl, reinstall the package"
+msgstr ""
+"akm-helper hid-inspect가 MTU를 보고하지 않음: 설치된 도우미가 이 akmctl보다 "
+"오래되었으니 패키지를 다시 설치하십시오"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "unreadable outgoing MTU {v} in akm-helper hid-inspect output"
+msgstr "akm-helper hid-inspect 출력의 송신 MTU {v}을(를) 읽을 수 없음"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "{HELPER} {INSPECT_CMD} refused or failed (exit {c}): {trim}"
+msgstr "{HELPER} {INSPECT_CMD} 거부 또는 실패 (종료 코드 {c}): {trim}"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "{HELPER} {INSPECT_CMD} killed by a signal"
+msgstr "{HELPER} {INSPECT_CMD}이(가) 신호로 종료됨"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid ""
+"{HELPER} {CONTROL_CMD} refused or failed (exit {c}); details above and in "
+"journalctl -t akm-hid-control"
+msgstr ""
+"{HELPER} {CONTROL_CMD}이(가) 거부했거나 실패함 (종료 코드 {c}); 자세한 내용"
+"은 위와 journalctl -t akm-hid-control 참조"
+
+#: apihub-app/crates/akmctl/src/hid_control.rs
+#, rust-format
+msgid "{HELPER} {CONTROL_CMD} killed by a signal"
+msgstr "{HELPER} {CONTROL_CMD}이(가) 신호로 종료됨"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "Time (UTC)"
+msgstr "시간 (UTC)"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "Bat %"
+msgstr "배터리 %"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "Voltage"
+msgstr "전압"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "Event"
+msgstr "이벤트"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+msgid "no sample in this window"
+msgstr "이 범위에 샘플 없음"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+#, rust-format
+msgid "min {min}{unit}  max {max}{unit}  last {last}{unit}  ({n} samples)"
+msgstr "최소 {min}{unit}  최대 {max}{unit}  마지막 {last}{unit}  (샘플 {n}개)"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+#, rust-format
+msgid "No history sample in the last {label}."
+msgstr "지난 {label} 동안의 기록 샘플이 없습니다."
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+#, rust-format
+msgid "BATTERY % - last {label}"
+msgstr "배터리 % - 지난 {label}"
+
+#: apihub-app/crates/akmctl/src/histcmd.rs
+#, rust-format
+msgid "VOLTAGE - last {label}"
+msgstr "전압 - 지난 {label}"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid ""
+"Register map of the Apple A1314 (BCM2042). Values come from the daemon's "
+"cache: this command never reads the keyboard.\n"
+"\n"
+msgstr ""
+"Apple A1314 (BCM2042)의 레지스터 맵. 값은 서비스 캐시에서 가져오며, 이 명령"
+"은 키보드를 절대 읽지 않습니다.\n"
+"\n"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Dir"
+msgstr "방향"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Len"
+msgstr "길이"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Class"
+msgstr "등급"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Name"
+msgstr "이름"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Value"
+msgstr "값"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "never read"
+msgstr "읽은 적 없음"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "routine read"
+msgstr "정기 읽기"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "read once per connection"
+msgstr "연결마다 한 번 읽음"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid ""
+"Input report requested once per battery read, right after 0x47 (Apple R2)"
+msgstr ""
+"배터리 읽기마다 한 번, 0x47 바로 다음에 요청하는 Input 리포트 (Apple R2)"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "listened to, never requested"
+msgstr "수신만 하고 요청하지 않음"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "readable, never requested by the daemon"
+msgstr "읽을 수 있으나 서비스는 요청하지 않음"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "never requested (secret or freezes the firmware)"
+msgstr "요청하지 않음 (비밀이거나 펌웨어가 멈춤)"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "written only by a named Apple operation:"
+msgstr "이름이 붙은 Apple 작업만 씀:"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "command / write-only register, no write path exists"
+msgstr "명령 / 쓰기 전용 레지스터, 쓰기 경로 없음"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "not understood"
+msgstr "파악되지 않음"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid "Classes:"
+msgstr "클래스:"
+
+#: apihub-app/crates/akmctl/src/info.rs
+msgid ""
+"Details per report: akmctl info --json (meaning, unit, endianness, decoder, "
+"proof, source)."
+msgstr ""
+"리포트별 상세: akmctl info --json (의미, 단위, 엔디언, 디코더, 근거, 출처)."
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{program} failed (exit {c})"
+msgstr "{program} 실패 (종료 코드 {c})"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{program} killed by a signal"
+msgstr "{program}이(가) 신호로 종료됨"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "session bus: {e}"
+msgstr "세션 버스: {e}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "akmctl: {e} (default profile used)"
+msgstr "akmctl: {e} (기본 프로필 사용)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "File:"
+msgstr "파일:"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "Active:"
+msgstr "활성:"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "none (hid_apple parameters left as they are)"
+msgstr "없음 (hid_apple 매개변수 그대로 유지)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "preset {preset}"
+msgstr "사전 설정 {preset}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "models: {models}"
+msgstr "모델: {models}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "unchanged"
+msgstr "변경 없음"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "keys: none (kernel mapping)"
+msgstr "키: 없음 (커널 매핑)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "hwdb: nothing to install"
+msgstr "hwdb: 설치할 것 없음"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{} back to the kernel mapping"
+msgstr "{}을(를) 커널 매핑으로 되돌림"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{} is not remapped in this profile"
+msgstr "{}은(는) 이 프로필에서 재매핑되지 않음"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "preset {} ({}): {}"
+msgstr "사전 설정 {} ({}): {}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "no preset: hid_apple parameters left as they are"
+msgstr "사전 설정 없음: hid_apple 매개변수 그대로 유지"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "active profile: {profile} (not applied yet: akmctl keymap apply)"
+msgstr "활성 프로필: {profile} (아직 적용 안 됨: akmctl keymap apply)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid ""
+"[{name}] {msg}\n"
+"saved in {path}; nothing changes until `akmctl keymap apply`"
+msgstr ""
+"[{name}] {msg}\n"
+"{path}에 저장됨. `akmctl keymap apply` 전까지 아무것도 바뀌지 않음"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "akmctl: {e}: it will be replaced"
+msgstr "akmctl: {e}: 교체됩니다"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid ""
+"hwdb to install in {path}:\n"
+"{h}"
+msgstr ""
+"{path}에 설치할 hwdb:\n"
+"{h}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "hwdb {} to remove (profile without remapped key)"
+msgstr "제거할 hwdb {} (재매핑된 키가 없는 프로필)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "hid_apple parameters to set (persistent, ALL Apple keyboards): {}"
+msgstr "설정할 hid_apple 매개변수 (영구, 모든 Apple 키보드): {}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid "Applied. Check with: akmctl keys --check"
+msgstr "적용됨. 확인: akmctl keys --check"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "keys of profile {active} cleared ({path} kept as .bak)"
+msgstr "프로필 {active}의 키를 지움 ({path}은(는) .bak으로 보관)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+msgid ""
+"Kernel key mapping restored. hid_apple parameters are unchanged (akmctl "
+"keymap preset apple && akmctl keymap apply)."
+msgstr ""
+"커널 키 매핑 복원됨. hid_apple 매개변수는 변경되지 않음 (akmctl keymap "
+"preset apple && akmctl keymap apply)."
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{e} (KDE Plasma session required)"
+msgstr "{e} (KDE Plasma 세션 필요)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{shortcut} already bound to {action} - left alone"
+msgstr "{shortcut}은(는) 이미 {action}에 지정됨 - 그대로 둠"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "would add {shortcut} to {target} ({existing} existing key kept) - {why}"
+msgid_plural ""
+"would add {shortcut} to {target} ({existing} existing keys kept) - {why}"
+msgstr[0] "{target}에 {shortcut} 추가 예정 (기존 키 {existing}개 유지) - {why}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "added {shortcut} to {target} ({existing} existing key kept) - {why}"
+msgid_plural ""
+"added {shortcut} to {target} ({existing} existing keys kept) - {why}"
+msgstr[0] "{target}에 {shortcut} 추가함 (기존 키 {existing}개 유지) - {why}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "would remove {shortcut} from {target}"
+msgstr "{target}에서 {shortcut} 제거 예정"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "removed {shortcut} from {target}"
+msgstr "{target}에서 {shortcut} 제거함"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "{shortcut} not bound by us - nothing to undo"
+msgstr "{shortcut}은(는) 이 도구가 지정한 것이 아님 - 되돌릴 것 없음"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "note: hid_apple.{name} applies to ALL Apple keyboards of this computer"
+msgstr ""
+"참고: hid_apple.{name}은(는) 이 컴퓨터의 모든 Apple 키보드에 적용됩니다"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "note: not persistent across reboots (use --persist)"
+msgstr "참고: 재부팅 후 유지되지 않음 (--persist 사용)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "write accepted but {name} reads {v}, expected {value}"
+msgstr "쓰기는 수락되었으나 {name}을(를) 읽은 값이 {v}, 예상 값은 {value}"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid ""
+"{name} = {value} saved; hid_apple is not loaded, applied at next module load"
+msgstr ""
+"{name} = {value} 저장됨. hid_apple이 로드되지 않아 다음 모듈 로드 시 적용됨"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "cannot read {name} back"
+msgstr "{name}을(를) 다시 읽을 수 없음"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "bad profile name {s} (a-z 0-9 - _, 1-32 characters)"
+msgstr "잘못된 프로필 이름 {s} (a-z 0-9 - _, 1-32자)"
+
+#: apihub-app/crates/akmctl/src/keymapcmd.rs
+#, rust-format
+msgid "unknown hid_apple parameter {s} ({known})"
+msgstr "알 수 없는 hid_apple 매개변수 {s} ({known})"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid ""
+"nothing in KDE (Launch (D) unbound) - `akmctl keymap kde-apply` binds it to "
+"the application launcher"
+msgstr ""
+"KDE에서 동작 없음 (Launch (D) 미지정) - `akmctl keymap kde-apply`가 애플리케"
+"이션 실행기에 지정합니다"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid ""
+"nothing in KDE (no shortcut uses Eject); remappable: akmctl keymap set Eject "
+"KEY_..."
+msgstr ""
+"KDE에서 동작 없음 (Eject를 사용하는 단축키 없음). 재매핑 가능: akmctl keymap "
+"set Eject KEY_..."
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid ""
+"NumLock toggles (handled by KWin, not a shortcut): J K L U I O M 7 8 9 turn "
+"into keypad keys until pressed again"
+msgstr ""
+"NumLock 전환 (KWin이 처리, 단축키 아님): 다시 누를 때까지 J K L U I O M 7 8 9"
+"가 숫자 키패드 키가 됨"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "PowerDevil keyboard backlight: the A1314 has none, nothing visible"
+msgstr "PowerDevil 키보드 백라이트: A1314에는 없으므로 보이는 변화 없음"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid ""
+"sent to the focused application (e.g. F5 reload, F11 full screen in a "
+"browser)"
+msgstr ""
+"포커스된 애플리케이션으로 전달 (예: 브라우저에서 F5 새로 고침, F11 전체 화면)"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "sent to the focused application"
+msgstr "포커스된 애플리케이션으로 전달"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "no KDE shortcut"
+msgstr "KDE 단축키 없음"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid " - not connected, table of the default model"
+msgstr " - 연결 안 됨, 기본 모델의 표"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "not modelled: Fn layer unknown"
+msgstr "모델링 안 됨: Fn 레이어 알 수 없음"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "05ac:{pid}{model}  (Fn table: {table})"
+msgstr "05ac:{pid}{model}  (Fn 표: {table})"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "  (hid_apple not loaded)"
+msgstr "  (hid_apple 로드 안 됨)"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "{path} ({n} key remapped)"
+msgid_plural "{path} ({n} keys remapped)"
+msgstr[0] "{path} (키 {n}개 재매핑됨)"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "none (kernel mapping)"
+msgstr "없음 (커널 매핑)"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid " - NOT applied yet: akmctl keymap apply"
+msgstr " - 아직 적용 안 됨: akmctl keymap apply"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+msgid "Profile:"
+msgstr "프로필:"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "{profile} (preset {preset}){pending}"
+msgstr "{profile} (사전 설정 {preset}){pending}"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "not reachable ({e}); actions not shown"
+msgstr "연결할 수 없음 ({e}). 동작 표시 안 함"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid "note: {n}"
+msgstr "참고: {n}"
+
+#: apihub-app/crates/akmctl/src/keys.rs
+#, rust-format
+msgid ""
+"{missing} legend key without a KDE shortcut. Nothing was pressed or read: "
+"press each key and tick it in docs/KEYS.md."
+msgid_plural ""
+"{missing} legend keys without a KDE shortcut. Nothing was pressed or read: "
+"press each key and tick it in docs/KEYS.md."
+msgstr[0] ""
+"KDE 단축키가 없는 각인 키 {missing}개. 아무것도 누르거나 읽지 않았습니다: 각 "
+"키를 눌러 보고 docs/KEYS.md에 표시하십시오."
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "source"
+msgstr "소스"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "HID usage"
+msgstr "HID 용도"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "name"
+msgstr "이름"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "state"
+msgstr "상태"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "key"
+msgstr "키"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "(unnamed)"
+msgstr "(이름 없음)"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "down"
+msgstr "누름"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "up"
+msgstr "뗌"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "repeat"
+msgstr "반복"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid ""
+"no supported Apple keyboard is connected (press a key to wake it, then retry)"
+msgstr ""
+"지원되는 Apple 키보드가 연결되어 있지 않음 (키를 눌러 깨운 뒤 다시 시도하십시"
+"오)"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+#, rust-format
+msgid ""
+"{path} is not readable by this user: {e}\n"
+"        reading key events needs the group \"input\" (sudo usermod -aG input "
+"$USER, then log in again); nothing was read"
+msgstr ""
+"이 사용자는 {path}을(를) 읽을 수 없음: {e}\n"
+"        키 이벤트를 읽으려면 \"input\" 그룹이 필요합니다 (sudo usermod -aG "
+"input $USER 후 다시 로그인). 아무것도 읽지 않았습니다"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid ""
+"Live key events, read-only, nothing is recorded. Leave: hold Escape 2 s, or "
+"Ctrl-C."
+msgstr ""
+"실시간 키 이벤트, 읽기 전용, 아무것도 기록하지 않음. 종료: Escape를 2초 누르"
+"고 있거나 Ctrl-C."
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid ""
+"keyd is running: if it holds the keyboard, only \"keyd\" lines appear (what "
+"keyd emits, no HID usage)"
+msgstr ""
+"keyd 실행 중: keyd가 키보드를 점유하면 \"keyd\" 줄만 표시됨 (keyd가 내보내는 "
+"것, HID usage 없음)"
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "Escape held: end of the view."
+msgstr "Escape 누르고 있음: 보기를 종료합니다."
+
+#: apihub-app/crates/akmctl/src/keyslive.rs
+msgid "The keyboard is gone (disconnected or asleep): end of the view."
+msgstr "키보드가 사라짐 (연결 끊김 또는 잠자기): 보기를 종료합니다."
+
+#: apihub-app/crates/akmctl/src/ledcmd.rs
+#, rust-format
+msgid "{led} LED: on"
+msgstr "{led} LED: 켜짐"
+
+#: apihub-app/crates/akmctl/src/ledcmd.rs
+#, rust-format
+msgid "{led} LED: off"
+msgstr "{led} LED: 꺼짐"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "--device-name NAME cannot be combined with --show or --restore"
+msgstr "--device-name 이름은 --show 또는 --restore와 함께 쓸 수 없음"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "--device-name needs a name, --show or --restore"
+msgstr "--device-name에는 이름, --show 또는 --restore가 필요합니다"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "cannot render the manual page"
+msgstr "매뉴얼 페이지를 생성할 수 없음"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "{m} (showing the static table, no cached values)"
+msgstr "{m} (정적 표 표시, 캐시 값 없음)"
+
+#: apihub-app/crates/akmctl/src/main.rs apihub-app/crates/akmctl/src/status.rs
+msgid "Daemon:"
+msgstr "서비스:"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "not running (the version is read by the daemon)"
+msgstr "실행 중 아님 (버전은 서비스가 읽음)"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "no history at {path} yet (the daemon writes it)"
+msgstr "{path}에 아직 기록이 없음 (서비스가 기록함)"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid ""
+"{added} entries imported from {src} into {dst} ({ignored} lines ignored)"
+msgstr "{src}에서 {dst}(으)로 항목 {added}개 가져옴 ({ignored}줄 무시)"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "import from {src}: {e}"
+msgstr "{src}에서 가져오기: {e}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "Fn mode: {m} - {label}"
+msgstr "Fn 모드: {m} - {label}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "write accepted but fnmode reads {m}, expected {mode}"
+msgstr "쓰기는 수락되었으나 fnmode를 읽은 값이 {m}, 예상 값은 {mode}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid ""
+"Fn mode {mode} saved ({label}); hid_apple is not loaded, applied at next "
+"module load"
+msgstr ""
+"Fn 모드 {mode} 저장됨 ({label}). hid_apple이 로드되지 않아 다음 모듈 로드 시 "
+"적용됨"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "helper failed (exit {c})"
+msgstr "도우미 실패 (종료 코드 {c})"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "helper killed by a signal"
+msgstr "도우미가 신호로 종료됨"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "no keyboard known to the daemon (use --mac)"
+msgstr "서비스가 알고 있는 키보드 없음 (--mac 사용)"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "Name restored: {now}"
+msgstr "이름 복원됨: {now}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "Name: {now}"
+msgstr "이름: {now}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+#, rust-format
+msgid "cannot subscribe to the daemon's signals: {e}"
+msgstr "서비스 신호를 구독할 수 없음: {e}"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "malformed StateChanged signal ignored"
+msgstr "잘못된 형식의 StateChanged 신호 무시됨"
+
+#: apihub-app/crates/akmctl/src/main.rs
+msgid "connection to the session bus lost"
+msgstr "세션 버스와의 연결이 끊어짐"
+
+#: apihub-app/crates/akmctl/src/pkexec.rs
+msgid "authentication dismissed"
+msgstr "인증이 취소됨"
+
+#: apihub-app/crates/akmctl/src/pkexec.rs
+#, rust-format
+msgid "not authorized, authentication failed or {what} not found"
+msgstr "권한이 없거나 인증에 실패했거나 {what}을(를) 찾을 수 없음"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Fresh"
+msgstr "새것"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Good"
+msgstr "양호"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Dead"
+msgstr "소진"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "apple-kb-monitord is not running"
+msgstr "apple-kb-monitord가 실행 중이 아님"
+
+#: apihub-app/crates/akmctl/src/render.rs
+msgid "Disconnected"
+msgstr "연결 끊김"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Battery: {p} % (keyboard indication)"
+msgstr "배터리: {p} % (키보드 표시값)"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Estimate: ~{pct} % ({low} to {high} %), {chemistry}"
+msgstr "추정: ~{pct} % ({low}~{high} %), {chemistry}"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Voltage: {v} V ({health})"
+msgstr "전압: {v} V ({health})"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Autonomy: {r}"
+msgstr "사용 시간: {r}"
+
+#: apihub-app/crates/akmctl/src/render.rs
+#, rust-format
+msgid "Error: {e}"
+msgstr "오류: {e}"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "forced by --force"
+msgstr "--force로 강제됨"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"→ Switch the keyboard OFF (power button, 3 s, light off), wait 5 s, switch "
+"it ON.\n"
+"  (The pairing is untouched; this is often what really fixes it.) Enter when "
+"done…"
+msgstr ""
+"→ 키보드를 끄고 (전원 버튼 3초, 표시등 꺼짐) 5초 기다린 후 다시 켜십시오.\n"
+"  (페어링은 그대로입니다. 실제로는 이것으로 해결되는 경우가 많습니다.) 완료되"
+"면 Enter…"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "→ Press a key on “{}” now (it wakes up and calls the computer)."
+msgstr "→ 지금 “{}”의 키를 누르십시오 (깨어나서 컴퓨터를 호출합니다)."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "  page {i}/{ATTEMPTS} from the computer to the keyboard…"
+msgstr "  컴퓨터에서 키보드로 호출 {i}/{ATTEMPTS}…"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "  (press a key again)"
+msgstr "  (키를 다시 누르십시오)"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid ""
+"\n"
+"RE-PAIRING ({why}).\n"
+"This REMOVES the pairing of “{name}” on this computer, then starts the "
+"pairing assistant.\n"
+"The keyboard will not work until pairing is done: keep another input device "
+"at hand.\n"
+"Type {CONFIRM} then Enter to go on, or just Enter to cancel: "
+msgstr ""
+"\n"
+"다시 페어링 ({why}).\n"
+"이 작업은 이 컴퓨터에서 “{name}”의 페어링을 제거한 뒤 페어링 도우미를 시작합"
+"니다.\n"
+"페어링이 끝날 때까지 키보드가 동작하지 않으므로 다른 입력 장치를 준비하십시"
+"오.\n"
+"계속하려면 {CONFIRM}을(를) 입력하고 Enter, 취소하려면 Enter만 누르십시오: "
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "refused: interactive confirmation required (stdin is not a terminal)."
+msgstr "거부됨: 대화형 확인이 필요합니다 (stdin이 터미널이 아님)."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "  pairing removed."
+msgstr "  페어링 제거됨."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "  pairing not removed (RemoveDevice: {e})"
+msgstr "  페어링을 제거하지 못함 (RemoveDevice: {e})"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"→ Switch the keyboard off (power button, 3 s) and on again: its light blinks "
+"(pairing mode).\n"
+"→ In the assistant, pick the keyboard, type the displayed code ON THE "
+"KEYBOARD, then Enter."
+msgstr ""
+"→ 키보드를 껐다가 (전원 버튼 3초) 다시 켜십시오: 표시등이 깜박입니다 (페어링 "
+"모드).\n"
+"→ 도우미에서 키보드를 선택하고 표시된 코드를 키보드로 입력한 뒤 Enter."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"  No graphical assistant: `bluetoothctl`, then `scan on`, `pair <MAC>`, type "
+"the code on the keyboard, `trust <MAC>`, `connect <MAC>`."
+msgstr ""
+"  그래픽 도우미 없음: `bluetoothctl` 다음에 `scan on`, `pair <MAC>`, 키보드"
+"로 코드 입력, `trust <MAC>`, `connect <MAC>`."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "  (waiting for the assistant…)"
+msgstr "  (도우미를 기다리는 중…)"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "✓ Keyboard re-paired, connected and trusted."
+msgstr "✓ 키보드를 다시 페어링하고 연결했으며 신뢰함으로 설정했습니다."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✗ No paired + connected keyboard after 4 min. Run `akmctl repair` again."
+msgstr ""
+"✗ 4분이 지나도 페어링 및 연결된 키보드가 없습니다. `akmctl repair`를 다시 실"
+"행하십시오."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"\n"
+"CLEAN FORGET, like macOS: the keyboard is connected, the computer first "
+"sends it “RecantConnection”\n"
+"(SET Feature 0x41, one byte, wire 53 41), waits 2 s for the link to drop, "
+"then ONLY removes the pairing.\n"
+"The exact effect of 0x41 on the keyboard was never measured (simple drop or "
+"forgetting this computer).\n"
+"Then, to re-pair: switch the keyboard off (3 s) and on (blinking light = "
+"pairing mode),\n"
+"pick it in the assistant and type the displayed code ON THE KEYBOARD, then "
+"Enter."
+msgstr ""
+"\n"
+"macOS와 같은 깔끔한 삭제: 키보드가 연결되어 있으면 컴퓨터가 먼저 "
+"“RecantConnection”을 보내고\n"
+"(SET Feature 0x41, 1바이트, 전송 53 41), 연결이 끊기기를 2초 기다린 뒤 페어링"
+"만 제거합니다.\n"
+"0x41이 키보드에 미치는 정확한 효과는 측정된 적이 없습니다 (단순 끊김인지, 이 "
+"컴퓨터를 잊는 것인지).\n"
+"그다음 다시 페어링하려면: 키보드를 끄고 (3초) 다시 켜고 (표시등 깜박임 = 페어"
+"링 모드),\n"
+"도우미에서 선택한 뒤 표시된 코드를 키보드로 입력하고 Enter."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "  pairing removed (link dropped: {}), backup: {}"
+msgstr "  페어링 제거됨 (연결 끊김: {}), 백업: {}"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "no"
+msgstr "아니요"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "yes"
+msgstr "예"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid ""
+"✗ RecantConnection not sent or refused ({e}): NOTHING was removed. Back to "
+"wake + reconnect."
+msgstr ""
+"✗ RecantConnection을 보내지 못했거나 거부됨 ({e}): 아무것도 제거하지 않았습니"
+"다. 깨우기 + 다시 연결로 돌아갑니다."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "✓ Keyboard connected, pairing intact."
+msgstr "✓ 키보드 연결됨, 페어링 유지됨."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✗ Circuit breaker open: the keyboard did not answer 3 requests in a row, it "
+"is mute (Apple's R3). RecantConnection (0x41) NOT sent, nothing removed. "
+"Back to wake + reconnect."
+msgstr ""
+"✗ 회로 차단기 열림: 키보드가 요청 3개에 연속으로 응답하지 않아 응답 불능 상태"
+"입니다 (Apple의 R3). RecantConnection(0x41)을 보내지 않았고 아무것도 제거하"
+"지 않았습니다. 깨우기 + 다시 연결로 돌아갑니다."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✓ Keyboard reconnected, pairing intact: the breaker closes on the new "
+"connection; run `akmctl repair` again if the forget is still needed."
+msgstr ""
+"✓ 키보드가 다시 연결되었고 페어링이 유지됨: 차단기는 새 연결에서 닫힙니다. 여"
+"전히 삭제가 필요하면 `akmctl repair`를 다시 실행하십시오."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✗ The keyboard does not answer. Switch it off and on (light at power-on), "
+"check its batteries, then run `akmctl repair` again."
+msgstr ""
+"✗ 키보드가 응답하지 않습니다. 껐다 켜고 (켤 때 표시등 켜짐) 배터리를 확인한 "
+"뒤 `akmctl repair`를 다시 실행하십시오."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "Cancelled: the backup could not be written ({e}); nothing was changed."
+msgstr "취소됨: 백업을 쓸 수 없음 ({e}); 아무것도 바뀌지 않았습니다."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+#, rust-format
+msgid "Cancelled: nothing was changed ({other})."
+msgstr "취소됨: 아무것도 변경하지 않았습니다 ({other})."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "Cancelled: nothing was changed."
+msgstr "취소됨: 아무것도 변경하지 않았습니다."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"BlueZ or the adapter is down: nothing to re-pair. `systemctl status "
+"bluetooth`, `bluetoothctl power on`."
+msgstr ""
+"BlueZ 또는 어댑터가 꺼져 있음: 다시 페어링할 수 없습니다. `systemctl status "
+"bluetooth`, `bluetoothctl power on`."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "The link is healthy: nothing to repair (--force to re-pair anyway)."
+msgstr ""
+"연결이 정상입니다: 복구할 것이 없습니다 (그래도 다시 페어링하려면 --force)."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "✓ Keyboard reconnected: the pairing was fine, no re-pairing needed."
+msgstr ""
+"✓ 키보드 다시 연결됨: 페어링은 정상이었으며 다시 페어링할 필요가 없습니다."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid ""
+"✗ The keyboard does not answer. Check it is switched on (light at power-on) "
+"and its batteries."
+msgstr ""
+"✗ 키보드가 응답하지 않습니다. 켜져 있는지 (켤 때 표시등 켜짐)와 배터리를 확인"
+"하십시오."
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "the keyboard does not answer the pages"
+msgstr "키보드가 호출에 응답하지 않음"
+
+#: apihub-app/crates/akmctl/src/repair.rs
+msgid "No paired Apple keyboard: starting the assistant."
+msgstr "페어링된 Apple 키보드 없음: 도우미를 시작합니다."
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"versions differ: daemon {v}, akmctl {mine}, package {p}: restart the daemon "
+"after an upgrade (systemctl --user restart apple-kb-monitord.service)"
+msgstr ""
+"버전 불일치: 서비스 {v}, akmctl {mine}, 패키지 {p}: 업그레이드 후 서비스를 다"
+"시 시작하십시오 (systemctl --user restart apple-kb-monitord.service)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon {v} = akmctl, package {p}"
+msgstr "서비스 {v} = akmctl, 패키지 {p}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "daemon version unknown (old interface)"
+msgstr "서비스 버전 알 수 없음 (이전 인터페이스)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "keyboard alias as last set through this monitor"
+msgstr "키보드 별칭이 이 모니터에서 마지막으로 설정한 값과 같음"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"keyboard alias is {actual}, last set to {alias} by {by} at {set_at} (unix): "
+"changed elsewhere (KDE Bluetooth settings, bluetoothctl) or the pairing was "
+"removed (akmctl repair, Plasma Forget); see the daemon journal for \"BlueZ "
+"alias\" lines"
+msgstr ""
+"키보드 별칭은 {actual}, 마지막 설정은 {set_at}(unix)에 {by}이(가) {alias}(으)"
+"로 설정: 다른 곳에서 변경되었거나 (KDE 블루투스 설정, bluetoothctl) 페어링이 "
+"제거되었습니다 (akmctl repair, Plasma 삭제). 서비스 저널의 \"BlueZ alias\" "
+"줄 참조"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "no answer within {} s (daemon stuck?)"
+msgstr "{}초 안에 응답 없음 (서비스 멈춤?)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"apple-kb-monitord restarted {} time by systemd since the last pass (crash "
+"loop?)"
+msgid_plural ""
+"apple-kb-monitord restarted {} times by systemd since the last pass (crash "
+"loop?)"
+msgstr[0] ""
+"지난 점검 이후 systemd가 apple-kb-monitord를 {}번 재시작함 (충돌 반복?)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon pid changed {prev_pid} -> {main_pid} (restart)"
+msgstr "서비스 pid 변경 {prev_pid} -> {main_pid} (재시작)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon answered GetState in {ms} ms (> 1 s)"
+msgstr "서비스가 GetState에 {ms} ms 만에 응답 (> 1초)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon on the bus, GetState in {ms} ms"
+msgstr "버스에 서비스 있음, GetState {ms} ms"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "keyboard connected but never acquired"
+msgstr "키보드가 연결되어 있지만 수집된 적 없음"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "keyboard connected, last acquisition {hours} h ago"
+msgstr "키보드 연결됨, 마지막 수집 {hours}시간 전"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "last acquisition {minutes} min ago"
+msgstr "마지막 수집 {minutes}분 전"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "keyboard not connected (nothing to acquire)"
+msgstr "키보드 연결 안 됨 (수집할 대상 없음)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon last_error: {e}"
+msgstr "서비스 last_error: {e}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "daemon unreachable ({e}); unit state: {state}"
+msgstr "서비스에 연결할 수 없음 ({e}). 유닛 상태: {state}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "no daemon warning since the last pass"
+msgstr "지난 점검 이후 서비스 경고 없음"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{} daemon warning/error line since the last pass, last: {}"
+msgid_plural "{} daemon warning/error lines since the last pass, last: {}"
+msgstr[0] "지난 점검 이후 서비스 경고/오류 {}줄, 마지막: {}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "user journal not readable"
+msgstr "사용자 저널을 읽을 수 없음"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "no bluetoothd error since the last pass"
+msgstr "지난 점검 이후 bluetoothd 오류 없음"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{n} bluetoothd error line since the last pass"
+msgid_plural "{n} bluetoothd error lines since the last pass"
+msgstr[0] "지난 점검 이후 bluetoothd 오류 {n}줄"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "system journal not readable (group systemd-journal)"
+msgstr "시스템 저널을 읽을 수 없음 (systemd-journal 그룹)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "no crash of our programs since the last pass"
+msgstr "지난 점검 이후 이 프로그램들의 충돌 없음"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{exe} crashed ({sig}, pid {pid}): coredumpctl info {pid}"
+msgstr "{exe} 충돌 ({sig}, pid {pid}): coredumpctl info {pid}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "coredump journal not readable"
+msgstr "coredump 저널을 읽을 수 없음"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{}: {} MiB free of {} MiB"
+msgstr "{}: 사용 가능 {} MiB / 전체 {} MiB"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{}: statvfs failed"
+msgstr "{}: statvfs 실패"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{hist}: {lines}, {kib} KiB, {bad} unreadable line in the last 1000"
+msgid_plural ""
+"{hist}: {lines}, {kib} KiB, {bad} unreadable lines in the last 1000"
+msgstr[0] "{hist}: {lines}, {kib} KiB, 최근 1000줄 중 읽을 수 없는 줄 {bad}개"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "{n} line"
+msgid_plural "{n} lines"
+msgstr[0] "{n}줄"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "no history yet"
+msgstr "아직 기록 없음"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "akmctl doctor: {text}"
+msgstr "akmctl doctor: {text}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"akmctl doctor did not finish within {} s (BlueZ or the daemon does not "
+"answer)"
+msgstr ""
+"akmctl doctor가 {}초 안에 끝나지 않음 (BlueZ 또는 서비스가 응답하지 않음)"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+msgid "Apple keyboard monitor: problem detected"
+msgstr "Apple 키보드 모니터: 문제 감지됨"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid "cannot write {}"
+msgstr "{}에 쓸 수 없음"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid ""
+"\n"
+"verdict: {}{}"
+msgstr ""
+"\n"
+"판정: {}{}"
+
+#: apihub-app/crates/akmctl/src/selftest.rs
+#, rust-format
+msgid " ({} new grave problem)"
+msgid_plural " ({} new grave problems)"
+msgstr[0] " (새로운 심각한 문제 {}개)"
+
+#: apihub-app/crates/akmctl/src/shutdown_notify.rs
+msgid ""
+"on (WillShutdown sent once at shutdown, as macOS; [apple] will_shutdown)"
+msgstr ""
+"켜짐 (macOS처럼 종료 시 WillShutdown을 한 번 전송. [apple] will_shutdown)"
+
+#: apihub-app/crates/akmctl/src/shutdown_notify.rs
+msgid "off ([apple] will_shutdown = false in config.toml)"
+msgstr "꺼짐 (config.toml에서 [apple] will_shutdown = false)"
+
+#: apihub-app/crates/akmctl/src/shutdown_notify.rs
+msgid "system is not shutting down: nothing sent"
+msgstr "시스템이 종료 중이 아님: 아무것도 보내지 않음"
+
+#: apihub-app/crates/akmctl/src/shutdown_notify.rs
+#, rust-format
+msgid "daemon not running ({name} absent on the session bus): nothing sent"
+msgstr ""
+"서비스가 실행 중이 아님 (세션 버스에 {name} 없음): 아무것도 보내지 않음"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "not measured; fix: {fix}"
+msgstr "측정 안 됨. 해결 방법: {fix}"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{short}; fix: {fix}"
+msgstr "{short}. 해결 방법: {fix}"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Name:"
+msgstr "이름:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "On kb:"
+msgstr "키보드 내:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "n/a (not read yet)"
+msgstr "해당 없음 (아직 읽지 않음)"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{n} (name stored in the keyboard)"
+msgstr "{n} (키보드에 저장된 이름)"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Kernel:"
+msgstr "커널:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Connected:"
+msgstr "연결:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Battery:"
+msgstr "배터리:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{p} % (keyboard indication, kept from the last read)"
+msgstr "{p} % (키보드 표시값, 마지막 읽기 값 유지)"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{p} % (keyboard indication)"
+msgstr "{p} % (키보드 표시값)"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Estimate:"
+msgstr "추정:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "new batteries, no estimate yet"
+msgstr "새 배터리, 아직 추정 없음"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "~{pct} % ({low} to {high} %) from the voltage, {chemistry}"
+msgstr "전압 기준 ~{pct} % ({low}~{high} %), {chemistry}"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Limits:"
+msgstr "기준값:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "Full {full} / Low {low} / Critical {critical} / Empty {empty} mV"
+msgstr "완충 {full} / 부족 {low} / 위험 {critical} / 방전 {empty} mV"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Firmware:"
+msgstr "펌웨어:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Voltage:"
+msgstr "전압:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Signal:"
+msgstr "신호:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Updated:"
+msgstr "업데이트:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "{age} s ago"
+msgstr "{age}초 전"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Fn mode:"
+msgstr "Fn 모드:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Shutdown:"
+msgstr "종료:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+msgid "Error:"
+msgstr "오류:"
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid ""
+"{kernel} - KWin and System Settings > Keyboard show this kernel name; "
+"Bluetooth and Battery show the alias \"{alias}\". The kernel name changes "
+"only after the keyboard reconnects (switch it off and on)."
+msgstr ""
+"{kernel} - KWin과 시스템 설정 > 키보드는 이 커널 이름을 표시하고, 블루투스와 "
+"배터리는 별칭 \"{alias}\"을(를) 표시합니다. 커널 이름은 키보드가 다시 연결된 "
+"후에만 바뀝니다 (껐다 켜십시오)."
+
+#: apihub-app/crates/akmctl/src/status.rs
+#, rust-format
+msgid "not running ({name} absent on the session bus)"
+msgstr "실행 중 아님 (세션 버스에 {name} 없음)"
+
+#: apihub-app/crates/akmctl/src/when.rs
+#, rust-format
+msgid ""
+"invalid date {s}: use 90m, 24h, 7d, 2w, YYYY-MM-DD or \"YYYY-MM-DD HH:MM\" "
+"(UTC)"
+msgstr ""
+"잘못된 날짜 {s}: 90m, 24h, 7d, 2w, YYYY-MM-DD 또는 \"YYYY-MM-DD HH:MM\" (UTC)"
+"을 사용하세요"

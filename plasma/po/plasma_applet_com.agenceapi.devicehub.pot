@@ -1,0 +1,647 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the apple-kb-monitor package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+msgid "alkaline"
+msgstr ""
+
+msgid "NiMH"
+msgstr ""
+
+msgid "lithium"
+msgstr ""
+
+msgid "not declared"
+msgstr ""
+
+msgid "State"
+msgstr ""
+
+msgid "Radio"
+msgstr ""
+
+msgid "Keys"
+msgstr ""
+
+msgid "Data"
+msgstr ""
+
+msgid "Diag"
+msgstr ""
+
+msgid "Apple keyboard monitor"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "READ %1"
+msgstr ""
+
+msgid "NO DAEMON"
+msgstr ""
+
+msgid "ONLINE"
+msgstr ""
+
+msgid "OFFLINE"
+msgstr ""
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr ""
+
+msgid "Reading error: %1"
+msgstr ""
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr ""
+
+msgid "Waiting for the keyboard data…"
+msgstr ""
+
+msgid "Batteries critical: replace them now."
+msgstr ""
+
+msgid "Batteries low: plan to replace them."
+msgstr ""
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%1%"
+msgstr ""
+
+msgid "rssi-helper not installed"
+msgstr ""
+
+msgid "see akmctl doctor"
+msgstr ""
+
+msgid "not measured (%1)"
+msgstr ""
+
+msgid "the rssi-helper utility is not installed"
+msgstr ""
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr ""
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr ""
+
+msgid "the signal cannot be measured"
+msgstr ""
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr ""
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr ""
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr ""
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr ""
+
+msgid "run akmctl doctor"
+msgstr ""
+
+msgid "Battery history"
+msgstr ""
+
+msgid "24 h"
+msgstr ""
+
+msgid "7 d"
+msgstr ""
+
+msgid "30 d"
+msgstr ""
+
+msgid "90 d"
+msgstr ""
+
+msgid "Refresh"
+msgstr ""
+
+msgid "LOADING…"
+msgstr ""
+
+msgid "Readings: %1"
+msgstr ""
+
+msgid "%1 V"
+msgstr ""
+
+msgid "Batteries %"
+msgstr ""
+
+msgid "Voltage %1 to %2 V"
+msgstr ""
+
+msgid "History not available: %1"
+msgstr ""
+
+msgid "Monitor stopped: no history."
+msgstr ""
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr ""
+
+msgid "Batteries"
+msgstr ""
+
+msgid "Voltage"
+msgstr ""
+
+msgid "EMPTY"
+msgstr ""
+
+msgid "CRITICAL"
+msgstr ""
+
+msgid "LOW"
+msgstr ""
+
+msgid "FULL"
+msgstr ""
+
+msgid "Thresholds"
+msgstr ""
+
+msgid "Estimate"
+msgstr ""
+
+msgid "Apple display"
+msgstr ""
+
+msgid "Chemistry"
+msgstr ""
+
+msgid "Installed on"
+msgstr ""
+
+msgid "Trend"
+msgstr ""
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "Empty around"
+msgstr ""
+
+msgid "Last reading"
+msgstr ""
+
+msgid "The last reading missed a report of the keyboard."
+msgstr ""
+
+msgid "Device"
+msgstr ""
+
+msgid "Model"
+msgstr ""
+
+msgid "Name"
+msgstr ""
+
+msgid "Address"
+msgstr ""
+
+msgid "Chip"
+msgstr ""
+
+msgid "Driver"
+msgstr ""
+
+msgid "Firmware"
+msgstr ""
+
+msgid "System diagnostic"
+msgstr ""
+
+msgid "Checking…"
+msgstr ""
+
+msgid "Run the full check"
+msgstr ""
+
+msgid "%1/%2 PASSED"
+msgstr ""
+
+msgid "PROBLEMS: %1"
+msgstr ""
+
+msgid "Check not run: %1"
+msgstr ""
+
+msgid "Monitor"
+msgstr ""
+
+msgid "RUNNING"
+msgstr ""
+
+msgid "STOPPED"
+msgstr ""
+
+msgid "Version"
+msgstr ""
+
+msgid "Keyboard"
+msgstr ""
+
+msgid "Link"
+msgstr ""
+
+msgid "Last error"
+msgstr ""
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr ""
+
+msgid "Log"
+msgstr ""
+
+msgid "[FAIL]"
+msgstr ""
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr ""
+
+msgid "Function keys"
+msgstr ""
+
+msgid "Media keys first"
+msgstr ""
+
+msgid "F1–F12 first"
+msgstr ""
+
+msgid "Current mode: %1"
+msgstr ""
+
+msgid "Fn mode not read yet."
+msgstr ""
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr ""
+
+msgid "Administrator authentication requested…"
+msgstr ""
+
+msgid "Fn mode not changed: %1"
+msgstr ""
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr ""
+
+msgid "Locks"
+msgstr ""
+
+msgid "Caps Lock"
+msgstr ""
+
+msgid "Num Lock"
+msgstr ""
+
+msgid "on"
+msgstr ""
+
+msgid "off"
+msgstr ""
+
+msgid "ON"
+msgstr ""
+
+msgid "OFF"
+msgstr ""
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr ""
+
+msgid "Special keys"
+msgstr ""
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+
+msgid "Edit the keys"
+msgstr ""
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "EXCELLENT"
+msgstr ""
+
+msgid "GOOD"
+msgstr ""
+
+msgid "WEAK"
+msgstr ""
+
+msgid "Signal"
+msgstr ""
+
+msgid "Not measured"
+msgstr ""
+
+msgid "Measured"
+msgstr ""
+
+msgid "at %1"
+msgstr ""
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr ""
+
+msgid "Correction: %1"
+msgstr ""
+
+msgid "No measurement: the keyboard is not connected."
+msgstr ""
+
+msgid "Connected"
+msgstr ""
+
+msgid "Yes"
+msgstr ""
+
+msgid "No"
+msgstr ""
+
+msgid "Paired"
+msgstr ""
+
+msgid "TX power"
+msgstr ""
+
+msgid "%1 dBm"
+msgstr ""
+
+msgid "Last wake-up"
+msgstr ""
+
+msgid "Paired host"
+msgstr ""
+
+msgid "Monitor's link"
+msgstr ""
+
+msgid "connected"
+msgstr ""
+
+msgid "asleep"
+msgstr ""
+
+msgid "unreachable"
+msgstr ""
+
+msgid "Attempts / failures"
+msgstr ""
+
+msgid "%1 / %2"
+msgstr ""
+
+msgid "Link quality"
+msgstr ""
+
+msgid "Disconnections"
+msgstr ""
+
+msgid "1 h"
+msgstr ""
+
+msgid "7 days"
+msgstr ""
+
+msgid "today"
+msgstr ""
+
+msgid "D-%1"
+msgstr ""
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr ""
+
+msgid "Restore the link"
+msgstr ""
+
+msgid "Reconnect"
+msgstr ""
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr ""
+
+msgid "OK"
+msgstr ""
+
+msgid "Autonomy"
+msgstr ""
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] ""
+msgstr[1] ""
+
+msgid "≈ %1 h"
+msgstr ""
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr ""
+
+msgid "not enough history yet"
+msgstr ""
+
+msgid "%1, up to date"
+msgstr ""
+
+msgid "%1, update %2 at Apple"
+msgstr ""
+
+msgid "%1, not in the table"
+msgstr ""
+
+msgid "Keyboard name"
+msgstr ""
+
+msgid "Apply"
+msgstr ""
+
+msgid "Keyboard's own name"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Rename refused: %1"
+msgstr ""
+
+msgid "Actions"
+msgstr ""
+
+msgid "Fn: waiting for authorisation…"
+msgstr ""
+
+msgid "Rename"
+msgstr ""
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr ""
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr ""
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr ""
+
+msgid "Autonomy: %1"
+msgstr ""
+
+msgid "media keys first"
+msgstr ""
+
+msgid "Fn key has no effect"
+msgstr ""
+
+msgid "F-keys disabled"
+msgstr ""
+
+msgid "Switch to F1–F12 first"
+msgstr ""
+
+msgid "Switch to media keys first"
+msgstr ""
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr ""
+
+msgid "%1 (%2)"
+msgstr ""
+
+msgid "new batteries, no estimate yet"
+msgstr ""
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr ""
+
+msgid "Keyboard not connected"
+msgstr ""
+
+msgid "Monitor stopped"
+msgstr ""
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr ""
+
+msgid "Apple keyboard, battery level unknown"
+msgstr ""
+
+msgid "Apple keyboard, %1"
+msgstr ""
+
+msgid "Keyboard indication %1"
+msgstr ""
+
+msgid "Estimate: %1"
+msgstr ""
+
+msgid "Apple display: %1%"
+msgstr ""
+
+msgid "Signal: %1"
+msgstr ""
+
+msgid "Firmware: %1"
+msgstr ""
+
+msgid "Waiting for the Apple keyboard…"
+msgstr ""
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr ""
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr ""
+
+msgid "New reading requested."
+msgstr ""
+
+msgid "Reading not requested: %1"
+msgstr ""
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+
+msgid "refused by the monitor"
+msgstr ""
+
+msgid "Reconnection not requested: %1"
+msgstr ""
+
+msgid "excellent"
+msgstr ""
+
+msgid "good"
+msgstr ""
+
+msgid "weak"
+msgstr ""
+
+msgid "Apple Keyboard"
+msgstr ""
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr ""

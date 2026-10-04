@@ -1,0 +1,44 @@
+{
+    "KPlugin": {
+        "Id": "com.agenceapi.devicehub",
+        "Name": "ApiHub",
+        "Description": "Apple Bluetooth keyboard: battery, voltage and signal",
+        "Description[fr]": "Clavier Bluetooth Apple : piles, tension et signal",
+        "Description[de]": "Apple-Bluetooth-Tastatur: Batterie, Spannung und Signal",
+        "Description[es]": "Teclado Bluetooth de Apple: pilas, tensión y señal",
+        "Description[it]": "Tastiera Bluetooth Apple: batterie, tensione e segnale",
+        "Description[pt]": "Teclado Bluetooth da Apple: pilhas, tensão e sinal",
+        "Description[pt_BR]": "Teclado Bluetooth da Apple: pilhas, tensão e sinal",
+        "Description[nl]": "Apple Bluetooth-toetsenbord: batterij, spanning en signaal",
+        "Description[pl]": "Klawiatura Bluetooth Apple: baterie, napięcie i sygnał",
+        "Description[cs]": "Bluetooth klávesnice Apple: baterie, napětí a signál",
+        "Description[sv]": "Apples Bluetooth-tangentbord: batteri, spänning och signal",
+        "Description[da]": "Apples Bluetooth-tastatur: batteri, spænding og signal",
+        "Description[nb]": "Apples Bluetooth-tastatur: batteri, spenning og signal",
+        "Description[fi]": "Applen Bluetooth-näppäimistö: paristot, jännite ja signaali",
+        "Description[ru]": "Bluetooth-клавиатура Apple: батарейки, напряжение и сигнал",
+        "Description[uk]": "Bluetooth-клавіатура Apple: батарейки, напруга і сигнал",
+        "Description[ja]": "Apple Bluetooth キーボード: 電池、電圧、信号",
+        "Description[zh_CN]": "Apple 蓝牙键盘：电池、电压和信号",
+        "Description[ko]": "Apple Bluetooth 키보드: 배터리, 전압, 신호",
+        "Description[tr]": "Apple Bluetooth klavye: pil, gerilim ve sinyal",
+        "Icon": "apihub-scarab",
+        "Category": "System Information",
+        "Authors": [
+            {
+                "Name": "litteulapi",
+                "Email": "124197991+litteulapi@users.noreply.github.com"
+            }
+        ],
+        "Version": "3.3.0",
+        "License": "GPL-2.0-or-later",
+        "Website": "https://github.com/litteulapi/apple-kb-monitor",
+        "EnabledByDefault": true
+    },
+    "X-Plasma-API": "declarativeappletscript",
+    "X-Plasma-API-Minimum-Version": "6.1",
+    "KPackageStructure": "Plasma/Applet",
+    "X-Plasma-NotificationArea": "true",
+    "X-Plasma-NotificationAreaCategory": "Hardware",
+    "X-Plasma-DBusActivationService": "com.agenceapi.AppleKbMonitor1"
+}

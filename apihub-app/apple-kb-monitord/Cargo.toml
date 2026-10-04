@@ -1,0 +1,36 @@
+[package]
+name = "apple-kb-monitord"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Headless Apple Bluetooth keyboard monitor: single owner of the hardware, BlueZ battery provider, session D-Bus interface"
+
+[lib]
+name = "apple_kb_monitord"
+path = "src/lib.rs"
+
+[[bin]]
+name = "apple-kb-monitord"
+path = "src/main.rs"
+
+[features]
+# Test-only private D-Bus server (src/testbus.rs); turned on for the tests by the
+# dev-dependency below, absent from the release build.
+testbus = []
+
+[dependencies]
+akm-core = { path = "../akm-core" }
+libc = "0.2"
+serde_json = "1"
+toml = { version = "1", default-features = false, features = ["std", "parse", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "ansi"] }
+zbus = "4"
+
+[dev-dependencies]
+apple-kb-monitord = { path = ".", features = ["testbus"] }
+akm-core = { path = "../akm-core", features = ["srclint", "testseam"] }
+
+[lints]
+workspace = true

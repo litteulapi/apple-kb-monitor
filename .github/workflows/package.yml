@@ -1,0 +1,57 @@
+name: Package
+
+# Every push to main and every pull request builds the Arch package in a
+# fresh archlinux container (scripts/release-build.sh). Only a tag v* publishes:
+# the package and its .sha256 are attached to a GitHub release of that tag.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Git for the checkout
+        run: pacman -Syu --noconfirm --needed git
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag matches the PKGBUILD version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v=$(sed -n 's/^pkgver=//p' PKGBUILD); r=$(sed -n 's/^pkgrel=//p' PKGBUILD)
+          case "${GITHUB_REF_NAME}" in
+            "v$v"|"v$v-$r") echo "tag ${GITHUB_REF_NAME} = PKGBUILD $v-$r" ;;
+            *) echo "tag ${GITHUB_REF_NAME} does not match PKGBUILD $v-$r"; exit 1 ;;
+          esac
+      - name: Build and check the package
+        run: bash scripts/release-build.sh "$GITHUB_WORKSPACE/dist"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: dist/*
+
+  release:
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: dist
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --notes "Arch Linux / Manjaro package. Install: sudo pacman -U ./$(cd dist && ls *.pkg.tar.zst). Checksum: the .sha256 file. Changes: CHANGELOG.md."

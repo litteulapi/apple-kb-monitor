@@ -1,0 +1,21 @@
+[General]
+Name=Clavier de alice #1
+Class=0x002540
+SupportedTechnologies=BR/EDR;
+Trusted=true
+Blocked=false
+CablePairing=false
+WakeAllowed=true
+Services=00001124-0000-1000-8000-00805f9b34fb;00001200-0000-1000-8000-00805f9b34fb;
+Alias=Clavier de alice #1
+
+[LinkKey]
+Key=<masked>
+Type=0
+PINLength=0
+
+[DeviceID]
+Source=2
+Vendor=1452
+Product=598
+Version=80

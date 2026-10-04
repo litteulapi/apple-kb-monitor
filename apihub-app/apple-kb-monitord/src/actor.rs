@@ -1,0 +1,2472 @@
+//! The acquisition actor: the only code that touches the keyboard.
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use akm_core::alerts::{AlertConfig, AlertState, Urgency};
+use akm_core::batteries::{self, Detector};
+use akm_core::chemistry::{self, Chemistry};
+use akm_core::forecast::{self, Forecast};
+use akm_core::history::{
+    legacy_path, Clock, History, HistoryEntry, HistoryEvent, SystemClock, RETENTION_S,
+};
+use akm_core::link::LinkTracker;
+use akm_core::machine::{Action, Event, Machine, NameReread, RSSI_MAX_AGE};
+use akm_core::reminder::NoticeMemory;
+use akm_core::rssi::{self, RssiTracker};
+use akm_core::{hidraw, led, power, KbReport, Snapshot, Watch};
+
+use crate::alias::{AliasBackend, BluezAlias};
+use crate::events::{DeviceEvent, EventHub};
+use crate::{bluez, notify, powerdevil, watcher};
+
+/// Messages handled by the actor thread.
+#[derive(Debug, Clone)]
+pub enum Msg {
+    /// From the `BlueZ` / `UPower` watcher.
+    Bus(Event),
+    /// Explicit refresh; the outcome goes back through the reply slot.
+    Refresh(RefreshReply),
+    /// The name stored in the keyboard was rewritten (D-Bus `RereadName()`).
+    RereadName(NameReply),
+    /// The pairing of this keyboard was removed from `BlueZ`: it is no longer the keyboard followed.
+    Forgotten(String),
+    /// The `BlueZ` alias of a keyboard is now this (`None` = unknown).
+    Alias(String, Option<String>),
+    /// Stop the actor.
+    Quit,
+}
+
+/// Where the actor answers a request (`none()` = nobody waits).
+pub struct Reply<T>(Option<mpsc::SyncSender<T>>);
+
+/// Where the actor answers a `RereadName()`.
+pub type NameReply = Reply<NameReread>;
+/// Where the actor answers a `Refresh()`.
+pub type RefreshReply = Reply<akm_core::machine::RefreshOutcome>;
+
+impl<T> Clone for Reply<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T> Default for Reply<T> {
+    fn default() -> Self {
+        Self(None)
+    }
+}
+
+impl<T> std::fmt::Debug for Reply<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() {
+            "Reply"
+        } else {
+            "Reply(none)"
+        })
+    }
+}
+
+impl<T> Reply<T> {
+    #[must_use]
+    pub fn none() -> Self {
+        Self(None)
+    }
+    /// A reply slot and the end the caller waits on.
+    #[must_use]
+    pub fn channel() -> (Self, mpsc::Receiver<T>) {
+        let (tx, rx) = mpsc::sync_channel(1);
+        (Self(Some(tx)), rx)
+    }
+    /// Give the answer (never blocks; a caller gone is not an error).
+    pub fn answer(&self, r: T) {
+        if let Some(tx) = &self.0 {
+            let _ = tx.try_send(r);
+        }
+    }
+}
+
+/// Where commands for the running actor go.
+#[derive(Debug, Default)]
+pub struct Mailbox(Mutex<Option<Sender<Msg>>>);
+
+impl Mailbox {
+    #[must_use]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
+    /// Install the sender of the running actor (done by the actor itself).
+    pub fn install(&self, tx: Sender<Msg>) {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(tx);
+    }
+    /// Send to the running actor; false if none is running.
+    pub fn send(&self, m: Msg) -> bool {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .is_some_and(|tx| tx.send(m).is_ok())
+    }
+}
+
+/// What the actor is allowed to do.
+#[allow(clippy::struct_excessive_bools)] // independent configuration switches
+#[derive(Debug, Clone)]
+pub struct Options {
+    /// Register `org.bluez.BatteryProvider1` on the system bus.
+    pub bluez_provider: bool,
+    /// Desktop notifications (master switch) + `CapsLock` flash on low battery.
+    pub notify: bool,
+    /// Write the battery history (single writer).
+    pub history: bool,
+    /// Low-battery thresholds and hysteresis.
+    pub alerts: AlertConfig,
+    /// Low-battery alerts on/off (signals and notifications).
+    pub alerts_enabled: bool,
+    /// Disconnected / reconnected notifications.
+    pub notify_connection: bool,
+    pub notify_battery_replaced: bool,
+    /// "Batteries changed too often" notification.
+    pub notify_battery_advice: bool,
+    /// Defer percentage alerts to KDE `PowerDevil` when it covers this keyboard.
+    pub defer_to_powerdevil: bool,
+    /// Does `PowerDevil` raise its own low-battery notification for this keyboard?
+    pub powerdevil: Arc<dyn crate::powerdevil::Probe>,
+    /// Hours during which non-critical notifications are held (`[notifications] quiet_hours`).
+    pub quiet_hours: akm_core::quiet::QuietHours,
+    /// Plasma OSD at a change of Fn mode / at a Caps Lock press.
+    pub osd: crate::osd::Enabled,
+    pub notify_link_unstable: bool,
+    /// Link statistics shared with the link keeper (set by `main`).
+    pub link_stats: Option<Arc<crate::linkq::Store>>,
+    /// The paired keyboards as the link keeper sees them (`BlueZ`), for the roster of the published
+    /// state (set by `main`).
+    pub roster: Option<crate::repair::SharedStatus>,
+    /// What to do with the Fn mode remembered for a keyboard when it reconnects.
+    pub reapply_policy: akm_core::device_settings::Reapply,
+    /// The memory of the settings per keyboard (set by `main`).
+    pub reapply: Option<Arc<crate::reapply::Reapplier>>,
+    /// Count the active minutes per day (`[usage] active_time`).
+    pub usage_active_time: bool,
+    /// The counter, when the statistics are on (set by `main`).
+    pub usage: Option<Arc<crate::usage::Tracker>>,
+    /// Declared battery chemistry (`[battery] chemistry`).
+    pub chemistry: Chemistry,
+    /// Publish the "Apple display" percentage (`[display] apple_percent`).
+    pub apple_percent: bool,
+    /// Send `WillShutdown` at shutdown (`[apple] will_shutdown`).
+    pub will_shutdown: bool,
+    /// After Apple's breaker trips, ask `BlueZ` once to disconnect the keyboard.
+    pub disconnect_on_breaker: bool,
+    /// How that disconnection is asked (`BlueZ` `Device1.Disconnect`; tests replace it).
+    pub disconnect: fn(&str, Duration) -> Result<(), String>,
+    /// Kernel battery level of a keyboard other than the one read: `BlueZ` has no `Battery1` for it.
+    pub kernel_battery: fn(&str) -> Option<f64>,
+    /// Where detected events go (D-Bus device signals, tray...).
+    pub events: Arc<EventHub>,
+    /// Where the keyboard's alias is read (`BlueZ`).
+    pub alias: Arc<dyn AliasBackend>,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            bluez_provider: true,
+            notify: true,
+            history: true,
+            alerts: AlertConfig::default(),
+            alerts_enabled: true,
+            notify_connection: true,
+            notify_battery_replaced: true,
+            notify_battery_advice: true,
+            defer_to_powerdevil: true,
+            powerdevil: Arc::new(crate::powerdevil::SystemProbe::default()),
+            quiet_hours: akm_core::quiet::QuietHours::none(),
+            osd: crate::osd::Enabled {
+                fn_mode: true,
+                caps_lock: true,
+            },
+            notify_link_unstable: true,
+            link_stats: None,
+            roster: None,
+            reapply_policy: akm_core::device_settings::Reapply::default(),
+            reapply: None,
+            usage_active_time: false,
+            usage: None,
+            chemistry: Chemistry::default(),
+            apple_percent: true,
+            will_shutdown: true,
+            disconnect_on_breaker: true,
+            disconnect: watcher::request_disconnect,
+            kernel_battery: |mac| power::kernel_battery(mac).map(|r| f64::from(r.percent)),
+            events: EventHub::new(),
+            alias: Arc::new(BluezAlias::default()),
+        }
+    }
+}
+
+impl Options {
+    /// Apply `config.toml` settings.
+    pub fn apply_config(&mut self, c: &akm_core::config::Config) {
+        self.alerts = c.alerts.clone();
+        self.alerts_enabled = c.alerts_enabled;
+        self.notify_connection = c.notify_connection;
+        self.notify_battery_replaced = c.notify_battery_replaced;
+        self.notify_battery_advice = c.notify_battery_advice;
+        self.defer_to_powerdevil = c.defer_to_powerdevil;
+        self.quiet_hours = c.quiet_hours.clone();
+        self.usage_active_time = c.usage_active_time;
+        self.reapply_policy = c.reapply_settings;
+        self.notify_link_unstable = c.notify_link_unstable;
+        self.osd = crate::osd::Enabled {
+            fn_mode: c.osd_fn_mode,
+            caps_lock: c.osd_caps_lock,
+        };
+        self.chemistry = c.chemistry;
+        self.apple_percent = c.apple_percent;
+        self.will_shutdown = c.will_shutdown;
+        self.disconnect_on_breaker = c.disconnect_on_breaker;
+    }
+}
+
+/// The passive publisher's event for a battery state read by GET Input `0x30` (R2).
+#[must_use]
+pub fn battery_state_event(k: &KbReport) -> Option<akm_core::passive::PassiveEvent> {
+    k.battery
+        .state
+        .map(|value| akm_core::passive::PassiveEvent::BattStat { value })
+}
+
+/// Journal line for a change of the `BlueZ` alias from `old` to `new`: `(warn, text)`.
+#[must_use]
+pub fn alias_change_log(
+    mac: &str,
+    old: Option<&str>,
+    new: Option<&str>,
+    memory: &akm_core::alias::AliasMemory,
+) -> Option<(bool, String)> {
+    let old = old?;
+    if Some(old) == new {
+        return None;
+    }
+    let new_s = new.unwrap_or("(none)");
+    Some(match memory.expected(mac) {
+        Some(e) if Some(e.alias.as_str()) == new => (
+            false,
+            format!("BlueZ alias of {mac}: {old:?} -> {new_s:?} (set through this monitor by {})", e.by),
+        ),
+        Some(e) => (
+            true,
+            format!(
+                "BlueZ alias of {mac} changed OUTSIDE this monitor: {old:?} -> {new_s:?}; expected {:?} (set by {} at {}). \
+                 BlueZ does not tell who: KDE Bluetooth settings, bluetoothctl, or a removed and re-made pairing",
+                e.alias, e.by, e.set_at
+            ),
+        ),
+        None => (
+            true,
+            format!("BlueZ alias of {mac} changed outside this monitor: {old:?} -> {new_s:?} (no alias remembered)"),
+        ),
+    })
+}
+
+/// The keyboard of the newest attributed sample: the battery story shown while none is followed,
+/// never every keyboard mixed.
+fn newest_keyboard(entries: &[HistoryEntry]) -> Option<String> {
+    entries
+        .iter()
+        .filter(|e| e.mac.is_some())
+        .max_by_key(|e| e.ts)
+        .and_then(|e| e.mac.clone())
+}
+
+/// The "batteries changed too often" advice a replacement at `ts` raises.
+#[must_use]
+pub fn replacement_advice(
+    entries: &[HistoryEntry],
+    ts: u64,
+) -> Option<akm_core::advice::ShortLife> {
+    akm_core::advice::short_life(&batteries::battery_sets(entries)).filter(|a| a.since == ts)
+}
+
+const HISTORY_SPACING: Duration = Duration::from_mins(5);
+const TICK: Duration = Duration::from_secs(5);
+
+/// D-Bus `RereadName()`: drops the four cached name fragments at once so no stale name is shown,
+/// then schedules ONE read of them (deferred, never dropped).
+pub(crate) fn reread_name(
+    machine: &mut Machine,
+    now: Instant,
+    forget: &mut dyn FnMut(),
+) -> NameReread {
+    let r = machine.request_name_reread(now);
+    if r.accepted() {
+        forget();
+        tracing::info!("RereadName: 0x51-0x54 forgotten, {}", name_reread_text(r));
+    }
+    r
+}
+
+/// What a refused refresh tells its caller; `None` when it was taken.
+#[must_use]
+pub fn refresh_text(o: akm_core::machine::RefreshOutcome) -> Option<String> {
+    use akm_core::machine::RefreshOutcome as R;
+    match o {
+        R::Accepted => None,
+        R::Disconnected => Some(tr!("no keyboard connected: nothing to read")),
+        R::TooSoon { wait } => Some(tr!(
+            "too soon: the keyboard was just read, next read possible in {s} s",
+            s = wait.as_secs().max(1)
+        )),
+    }
+}
+
+/// What `RereadName()` answers on D-Bus (second value of `(bs)`).
+#[must_use]
+pub fn name_reread_text(r: NameReread) -> String {
+    match r {
+        NameReread::NotConnected => tr!("no keyboard connected: nothing to read again"),
+        NameReread::Now => tr!("name read again now (0x51-0x54 only)"),
+        NameReread::Deferred(d) if d.is_zero() => {
+            tr!("name read again as soon as the keyboard can be read (0x51-0x54 only)")
+        }
+        NameReread::Deferred(d) => tr!(
+            "name read again in {s} s (0x51-0x54 only, at most once per {floor} s)",
+            s = d.as_secs().max(1),
+            floor = akm_core::machine::NAME_REREAD_FLOOR.as_secs()
+        ),
+    }
+}
+
+fn unix_now() -> u64 {
+    SystemClock.now()
+}
+
+struct Actor {
+    opts: Options,
+    kb: Option<KbReport>,
+    linked: bool,
+    rssi: RssiTracker,
+    rssi_at: Option<u64>,
+    rssi_issue: Option<rssi::RssiIssue>,
+    provider: Option<bluez::BatteryProvider>,
+    provider_mac: Option<String>,
+    /// Low-battery alert state PER keyboard.
+    alerts: HashMap<String, AlertState>,
+    /// Replacement detector PER keyboard (key: upper-case MAC, "" = unknown).
+    detectors: HashMap<String, Detector>,
+    link: LinkTracker,
+    forecast: Option<Forecast>,
+    advice: Option<akm_core::advice::ShortLife>,
+    installed_at: Option<u64>,
+    history: Option<History>,
+    last_history: Option<Instant>,
+    last_rotation: Option<Instant>,
+    remaining_at: Option<Instant>,
+    last_update: u64,
+    last_error: Option<String>,
+    reconnected: bool,
+    estimate_reminded: bool,
+    notices: NoticeMemory,
+    notices_path: Option<std::path::PathBuf>,
+    alias_memory_path: Option<std::path::PathBuf>,
+}
+
+impl Actor {
+    fn new(opts: Options) -> Self {
+        let history = opts.history.then(|| {
+            let h = History::open_default();
+            match h.migrate_from(&legacy_path()) {
+                Ok(true) => tracing::info!("history migrated to {}", h.path().display()),
+                Ok(false) => {}
+                Err(e) => tracing::warn!("history migration failed: {e}"),
+            }
+            h
+        });
+        // the former `voltage` field was a constant; mark it unreliable.
+        if let Some(h) = history.as_ref() {
+            match h.mark_legacy_voltages() {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("history: {n} legacy voltage(s) marked unreliable"),
+                Err(e) => tracing::warn!("history voltage migration failed: {e}"),
+            }
+        }
+        let past = history.as_ref().map(History::read).unwrap_or_default();
+        let newest = newest_keyboard(&past);
+        let past = akm_core::history::of_keyboard(past, newest.as_deref());
+        let notices_path = opts.history.then(NoticeMemory::default_path);
+        Self {
+            notices: notices_path
+                .as_deref()
+                .map(NoticeMemory::load)
+                .unwrap_or_default(),
+            notices_path,
+            alias_memory_path: opts
+                .history
+                .then(akm_core::alias::AliasMemory::default_path),
+            alerts: HashMap::new(),
+            detectors: HashMap::new(),
+            link: LinkTracker::new(),
+            forecast: None,
+            advice: akm_core::advice::short_life(&batteries::battery_sets(&past)),
+            installed_at: batteries::current_set_start(&past),
+            opts,
+            kb: None,
+            linked: false,
+            rssi: RssiTracker::new(RSSI_MAX_AGE),
+            rssi_at: None,
+            rssi_issue: None,
+            provider: None,
+            provider_mac: None,
+            history,
+            last_history: None,
+            last_rotation: None,
+            remaining_at: None,
+            last_update: 0,
+            last_error: None,
+            reconnected: false,
+            estimate_reminded: false,
+        }
+    }
+
+    fn assess(&self, k: &KbReport, now_s: u64) -> chemistry::Assessment {
+        chemistry::assess(
+            k.battery.voltage_filtered_mv,
+            k.battery.voltage_mv,
+            self.opts.chemistry,
+            self.installed_at.map(|t| now_s.saturating_sub(t)),
+        )
+    }
+
+    fn acquire(&mut self, mac: Option<&str>) -> bool {
+        let hid = hidraw::read_keyboard(crate::passive::wake()).filter(|k| {
+            mac.is_none_or(|m| {
+                k.device
+                    .mac
+                    .as_deref()
+                    .is_some_and(|km| km.eq_ignore_ascii_case(m))
+            })
+        });
+        let (report, err) = if let Some(k) = hid {
+            (Some(k), None)
+        } else {
+            let m = mac
+                .map(str::to_string)
+                .or_else(|| hidraw::find_apple_keyboard_mac_in(std::path::Path::new("/sys")));
+            match m.as_deref().and_then(hidraw::report_from_sysfs) {
+                Some(k) if k.battery_pct().is_some() => {
+                    (Some(k), Some(tr!("HID diagnostics unavailable (hidraw not readable or keyboard asleep): kernel battery only")))
+                }
+                _ => (None, Some(tr!("keyboard not reachable (no hidraw answer, no kernel battery)"))),
+            }
+        };
+        // Was a battery read really sent and left unanswered?
+        let read_failed = akm_core::read_policy::peek_last_outcome()
+            .is_some_and(akm_core::read_policy::SafeRead::attempted_and_failed);
+        self.integrate(report, err, mac, read_failed)
+    }
+
+    fn integrate(
+        &mut self,
+        report: Option<KbReport>,
+        err: Option<String>,
+        mac: Option<&str>,
+        read_failed: bool,
+    ) -> bool {
+        self.last_error = err;
+        let Some(mut k) = report else {
+            // A failed read keeps the last value (and `linked`).
+            // Asked for another keyboard than the one kept.
+            if let (Some(want), Some(have)) =
+                (mac, self.kb.as_ref().and_then(|k| k.device.mac.as_deref()))
+            {
+                if !want.eq_ignore_ascii_case(have) {
+                    self.linked = false;
+                }
+            }
+            return false;
+        };
+        let mac = k.device.mac.clone();
+        // The firmware version and thresholds are read once per connection.
+        if k.firmware.version.is_none() && k.battery.thresholds.is_none() {
+            if let Some(prev) = self.kb.as_ref().filter(|p| p.device.mac == mac) {
+                k.firmware = prev.firmware.clone();
+                k.battery.thresholds = prev.battery.thresholds;
+                k.battery
+                    .threshold_level
+                    .clone_from(&prev.battery.threshold_level);
+                k.battery.threshold_margins_mv = prev.battery.threshold_margins_mv;
+                k.battery.apple_display_pct = prev
+                    .battery
+                    .apple_display_pct
+                    .and(k.battery.percentage)
+                    .map(|p| akm_core::registry::apple_display_percent(akm_core::conv::pct_u8(p)));
+            }
+        }
+        let mut kept = false;
+        if k.battery_pct().is_none() {
+            if let Some(prev) = self.kb.as_ref().filter(|p| p.device.mac == mac) {
+                if prev.battery_pct().is_some() {
+                    k.battery = prev.battery.clone();
+                    k.battery.kept = true;
+                    // With the raw reports they were decoded from.
+                    for (id, hex) in &prev.raw {
+                        k.raw.entry(id.clone()).or_insert_with(|| hex.clone());
+                    }
+                    kept = true;
+                    if read_failed {
+                        self.last_error.get_or_insert_with(|| {
+                            tr!("keyboard silent: battery level kept from the last read")
+                        });
+                    }
+                }
+            }
+        }
+        if !self.opts.apple_percent {
+            k.battery.apple_display_pct = None;
+        }
+        let pct = k.battery_pct();
+        k.device.alias = mac
+            .as_deref()
+            .and_then(|m| crate::alias::get_bounded(&self.opts.alias, m));
+        // The battery state read by GET Input 0x30 (Apple's R2) goes through the
+        // passive publisher like the pushed `A1 30 xx`: one state, one dedupe.
+        if let Some(ev) = battery_state_event(&k).filter(|_| !kept) {
+            if !crate::passive::inject(ev) {
+                tracing::debug!(
+                    "battery state {:?} read, no passive publisher to tell",
+                    k.battery.state
+                );
+            }
+        }
+        // A keyboard that just (re)connected gets its remembered settings back, or the
+        // offer to.
+        if !self.linked {
+            if let (Some(r), Some(m)) = (self.opts.reapply.as_ref(), mac.as_deref()) {
+                let name = [k.device.alias.as_deref(), k.device.name.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .find(|n| !n.is_empty())
+                    .unwrap_or(m);
+                r.on_connected(m, name);
+            }
+        }
+        self.kb = Some(k);
+        self.linked = true;
+        if !kept {
+            self.last_update = unix_now();
+            self.after_battery_update(true);
+        }
+        if let Some(ev) = mac.and_then(|m| self.link.acquired(&m, pct)) {
+            self.link_event(ev);
+        }
+        true
+    }
+
+    fn after_breaker(&mut self, mac: Option<&str>) -> bool {
+        if !akm_core::read_policy::take_disconnect_request() {
+            return false;
+        }
+        let kb_mac = self.kb.as_ref().and_then(|k| k.device.mac.clone());
+        let Some(mac) = mac.map(str::to_string).or(kb_mac) else {
+            tracing::warn!(
+                "circuit breaker open: keyboard address unknown, no disconnection asked"
+            );
+            return false;
+        };
+        if !self.opts.disconnect_on_breaker {
+            tracing::warn!(
+                "circuit breaker open: 3 unanswered requests, nothing more is sent to {mac}; left connected ([apple] disconnect_on_breaker = false)"
+            );
+            return false;
+        }
+        tracing::warn!(
+            "circuit breaker open: 3 unanswered requests, asking BlueZ to disconnect {mac} once (as macOS: SetHIDDriverReady(false))"
+        );
+        match (self.opts.disconnect)(&mac, akm_core::apple_model::APPLE.disconnect_call_timeout) {
+            Ok(()) => tracing::info!("disconnection of {mac} requested"),
+            Err(e) => tracing::warn!("disconnection of {mac} not done: {e} (not retried)"),
+        }
+        true
+    }
+
+    fn set_alias(&mut self, mac: &str, alias: Option<String>) {
+        let memory = self
+            .alias_memory_path
+            .as_deref()
+            .map(akm_core::alias::AliasMemory::load)
+            .unwrap_or_default();
+        if let Some(k) = self.kb.as_mut() {
+            if k.device
+                .mac
+                .as_deref()
+                .is_some_and(|m| m.eq_ignore_ascii_case(mac))
+            {
+                if let Some((warn, line)) =
+                    alias_change_log(mac, k.device.alias.as_deref(), alias.as_deref(), &memory)
+                {
+                    if warn {
+                        tracing::warn!("{line}");
+                    } else {
+                        tracing::info!("{line}");
+                    }
+                }
+                k.device.alias = alias;
+            }
+        }
+    }
+
+    fn kernel_battery(&mut self) {
+        let Some(k) = self.kb.as_mut().filter(|_| self.linked) else {
+            return;
+        };
+        if let Some(r) = k.device.mac.as_deref().and_then(power::kernel_battery) {
+            k.battery.percentage_fine = Some(f64::from(r.percent));
+            k.battery.percentage = Some(f64::from(r.percent));
+            k.battery.kept = false;
+            if k.battery.apple_display_pct.is_some() {
+                k.battery.apple_display_pct =
+                    Some(akm_core::registry::apple_display_percent(r.percent));
+            }
+            self.last_update = unix_now();
+            self.after_battery_update(false);
+        }
+    }
+
+    fn disconnected(&mut self) {
+        // `akmctl repair` forgets the keyboard (RecantConnection 0x41).
+        if akm_core::link::take_expected_disconnect() {
+            tracing::info!(
+                "expected disconnection (akmctl repair, RecantConnection): not notified"
+            );
+            let _ = self.link.disconnected_as(false);
+            self.clear();
+            return;
+        }
+        // The keyboard announced its switch-off just before: an Off, not a lost link.
+        self.disconnected_with(akm_core::link::take_keyboard_off());
+    }
+
+    fn disconnected_with(&mut self, powered_off: bool) {
+        if let Some(ev) = self.link.disconnected_as(powered_off) {
+            self.link_event(ev);
+        }
+        self.clear();
+    }
+
+    fn forget(&mut self, mac: &str) {
+        self.alerts.remove(&mac.to_ascii_uppercase());
+        let ours = self
+            .kb
+            .as_ref()
+            .and_then(|k| k.device.mac.as_deref())
+            .is_some_and(|m| m.eq_ignore_ascii_case(mac));
+        self.opts.events.publish(&DeviceEvent::Forgotten {
+            mac: mac.to_ascii_uppercase(),
+        });
+        if ours {
+            tracing::info!("{mac} forgotten: no longer followed");
+            if self.linked {
+                self.clear();
+            }
+            self.kb = None;
+            self.reconnected = false;
+        }
+    }
+
+    fn link_event(&mut self, ev: akm_core::link::LinkEvent) {
+        tracing::info!("{ev:?}");
+        if self.opts.notify && self.opts.notify_connection {
+            notify::link(&ev);
+        }
+        self.opts.events.publish(&DeviceEvent::Link(ev));
+    }
+
+    fn clear(&mut self) {
+        self.linked = false;
+        self.reconnected = true;
+        self.last_error = None;
+        self.rssi.clear();
+        self.rssi_at = None;
+        self.rssi_issue = None;
+        hidraw::close_hid_fd();
+        if let (Some(old), Some(bp)) = (self.provider_mac.take(), self.provider.as_ref()) {
+            bp.remove(&old);
+        }
+    }
+
+    #[allow(clippy::too_many_lines)] // ordered steps over shared actor state
+    fn after_battery_update(&mut self, full_read: bool) {
+        let Some(k) = self.kb.as_ref() else { return };
+        let Some(pct) = k.battery_pct() else { return };
+        let mac = k.device.mac.clone();
+        // A voltage outside the plausible range is a misread ADC, not a sample.
+        let voltage = k
+            .battery
+            .voltage
+            .filter(|v| akm_core::history::VOLTAGE_RANGE.contains(v));
+        let now = Instant::now();
+
+        let due = self
+            .last_history
+            .is_none_or(|t| now.duration_since(t) >= HISTORY_SPACING);
+        if (due || (full_read && voltage.is_some()))
+            && akm_core::history::valid_sample(pct, voltage)
+        {
+            // Validate BEFORE the detector.
+            let ts = self.history.as_ref().map_or_else(unix_now, History::now);
+            // The real voltages in mV (0x46 and 0x49), not the legacy constant.
+            let mv46 = voltage.and(
+                k.battery
+                    .voltage_mv
+                    .or_else(|| voltage.map(akm_core::conv::millivolts)),
+            );
+            let mv49 = k
+                .battery
+                .voltage_filtered_mv
+                .filter(|mv| akm_core::history::VOLTAGE_RANGE.contains(&(f64::from(*mv) / 1000.0)));
+            let mut entry = HistoryEntry::measured(ts, pct, mv46, mv49).with_mac(mac.as_deref());
+            let detector = self.detector_for(mac.as_deref());
+            if detector.check(&entry).is_some() {
+                entry.event = Some(HistoryEvent::BatteryReplaced);
+            }
+            let stored = match self.history.as_ref().map(|h| h.append_entry(&entry)) {
+                Some(Ok(true)) | None => {
+                    self.last_history = Some(now);
+                    self.remaining_at = None; // new data: recompute the forecast
+                    true
+                }
+                Some(Ok(false)) => false,
+                Some(Err(e)) => {
+                    tracing::warn!("history append failed: {e}");
+                    false
+                }
+            };
+            if stored {
+                if let Some(r) = self.detector_for(mac.as_deref()).observe(&entry) {
+                    self.on_replaced(mac.as_deref(), r);
+                }
+            }
+        }
+        let Some(k) = self.kb.as_ref() else { return };
+        if let Some(h) = self.history.as_ref() {
+            if self
+                .last_rotation
+                .is_none_or(|t| now.duration_since(t) >= Duration::from_hours(24))
+            {
+                self.last_rotation = Some(now);
+                match h.rotate(RETENTION_S) {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!("history rotation: {n} old entries removed"),
+                    Err(e) => tracing::warn!("history rotation failed: {e}"),
+                }
+            }
+            // Size bound (5 MiB): a `stat` per pass, a rewrite only over it.
+            match h.enforce_size() {
+                Ok(0) => {}
+                Ok(n) => tracing::warn!(
+                    "history over {} bytes: {n} oldest entries removed",
+                    akm_core::history_limits::MAX_BYTES
+                ),
+                Err(e) => tracing::warn!("history size rotation failed: {e}"),
+            }
+        }
+
+        if let (true, Some(mac)) = (self.opts.bluez_provider, k.device.mac.clone()) {
+            if self.provider.is_none() {
+                self.provider = bluez::BatteryProvider::spawn();
+            }
+            if let Some(bp) = self.provider.as_ref() {
+                if self
+                    .provider_mac
+                    .as_deref()
+                    .is_some_and(|m| !m.eq_ignore_ascii_case(&mac))
+                {
+                    // Another keyboard: withdraw the old object (MAC tracking).
+                    if let Some(old) = self.provider_mac.take() {
+                        bp.remove(&old);
+                    }
+                }
+                bp.set_battery(&mac, akm_core::conv::pct_u8(pct));
+                self.provider_mac = Some(mac);
+            }
+        }
+
+        // Alerts run on the charge estimated by the declared chemistry when there is one, else on
+        // the keyboard's percentage.
+        let after_reconnect = std::mem::take(&mut self.reconnected);
+        if self.opts.alerts_enabled {
+            let assessment =
+                self.assess(k, self.history.as_ref().map_or_else(unix_now, History::now));
+            let (alert_pct, basis) = chemistry::alert_pct(assessment.estimate.as_ref(), pct);
+            let cfg = self.opts.alerts.clone();
+            let state = self
+                .alerts
+                .entry(mac.clone().unwrap_or_default().to_ascii_uppercase())
+                .or_insert_with(|| AlertState::new(cfg));
+            if let Some(c) = state.update_after(alert_pct, after_reconnect) {
+                tracing::warn!(
+                    "low battery: {alert_pct:.0}% ({basis:?}, keyboard {pct:.0}%, threshold {}%)",
+                    c.threshold
+                );
+                // The keyboard's own 0x30 alert, if it already announced the same level, is the one
+                // the user got.
+                let fresh = akm_core::alerts::dedupe()
+                    .allow_percent(akm_core::alerts::rank_of(c.urgency), unix_now());
+                if !fresh {
+                    tracing::info!(
+                        "low battery {alert_pct:.0}%: not shown, the keyboard already announced it"
+                    );
+                }
+                if self.opts.notify && fresh {
+                    let covered = self.opts.defer_to_powerdevil && self.opts.powerdevil.covers();
+                    match powerdevil::plan(
+                        self.opts.defer_to_powerdevil,
+                        covered,
+                        basis == chemistry::AlertBasis::Estimate,
+                        self.estimate_reminded,
+                    ) {
+                        powerdevil::Plan::Normal => notify::battery_crossing(&c, basis),
+                        powerdevil::Plan::Reminder => {
+                            self.estimate_reminded = true;
+                            notify::battery_estimate(alert_pct, self.opts.powerdevil.low_level());
+                        }
+                        powerdevil::Plan::Skip => tracing::info!(
+                            "low battery {alert_pct:.0}%: not shown, KDE PowerDevil already warns about this keyboard"
+                        ),
+                    }
+                    // Apple's breaker blocks every emission, LED included.
+                    if c.urgency == Urgency::Critical && !akm_core::read_policy::tripped() {
+                        led::flash_capslock_for(mac.clone(), 5);
+                    }
+                }
+                if let Some(mac) = mac {
+                    self.opts
+                        .events
+                        .publish(&DeviceEvent::BatteryLevelCrossed { mac, crossing: c });
+                }
+            }
+        }
+        if self.opts.notify {
+            for n in self.due_notices() {
+                // "Ignore this reminder" silences the Low reminder only.
+                if n.event == notify::Event::BatteryReminder
+                    && n.urgency != Urgency::Critical
+                    && notify::reminder_suppressed(akm_core::reminder::ReminderLevel::Low)
+                {
+                    tracing::info!(
+                        "battery reminder not shown: ignored by the user until new batteries"
+                    );
+                    continue;
+                }
+                notify::deliver(n);
+            }
+        } else {
+            let _ = self.due_notices();
+        }
+    }
+
+    fn due_notices(&mut self) -> Vec<notify::Notification> {
+        let mut out = Vec::new();
+        let Some(k) = self.kb.as_ref().filter(|_| self.linked) else {
+            return out;
+        };
+        let Some(mac) = k.device.mac.clone() else {
+            return out;
+        };
+        let mut changed = false;
+        // Battery: the keyboard's own thresholds (0x60 = 0x5A) against the smoothed voltage 0x49,
+        // as macOS compares them.
+        let mv = k
+            .battery
+            .voltage_filtered_mv
+            .or(k.battery.voltage_mv)
+            .or_else(|| k.battery.voltage.map(akm_core::conv::millivolts));
+        if let (Some(t), Some(mv), true) = (k.battery.thresholds, mv, self.opts.alerts_enabled) {
+            let pct = k.battery_pct();
+            let (due, ch) = self.notices.battery(&mac, mv, &t);
+            changed |= ch;
+            if let Some(r) = due {
+                tracing::warn!(
+                    "battery reminder: {mv} mV under the keyboard's {:?} threshold ({} mV), indication {:?} %",
+                    r.level,
+                    r.threshold_mv,
+                    pct.map(f64::round)
+                );
+                out.push(notify::reminder_notification(&r, pct));
+            }
+        }
+        // Firmware: the embedded table says a newer public version exists.
+        let fw = &k.firmware;
+        let latest = (fw.status == "update_available")
+            .then(|| fw.latest_known.clone())
+            .flatten();
+        let (due, ch) = self
+            .notices
+            .firmware(&mac, latest.as_deref(), fw.status == "up_to_date");
+        changed |= ch;
+        if due {
+            let current = fw.version.clone().unwrap_or_else(|| "?".into());
+            let latest = latest.unwrap_or_default();
+            tracing::info!("firmware update known: {current} -> {latest}");
+            out.push(notify::firmware_notification(&current, &latest));
+        }
+        if changed {
+            self.save_notices();
+        }
+        out
+    }
+
+    fn save_notices(&self) {
+        if let Some(p) = self.notices_path.as_deref() {
+            if let Err(e) = self.notices.save(p) {
+                tracing::warn!("cannot save {}: {e}", p.display());
+            }
+        }
+    }
+
+    /// This keyboard's samples of the history (every sample when `mac` is unknown).
+    fn history_of(&self, mac: Option<&str>) -> Vec<HistoryEntry> {
+        let entries = self.history.as_ref().map(History::read).unwrap_or_default();
+        akm_core::history::of_keyboard(entries, mac)
+    }
+
+    /// The replacement detector of `mac`, primed on its own samples only: a switch of keyboard is
+    /// never a replacement.
+    fn detector_for(&mut self, mac: Option<&str>) -> &mut Detector {
+        // Before the first keyboard with an address is primed: the old lines are given to it.
+        let first = !self.detectors.keys().any(|k| !k.is_empty());
+        if let (Some(m), Some(h), true) = (mac, self.history.as_ref(), first) {
+            match h.attribute_unowned(m) {
+                Ok(0) => {}
+                Ok(n) => tracing::info!("history: {n} sample(s) without a keyboard given to {m}"),
+                Err(e) => tracing::warn!("history attribution failed: {e}"),
+            }
+        }
+        let key = mac.unwrap_or_default().to_ascii_uppercase();
+        if !self.detectors.contains_key(&key) {
+            let d = Detector::primed(&self.history_of(mac));
+            self.detectors.insert(key.clone(), d);
+        }
+        self.detectors.entry(key).or_default()
+    }
+
+    fn on_replaced(&mut self, mac: Option<&str>, r: batteries::Replacement) {
+        tracing::info!(
+            "battery replacement detected: {:?}% -> {:.0}%, {:?} V -> {:?} V",
+            r.pct_before,
+            r.pct_after,
+            r.voltage_before,
+            r.voltage_after
+        );
+        match mac {
+            Some(m) => {
+                if let Some(a) = self.alerts.get_mut(&m.to_ascii_uppercase()) {
+                    a.rearm_all();
+                }
+            }
+            None => self.alerts.values_mut().for_each(AlertState::rearm_all),
+        }
+        self.estimate_reminded = false;
+        if mac.is_some_and(|m| self.notices.rearm_battery(m)) {
+            self.save_notices();
+        }
+        akm_core::alerts::dedupe().reset();
+        self.installed_at = Some(r.ts);
+        if self.opts.notify && self.opts.notify_battery_replaced {
+            notify::battery_replaced(&r);
+        }
+        // Second set in a row replaced within 30 days: say it once.
+        let entries = self.history_of(mac);
+        self.advice = replacement_advice(&entries, r.ts);
+        if let Some(a) = self.advice.as_ref() {
+            tracing::warn!(
+                "batteries replaced too often: {:.0} d then {:.0} d",
+                a.days[0],
+                a.days[1]
+            );
+            if self.opts.notify && self.opts.notify_battery_advice {
+                notify::battery_advice(a);
+            }
+        }
+        if let Some(mac) = mac {
+            self.opts.events.publish(&DeviceEvent::BatteryReplaced {
+                mac: mac.to_string(),
+                replacement: r,
+            });
+        }
+    }
+
+    fn refresh_rssi(&mut self) {
+        let Some(mac) = self.kb.as_ref().and_then(|k| k.device.mac.clone()) else {
+            return;
+        };
+        let r = rssi::read_rssi(&mac);
+        if let Some((rel, _)) = r {
+            let now = unix_now();
+            self.rssi_at = Some(now);
+            // 7 days of relative signal, by the hour.
+            if let Some(stats) = self.opts.link_stats.as_ref() {
+                stats.rssi(&mac, now, i32::from(rel));
+            }
+        }
+        // Classified once per read (not at every publication).
+        self.rssi_issue = match r {
+            Some(_) => None,
+            None => rssi::last_issue(),
+        };
+        self.rssi.record(&mac, r, Instant::now());
+    }
+
+    fn devices(&self) -> Vec<akm_core::roster::DeviceSummary> {
+        use akm_core::roster::DeviceSummary;
+        let primary = self.kb.as_ref().and_then(|k| {
+            let mac = k.device.mac.clone()?;
+            let name = [k.device.alias.as_deref(), k.device.name.as_deref()]
+                .into_iter()
+                .flatten()
+                .find(|n| !n.is_empty())
+                .unwrap_or(mac.as_str())
+                .to_string();
+            Some(DeviceSummary {
+                mac,
+                name,
+                connected: self.linked,
+                battery: k.battery_pct(),
+                primary: true,
+            })
+        });
+        let others = self
+            .opts
+            .roster
+            .as_ref()
+            .map(|r| {
+                r.lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone()
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| DeviceSummary {
+                battery: s.battery.map(f64::from).or_else(|| {
+                    s.connected
+                        .then(|| (self.opts.kernel_battery)(&s.mac))
+                        .flatten()
+                }),
+                mac: s.mac,
+                name: s.name,
+                connected: s.connected,
+                primary: false,
+            })
+            .collect();
+        akm_core::roster::merge(primary, others)
+    }
+
+    fn paired(&self, mac: &str) -> bool {
+        self.opts.roster.as_ref().is_some_and(|r| {
+            r.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .iter()
+                .any(|s| s.paired && s.mac.eq_ignore_ascii_case(mac))
+        })
+    }
+
+    fn link_quality(&self) -> Option<akm_core::linkstats::LinkQuality> {
+        let mac = self.kb.as_ref()?.device.mac.as_deref()?;
+        self.opts.link_stats.as_ref()?.quality(mac, unix_now())
+    }
+
+    fn refresh_remaining(&mut self, now: Instant) {
+        if self
+            .remaining_at
+            .is_some_and(|t| now.duration_since(t) < HISTORY_SPACING)
+        {
+            return;
+        }
+        self.remaining_at = Some(now);
+        let entries = self.history.as_ref().map(History::read).unwrap_or_default();
+        let mac = match &self.kb {
+            Some(k) => k.device.mac.clone(),
+            None => newest_keyboard(&entries),
+        };
+        let entries = akm_core::history::of_keyboard(entries, mac.as_deref());
+        self.forecast = forecast::estimate(&entries).ok();
+        if self.history.is_some() {
+            self.advice = akm_core::advice::short_life(&batteries::battery_sets(&entries));
+            // Another keyboard followed: its own set, or none known.
+            self.installed_at = batteries::current_set_start(&entries);
+        }
+    }
+
+    fn snapshot(&mut self) -> Snapshot {
+        let now = Instant::now();
+        self.refresh_remaining(now);
+        let mut kb = self.kb.clone();
+        let mut rssi_at = None;
+        if let Some(k) = kb.as_mut().filter(|_| self.linked) {
+            // RSSI is exposed only while fresh and taken from this very MAC.
+            let cur = k
+                .device
+                .mac
+                .as_deref()
+                .and_then(|m| self.rssi.current(m, now));
+            // BR/EDR: a gap in dB to the ideal range, not dBm.
+            k.radio.set_rssi_rel(cur.map(|c| c.0));
+            k.radio.tx_power_dbm = cur.and_then(|c| c.1);
+            // No value: say why, never a bare "n/a".
+            k.radio.rssi_error = cur.is_none().then(|| self.rssi_issue.clone()).flatten();
+            k.bluetooth.rssi_dbus = None;
+            k.bluetooth.tx_power_dbus = None;
+            rssi_at = cur.and(self.rssi_at);
+        }
+        // Paired as BlueZ says: the link keeper's roster carries it.
+        if let Some(k) = kb.as_mut() {
+            k.bluetooth.paired = k.device.mac.as_deref().is_some_and(|m| self.paired(m));
+        }
+        // Charge estimate by declared chemistry, recomputed at every publication so a change
+        // of set or of config shows at once.
+        if let Some(k) = kb.as_mut() {
+            let a = self.assess(k, self.history.as_ref().map_or_else(unix_now, History::now));
+            k.battery.charge_estimate = a.estimate;
+            k.battery.new_batteries = a.new_batteries;
+        }
+        let (caps, num) = if self.linked {
+            led::read_led_state()
+        } else {
+            (false, false)
+        };
+        Snapshot {
+            connected: self.linked,
+            kb_error: (!self.linked).then(|| {
+                if kb.is_some() {
+                    tr!("Keyboard disconnected")
+                } else {
+                    tr!("Keyboard: not found")
+                }
+            }),
+            keyboard: kb,
+            caps_lock: caps,
+            num_lock: num,
+            rssi_at,
+            last_update: self.last_update,
+            last_error: self.last_error.clone(),
+            forecast: self.forecast.clone(),
+            batteries_installed_at: self.installed_at,
+            battery_advice: self.advice.clone(),
+            link_quality: self.link_quality(),
+            devices: self.devices(),
+            usage: self.opts.usage.as_ref().map(|u| u.summary()),
+            ..Default::default()
+        }
+    }
+}
+
+/// Handle on a running supervised actor.
+pub struct ActorHandle {
+    quit: Arc<AtomicBool>,
+    mailbox: Arc<Mailbox>,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl ActorHandle {
+    /// Ask the actor to stop and wait for it (provider unregistered, fd closed).
+    pub fn stop(mut self) {
+        self.shutdown();
+    }
+
+    #[must_use]
+    pub fn mailbox(&self) -> Arc<Mailbox> {
+        self.mailbox.clone()
+    }
+
+    fn shutdown(&mut self) {
+        self.quit.store(true, Ordering::Relaxed);
+        self.mailbox.send(Msg::Quit);
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
+}
+
+impl Drop for ActorHandle {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+/// Start the actor under a supervisor.
+///
+/// # Panics
+/// If the OS cannot start the supervisor thread.
+pub fn spawn(watch: Arc<Watch>, mailbox: Arc<Mailbox>, opts: Options) -> ActorHandle {
+    let quit = Arc::new(AtomicBool::new(false));
+    let (stop, mb) = (quit.clone(), mailbox.clone());
+    let thread = thread::Builder::new()
+        .name("kb-supervisor".into())
+        .spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                let worker = thread::Builder::new().name("kb-actor".into()).spawn({
+                    let (watch, mailbox, stop, opts) =
+                        (watch.clone(), mb.clone(), stop.clone(), opts.clone());
+                    move || run(&watch, &mailbox, &stop, opts)
+                });
+                match worker.map(std::thread::JoinHandle::join) {
+                    Ok(Ok(())) => break,
+                    Ok(Err(_)) => {
+                        tracing::error!("keyboard actor panicked, restarting in 5 s");
+                        let mut s = watch.get();
+                        s.last_error = Some(tr!("keyboard thread crashed, restarting"));
+                        watch.publish(s);
+                        thread::sleep(Duration::from_secs(5));
+                    }
+                    Err(e) => {
+                        tracing::error!("cannot spawn keyboard actor: {e}");
+                        thread::sleep(Duration::from_secs(5));
+                    }
+                }
+            }
+            hidraw::close_hid_fd();
+            akm_core::read_policy::withdraw_breaker_state();
+        })
+        .expect("spawn kb-supervisor");
+    ActorHandle {
+        quit,
+        mailbox,
+        thread: Some(thread),
+    }
+}
+
+/// After a system wake, has the keyboard stayed silent (no key press since)?
+#[must_use]
+pub fn quiet_since_wake(
+    since_wake: Option<Duration>,
+    input_age: Option<Duration>,
+    listening: bool,
+) -> bool {
+    if !listening {
+        return false;
+    }
+    match (since_wake, input_age) {
+        (None, _) => false,
+        (Some(_), None) => true,
+        (Some(w), Some(a)) => a >= w,
+    }
+}
+
+pub(crate) fn hold_while_quiet(
+    machine: &mut Machine,
+    woke_at: &mut Option<Instant>,
+    input_age: Option<Duration>,
+    listening: bool,
+    now: Instant,
+) -> bool {
+    let quiet = quiet_since_wake(
+        woke_at.map(|w| now.saturating_duration_since(w)),
+        input_age,
+        listening,
+    );
+    if !quiet {
+        *woke_at = None;
+    }
+    machine.set_vendor_hold(quiet);
+    quiet
+}
+
+pub(crate) fn after_name_reread(
+    machine: &mut Machine,
+    ok: bool,
+    outcome: Option<akm_core::read_policy::SafeRead>,
+    now: Instant,
+) {
+    use akm_core::read_policy::{Gate, SafeRead};
+    if !ok {
+        machine.acquire_done(false, now);
+    } else if outcome == Some(SafeRead::Skipped(Gate::Busy)) {
+        let _ = machine.request_name_reread(now);
+    }
+}
+
+#[allow(clippy::too_many_lines)] // actor loop: one arm per message
+fn run(watch: &Arc<Watch>, mailbox: &Mailbox, quit: &AtomicBool, opts: Options) {
+    let (tx, rx) = mpsc::channel::<Msg>();
+    mailbox.install(tx.clone());
+    watcher::spawn_signal_watcher(tx);
+    let mut machine = Machine::new();
+    let mut actor = Actor::new(opts);
+    let mut was_paused = false;
+    // Set at a system wake, cleared by a new connection or a key press.
+    let mut woke_at: Option<Instant> = None;
+    watch.publish(actor.snapshot());
+
+    loop {
+        if quit.load(Ordering::Relaxed) {
+            break;
+        }
+        let now = Instant::now();
+        let wait = if crate::sleep::paused() {
+            TICK // system sleep: nothing is due, never spin
+        } else {
+            machine
+                .next_deadline()
+                .map_or(TICK, |d| d.saturating_duration_since(now).min(TICK))
+        };
+        match rx.recv_timeout(wait) {
+            Ok(Msg::Bus(ev)) => {
+                let before = (machine.is_connected(), machine.mac().map(str::to_string));
+                if machine.on_event(&ev, Instant::now()) == Some(Action::Clear) {
+                    tracing::info!("keyboard disconnected");
+                    actor.disconnected();
+                }
+                // A keyboard newly followed: a new driver in Apple's terms.
+                if machine.is_connected() && (!before.0 || machine.mac() != before.1.as_deref()) {
+                    akm_core::read_policy::note_connection();
+                    woke_at = None;
+                }
+            }
+            Ok(Msg::Refresh(reply)) => {
+                let o = machine.request_refresh(Instant::now());
+                if o != akm_core::machine::RefreshOutcome::Accepted {
+                    tracing::info!("refresh not taken: {}", refresh_text(o).unwrap_or_default());
+                }
+                reply.answer(o);
+            }
+            Ok(Msg::RereadName(reply)) => {
+                reply.answer(reread_name(&mut machine, Instant::now(), &mut || {
+                    akm_core::read_policy::forget_name_fragments();
+                }));
+            }
+            Ok(Msg::Alias(mac, alias)) => actor.set_alias(&mac, alias),
+            Ok(Msg::Forgotten(mac)) => {
+                if machine.on_event(
+                    &Event::Disconnected(mac.to_ascii_uppercase()),
+                    Instant::now(),
+                ) == Some(Action::Clear)
+                {
+                    actor.clear();
+                }
+                actor.forget(&mac);
+            }
+            Ok(Msg::Quit) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        // System sleep: no hardware access.
+        let paused = crate::sleep::paused();
+        if paused != was_paused {
+            // Apple's handleSleep / handleWake: timer stopped, breaker counter 1.
+            was_paused = paused;
+            if paused {
+                machine.on_sleep();
+                akm_core::read_policy::note_sleep();
+            } else {
+                machine.on_wake(Instant::now());
+                woke_at = Some(Instant::now());
+            }
+        }
+        let _io = (!paused).then(crate::sleep::io_guard);
+        let due = if paused {
+            Vec::new()
+        } else {
+            let now = Instant::now();
+            hold_while_quiet(
+                &mut machine,
+                &mut woke_at,
+                akm_core::read_policy::last_input_age(now),
+                crate::passive::listener_started(),
+                now,
+            );
+            machine.due(now)
+        };
+        for action in due {
+            match action {
+                Action::Acquire => {
+                    let mac = machine.mac().map(str::to_string);
+                    // The Apple model decides whether vendor reports are read.
+                    akm_core::read_policy::set_schedule(Some(machine.vendor_reads_due()));
+                    let ok = actor.acquire(mac.as_deref());
+                    let read_ok = akm_core::read_policy::take_last_outcome()
+                        .is_some_and(akm_core::read_policy::SafeRead::is_success);
+                    machine.acquire_done_with(ok, Some(read_ok), Instant::now());
+                    actor.after_breaker(mac.as_deref());
+                    if ok {
+                        let pct = actor.kb.as_ref().and_then(KbReport::battery_pct);
+                        tracing::info!(
+                            "acquired {} battery={}",
+                            mac.as_deref().unwrap_or("?"),
+                            pct.map_or("n/a".into(), |p| format!("{p:.0}%"))
+                        );
+                    }
+                }
+                Action::RereadName => {
+                    // `0x51`-`0x54` alone: not a battery cycle, the model's timer and `Refresh()`'s
+                    // floor are untouched.
+                    let mac = machine.mac().map(str::to_string);
+                    akm_core::read_policy::set_name_only_schedule();
+                    let ok = actor.acquire(mac.as_deref());
+                    let outcome = akm_core::read_policy::take_last_outcome();
+                    // The name-only order must not outlive this read.
+                    akm_core::read_policy::set_schedule(Some(false));
+                    actor.after_breaker(mac.as_deref());
+                    tracing::info!(
+                        "name re-read for {}: {outcome:?} (node {})",
+                        mac.as_deref().unwrap_or("?"),
+                        if ok { "read" } else { "not reachable" }
+                    );
+                    after_name_reread(&mut machine, ok, outcome, Instant::now());
+                }
+                Action::KernelBattery => actor.kernel_battery(),
+                Action::Rssi => actor.refresh_rssi(),
+                Action::Clear => actor.clear(),
+            }
+        }
+        watch.publish(actor.snapshot());
+        // Notifications whose time has come.
+        if actor.opts.notify && !paused {
+            notify::tick();
+        }
+        // Breaker published for akm-helper hid-control and akmctl.
+        if let Err(e) = akm_core::read_policy::publish_breaker_state(machine.mac()) {
+            tracing::warn!("breaker state not published: {e}");
+        }
+    }
+    akm_core::read_policy::withdraw_breaker_state();
+    // Dropping the actor drops the BlueZ provider: unregistered cleanly.
+    drop(actor);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn quiet_actor() -> Actor {
+        Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            ..Options::default()
+        })
+    }
+
+    #[test]
+    fn every_published_read_error_is_translated() {
+        // last_error is shown verbatim by the widget and the settings module.
+        let prod = akm_core::srclint::prod_tokens(include_str!("actor.rs"));
+        for lit in prod.split("Some(\"").skip(1) {
+            let rest = lit.split_once('"').map_or("", |(_, r)| r);
+            assert!(
+                !rest.starts_with(".to_string()"),
+                "untranslated: Some(\"{lit:.60}"
+            );
+        }
+    }
+
+    fn report(pct: f64, voltage: Option<f64>) -> KbReport {
+        let mut k = KbReport::default();
+        k.battery.percentage = Some(pct);
+        k.battery.voltage = voltage;
+        k.device.mac = Some("AA:BB:CC:DD:EE:F1".into());
+        k.device.model = Some("Apple Wireless Keyboard (A1314)".into());
+        k
+    }
+
+    #[test]
+    fn the_read_battery_state_feeds_the_passive_publisher_once() {
+        use akm_core::passive::{battery_state_alert, PassiveEvent, PassiveState};
+        let mut k = report(50.0, None);
+        assert_eq!(battery_state_event(&k), None);
+        k.battery.state = Some(1);
+        assert_eq!(
+            battery_state_event(&k),
+            Some(PassiveEvent::BattStat { value: 1 })
+        );
+        assert!(!crate::passive::inject(PassiveEvent::BattStat { value: 1 }));
+        let mut st = PassiveState::default();
+        st.apply(PassiveEvent::BattStat { value: 1 }, 1);
+        assert!(
+            battery_state_alert(st.batt_stat, 1).is_none(),
+            "repeat: no second alert"
+        );
+        assert!(
+            battery_state_alert(st.batt_stat, 2).is_some(),
+            "rise: alert"
+        );
+        assert!(
+            battery_state_alert(Some(2), 1).is_none(),
+            "de-escalation: nothing"
+        );
+    }
+
+    #[test]
+    fn alias_changes_are_journalled_with_the_expected_alias() {
+        use akm_core::alias::AliasMemory;
+        const M: &str = "AA:BB:CC:DD:EE:F1";
+        let mut mem = AliasMemory::default();
+        assert_eq!(alias_change_log(M, None, Some("x"), &mem), None);
+        assert_eq!(alias_change_log(M, Some("x"), Some("x"), &mem), None);
+        let (warn, l) = alias_change_log(M, Some("Desk"), Some("Alice's keyboard"), &mem).unwrap();
+        assert!(warn && l.contains("no alias remembered"), "{l}");
+        mem.remember(M, "Desk", ":1.9 pid 4 (kcmshell6)", 100);
+        let (warn, l) = alias_change_log(M, Some("Alice's keyboard"), Some("Desk"), &mem).unwrap();
+        assert!(!warn && l.contains("kcmshell6"), "{l}");
+        let (warn, l) = alias_change_log(M, Some("Desk"), Some("Alice's keyboard"), &mem).unwrap();
+        assert!(
+            warn && l.contains("OUTSIDE") && l.contains("\"Desk\"") && l.contains("at 100"),
+            "{l}"
+        );
+        let mut a = quiet_actor();
+        assert!(a.alias_memory_path.is_none());
+        a.kb = Some(report(50.0, None));
+        a.set_alias(M, Some("Desk".into()));
+        assert_eq!(a.kb.as_ref().unwrap().device.alias.as_deref(), Some("Desk"));
+    }
+
+    #[test]
+    fn no_vendor_read_after_a_wake_until_a_key_press() {
+        let s = Duration::from_secs;
+        assert!(!quiet_since_wake(None, None, true), "no wake pending");
+        assert!(!quiet_since_wake(None, Some(s(900)), true));
+        assert!(quiet_since_wake(Some(s(60)), None, true), "never typed");
+        assert!(
+            quiet_since_wake(Some(s(60)), Some(s(600)), true),
+            "typed before the sleep"
+        );
+        assert!(quiet_since_wake(Some(s(60)), Some(s(60)), true));
+        assert!(
+            !quiet_since_wake(Some(s(60)), Some(s(5)), true),
+            "typed since the wake"
+        );
+        // No passive listener: nobody would tell about a key press, never quiet.
+        assert!(!quiet_since_wake(Some(s(60)), None, false));
+        assert!(!quiet_since_wake(Some(s(60)), Some(s(600)), false));
+    }
+
+    #[test]
+    fn the_read_after_a_wake_waits_for_the_first_key_press_then_goes_out() {
+        let s = Duration::from_secs;
+        let t0 = Instant::now();
+        let mac = "AA:BB:CC:DD:EE:F1";
+        let ready = |t0: Instant| {
+            let mut m = Machine::new();
+            m.on_event(&Event::Connected(mac.into()), t0);
+            m.due(t0);
+            m.acquire_done(true, t0);
+            m.on_sleep();
+            m.on_wake(t0 + s(100));
+            m
+        };
+        let mut m = ready(t0);
+        let mut woke_at = Some(t0 + s(100));
+        let t = t0 + s(160);
+        assert!(hold_while_quiet(
+            &mut m,
+            &mut woke_at,
+            Some(s(600)),
+            true,
+            t
+        ));
+        assert!(woke_at.is_some());
+        assert!(!m.due(t).contains(&Action::Acquire));
+        assert_eq!(m.link().next_battery(), Some(t0 + s(160)), "still due");
+        let t = t0 + s(220);
+        assert!(!hold_while_quiet(&mut m, &mut woke_at, Some(s(1)), true, t));
+        assert_eq!(woke_at, None);
+        assert!(m.due(t).contains(&Action::Acquire));
+        assert!(m.vendor_reads_due(), "the battery read itself");
+
+        let mut m = ready(t0);
+        let mut woke_at = Some(t0 + s(100));
+        let t = t0 + s(160);
+        assert!(!hold_while_quiet(&mut m, &mut woke_at, None, false, t));
+        assert_eq!(woke_at, None);
+        assert!(m.due(t).contains(&Action::Acquire));
+        assert!(m.vendor_reads_due());
+    }
+
+    #[test]
+    fn a_kept_battery_level_is_marked_and_never_recorded_as_a_measure() {
+        const M: &str = "AA:BB:CC:DD:EE:F1";
+        let mut a = quiet_actor();
+        assert!(a.integrate(Some(report_mv(60.0, 2600)), None, Some(M), false));
+        assert!(a.last_history.is_some(), "a real read is a sample");
+        assert!(a.last_update > 0);
+        assert!(!a.kb.as_ref().unwrap().battery.kept);
+        a.last_history = None;
+        a.last_update = 1234;
+        let mut blank = KbReport::default();
+        blank.device.mac = Some(M.into());
+        assert!(a.integrate(Some(blank.clone()), None, Some(M), false));
+        let b = &a.kb.as_ref().unwrap().battery;
+        assert_eq!(b.percentage, Some(60.0), "last level kept");
+        assert_eq!(b.voltage_filtered_mv, Some(2600));
+        assert!(b.kept, "and marked as kept");
+        assert!(
+            a.last_history.is_none(),
+            "no history sample for a kept value"
+        );
+        assert_eq!(
+            a.last_update, 1234,
+            "the age stays the one of the real read"
+        );
+        assert_eq!(a.last_error, None, "nothing was asked: not silent");
+        assert!(a.snapshot().keyboard.unwrap().battery.kept);
+        assert!(a.integrate(Some(blank.clone()), None, Some(M), false));
+        assert!(a.last_history.is_none());
+        assert_eq!(a.last_update, 1234);
+        assert!(a.integrate(Some(blank), None, Some(M), true));
+        assert!(a
+            .last_error
+            .as_deref()
+            .is_some_and(|e| e.contains("keyboard silent")));
+        assert!(a.last_history.is_none());
+        assert_eq!(a.last_update, 1234);
+        assert!(a.integrate(Some(report_mv(59.0, 2590)), None, Some(M), false));
+        assert!(!a.kb.as_ref().unwrap().battery.kept);
+        assert!(a.last_history.is_some());
+        assert!(a.last_update > 1234);
+        assert_eq!(a.last_error, None);
+        let mut other = KbReport::default();
+        other.device.mac = Some("AA:BB:CC:DD:EE:02".into());
+        assert!(a.integrate(Some(other), None, None, true));
+        assert_eq!(a.kb.as_ref().unwrap().battery_pct(), None);
+        assert!(!a.kb.as_ref().unwrap().battery.kept);
+    }
+
+    #[test]
+    fn remembered_settings_are_offered_at_each_connection_only() {
+        use crate::settings::{SetError, SettingsBackend};
+        use akm_core::device_settings::Reapply;
+        use akm_core::hid_params::Param;
+        struct Live;
+        impl SettingsBackend for Live {
+            fn get(&self, _: Param) -> i32 {
+                1
+            }
+            fn apply(&self, _: Param, _: i32) -> Result<(), SetError> {
+                Ok(())
+            }
+        }
+        const M: &str = "AA:BB:CC:DD:EE:F1";
+        let offers = Arc::new(Mutex::new(Vec::new()));
+        let o = offers.clone();
+        let r = crate::reapply::Reapplier::with_notifier(
+            None,
+            Arc::new(Live),
+            Reapply::Ask,
+            Arc::new(move |n: notify::Notification| o.lock().unwrap().push(n.event)),
+        );
+        r.remember(M, 2);
+        let mut a = quiet_actor();
+        a.opts.reapply = Some(r);
+        assert!(a.integrate(Some(report(60.0, None)), None, Some(M), false));
+        assert_eq!(*offers.lock().unwrap(), [notify::Event::SettingsReapply]);
+        assert!(a.integrate(Some(report(59.0, None)), None, Some(M), false));
+        assert_eq!(offers.lock().unwrap().len(), 1);
+        a.disconnected();
+        assert!(a.integrate(Some(report(59.0, None)), None, Some(M), false));
+        assert_eq!(offers.lock().unwrap().len(), 2);
+        a.disconnected();
+        let mut other = report(70.0, None);
+        other.device.mac = Some("AA:BB:CC:DD:EE:F2".into());
+        assert!(a.integrate(Some(other), None, None, false));
+        assert_eq!(offers.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn snapshot_lists_two_keyboards_and_one_leaving_does_not_affect_the_other() {
+        use crate::repair::LinkStatus;
+        const M2: &str = "AA:BB:CC:DD:EE:F2";
+        let status = |mac: &str, name: &str, connected: bool, battery: Option<u8>| LinkStatus {
+            mac: mac.into(),
+            name: name.into(),
+            health: if connected { "connected" } else { "dormant" }.into(),
+            since: 0,
+            attempts: 0,
+            failures: 0,
+            last_error: String::new(),
+            last_reason: String::new(),
+            updated: 0,
+            quality: None,
+            connected,
+            battery,
+            paired: true,
+            connecting: false,
+        };
+        let roster = crate::repair::SharedStatus::default();
+        let mut a = quiet_actor();
+        a.opts.roster = Some(roster.clone());
+        assert!(a.snapshot().devices.is_empty(), "nothing known");
+        a.kb = Some(report(80.0, None));
+        a.linked = true;
+        *roster.lock().unwrap() = vec![
+            status("AA:BB:CC:DD:EE:F1", "Desk (BlueZ)", true, Some(79)),
+            status(M2, "Living room keyboard", true, Some(12)),
+        ];
+        let s = a.snapshot();
+        assert_eq!(s.devices.len(), 2, "the primary is not listed twice");
+        assert!(s.devices[0].primary && s.devices[0].battery == Some(80.0));
+        assert_eq!(
+            (s.devices[1].mac.as_str(), s.devices[1].battery),
+            (M2, Some(12.0))
+        );
+        assert_eq!(akm_core::roster::weakest(&s.devices).unwrap().mac, M2);
+        assert_eq!(s.battery_pct(), Some(80.0));
+        assert!(s.keyboard.as_ref().unwrap().bluetooth.paired);
+        roster.lock().unwrap()[0].paired = false;
+        assert!(
+            !a.snapshot().keyboard.unwrap().bluetooth.paired,
+            "bond lost"
+        );
+        roster.lock().unwrap()[0].paired = true;
+        roster.lock().unwrap()[1] = status(M2, "Living room keyboard", false, Some(12));
+        let s = a.snapshot();
+        assert_eq!(
+            (s.devices[0].connected, s.devices[0].battery),
+            (true, Some(80.0))
+        );
+        assert!(!s.devices[1].connected);
+        assert_eq!(
+            akm_core::roster::weakest(&s.devices).unwrap().mac,
+            "AA:BB:CC:DD:EE:F1"
+        );
+        roster.lock().unwrap()[1] = status(M2, "Living room keyboard", true, Some(12));
+        a.disconnected();
+        let s = a.snapshot();
+        assert!(!s.devices[0].connected && s.devices[1].connected);
+        assert_eq!(akm_core::roster::weakest(&s.devices).unwrap().mac, M2);
+        let json = serde_json::to_value(&s).unwrap();
+        assert_eq!(json["devices"][1]["name"], "Living room keyboard");
+    }
+
+    #[test]
+    fn snapshot_carries_the_link_quality_of_the_keyboard_followed() {
+        const M: &str = "AA:BB:CC:DD:EE:F1";
+        let mut a = quiet_actor();
+        a.kb = Some(report(50.0, None));
+        a.linked = true;
+        assert_eq!(a.snapshot().link_quality, None, "no statistics kept");
+        let stats = crate::linkq::Store::new(None);
+        a.opts.link_stats = Some(stats.clone());
+        assert_eq!(a.snapshot().link_quality, None, "nothing recorded yet");
+        let now = unix_now();
+        stats.disconnect(M, now - 120, "timeout");
+        stats.rssi(M, now - 60, -4);
+        let q = a.snapshot().link_quality.expect("link quality");
+        assert_eq!((q.disconnects_last_hour, q.disconnects_last_day), (1, 1));
+        assert_eq!(
+            q.signal_7d.as_ref().map(|s| (s.samples, s.min)),
+            Some((1, -4))
+        );
+        assert!(!q.unstable);
+        let json = serde_json::to_value(a.snapshot()).unwrap();
+        assert_eq!(
+            json["link_quality"]["disconnects_by_hour"]
+                .as_array()
+                .unwrap()
+                .len(),
+            24
+        );
+        assert_eq!(
+            json["link_quality"]["disconnects_by_day"]
+                .as_array()
+                .unwrap()
+                .len(),
+            7
+        );
+    }
+
+    #[test]
+    fn the_advice_is_raised_once_by_the_replacement_that_ends_the_second_short_set() {
+        const DAY: u64 = 86_400;
+        let t0 = 1_780_000_000u64;
+        let mut h = Vec::new();
+        let mut set = |start: u64, days: u64| {
+            for i in 0..days * 4 {
+                #[allow(clippy::cast_precision_loss)] // a few hundred samples
+                let pct = 100.0 - 90.0 * i as f64 / (days * 4) as f64;
+                h.push(HistoryEntry::sample(start + i * DAY / 4, pct, None));
+            }
+        };
+        set(t0, 40);
+        set(t0 + 40 * DAY, 12);
+        set(t0 + 52 * DAY, 18);
+        h.push(HistoryEntry::sample(t0 + 70 * DAY, 100.0, None));
+        let a = replacement_advice(&h, t0 + 70 * DAY).expect("advice");
+        assert!(
+            a.days.len() == 2 && (a.days[0] - 12.0).abs() < 1e-9 && (a.days[1] - 18.0).abs() < 1e-9,
+            "{:?}",
+            a.days
+        );
+        assert_eq!(
+            replacement_advice(&h, t0 + 52 * DAY),
+            None,
+            "an older replacement"
+        );
+        assert_eq!(
+            replacement_advice(&h[..h.len() - 1], t0 + 52 * DAY),
+            None,
+            "one short set"
+        );
+        let mut actor = quiet_actor();
+        actor.advice = Some(a.clone());
+        assert_eq!(actor.snapshot().battery_advice, Some(a));
+    }
+
+    #[test]
+    fn with_no_keyboard_followed_the_battery_story_is_not_mixed_across_keyboards() {
+        const DAY: u64 = 86_400;
+        let (a, b) = ("AA:BB:CC:DD:EE:01", "AA:BB:CC:DD:EE:02");
+        let t0 = 1_780_000_000u64;
+        let replaced = |ts, mac| {
+            let mut e = HistoryEntry::sample(ts, 100.0, None).with_mac(Some(mac));
+            e.event = Some(HistoryEvent::BatteryReplaced);
+            e
+        };
+        let dir = std::env::temp_dir().join(format!("akm-actor-story-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let h = History::new(dir.join("history.jsonl"), SystemClock);
+        for e in [
+            replaced(t0, a),
+            replaced(t0 + 20 * DAY, b),
+            replaced(t0 + 40 * DAY, a),
+            HistoryEntry::sample(t0 + 55 * DAY, 90.0, None).with_mac(Some(a)),
+        ] {
+            h.append_entry(&e).unwrap();
+        }
+        let mut actor = quiet_actor();
+        actor.history = Some(h);
+        assert!(actor.kb.is_none());
+        let snap = actor.snapshot();
+        assert_eq!(snap.battery_advice, None, "A and B sets are never chained");
+        assert_eq!(
+            actor.installed_at,
+            Some(t0 + 40 * DAY),
+            "newest keyboard: A"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_signal_is_published_with_its_reason() {
+        let mut a = quiet_actor();
+        a.kb = Some(report(42.0, Some(2.8)));
+        a.linked = true;
+        a.rssi_issue = Some(rssi::classify(&rssi::RssiError::Denied));
+        let json = serde_json::to_value(a.snapshot()).unwrap();
+        let e = &json["keyboard"]["radio"]["rssi_error"];
+        assert_eq!(e["code"], "helper_failed", "{json}");
+        assert!(!e["detail"].as_str().unwrap().contains("usermod"));
+        assert!(json["keyboard"]["radio"]["rssi_rel_db"].is_null());
+        a.disconnected();
+        let json = serde_json::to_value(a.snapshot()).unwrap();
+        assert!(json["keyboard"]["radio"]["rssi_error"].is_null());
+    }
+
+    #[test]
+    fn disconnection_keeps_the_last_value_and_refreshes_errors() {
+        let mut a = quiet_actor();
+        a.kb = Some(report(42.0, Some(2.8)));
+        a.linked = true;
+        a.last_update = 1234;
+        a.last_error = Some("HID diagnostics unavailable (stale)".into());
+        let s = a.snapshot();
+        assert!(s.connected && s.kb_error.is_none());
+        a.disconnected();
+        let s = a.snapshot();
+        assert!(!s.connected);
+        assert_eq!(s.battery_pct(), Some(42.0), "last value kept");
+        assert_eq!(s.last_update, 1234, "its age is known");
+        assert_eq!(s.last_error, None);
+        assert_eq!(s.kb_error.as_deref(), Some("Keyboard disconnected"));
+        assert_eq!(s.mac(), Some("AA:BB:CC:DD:EE:F1"));
+        // never seen: the old message
+        let mut b = quiet_actor();
+        assert_eq!(
+            b.snapshot().kb_error.as_deref(),
+            Some("Keyboard: not found")
+        );
+    }
+
+    #[test]
+    fn switching_keyboard_is_not_a_battery_replacement() {
+        let mut a = quiet_actor();
+        a.kb = Some(report(30.0, Some(2.8)));
+        a.after_battery_update(true);
+        let mut b = report(85.0, Some(2.8));
+        b.device.mac = Some("AA:BB:CC:DD:EE:F2".into());
+        a.kb = Some(b);
+        a.after_battery_update(true);
+        assert_eq!(
+            a.detector_for(Some("AA:BB:CC:DD:EE:F2")).last_replacement(),
+            None
+        );
+        assert_eq!(a.installed_at, None);
+        // The first keyboard still detects its own new batteries.
+        a.kb = Some(report(85.0, Some(2.8)));
+        a.after_battery_update(true);
+        assert!(a.installed_at.is_some());
+    }
+
+    #[test]
+    fn invalid_sample_never_reaches_the_detector() {
+        let mut a = quiet_actor();
+        a.kb = Some(report(40.0, Some(2.8)));
+        a.after_battery_update(true);
+        a.kb = Some(report(255.0, None));
+        a.after_battery_update(true);
+        a.kb = Some(report(41.0, Some(211.0)));
+        a.after_battery_update(true);
+        assert_eq!(a.detector_for(None).last_replacement(), None);
+        assert_eq!(a.installed_at, None);
+    }
+
+    fn report_mv(fw_pct: f64, mv_slow: u32) -> KbReport {
+        let mut k = report(fw_pct, Some(f64::from(mv_slow + 37) / 1000.0));
+        k.battery.voltage_mv = Some(mv_slow + 37);
+        k.battery.voltage_filtered_mv = Some(mv_slow);
+        k
+    }
+
+    fn crossings(rx: &mpsc::Receiver<DeviceEvent>) -> Vec<u8> {
+        rx.try_iter()
+            .filter_map(|e| match e {
+                DeviceEvent::BatteryLevelCrossed { crossing, .. } => Some(crossing.threshold),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[allow(clippy::many_single_char_names)] // test fixtures with short local names
+    #[test]
+    fn snapshot_carries_the_estimate_next_to_the_firmware_percentage() {
+        let mut a = quiet_actor();
+        a.kb = Some(report_mv(50.0, 2404));
+        a.linked = true;
+        let s = a.snapshot();
+        let b = &s.keyboard.as_ref().unwrap().battery;
+        assert_eq!(b.percentage, Some(50.0), "the indication is not rewritten");
+        let e = b.charge_estimate.as_ref().unwrap();
+        assert_eq!((e.pct, e.low, e.high), (25.0, 15.0, 35.0));
+        assert_eq!(e.chemistry, Chemistry::Alkaline);
+        let mut u = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            chemistry: Chemistry::Unknown,
+            ..Options::default()
+        });
+        u.kb = Some(report_mv(50.0, 2404));
+        u.linked = true;
+        assert!(u
+            .snapshot()
+            .keyboard
+            .unwrap()
+            .battery
+            .charge_estimate
+            .is_none());
+        let mut n = quiet_actor();
+        n.kb = Some(report_mv(98.0, 2950));
+        n.linked = true;
+        n.installed_at = Some(unix_now() - 3600);
+        let b = n.snapshot().keyboard.unwrap().battery;
+        assert!(b.new_batteries && b.charge_estimate.is_none());
+    }
+
+    #[test]
+    fn reminder_and_firmware_notices_are_triggered_once_per_crossing() {
+        let mut a = quiet_actor();
+        a.linked = true;
+        let t = akm_core::registry::Thresholds {
+            full_mv: 2954,
+            low_mv: 2506,
+            critical_mv: 2404,
+            empty_mv: 2054,
+        };
+        let step = |a: &mut Actor, fw_pct: f64, mv: u32, fw: &str| {
+            let mut k = report_mv(fw_pct, mv);
+            k.battery.thresholds = Some(t);
+            k.firmware.version = Some("0x0040".into());
+            k.firmware.status = fw.into();
+            k.firmware.latest_known = Some("0x0050".into());
+            a.kb = Some(k);
+            a.due_notices()
+                .into_iter()
+                .map(|n| (n.event, n.urgency, n.body))
+                .collect::<Vec<_>>()
+        };
+        let n = step(&mut a, 90.0, 2775, "update_available");
+        assert_eq!(n.len(), 1, "{n:?}");
+        assert_eq!(n[0].0, notify::Event::FirmwareUpdate);
+        assert!(n[0].2.contains("0x0040") && n[0].2.contains("0x0050"));
+        assert!(
+            step(&mut a, 88.0, 2770, "update_available").is_empty(),
+            "firmware: once"
+        );
+        let n = step(&mut a, 75.0, 2506, "update_available");
+        assert_eq!(n.len(), 1);
+        assert_eq!(
+            (n[0].0, n[0].1),
+            (notify::Event::BatteryReminder, Urgency::Normal)
+        );
+        assert!(
+            n[0].2.contains("keyboard's Low threshold (2506\u{202f}mV)") && n[0].2.contains("75%"),
+            "{}",
+            n[0].2
+        );
+        assert!(
+            step(&mut a, 74.0, 2503, "update_available").is_empty(),
+            "Low: once"
+        );
+        let n = step(&mut a, 50.0, 2404, "update_available");
+        assert_eq!(
+            (n[0].0, n[0].1),
+            (notify::Event::BatteryReminder, Urgency::Critical)
+        );
+        assert!(
+            step(&mut a, 49.0, 2390, "update_available").is_empty(),
+            "Critical: once"
+        );
+        a.on_replaced(
+            Some("AA:BB:CC:DD:EE:F1"),
+            akm_core::batteries::Replacement {
+                ts: 1,
+                pct_before: Some(49.0),
+                pct_after: 99.0,
+                voltage_before: None,
+                voltage_after: None,
+            },
+        );
+        assert!(
+            step(&mut a, 99.0, 2950, "up_to_date").is_empty(),
+            "{:?}",
+            step(&mut a, 99.0, 2950, "up_to_date")
+        );
+        assert_eq!(
+            step(&mut a, 70.0, 2500, "update_available").len(),
+            2,
+            "both armed again"
+        );
+        let mut b = quiet_actor();
+        b.linked = true;
+        b.kb = Some(report_mv(10.0, 2200));
+        let got = b.due_notices();
+        assert!(got.is_empty(), "{got:?}");
+        b.linked = false;
+        let got = b.due_notices();
+        assert!(got.is_empty(), "{got:?}");
+    }
+
+    #[test]
+    fn alerts_follow_the_estimate_not_the_firmware_scale() {
+        let mut a = quiet_actor();
+        let rx = a.opts.events.subscribe();
+        for (fw, mv) in [(90.0, 2775), (75.0, 2506)] {
+            a.kb = Some(report_mv(fw, mv));
+            a.after_battery_update(true);
+        }
+        assert!(crossings(&rx).is_empty(), "35 % real: nothing yet");
+        a.kb = Some(report_mv(64.0, 2455));
+        a.after_battery_update(true);
+        assert_eq!(crossings(&rx), vec![30]);
+        a.after_battery_update(true);
+        let got = crossings(&rx);
+        assert!(got.is_empty(), "{got:?}");
+        let mut u = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            chemistry: Chemistry::Unknown,
+            ..Options::default()
+        });
+        let rxu = u.opts.events.subscribe();
+        u.kb = Some(report_mv(64.0, 2455));
+        u.after_battery_update(true);
+        let got = crossings(&rxu);
+        assert!(got.is_empty(), "{got:?}");
+        u.kb = Some(report_mv(29.0, 2455));
+        u.after_battery_update(true);
+        assert_eq!(crossings(&rxu), vec![30]);
+    }
+
+    #[test]
+    fn announced_switch_off_is_published_as_off_not_as_a_lost_link() {
+        let mut a = quiet_actor();
+        let rx = a.opts.events.subscribe();
+        let mac = "AA:BB:CC:DD:EE:F1";
+        a.link.acquired(mac, Some(60.0));
+        a.disconnected_with(true);
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            DeviceEvent::Link(akm_core::link::LinkEvent::PoweredOff { mac: mac.into() })
+        );
+        assert!(rx.try_recv().is_err());
+        assert!(!a.snapshot().connected);
+        a.link.acquired(mac, Some(60.0));
+        a.link.disconnected();
+        let mut b = quiet_actor();
+        let rx = b.opts.events.subscribe();
+        b.link.acquired(mac, None);
+        b.disconnected_with(false);
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            DeviceEvent::Link(akm_core::link::LinkEvent::Disconnected { mac: mac.into() })
+        );
+    }
+
+    #[test]
+    fn firmware_step_at_a_reconnection_raises_no_alert() {
+        let mut a = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            chemistry: Chemistry::Unknown,
+            ..Options::default()
+        });
+        let rx = a.opts.events.subscribe();
+        a.kb = Some(report(32.0, None));
+        a.linked = true;
+        a.after_battery_update(true);
+        a.disconnected();
+        assert!(a.reconnected);
+        a.kb = Some(report(28.0, None));
+        a.linked = true;
+        a.after_battery_update(true);
+        assert!(crossings(&rx).is_empty(), "link artefact, not a discharge");
+        assert!(!a.reconnected, "consumed by the first reading");
+        a.kb = Some(report(14.0, None));
+        a.after_battery_update(false);
+        assert_eq!(crossings(&rx), vec![15]);
+    }
+
+    #[test]
+    fn a_forgotten_keyboard_is_no_longer_presented() {
+        let mut a = quiet_actor();
+        let rx = a.opts.events.subscribe();
+        a.kb = Some(report(55.0, None));
+        a.linked = true;
+        a.forget("AA:BB:CC:DD:EE:99");
+        assert!(
+            a.snapshot().keyboard.is_some(),
+            "another keyboard: unchanged"
+        );
+        a.forget("aa:bb:cc:dd:ee:f1");
+        let s = a.snapshot();
+        assert!(s.keyboard.is_none() && !s.connected, "{s:?}");
+        assert!(s.devices.is_empty(), "{:?}", s.devices);
+        assert!(rx.try_iter().any(|e| matches!(e,
+            DeviceEvent::Forgotten { ref mac } if mac == "AA:BB:CC:DD:EE:F1")));
+    }
+
+    #[test]
+    fn a_second_keyboard_gets_its_kernel_battery() {
+        let roster = crate::repair::SharedStatus::default();
+        let mut a = quiet_actor();
+        a.opts.roster = Some(roster.clone());
+        a.opts.kernel_battery = |mac| (mac == "AA:BB:CC:DD:EE:02").then_some(42.0);
+        a.kb = Some(report(55.0, None));
+        a.linked = true;
+        let mut st = crate::repair::LinkStatus {
+            mac: "AA:BB:CC:DD:EE:02".into(),
+            name: "fake-02".into(),
+            health: "connected".into(),
+            since: 0,
+            attempts: 0,
+            failures: 0,
+            last_error: String::new(),
+            last_reason: String::new(),
+            updated: 0,
+            quality: None,
+            connected: true,
+            battery: None,
+            paired: true,
+            connecting: false,
+        };
+        roster.lock().unwrap().push(st.clone());
+        assert_eq!(a.snapshot().devices[1].battery, Some(42.0));
+        st.connected = false;
+        *roster.lock().unwrap() = vec![st];
+        assert_eq!(
+            a.snapshot().devices[1].battery,
+            None,
+            "not read while offline"
+        );
+    }
+
+    #[test]
+    fn the_low_battery_alert_is_per_keyboard() {
+        let mut a = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            chemistry: Chemistry::Unknown,
+            ..Options::default()
+        });
+        let rx = a.opts.events.subscribe();
+        let mut k2 = report(16.0, None);
+        k2.device.mac = Some("AA:BB:CC:DD:EE:02".into());
+        a.kb = Some(k2);
+        a.linked = true;
+        a.after_battery_update(true);
+        a.disconnected();
+        let mut k1 = report(14.0, None);
+        k1.device.mac = Some("AA:BB:CC:DD:EE:01".into());
+        a.kb = Some(k1);
+        a.linked = true;
+        a.after_battery_update(true);
+        assert_eq!(crossings(&rx), vec![30, 15]);
+    }
+
+    #[test]
+    fn history_stores_real_millivolts() {
+        let dir = std::env::temp_dir().join(format!("akm-actor-hist-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut a = quiet_actor();
+        a.history = Some(History::new(dir.join("h.jsonl"), SystemClock));
+        a.kb = Some(report_mv(98.0, 2945));
+        a.after_battery_update(true);
+        let e = a.history.as_ref().unwrap().read();
+        assert_eq!(e.len(), 1);
+        assert_eq!((e[0].mv_0x46, e[0].mv_0x49), (Some(2982), Some(2945)));
+        assert_eq!(e[0].schema, Some(akm_core::history::SCHEMA));
+        assert!(e[0].voltage_reliable());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    #[allow(clippy::many_single_char_names)] // test fixtures with short local names
+    fn real_read_path_feeds_history_millivolts_and_reminders() {
+        struct Frames;
+        impl akm_core::decode::HidSource for Frames {
+            fn feature(&self, id: u8) -> std::io::Result<Vec<u8>> {
+                match id {
+                    0x47 => Ok(vec![0x47, 55]),
+                    0x46 => Ok(vec![0x46, 0x99, 0x0B]),
+                    0x49 => Ok(vec![0x49, 0x5C, 0x0B]),
+                    _ => Err(std::io::Error::other("no such report")),
+                }
+            }
+            fn input(&self, _: u8) -> std::io::Result<Vec<u8>> {
+                Ok(vec![0x30, 0])
+            }
+        }
+        // sleep.rs tests hold the reads process-wide for a moment: read until one completes.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut k = loop {
+            let mut k = report(55.0, None);
+            k.battery.percentage = None;
+            if akm_core::read_policy::read_safe(&Frames, &mut k)
+                == akm_core::read_policy::SafeRead::Complete
+            {
+                break k;
+            }
+            assert!(Instant::now() < deadline, "no complete read in 10 s");
+        };
+        assert_eq!(
+            (k.battery.voltage_mv, k.battery.voltage_filtered_mv),
+            (Some(2969), Some(2908))
+        );
+        let dir = std::env::temp_dir().join(format!("akm-actor-c5-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut a = quiet_actor();
+        a.linked = true;
+        a.history = Some(History::new(dir.join("h.jsonl"), SystemClock));
+        // Thresholds above the measured voltage: the Low reminder is due.
+        k.battery.thresholds = Some(akm_core::registry::Thresholds {
+            full_mv: 3100,
+            low_mv: 2950,
+            critical_mv: 2404,
+            empty_mv: 2054,
+        });
+        a.kb = Some(k);
+        a.after_battery_update(true);
+        let e = a.history.as_ref().unwrap().read();
+        assert_eq!(e.len(), 1);
+        assert_eq!((e[0].mv_0x46, e[0].mv_0x49), (Some(2969), Some(2908)));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut b = quiet_actor();
+        b.linked = true;
+        b.kb = a.kb.clone();
+        let n = b.due_notices();
+        assert!(
+            n.iter().any(|n| n.event == notify::Event::BatteryReminder),
+            "{:?}",
+            n.iter().map(|n| n.event).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn options_follow_the_config() {
+        let o = Options::default();
+        assert_eq!(o.alerts.thresholds(), &[30, 15, 5]);
+        assert!(o.alerts_enabled && o.notify_connection && o.notify_battery_replaced);
+        let (c, _) = akm_core::config::parse(
+            "[alerts]\nthresholds = [20]\nenabled = false\n[notifications]\nconnection = false\n",
+        );
+        let mut o = Options::default();
+        o.apply_config(&c);
+        assert_eq!(o.alerts.thresholds(), &[20]);
+        assert!(!o.alerts_enabled && !o.notify_connection && o.notify_battery_replaced);
+        assert_eq!(o.chemistry, Chemistry::Alkaline);
+        let (c, _) = akm_core::config::parse("[battery]\nchemistry = \"lithium\"\n");
+        o.apply_config(&c);
+        assert_eq!(o.chemistry, Chemistry::Lithium);
+    }
+
+    #[test]
+    fn reread_name_forgets_at_once_and_defers_inside_the_floor() {
+        let t0 = Instant::now();
+        let s = Duration::from_secs;
+        let mut m = Machine::new();
+        let mut forgotten = 0;
+        assert_eq!(
+            reread_name(&mut m, t0, &mut || forgotten += 1),
+            NameReread::NotConnected
+        );
+        assert_eq!(forgotten, 0);
+        m.on_event(&Event::Connected("AA:BB:CC:DD:EE:F1".into()), t0);
+        m.acquire_done(true, t0);
+        m.due(t0);
+        assert_eq!(
+            reread_name(&mut m, t0 + s(1), &mut || forgotten += 1),
+            NameReread::Now
+        );
+        assert_eq!(forgotten, 1);
+        let due = m.due(t0 + s(1));
+        assert!(due.contains(&Action::RereadName), "{due:?}");
+        assert!(!due.contains(&Action::Acquire), "never the routine read");
+        assert_eq!(
+            reread_name(&mut m, t0 + s(10), &mut || forgotten += 1),
+            NameReread::Deferred(s(21))
+        );
+        assert_eq!(forgotten, 2);
+        assert!(!m.due(t0 + s(30)).contains(&Action::RereadName));
+        assert!(m.due(t0 + s(31)).contains(&Action::RereadName), "served");
+        assert!(name_reread_text(NameReread::Now).contains("now"));
+        assert!(name_reread_text(NameReread::Deferred(s(21))).contains("in 21 s"));
+        assert!(name_reread_text(NameReread::NotConnected).contains("no keyboard"));
+    }
+
+    #[test]
+    fn a_name_reread_that_found_the_lock_busy_is_put_back_a_failed_one_is_not() {
+        use akm_core::read_policy::{Gate, SafeRead};
+        let s = Duration::from_secs;
+        let t0 = Instant::now();
+        let ready = || {
+            let mut m = Machine::new();
+            m.on_event(&Event::Connected("AA:BB:CC:DD:EE:F1".into()), t0);
+            m.acquire_done(true, t0);
+            m.due(t0);
+            assert_eq!(m.request_name_reread(t0 + s(1)), NameReread::Now);
+            assert!(m.due(t0 + s(1)).contains(&Action::RereadName));
+            m
+        };
+        let mut m = ready();
+        after_name_reread(&mut m, true, Some(SafeRead::Skipped(Gate::Busy)), t0 + s(2));
+        assert!(m.name_reread_pending());
+        assert!(!m.due(t0 + s(30)).contains(&Action::RereadName));
+        assert!(m.due(t0 + s(31)).contains(&Action::RereadName));
+        // Sent and failed, complete, breaker open: never asked again.
+        for o in [
+            SafeRead::Partial,
+            SafeRead::Complete,
+            SafeRead::Skipped(Gate::Tripped),
+        ] {
+            let mut m = ready();
+            after_name_reread(&mut m, true, Some(o), t0 + s(2));
+            assert!(!m.name_reread_pending(), "{o:?}");
+            assert!(m.is_acquired());
+        }
+        let mut m = ready();
+        after_name_reread(&mut m, false, None, t0 + s(2));
+        assert!(!m.is_acquired() && m.is_connected());
+        assert!(m.due(t0 + s(3)).contains(&Action::Acquire));
+    }
+
+    #[test]
+    fn the_name_reply_reaches_the_caller_and_never_blocks_the_actor() {
+        let (reply, rx) = NameReply::channel();
+        assert!(matches!(Msg::RereadName(reply.clone()), Msg::RereadName(r) if r.0.is_some()));
+        reply.answer(NameReread::Now);
+        reply.answer(NameReread::NotConnected); // slot full: dropped, no block
+        assert_eq!(rx.try_recv(), Ok(NameReread::Now));
+        NameReply::none().answer(NameReread::Now);
+        drop(rx);
+        reply.answer(NameReread::Now); // caller gone: no panic
+    }
+
+    #[test]
+    fn mailbox_without_actor_reports_failure() {
+        let mb = Mailbox::new();
+        assert!(!mb.send(Msg::Refresh(RefreshReply::none())));
+        let (tx, rx) = mpsc::channel();
+        mb.install(tx);
+        assert!(mb.send(Msg::Refresh(RefreshReply::none())));
+        assert!(matches!(rx.recv().unwrap(), Msg::Refresh(r) if r.0.is_none()));
+        drop(rx);
+        assert!(!mb.send(Msg::Refresh(RefreshReply::none())));
+    }
+
+    static ASKED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    #[allow(clippy::unnecessary_wraps)] // signature of Options::disconnect
+    fn fake_disconnect(mac: &str, t: Duration) -> Result<(), String> {
+        assert_eq!(t, akm_core::apple_model::APPLE.disconnect_call_timeout);
+        ASKED.lock().unwrap().push(mac.to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn a_tripped_breaker_asks_once_for_the_disconnection() {
+        let mut a = Actor::new(Options {
+            bluez_provider: false,
+            notify: false,
+            history: false,
+            disconnect: fake_disconnect,
+            ..Options::default()
+        });
+        let b = akm_core::read_policy::breaker();
+        b.lock().unwrap().reset();
+        assert!(
+            !a.after_breaker(Some("AA:BB:CC:DD:EE:F1")),
+            "closed: nothing"
+        );
+        for _ in 0..akm_core::read_policy::TRIP_AFTER {
+            b.lock().unwrap().record(false);
+        }
+        assert!(a.after_breaker(Some("AA:BB:CC:DD:EE:F1")));
+        assert!(
+            !a.after_breaker(Some("AA:BB:CC:DD:EE:F1")),
+            "once per connection"
+        );
+        assert_eq!(
+            *ASKED.lock().unwrap(),
+            vec!["AA:BB:CC:DD:EE:F1".to_string()]
+        );
+        b.lock().unwrap().reset();
+        a.opts.disconnect_on_breaker = false;
+        for _ in 0..akm_core::read_policy::TRIP_AFTER {
+            b.lock().unwrap().record(false);
+        }
+        assert!(!a.after_breaker(Some("AA:BB:CC:DD:EE:F1")));
+        assert_eq!(ASKED.lock().unwrap().len(), 1);
+        b.lock().unwrap().reset();
+        a.opts.disconnect_on_breaker = true;
+        a.kb = Some(report(50.0, None));
+        for _ in 0..akm_core::read_policy::TRIP_AFTER {
+            b.lock().unwrap().record(false);
+        }
+        assert!(a.after_breaker(None));
+        assert_eq!(ASKED.lock().unwrap().len(), 2);
+        b.lock().unwrap().reset();
+        let (c, _) = akm_core::config::parse("[apple]\ndisconnect_on_breaker = false\n");
+        let mut o = Options::default();
+        assert!(o.disconnect_on_breaker);
+        o.apply_config(&c);
+        assert!(!o.disconnect_on_breaker);
+    }
+}

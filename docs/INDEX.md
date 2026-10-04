@@ -1,0 +1,45 @@
+# Documentation index
+
+One line per document of `docs/`. **Guides** are kept in step with the code; **hardware references** are dated measurements on a real A1314: their method and numbers are not rewritten, but a claim refuted by a later measurement is corrected in place, and each corrected document opens with one line per correction, "Corrected on YYYY-MM-DD (issue #N): …". Their claims are checked by `scripts/qa_checks.py claims`.
+
+## User guides
+
+| Document | One line |
+|---|---|
+| [../README.md](../README.md) | What the project does, what works (with evidence level), install, daily use, KDE, troubleshooting, security, limits, architecture, links |
+| [INSTALL.md](INSTALL.md) | Package build, installed files, what `post_install` does, permissions, enabled units, BlueZ / UPower settings, keyd optional, upgrade notices, uninstall |
+| [CONFIGURATION.md](CONFIGURATION.md) | Every key of `config.toml` with its default (`[alerts] [battery] [notifications] [display] [apple]`), the battery estimate, the write locks, the other files (`hid-suspend.conf`, `keymap.toml`, `selfcheck.env`, modprobe, hwdb) |
+| [FEATURES.md](FEATURES.md) | Feature → evidence level → module; CLI commands; D-Bus API; what is not done |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Symptom → cause → command: reconnection (switch the keyboard off and on, `akmctl repair`), battery, signal, keys / keyd, daemon, disk and BlueZ |
+| [KEYS.md](KEYS.md) | Special keys: what each key does, the kernel → evdev → KDE chain, `akmctl keys`, pitfalls, manual mapping without keyd, missing KDE shortcuts, test checklist |
+| [KCM.md](KCM.md) | System Settings module "Apple Keyboard": pages, writes and authentication, responsiveness, languages, tests, limits |
+| [NOTIFICATIONS.md](NOTIFICATIONS.md) | KNotification integration: the 18 events, buttons, replacement, language, configuration, test |
+| [INTEGRATION-KDE.md](INTEGRATION-KDE.md) | Fixes of the KDE audit: Forget from Plasma, one icon, PowerDevil, two names, F4 / Eject, languages, no window |
+| [RECONNECTION-PAIRING.md](RECONNECTION-PAIRING.md) | Reconnection, pairing and sleep: symptom, what the errors mean, measurements, root cause, fixes (system, daemon, tools, clean forget), expected behaviour, controlled test, risks |
+| [RENAME-KEYBOARD.md](RENAME-KEYBOARD.md) | The two names: alias delivered; name stored in the keyboard: validation, three locks, Lion frames, risks, procedure, rollback |
+| [KEYD.md](KEYD.md) | keyd 2.6.0 crash on `keyd reload`: evidence, reproduction, bisection, fix in the package, keyd optional, upstream report |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Build, test, translate, commit style |
+| [../SECURITY.md](../SECURITY.md) | How to report a vulnerability |
+
+## Developer guides
+
+| Document | One line |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Components (daemon, clients, one privileged helper with five actions, `rssi-helper`, KCM, widget), `akm-core` decision modules, daemon loop, data flow, privilege model, installed and repository layout |
+| [TESTING.md](TESTING.md) | `scripts/ci-local.sh` (22 steps), Rust tests and invariants, e2e under Xvfb + bubblewrap, `akmctl selftest`, CI jobs, fixtures, read-only hardware checks |
+| [APPLE-PARITY.md](APPLE-PARITY.md) | Parity with Apple: what is sent to the keyboard and nothing more; rules R1-R8 of the model with sources and tests; what is deliberately not implemented; the write doors |
+| [FIRMWARE.md](FIRMWARE.md) | Firmware version check: `0x4F` once per connection, embedded table and its sources, statuses, where it is shown, how to update the table, register classes summary |
+| [HID-SLEEP.md](HID-SLEEP.md) | Sleep and wake HID_CONTROL bytes: why a root helper borrows `bluetoothd`'s socket, safety rules, breaker, triggers, configuration, manual test, limits, tests |
+| [../udev/README.md](../udev/README.md) | The `uaccess` rule and the accepted keylogger trade-off; multi-user caveat |
+| [../polkit/README.md](../polkit/README.md) | Polkit actions and the optional rules example |
+| [../tests/fixtures/README.md](../tests/fixtures/README.md) | Provenance of the fixtures (real A1314 capture, synthetic, devname, models) |
+
+## Hardware references (measurements, dated 2026-10-01)
+
+| Document | One line |
+|---|---|
+| [HARDWARE-HID-REPORTS.md](HARDWARE-HID-REPORTS.md) | Map of the HID Feature reports of the A1314 (BCM2042) read on the real keyboard, with evidence level per report |
+| [HARDWARE-INPUTS-MODELS.md](HARDWARE-INPUTS-MODELS.md) | Input reports of the A1314, keyd remapping as read in the code, LED path, model × function matrix (what is tested) |
+| [BATTERY-CHECK.md](BATTERY-CHECK.md) | Adversarial verification of the battery percentage: firmware interpolation, steps at reconnection, voltage vs real charge |
+
+`captures/readme/`: screenshots of the notification-area widget and the `akmctl` animation shown in the README; `../kcm/captures/`: the pages of the System Settings module, regenerated by `tests/e2e/kcm.py --only screens`.

@@ -1,0 +1,80 @@
+{
+  "daemon": {
+    "running": true
+  },
+  "findings": [
+    {
+      "args": [],
+      "fix": null,
+      "id": "adapter.powered",
+      "level": "ok",
+      "text": "Bluetooth adapter powered",
+      "topic": "adapter"
+    },
+    {
+      "args": [
+        "AA:BB:CC:DD:EE:F1",
+        "Test keyboard",
+        "1",
+        "1"
+      ],
+      "fix": null,
+      "id": "pairing.ok",
+      "level": "ok",
+      "text": "AA:BB:CC:DD:EE:F1 “Test keyboard” paired, bonded, legacy PIN pairing",
+      "topic": "pairing"
+    },
+    {
+      "args": [],
+      "fix": null,
+      "id": "link.connected",
+      "level": "ok",
+      "text": "connected",
+      "topic": "link"
+    },
+    {
+      "args": [],
+      "fix": "optional: akmctl doctor --fix --optional --restart-services",
+      "id": "upower.polls",
+      "level": "info",
+      "text": "UPower reads the keyboard battery every 30 s (2 GET_REPORT over the air): the keyboard never sleeps",
+      "topic": "upower"
+    },
+    {
+      "args": [],
+      "fix": null,
+      "id": "signal.ok",
+      "level": "ok",
+      "text": "rssi-helper executable, capability cap_net_admin present",
+      "topic": "signal"
+    },
+    {
+      "args": [
+        "1",
+        "2026-10-01T05:00:00+02:00"
+      ],
+      "fix": null,
+      "id": "journal.refused",
+      "level": "info",
+      "text": "1 connection reset/refused by the keyboard, last 2026-10-01T05:00:00+02:00",
+      "topic": "journal"
+    }
+  ],
+  "health": "connected",
+  "keyboard": {
+    "bonded": true,
+    "connected": true,
+    "legacy_pairing": true,
+    "mac": "AA:BB:CC:DD:EE:F1",
+    "name": "Test keyboard",
+    "paired": true,
+    "trusted": true,
+    "wake_allowed": true
+  },
+  "verdict": {
+    "advice": "link up and configuration sound",
+    "args": [],
+    "id": "link-up-ok",
+    "level": "info"
+  }
+}

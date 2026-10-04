@@ -1,0 +1,14 @@
+--- a/src/daemon.c	2026-10-01 16:54:20.083703056 +0200
++++ b/src/daemon.c	2026-10-01 16:54:20.083703056 +0200
+@@ -296,6 +296,11 @@
+ {
+ 	size_t i;
+ 
++	/*
++	 * free_configs() frees every struct keyboard: drop the cached pointer,
++	 * otherwise the next unmanaged mouse event or timeout dereferences it.
++	 */
++	active_kbd = NULL;
+ 	free_configs();
+ 	load_configs();
+ 

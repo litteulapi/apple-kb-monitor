@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  One program, /usr/lib/apple-kb-monitor/akm-helper; argv[1] selects the action
+  (exec.argv1, polkit 127). Every action carries an argv1, so pkexec picks one
+  action per command; any other argv1 falls back to org.freedesktop.policykit.exec
+  and the helper refuses it. No "keep": the daemon is a long-lived subject.
+  No double hyphen in these comments: polkitd would reject the file.
+-->
+<policyconfig>
+  <vendor>agenceapi</vendor>
+  <vendor_url>https://github.com/litteulapi/apple-kb-monitor</vendor_url>
+
+  <!-- hid_apple parameters (fnmode, iso_layout, swap_*), sysfs and /etc/modprobe.d. -->
+  <action id="com.agenceapi.AppleKbMonitor.set-fnmode">
+    <description>Change the Fn key mode and the hid_apple parameters of Apple keyboards</description>
+    <description xml:lang="fr">Modifier le mode de la touche Fn et les paramètres hid_apple des claviers Apple</description>
+    <description xml:lang="de">Den Fn-Tastenmodus und die hid_apple-Parameter von Apple-Tastaturen ändern</description>
+    <description xml:lang="es">Cambiar el modo de la tecla Fn y los parámetros hid_apple de los teclados Apple</description>
+    <description xml:lang="it">Modifica la modalità del tasto Fn e i parametri hid_apple delle tastiere Apple</description>
+    <description xml:lang="pt">Alterar o modo da tecla Fn e os parâmetros hid_apple dos teclados Apple</description>
+    <description xml:lang="pt_BR">Alterar o modo da tecla Fn e os parâmetros hid_apple dos teclados Apple</description>
+    <description xml:lang="nl">De modus van de Fn-toets en de hid_apple-parameters van Apple-toetsenborden wijzigen</description>
+    <description xml:lang="pl">Zmień tryb klawisza Fn i parametry hid_apple klawiatur Apple</description>
+    <description xml:lang="cs">Změnit režim klávesy Fn a parametry hid_apple klávesnic Apple</description>
+    <description xml:lang="sv">Ändra Fn-tangentens läge och hid_apple-parametrarna för Apple-tangentbord</description>
+    <description xml:lang="da">Ændr Fn-tastens tilstand og hid_apple-parametrene for Apple-tastaturer</description>
+    <description xml:lang="nb">Endre Fn-tastens modus og hid_apple-parameterne for Apple-tastaturer</description>
+    <description xml:lang="fi">Muuta Fn-näppäimen tilaa ja Apple-näppäimistöjen hid_apple-parametreja</description>
+    <description xml:lang="ru">Изменение режима клавиши Fn и параметров hid_apple клавиатур Apple</description>
+    <description xml:lang="uk">Зміна режиму клавіші Fn і параметрів hid_apple клавіатур Apple</description>
+    <description xml:lang="ja">Apple キーボードの Fn キーモードと hid_apple パラメータを変更</description>
+    <description xml:lang="zh_CN">更改 Apple 键盘的 Fn 键模式和 hid_apple 参数</description>
+    <description xml:lang="ko">Apple 키보드의 Fn 키 모드와 hid_apple 매개변수 변경</description>
+    <description xml:lang="tr">Apple klavyelerin Fn tuşu kipini ve hid_apple parametrelerini değiştir</description>
+    <message>Authentication is required to change the Fn key mode or the hid_apple parameters of all Apple keyboards</message>
+    <message xml:lang="fr">Authentification requise pour modifier le mode Fn ou les paramètres hid_apple de tous les claviers Apple</message>
+    <message xml:lang="de">Zum Ändern des Fn-Modus oder der hid_apple-Parameter aller Apple-Tastaturen ist eine Authentifizierung erforderlich</message>
+    <message xml:lang="es">Se requiere autenticación para cambiar el modo Fn o los parámetros hid_apple de todos los teclados Apple</message>
+    <message xml:lang="it">È richiesta l'autenticazione per modificare la modalità Fn o i parametri hid_apple di tutte le tastiere Apple</message>
+    <message xml:lang="pt">É necessária autenticação para alterar o modo Fn ou os parâmetros hid_apple de todos os teclados Apple</message>
+    <message xml:lang="pt_BR">É necessária autenticação para alterar o modo Fn ou os parâmetros hid_apple de todos os teclados Apple</message>
+    <message xml:lang="nl">Authenticatie is vereist om de Fn-modus of de hid_apple-parameters van alle Apple-toetsenborden te wijzigen</message>
+    <message xml:lang="pl">Do zmiany trybu Fn lub parametrów hid_apple wszystkich klawiatur Apple wymagane jest uwierzytelnienie</message>
+    <message xml:lang="cs">Ke změně režimu Fn nebo parametrů hid_apple všech klávesnic Apple je vyžadováno ověření</message>
+    <message xml:lang="sv">Autentisering krävs för att ändra Fn-läget eller hid_apple-parametrarna för alla Apple-tangentbord</message>
+    <message xml:lang="da">Godkendelse kræves for at ændre Fn-tilstanden eller hid_apple-parametrene for alle Apple-tastaturer</message>
+    <message xml:lang="nb">Autentisering kreves for å endre Fn-modusen eller hid_apple-parameterne for alle Apple-tastaturer</message>
+    <message xml:lang="fi">Fn-tilan tai kaikkien Apple-näppäimistöjen hid_apple-parametrien muuttaminen vaatii tunnistautumisen</message>
+    <message xml:lang="ru">Для изменения режима Fn или параметров hid_apple всех клавиатур Apple требуется аутентификация</message>
+    <message xml:lang="uk">Для зміни режиму Fn або параметрів hid_apple усіх клавіатур Apple потрібна автентифікація</message>
+    <message xml:lang="ja">すべての Apple キーボードの Fn モードまたは hid_apple パラメータを変更するには認証が必要です</message>
+    <message xml:lang="zh_CN">更改所有 Apple 键盘的 Fn 模式或 hid_apple 参数需要认证</message>
+    <message xml:lang="ko">모든 Apple 키보드의 Fn 모드나 hid_apple 매개변수를 변경하려면 인증이 필요합니다</message>
+    <message xml:lang="tr">Tüm Apple klavyelerin Fn kipini veya hid_apple parametrelerini değiştirmek için kimlik doğrulaması gerekir</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">set-fnmode</annotate>
+  </action>
+
+  <!-- Reads /run/user/PKEXEC_UID/apple-kb-monitor/keymap.hwdb, checks each line against a whitelist, writes /etc/udev/hwdb.d/90-apple-kb-monitor.hwdb. -->
+  <action id="com.agenceapi.AppleKbMonitor.install-keymap">
+    <description>Install the key mapping of Apple keyboards (udev hwdb)</description>
+    <description xml:lang="fr">Installer la correspondance des touches des claviers Apple (hwdb udev)</description>
+    <description xml:lang="de">Die Tastenbelegung von Apple-Tastaturen installieren (udev-hwdb)</description>
+    <description xml:lang="es">Instalar la asignación de teclas de los teclados Apple (hwdb de udev)</description>
+    <description xml:lang="it">Installa la mappatura dei tasti delle tastiere Apple (hwdb di udev)</description>
+    <description xml:lang="pt">Instalar o mapeamento de teclas dos teclados Apple (hwdb do udev)</description>
+    <description xml:lang="pt_BR">Instalar o mapeamento de teclas dos teclados Apple (hwdb do udev)</description>
+    <description xml:lang="nl">De toetstoewijzing van Apple-toetsenborden installeren (udev-hwdb)</description>
+    <description xml:lang="pl">Zainstaluj mapowanie klawiszy klawiatur Apple (hwdb udev)</description>
+    <description xml:lang="cs">Nainstalovat mapování kláves klávesnic Apple (udev hwdb)</description>
+    <description xml:lang="sv">Installera tangentmappningen för Apple-tangentbord (udev-hwdb)</description>
+    <description xml:lang="da">Installér tastetildelingen for Apple-tastaturer (udev-hwdb)</description>
+    <description xml:lang="nb">Installer tastetilordningen for Apple-tastaturer (udev-hwdb)</description>
+    <description xml:lang="fi">Asenna Apple-näppäimistöjen näppäinkartta (udev-hwdb)</description>
+    <description xml:lang="ru">Установка сопоставления клавиш клавиатур Apple (hwdb udev)</description>
+    <description xml:lang="uk">Встановлення прив'язки клавіш клавіатур Apple (hwdb udev)</description>
+    <description xml:lang="ja">Apple キーボードのキーマッピングをインストール (udev hwdb)</description>
+    <description xml:lang="zh_CN">安装 Apple 键盘的按键映射（udev hwdb）</description>
+    <description xml:lang="ko">Apple 키보드의 키 매핑 설치(udev hwdb)</description>
+    <description xml:lang="tr">Apple klavyelerin tuş eşlemesini kur (udev hwdb)</description>
+    <message>Authentication is required to change the key mapping of all Apple aluminium keyboards</message>
+    <message xml:lang="fr">Authentification requise pour modifier la correspondance des touches de tous les claviers Apple en aluminium</message>
+    <message xml:lang="de">Zum Ändern der Tastenbelegung aller Apple-Aluminiumtastaturen ist eine Authentifizierung erforderlich</message>
+    <message xml:lang="es">Se requiere autenticación para cambiar la asignación de teclas de todos los teclados Apple de aluminio</message>
+    <message xml:lang="it">È richiesta l'autenticazione per modificare la mappatura dei tasti di tutte le tastiere Apple in alluminio</message>
+    <message xml:lang="pt">É necessária autenticação para alterar o mapeamento de teclas de todos os teclados Apple de alumínio</message>
+    <message xml:lang="pt_BR">É necessária autenticação para alterar o mapeamento de teclas de todos os teclados Apple de alumínio</message>
+    <message xml:lang="nl">Authenticatie is vereist om de toetstoewijzing van alle aluminium Apple-toetsenborden te wijzigen</message>
+    <message xml:lang="pl">Do zmiany mapowania klawiszy wszystkich aluminiowych klawiatur Apple wymagane jest uwierzytelnienie</message>
+    <message xml:lang="cs">Ke změně mapování kláves všech hliníkových klávesnic Apple je vyžadováno ověření</message>
+    <message xml:lang="sv">Autentisering krävs för att ändra tangentmappningen för alla Apple-tangentbord i aluminium</message>
+    <message xml:lang="da">Godkendelse kræves for at ændre tastetildelingen for alle Apple-tastaturer i aluminium</message>
+    <message xml:lang="nb">Autentisering kreves for å endre tastetilordningen for alle Apple-tastaturer i aluminium</message>
+    <message xml:lang="fi">Kaikkien alumiinisten Apple-näppäimistöjen näppäinkartan muuttaminen vaatii tunnistautumisen</message>
+    <message xml:lang="ru">Для изменения сопоставления клавиш всех алюминиевых клавиатур Apple требуется аутентификация</message>
+    <message xml:lang="uk">Для зміни прив'язки клавіш усіх алюмінієвих клавіатур Apple потрібна автентифікація</message>
+    <message xml:lang="ja">すべてのアルミニウム製 Apple キーボードのキーマッピングを変更するには認証が必要です</message>
+    <message xml:lang="zh_CN">更改所有铝制 Apple 键盘的按键映射需要认证</message>
+    <message xml:lang="ko">모든 알루미늄 Apple 키보드의 키 매핑을 변경하려면 인증이 필요합니다</message>
+    <message xml:lang="tr">Tüm alüminyum Apple klavyelerin tuş eşlemesini değiştirmek için kimlik doğrulaması gerekir</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">install-keymap</annotate>
+  </action>
+
+  <!-- Byte 0x13 or 0x14, once, to a connected Apple keyboard of the model table. -->
+  <action id="com.agenceapi.AppleKbMonitor.hid-control">
+    <description>Send HID_CONTROL SUSPEND or EXIT_SUSPEND to Apple Bluetooth keyboards</description>
+    <description xml:lang="fr">Envoyer HID_CONTROL SUSPEND ou EXIT_SUSPEND aux claviers Bluetooth Apple</description>
+    <description xml:lang="de">HID_CONTROL SUSPEND oder EXIT_SUSPEND an Apple-Bluetooth-Tastaturen senden</description>
+    <description xml:lang="es">Enviar HID_CONTROL SUSPEND o EXIT_SUSPEND a los teclados Bluetooth de Apple</description>
+    <description xml:lang="it">Invia HID_CONTROL SUSPEND o EXIT_SUSPEND alle tastiere Bluetooth Apple</description>
+    <description xml:lang="pt">Enviar HID_CONTROL SUSPEND ou EXIT_SUSPEND aos teclados Bluetooth da Apple</description>
+    <description xml:lang="pt_BR">Enviar HID_CONTROL SUSPEND ou EXIT_SUSPEND aos teclados Bluetooth da Apple</description>
+    <description xml:lang="nl">HID_CONTROL SUSPEND of EXIT_SUSPEND naar Apple Bluetooth-toetsenborden sturen</description>
+    <description xml:lang="pl">Wyślij HID_CONTROL SUSPEND lub EXIT_SUSPEND do klawiatur Bluetooth Apple</description>
+    <description xml:lang="cs">Odeslat HID_CONTROL SUSPEND nebo EXIT_SUSPEND Bluetooth klávesnicím Apple</description>
+    <description xml:lang="sv">Skicka HID_CONTROL SUSPEND eller EXIT_SUSPEND till Apples Bluetooth-tangentbord</description>
+    <description xml:lang="da">Send HID_CONTROL SUSPEND eller EXIT_SUSPEND til Apples Bluetooth-tastaturer</description>
+    <description xml:lang="nb">Send HID_CONTROL SUSPEND eller EXIT_SUSPEND til Apples Bluetooth-tastaturer</description>
+    <description xml:lang="fi">Lähetä HID_CONTROL SUSPEND tai EXIT_SUSPEND Applen Bluetooth-näppäimistöille</description>
+    <description xml:lang="ru">Отправка HID_CONTROL SUSPEND или EXIT_SUSPEND Bluetooth-клавиатурам Apple</description>
+    <description xml:lang="uk">Надсилання HID_CONTROL SUSPEND або EXIT_SUSPEND Bluetooth-клавіатурам Apple</description>
+    <description xml:lang="ja">Apple Bluetooth キーボードに HID_CONTROL SUSPEND または EXIT_SUSPEND を送信</description>
+    <description xml:lang="zh_CN">向 Apple 蓝牙键盘发送 HID_CONTROL SUSPEND 或 EXIT_SUSPEND</description>
+    <description xml:lang="ko">Apple Bluetooth 키보드에 HID_CONTROL SUSPEND 또는 EXIT_SUSPEND 보내기</description>
+    <description xml:lang="tr">Apple Bluetooth klavyelere HID_CONTROL SUSPEND veya EXIT_SUSPEND gönder</description>
+    <message>Authentication is required to send a sleep/wake control byte to the Apple keyboard through bluetoothd</message>
+    <message xml:lang="fr">Authentification requise pour envoyer un octet de veille ou de réveil au clavier Apple par bluetoothd</message>
+    <message xml:lang="de">Zum Senden eines Ruhe-/Weck-Steuerbytes über bluetoothd an die Apple-Tastatur ist eine Authentifizierung erforderlich</message>
+    <message xml:lang="es">Se requiere autenticación para enviar un byte de control de reposo/activación al teclado Apple a través de bluetoothd</message>
+    <message xml:lang="it">È richiesta l'autenticazione per inviare un byte di controllo di sospensione/risveglio alla tastiera Apple tramite bluetoothd</message>
+    <message xml:lang="pt">É necessária autenticação para enviar um byte de controlo de suspensão/despertar ao teclado Apple através do bluetoothd</message>
+    <message xml:lang="pt_BR">É necessária autenticação para enviar um byte de controle de suspensão/despertar ao teclado Apple pelo bluetoothd</message>
+    <message xml:lang="nl">Authenticatie is vereist om via bluetoothd een slaap-/wekbyte naar het Apple-toetsenbord te sturen</message>
+    <message xml:lang="pl">Do wysłania bajtu sterującego uśpieniem/wybudzeniem do klawiatury Apple przez bluetoothd wymagane jest uwierzytelnienie</message>
+    <message xml:lang="cs">K odeslání řídicího bajtu uspání/probuzení klávesnici Apple přes bluetoothd je vyžadováno ověření</message>
+    <message xml:lang="sv">Autentisering krävs för att skicka en vilo-/väckningsbyte till Apple-tangentbordet via bluetoothd</message>
+    <message xml:lang="da">Godkendelse kræves for at sende en dvale-/vækkebyte til Apple-tastaturet via bluetoothd</message>
+    <message xml:lang="nb">Autentisering kreves for å sende en dvale-/vekkebyte til Apple-tastaturet via bluetoothd</message>
+    <message xml:lang="fi">Lepo-/herätysohjaustavun lähettäminen Apple-näppäimistölle bluetoothd:n kautta vaatii tunnistautumisen</message>
+    <message xml:lang="ru">Для отправки управляющего байта сна/пробуждения клавиатуре Apple через bluetoothd требуется аутентификация</message>
+    <message xml:lang="uk">Для надсилання керівного байта сну/пробудження клавіатурі Apple через bluetoothd потрібна автентифікація</message>
+    <message xml:lang="ja">bluetoothd 経由で Apple キーボードにスリープ/復帰の制御バイトを送信するには認証が必要です</message>
+    <message xml:lang="zh_CN">通过 bluetoothd 向 Apple 键盘发送休眠/唤醒控制字节需要认证</message>
+    <message xml:lang="ko">bluetoothd를 통해 Apple 키보드에 절전/깨우기 제어 바이트를 보내려면 인증이 필요합니다</message>
+    <message xml:lang="tr">bluetoothd üzerinden Apple klavyeye uyku/uyanma denetim baytı göndermek için kimlik doğrulaması gerekir</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">hid-control</annotate>
+  </action>
+
+  <!-- Read-only, connected Apple keyboards of the model table only: getsockopt / getsockname / getpeername, no send path; active local session only. -->
+  <action id="com.agenceapi.AppleKbMonitor.hid-inspect">
+    <description>Read the MTU of the HID control channel of Apple Bluetooth keyboards</description>
+    <description xml:lang="fr">Lire la MTU du canal de contrôle HID des claviers Bluetooth Apple</description>
+    <description xml:lang="de">Die MTU des HID-Steuerkanals von Apple-Bluetooth-Tastaturen lesen</description>
+    <description xml:lang="es">Leer la MTU del canal de control HID de los teclados Bluetooth de Apple</description>
+    <description xml:lang="it">Leggi la MTU del canale di controllo HID delle tastiere Bluetooth Apple</description>
+    <description xml:lang="pt">Ler a MTU do canal de controlo HID dos teclados Bluetooth da Apple</description>
+    <description xml:lang="pt_BR">Ler a MTU do canal de controle HID dos teclados Bluetooth da Apple</description>
+    <description xml:lang="nl">De MTU van het HID-besturingskanaal van Apple Bluetooth-toetsenborden lezen</description>
+    <description xml:lang="pl">Odczytaj MTU kanału sterującego HID klawiatur Bluetooth Apple</description>
+    <description xml:lang="cs">Přečíst MTU řídicího kanálu HID Bluetooth klávesnic Apple</description>
+    <description xml:lang="sv">Läs MTU för HID-styrkanalen på Apples Bluetooth-tangentbord</description>
+    <description xml:lang="da">Læs MTU for HID-styrekanalen på Apples Bluetooth-tastaturer</description>
+    <description xml:lang="nb">Les MTU for HID-kontrollkanalen på Apples Bluetooth-tastaturer</description>
+    <description xml:lang="fi">Lue Applen Bluetooth-näppäimistöjen HID-ohjauskanavan MTU</description>
+    <description xml:lang="ru">Чтение MTU управляющего канала HID Bluetooth-клавиатур Apple</description>
+    <description xml:lang="uk">Читання MTU керівного каналу HID Bluetooth-клавіатур Apple</description>
+    <description xml:lang="ja">Apple Bluetooth キーボードの HID 制御チャンネルの MTU を読み取る</description>
+    <description xml:lang="zh_CN">读取 Apple 蓝牙键盘 HID 控制通道的 MTU</description>
+    <description xml:lang="ko">Apple Bluetooth 키보드 HID 제어 채널의 MTU 읽기</description>
+    <description xml:lang="tr">Apple Bluetooth klavyelerin HID denetim kanalının MTU değerini oku</description>
+    <message>Reading the MTU of the HID control channel of the Apple keyboard (read-only, nothing is sent)</message>
+    <message xml:lang="fr">Lecture de la MTU du canal de contrôle HID du clavier Apple (lecture seule, rien n'est envoyé)</message>
+    <message xml:lang="de">Lesen der MTU des HID-Steuerkanals der Apple-Tastatur (nur lesend, es wird nichts gesendet)</message>
+    <message xml:lang="es">Lectura de la MTU del canal de control HID del teclado Apple (solo lectura, no se envía nada)</message>
+    <message xml:lang="it">Lettura della MTU del canale di controllo HID della tastiera Apple (sola lettura, non viene inviato nulla)</message>
+    <message xml:lang="pt">Leitura da MTU do canal de controlo HID do teclado Apple (só leitura, nada é enviado)</message>
+    <message xml:lang="pt_BR">Leitura da MTU do canal de controle HID do teclado Apple (somente leitura, nada é enviado)</message>
+    <message xml:lang="nl">De MTU van het HID-besturingskanaal van het Apple-toetsenbord lezen (alleen lezen, er wordt niets verzonden)</message>
+    <message xml:lang="pl">Odczyt MTU kanału sterującego HID klawiatury Apple (tylko odczyt, nic nie jest wysyłane)</message>
+    <message xml:lang="cs">Čtení MTU řídicího kanálu HID klávesnice Apple (pouze čtení, nic se neodesílá)</message>
+    <message xml:lang="sv">Läser MTU för Apple-tangentbordets HID-styrkanal (endast läsning, ingenting skickas)</message>
+    <message xml:lang="da">Læser MTU for Apple-tastaturets HID-styrekanal (kun læsning, intet sendes)</message>
+    <message xml:lang="nb">Leser MTU for HID-kontrollkanalen på Apple-tastaturet (bare lesing, ingenting sendes)</message>
+    <message xml:lang="fi">Luetaan Apple-näppäimistön HID-ohjauskanavan MTU (vain luku, mitään ei lähetetä)</message>
+    <message xml:lang="ru">Чтение MTU управляющего канала HID клавиатуры Apple (только чтение, ничего не отправляется)</message>
+    <message xml:lang="uk">Читання MTU керівного каналу HID клавіатури Apple (лише читання, нічого не надсилається)</message>
+    <message xml:lang="ja">Apple キーボードの HID 制御チャンネルの MTU を読み取っています (読み取りのみ、何も送信しません)</message>
+    <message xml:lang="zh_CN">正在读取 Apple 键盘 HID 控制通道的 MTU（只读，不发送任何内容）</message>
+    <message xml:lang="ko">Apple 키보드 HID 제어 채널의 MTU를 읽는 중(읽기 전용, 아무것도 보내지 않음)</message>
+    <message xml:lang="tr">Apple klavyenin HID denetim kanalının MTU değeri okunuyor (yalnızca okuma, hiçbir şey gönderilmez)</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">hid-inspect</annotate>
+  </action>
+
+  <!-- Closed list (bluez-conf, upower-conf, adapter-autosuspend), never a path, a key or a value. -->
+  <action id="com.agenceapi.AppleKbMonitor.doctor-fix">
+    <description>Apply the corrections of the Apple keyboard diagnostic (BlueZ, UPower, udev)</description>
+    <description xml:lang="fr">Appliquer les corrections du diagnostic du clavier Apple (BlueZ, UPower, udev)</description>
+    <description xml:lang="de">Die Korrekturen der Apple-Tastaturdiagnose anwenden (BlueZ, UPower, udev)</description>
+    <description xml:lang="es">Aplicar las correcciones del diagnóstico del teclado Apple (BlueZ, UPower, udev)</description>
+    <description xml:lang="it">Applica le correzioni della diagnostica della tastiera Apple (BlueZ, UPower, udev)</description>
+    <description xml:lang="pt">Aplicar as correções do diagnóstico do teclado Apple (BlueZ, UPower, udev)</description>
+    <description xml:lang="pt_BR">Aplicar as correções do diagnóstico do teclado Apple (BlueZ, UPower, udev)</description>
+    <description xml:lang="nl">De correcties van de Apple-toetsenborddiagnose toepassen (BlueZ, UPower, udev)</description>
+    <description xml:lang="pl">Zastosuj poprawki z diagnostyki klawiatury Apple (BlueZ, UPower, udev)</description>
+    <description xml:lang="cs">Použít opravy z diagnostiky klávesnice Apple (BlueZ, UPower, udev)</description>
+    <description xml:lang="sv">Tillämpa rättningarna från Apple-tangentbordets diagnos (BlueZ, UPower, udev)</description>
+    <description xml:lang="da">Anvend rettelserne fra Apple-tastaturets diagnose (BlueZ, UPower, udev)</description>
+    <description xml:lang="nb">Bruk rettelsene fra diagnosen av Apple-tastaturet (BlueZ, UPower, udev)</description>
+    <description xml:lang="fi">Ota käyttöön Apple-näppäimistön diagnoosin korjaukset (BlueZ, UPower, udev)</description>
+    <description xml:lang="ru">Применение исправлений диагностики клавиатуры Apple (BlueZ, UPower, udev)</description>
+    <description xml:lang="uk">Застосування виправлень діагностики клавіатури Apple (BlueZ, UPower, udev)</description>
+    <description xml:lang="ja">Apple キーボード診断の修正を適用 (BlueZ、UPower、udev)</description>
+    <description xml:lang="zh_CN">应用 Apple 键盘诊断的修正（BlueZ、UPower、udev）</description>
+    <description xml:lang="ko">Apple 키보드 진단의 수정 사항 적용(BlueZ, UPower, udev)</description>
+    <description xml:lang="tr">Apple klavye tanılamasının düzeltmelerini uygula (BlueZ, UPower, udev)</description>
+    <message>Authentication is required to apply the corrections of the Apple keyboard diagnostic to the Bluetooth, UPower or udev configuration</message>
+    <message xml:lang="fr">Authentification requise pour appliquer les corrections du diagnostic du clavier Apple à la configuration Bluetooth, UPower ou udev</message>
+    <message xml:lang="de">Zum Anwenden der Korrekturen der Apple-Tastaturdiagnose auf die Bluetooth-, UPower- oder udev-Konfiguration ist eine Authentifizierung erforderlich</message>
+    <message xml:lang="es">Se requiere autenticación para aplicar las correcciones del diagnóstico del teclado Apple a la configuración de Bluetooth, UPower o udev</message>
+    <message xml:lang="it">È richiesta l'autenticazione per applicare le correzioni della diagnostica della tastiera Apple alla configurazione di Bluetooth, UPower o udev</message>
+    <message xml:lang="pt">É necessária autenticação para aplicar as correções do diagnóstico do teclado Apple à configuração do Bluetooth, UPower ou udev</message>
+    <message xml:lang="pt_BR">É necessária autenticação para aplicar as correções do diagnóstico do teclado Apple à configuração do Bluetooth, UPower ou udev</message>
+    <message xml:lang="nl">Authenticatie is vereist om de correcties van de Apple-toetsenborddiagnose toe te passen op de configuratie van Bluetooth, UPower of udev</message>
+    <message xml:lang="pl">Do zastosowania poprawek z diagnostyki klawiatury Apple w konfiguracji Bluetooth, UPower lub udev wymagane jest uwierzytelnienie</message>
+    <message xml:lang="cs">K použití oprav z diagnostiky klávesnice Apple na konfiguraci Bluetooth, UPower nebo udev je vyžadováno ověření</message>
+    <message xml:lang="sv">Autentisering krävs för att tillämpa rättningarna från Apple-tangentbordets diagnos på Bluetooth-, UPower- eller udev-konfigurationen</message>
+    <message xml:lang="da">Godkendelse kræves for at anvende rettelserne fra Apple-tastaturets diagnose på Bluetooth-, UPower- eller udev-konfigurationen</message>
+    <message xml:lang="nb">Autentisering kreves for å bruke rettelsene fra diagnosen av Apple-tastaturet på Bluetooth-, UPower- eller udev-oppsettet</message>
+    <message xml:lang="fi">Apple-näppäimistön diagnoosin korjausten soveltaminen Bluetooth-, UPower- tai udev-asetuksiin vaatii tunnistautumisen</message>
+    <message xml:lang="ru">Для применения исправлений диагностики клавиатуры Apple к конфигурации Bluetooth, UPower или udev требуется аутентификация</message>
+    <message xml:lang="uk">Для застосування виправлень діагностики клавіатури Apple до налаштувань Bluetooth, UPower або udev потрібна автентифікація</message>
+    <message xml:lang="ja">Apple キーボード診断の修正を Bluetooth、UPower、udev の設定に適用するには認証が必要です</message>
+    <message xml:lang="zh_CN">将 Apple 键盘诊断的修正应用到蓝牙、UPower 或 udev 配置需要认证</message>
+    <message xml:lang="ko">Apple 키보드 진단의 수정 사항을 Bluetooth, UPower 또는 udev 구성에 적용하려면 인증이 필요합니다</message>
+    <message xml:lang="tr">Apple klavye tanılamasının düzeltmelerini Bluetooth, UPower veya udev yapılandırmasına uygulamak için kimlik doğrulaması gerekir</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_admin</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/apple-kb-monitor/akm-helper</annotate>
+    <annotate key="org.freedesktop.policykit.exec.argv1">doctor-fix</annotate>
+  </action>
+</policyconfig>

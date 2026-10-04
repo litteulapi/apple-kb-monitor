@@ -1,0 +1,77 @@
+{"capture":"apple-kb-monitor --dump 2026-10-01T03:57:18+02:00 (trailing zeros trimmed by the tool; 0x4C redacted after byte 7)"}
+{"id": "0x09", "hex": "0901"}
+{"id": "0x46", "hex": "46af0b"}
+{"id": "0x47", "hex": "4763"}
+{"id": "0x49", "hex": "49890b"}
+{"id": "0x4A", "hex": "4a12"}
+{"id": "0x4B", "hex": "4b0008"}
+{"id": "0x4C", "hex": "4c03f2eeddccbb<redacted 13 bytes>"}
+{"id": "0x4F", "hex": "4f50"}
+{"id": "0x51", "hex": "51436c617669657220"}
+{"id": "0x52", "hex": "52646520616c696365"}
+{"id": "0x53", "hex": "53202331"}
+{"id": "0x5A", "hex": "5a0b8a09ca09640806"}
+{"id": "0x5B", "hex": "5b06cc0384"}
+{"id": "0x60", "hex": "600b8a09ca09640806"}
+{"id": "0xEA", "hex": "ea62"}
+{"id": "0xEB", "hex": "eb0b8a09ca09640806"}
+{"id": "0xF4", "hex": "f406cc"}
+{"id": "0xF5", "hex": "f50384"}
+{"id": "0xF6", "hex": "f60004"}
+{"id": "0xF7", "hex": "f70004"}
+{"id": "0xFE", "hex": "fe0004"}
+{"id": "0xFF", "hex": "ff0ba601"}
+{"capture":"sample_reports.py round A 2026-10-01T03:58 (exact ioctl length)"}
+{"t": 1790819904.3, "round": 0, "id": "0x09", "ret": 4, "errno": null, "ms": 7.3, "hex": "09010000"}
+{"t": 1790819904.7, "round": 0, "id": "0x46", "ret": 3, "errno": null, "ms": 22.8, "hex": "46af0b"}
+{"t": 1790819905.2, "round": 0, "id": "0x47", "ret": 2, "errno": null, "ms": 36.8, "hex": "4763"}
+{"t": 1790819905.6, "round": 0, "id": "0x49", "ret": 3, "errno": null, "ms": 24.8, "hex": "49890b"}
+{"t": 1790819906.0, "round": 0, "id": "0x4A", "ret": 2, "errno": null, "ms": 24.9, "hex": "4a12"}
+{"t": 1790819906.4, "round": 0, "id": "0x4B", "ret": 3, "errno": null, "ms": 40.8, "hex": "4b0008"}
+{"t": 1790819906.9, "round": 0, "id": "0x4C", "ret": 20, "errno": null, "ms": 21.8, "hex": "4c03f2eeddccbb<redacted 13 bytes>"}
+{"t": 1790819907.3, "round": 0, "id": "0x4F", "ret": 3, "errno": null, "ms": 25.8, "hex": "4f5000"}
+{"t": 1790819907.7, "round": 0, "id": "0x51", "ret": 9, "errno": null, "ms": 23.9, "hex": "51436c617669657220"}
+{"t": 1790819908.1, "round": 0, "id": "0x52", "ret": 9, "errno": null, "ms": 24.8, "hex": "52646520616c696365"}
+{"t": 1790819908.6, "round": 0, "id": "0x53", "ret": 9, "errno": null, "ms": 25.8, "hex": "532023310000000000"}
+{"t": 1790819909.0, "round": 0, "id": "0x5A", "ret": 9, "errno": null, "ms": 23.8, "hex": "5a0b8a09ca09640806"}
+{"t": 1790819909.4, "round": 0, "id": "0x5B", "ret": 9, "errno": null, "ms": 24.8, "hex": "5b06cc038400000000"}
+{"t": 1790819909.8, "round": 0, "id": "0x60", "ret": 9, "errno": null, "ms": 24.8, "hex": "600b8a09ca09640806"}
+{"t": 1790819910.3, "round": 0, "id": "0xEA", "ret": 2, "errno": null, "ms": 25.9, "hex": "ea62"}
+{"t": 1790819910.7, "round": 0, "id": "0xEB", "ret": 9, "errno": null, "ms": 24.8, "hex": "eb0b8a09ca09640806"}
+{"t": 1790819911.1, "round": 0, "id": "0xF4", "ret": 3, "errno": null, "ms": 23.9, "hex": "f406cc"}
+{"t": 1790819911.5, "round": 0, "id": "0xF5", "ret": 3, "errno": null, "ms": 25.1, "hex": "f50384"}
+{"t": 1790819912.0, "round": 0, "id": "0xF6", "ret": 3, "errno": null, "ms": 23.9, "hex": "f60004"}
+{"t": 1790819912.4, "round": 0, "id": "0xF7", "ret": 3, "errno": null, "ms": 24.8, "hex": "f70004"}
+{"t": 1790819912.8, "round": 0, "id": "0xFE", "ret": 9, "errno": null, "ms": 41.9, "hex": "fe0000000000000000"}
+{"t": 1790819913.3, "round": 0, "id": "0xFF", "ret": 4, "errno": null, "ms": 19.8, "hex": "ff0baf01"}
+{"capture":"sample_reports.py rounds B/C 03:58:46 and 04:00:12; link dropped during C"}
+{"t":1790819926,"kernel_capacity":99}
+{"t": 1790819927.4, "round": 0, "id": "0x46", "ret": 3, "errno": null, "ms": 10.8, "hex": "46af0b"}
+{"t": 1790819927.8, "round": 0, "id": "0x47", "ret": 2, "errno": null, "ms": 18.8, "hex": "4763"}
+{"t": 1790819928.2, "round": 0, "id": "0x49", "ret": 3, "errno": null, "ms": 24.8, "hex": "49890b"}
+{"t": 1790819928.6, "round": 0, "id": "0x4A", "ret": 2, "errno": null, "ms": 24.8, "hex": "4a12"}
+{"t": 1790819929.0, "round": 0, "id": "0x4B", "ret": 3, "errno": null, "ms": 24.8, "hex": "4b0008"}
+{"t": 1790819929.5, "round": 0, "id": "0xEA", "ret": 2, "errno": null, "ms": 25.9, "hex": "ea62"}
+{"t": 1790819929.9, "round": 0, "id": "0xF4", "ret": 3, "errno": null, "ms": 23.8, "hex": "f406cc"}
+{"t": 1790819930.3, "round": 0, "id": "0xF5", "ret": 3, "errno": null, "ms": 25.8, "hex": "f50384"}
+{"t": 1790819930.7, "round": 0, "id": "0xF6", "ret": 3, "errno": null, "ms": 23.8, "hex": "f60004"}
+{"t": 1790819931.2, "round": 0, "id": "0xF7", "ret": 3, "errno": null, "ms": 24.8, "hex": "f70004"}
+{"t": 1790819931.6, "round": 0, "id": "0xFE", "ret": 9, "errno": null, "ms": 41.9, "hex": "fe0000000000000000"}
+{"t": 1790819932.0, "round": 0, "id": "0xFF", "ret": 4, "errno": null, "ms": 19.8, "hex": "ff0baf01"}
+{"t": 1790819932.5, "round": 0, "id": "0x5B", "ret": 9, "errno": null, "ms": 27.8, "hex": "5b06cc038400000000"}
+{"t": 1790819932.9, "round": 0, "id": "0x09", "ret": 4, "errno": null, "ms": 21.9, "hex": "09010000"}
+{"t":1790820008,"kernel_capacity":99}
+{"t": 1790820009.0, "round": 0, "id": "0x46", "ret": 3, "errno": null, "ms": 8.2, "hex": "46af0b"}
+{"t": 1790820009.4, "round": 0, "id": "0x47", "ret": 2, "errno": null, "ms": 18.8, "hex": "4763"}
+{"t": 1790820009.8, "round": 0, "id": "0x49", "ret": 3, "errno": null, "ms": 26.1, "hex": "49890b"}
+{"t": 1790820010.3, "round": 0, "id": "0x4A", "ret": 2, "errno": null, "ms": 23.6, "hex": "4a12"}
+{"t": 1790820010.7, "round": 0, "id": "0x4B", "ret": 3, "errno": null, "ms": 25.8, "hex": "4b0008"}
+{"t": 1790820011.1, "round": 0, "id": "0xEA", "ret": 2, "errno": null, "ms": 24.8, "hex": "ea62"}
+{"t": 1790820011.6, "round": 0, "id": "0xF4", "ret": 3, "errno": null, "ms": 39.9, "hex": "f406cc"}
+{"t": 1790820012.0, "round": 0, "id": "0xF5", "ret": 3, "errno": null, "ms": 22.8, "hex": "f50384"}
+{"t": 1790820012.4, "round": 0, "id": "0xF6", "ret": 3, "errno": null, "ms": 23.9, "hex": "f60004"}
+{"t": 1790820012.8, "round": 0, "id": "0xF7", "ret": 3, "errno": null, "ms": 41.9, "hex": "f70004"}
+{"t": 1790820016.6, "round": 0, "id": "0xFE", "ret": -1, "errno": 5, "ms": 3392.9, "hex": ""}
+{"t": 1790820020.6, "round": 0, "id": "0xFF", "ret": -1, "errno": 5, "ms": 3598.9, "hex": ""}
+{"t": 1790820024.6, "round": 0, "id": "0x5B", "ret": -1, "errno": 5, "ms": 3598.7, "hex": ""}
+{"t": 1790820028.6, "round": 0, "id": "0x09", "ret": -1, "errno": 5, "ms": 3603.4, "hex": ""}

@@ -1,0 +1,80 @@
+name: CI
+
+# Every push and pull request: the checks of scripts/ci-local.sh in a fresh
+# Arch Linux container, as an unprivileged user (tests that check permissions
+# would pass as root). No job needs a keyboard; D-Bus tests use a private bus.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      # the helper tests duplicate a child's sockets with pidfd_getfd, which Docker's seccomp profile gates on it
+      options: --cap-add SYS_PTRACE
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Install tools
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git rust dbus shellcheck gettext python \
+            python-pytest python-dbus python-gobject \
+            qt6-base qt6-declarative cmake extra-cmake-modules kcmutils ki18n kcoreaddons kirigami \
+            libplasma plasma-workspace systemd libcap desktop-file-utils cargo-deny
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Prepare an unprivileged user
+        run: |
+          useradd -m ci
+          chown -R ci: "$GITHUB_WORKSPACE"
+          git config --system --add safe.directory '*'
+      - name: Versions, secrets, private data, links, claims, redaction
+        run: su ci -c 'scripts/ci-local.sh --only versions,secrets,private,links,claims,redaction'
+      - name: rustfmt
+        run: su ci -c 'scripts/ci-local.sh --only fmt'
+      - name: clippy -D warnings
+        run: su ci -c 'scripts/ci-local.sh --only clippy'
+      - name: cargo deny (advisories, bans, sources)
+        run: su ci -c 'scripts/ci-local.sh --only deny'
+      - name: cargo test (private dbus-daemon)
+        run: su ci -c 'scripts/ci-local.sh --only test'
+      - name: shellcheck and shell syntax
+        run: su ci -c 'scripts/ci-local.sh --only shell'
+      - name: Translation catalogs (msgfmt --check)
+        run: |
+          set -eu
+          for f in po/*.po kcm/po/*/*.po plasma/po/*.po; do
+            msgfmt --check --statistics -o /dev/null "$f"
+          done
+      - name: qmllint (Qt 6), widget and System Settings module
+        run: su ci -c 'scripts/ci-local.sh --only qml'
+      - name: C helper, security files, catalogs, udev, systemd units
+        run: su ci -c 'scripts/ci-local.sh --only c,security,udev,units'
+      - name: System Settings module (cmake build, ctest), widget QML tests, tools' fixture tests
+        run: |
+          su ci -c 'scripts/ci-local.sh --only kcm,plasma,re'
+      - name: No step skipped (a missing tool would turn a check into a pass)
+        run: "! grep -E '^\\[skip\\]' scripts/out/2*/report.txt"
+      - name: Keep the report
+        if: always()
+        run: cat scripts/out/2*/report.txt 2>/dev/null || true
+      - name: Upload the step logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          path: scripts/out/
+          if-no-files-found: ignore
+          retention-days: 14

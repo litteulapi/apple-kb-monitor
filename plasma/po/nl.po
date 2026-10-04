@@ -1,0 +1,665 @@
+# Dutch translation of the Plasma widget com.agenceapi.devicehub.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Dutch\n"
+"Language: nl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "alkaline"
+msgstr "alkaline"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "lithium"
+
+msgid "not declared"
+msgstr "niet opgegeven"
+
+msgid "State"
+msgstr "Status"
+
+msgid "Radio"
+msgstr "Radio"
+
+msgid "Keys"
+msgstr "Toetsen"
+
+msgid "Data"
+msgstr "Gegevens"
+
+msgid "Diag"
+msgstr "Diag"
+
+msgid "Apple keyboard monitor"
+msgstr "Apple-toetsenbordmonitor"
+
+msgid "Settings"
+msgstr "Instellingen"
+
+msgid "READ %1"
+msgstr "GELEZEN %1"
+
+msgid "NO DAEMON"
+msgstr "GEEN DIENST"
+
+msgid "ONLINE"
+msgstr "ONLINE"
+
+msgid "OFFLINE"
+msgstr "OFFLINE"
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr ""
+"De monitor apple-kb-monitord staat niet op de sessiebus: er kan niets worden "
+"gelezen."
+
+msgid "Reading error: %1"
+msgstr "Leesfout: %1"
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr ""
+"Toetsenbord niet verbonden. Druk op een toets om het te wekken, of verbind "
+"het opnieuw via RADIO."
+
+msgid "Waiting for the keyboard data…"
+msgstr "Wachten op de toetsenbordgegevens…"
+
+msgid "Batteries critical: replace them now."
+msgstr "Batterijen kritiek: vervang ze nu."
+
+msgid "Batteries low: plan to replace them."
+msgstr "Batterijen bijna leeg: plan de vervanging."
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] "Instabiele verbinding: %1 verbreking in het afgelopen uur."
+msgstr[1] "Instabiele verbinding: %1 verbrekingen in het afgelopen uur."
+
+msgid "%1%"
+msgstr "%1%"
+
+msgid "rssi-helper not installed"
+msgstr "rssi-helper niet geïnstalleerd"
+
+msgid "see akmctl doctor"
+msgstr "zie akmctl doctor"
+
+msgid "not measured (%1)"
+msgstr "niet gemeten (%1)"
+
+msgid "the rssi-helper utility is not installed"
+msgstr "het hulpprogramma rssi-helper is niet geïnstalleerd"
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+"het hulpprogramma rssi-helper is mislukt (capability ontbreekt, Bluetooth "
+"geweigerd)"
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr "het hulpprogramma rssi-helper antwoordt niet op tijd"
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "de Bluetooth-adapter geeft geen meting voor deze verbinding"
+
+msgid "the signal cannot be measured"
+msgstr "het signaal kan niet worden gemeten"
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr "installeer het pakket apple-kb-monitor opnieuw"
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr ""
+"installeer het pakket apple-kb-monitor opnieuw en voer daarna akmctl doctor "
+"uit"
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "controleer de Bluetooth-dienst: systemctl status bluetooth"
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "breng het toetsenbord dichterbij of verbind het opnieuw"
+
+msgid "run akmctl doctor"
+msgstr "voer akmctl doctor uit"
+
+msgid "Battery history"
+msgstr "Batterijgeschiedenis"
+
+msgid "24 h"
+msgstr "24 u"
+
+msgid "7 d"
+msgstr "7 d"
+
+msgid "30 d"
+msgstr "30 d"
+
+msgid "90 d"
+msgstr "90 d"
+
+msgid "Refresh"
+msgstr "Verversen"
+
+msgid "LOADING…"
+msgstr "LADEN…"
+
+msgid "Readings: %1"
+msgstr "Metingen: %1"
+
+msgid "%1 V"
+msgstr "%1 V"
+
+msgid "Batteries %"
+msgstr "Batterijen %"
+
+msgid "Voltage %1 to %2 V"
+msgstr "Spanning %1 tot %2 V"
+
+msgid "History not available: %1"
+msgstr "Geschiedenis niet beschikbaar: %1"
+
+msgid "Monitor stopped: no history."
+msgstr "Monitor gestopt: geen geschiedenis."
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr "Te weinig metingen in deze periode om een curve te tekenen."
+
+msgid "Batteries"
+msgstr "Batterijen"
+
+msgid "Voltage"
+msgstr "Spanning"
+
+msgid "EMPTY"
+msgstr "LEEG"
+
+msgid "CRITICAL"
+msgstr "KRITIEK"
+
+msgid "LOW"
+msgstr "LAAG"
+
+msgid "FULL"
+msgstr "VOL"
+
+msgid "Thresholds"
+msgstr "Drempels"
+
+msgid "Estimate"
+msgstr "Schatting"
+
+msgid "Apple display"
+msgstr "Apple-weergave"
+
+msgid "Chemistry"
+msgstr "Chemie"
+
+msgid "Installed on"
+msgstr "Geplaatst op"
+
+msgid "Trend"
+msgstr "Trend"
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] "−%2% per dag over %1 dag"
+msgstr[1] "−%2% per dag over %1 dagen"
+
+msgid "Empty around"
+msgstr "Leeg rond"
+
+msgid "Last reading"
+msgstr "Laatste meting"
+
+msgid "The last reading missed a report of the keyboard."
+msgstr "Bij de laatste meting ontbrak een rapport van het toetsenbord."
+
+msgid "Device"
+msgstr "Apparaat"
+
+msgid "Model"
+msgstr "Model"
+
+msgid "Name"
+msgstr "Naam"
+
+msgid "Address"
+msgstr "Adres"
+
+msgid "Chip"
+msgstr "Chip"
+
+msgid "Driver"
+msgstr "Stuurprogramma"
+
+msgid "Firmware"
+msgstr "Firmware"
+
+msgid "System diagnostic"
+msgstr "Systeemdiagnose"
+
+msgid "Checking…"
+msgstr "Controleren…"
+
+msgid "Run the full check"
+msgstr "Volledige controle uitvoeren"
+
+msgid "%1/%2 PASSED"
+msgstr "%1/%2 GESLAAGD"
+
+msgid "PROBLEMS: %1"
+msgstr "PROBLEMEN: %1"
+
+msgid "Check not run: %1"
+msgstr "Controle niet uitgevoerd: %1"
+
+msgid "Monitor"
+msgstr "Monitor"
+
+msgid "RUNNING"
+msgstr "ACTIEF"
+
+msgid "STOPPED"
+msgstr "GESTOPT"
+
+msgid "Version"
+msgstr "Versie"
+
+msgid "Keyboard"
+msgstr "Toetsenbord"
+
+msgid "Link"
+msgstr "Verbinding"
+
+msgid "Last error"
+msgstr "Laatste fout"
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr "Start hem met: systemctl --user start apple-kb-monitord"
+
+msgid "Log"
+msgstr "Logboek"
+
+msgid "[FAIL]"
+msgstr "[MISLUKT]"
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr ""
+"De controle wordt door de monitor uitgevoerd (een tiental tests, nooit op "
+"het toetsenbord)."
+
+msgid "Function keys"
+msgstr "Functietoetsen"
+
+msgid "Media keys first"
+msgstr "Mediatoetsen eerst"
+
+msgid "F1–F12 first"
+msgstr "F1–F12 eerst"
+
+msgid "Current mode: %1"
+msgstr "Huidige modus: %1"
+
+msgid "Fn mode not read yet."
+msgstr "Fn-modus nog niet gelezen."
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr "Fn-modus onbekend: het toetsenbord is niet verbonden."
+
+msgid "Administrator authentication requested…"
+msgstr "Beheerdersauthenticatie gevraagd…"
+
+msgid "Fn mode not changed: %1"
+msgstr "Fn-modus niet gewijzigd: %1"
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr "hid_apple geldt voor alle Apple-toetsenborden van deze computer."
+
+msgid "Locks"
+msgstr "Vergrendelingen"
+
+msgid "Caps Lock"
+msgstr "Caps Lock"
+
+msgid "Num Lock"
+msgstr "Num Lock"
+
+msgid "on"
+msgstr "aan"
+
+msgid "off"
+msgstr "uit"
+
+msgid "ON"
+msgstr "AAN"
+
+msgid "OFF"
+msgstr "UIT"
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr "Bij elke meting afgelezen van de leds van het toetsenbord."
+
+msgid "Special keys"
+msgstr "Speciale toetsen"
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+"De tabel met speciale toetsen (code en KDE-actie met en zonder Fn) en de "
+"toetsentoewijzingseditor staan in Systeeminstellingen, module Apple-"
+"toetsenbord, pagina Toetsen."
+
+msgid "Edit the keys"
+msgstr "Toetsen bewerken"
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] "%1 s geleden"
+msgstr[1] "%1 s geleden"
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "%1 min geleden"
+msgstr[1] "%1 min geleden"
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "%1 u geleden"
+msgstr[1] "%1 u geleden"
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "%1 dag geleden"
+msgstr[1] "%1 dagen geleden"
+
+msgid "EXCELLENT"
+msgstr "UITSTEKEND"
+
+msgid "GOOD"
+msgstr "GOED"
+
+msgid "WEAK"
+msgstr "ZWAK"
+
+msgid "Signal"
+msgstr "Signaal"
+
+msgid "Not measured"
+msgstr "Niet gemeten"
+
+msgid "Measured"
+msgstr "Gemeten"
+
+msgid "at %1"
+msgstr "om %1"
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr ""
+"dB ten opzichte van het ideale ontvangstbereik van de adapter (0 = ideaal), "
+"geen dBm."
+
+msgid "Correction: %1"
+msgstr "Correctie: %1"
+
+msgid "No measurement: the keyboard is not connected."
+msgstr "Geen meting: het toetsenbord is niet verbonden."
+
+msgid "Connected"
+msgstr "Verbonden"
+
+msgid "Yes"
+msgstr "Ja"
+
+msgid "No"
+msgstr "Nee"
+
+msgid "Paired"
+msgstr "Gekoppeld"
+
+msgid "TX power"
+msgstr "Zendvermogen"
+
+msgid "%1 dBm"
+msgstr "%1 dBm"
+
+msgid "Last wake-up"
+msgstr "Laatste keer gewekt"
+
+msgid "Paired host"
+msgstr "Gekoppelde host"
+
+msgid "Monitor's link"
+msgstr "Verbinding van de monitor"
+
+msgid "connected"
+msgstr "verbonden"
+
+msgid "asleep"
+msgstr "slaapt"
+
+msgid "unreachable"
+msgstr "onbereikbaar"
+
+msgid "Attempts / failures"
+msgstr "Pogingen / mislukt"
+
+msgid "%1 / %2"
+msgstr "%1 / %2"
+
+msgid "Link quality"
+msgstr "Verbindingskwaliteit"
+
+msgid "Disconnections"
+msgstr "Verbrekingen"
+
+msgid "1 h"
+msgstr "1 u"
+
+msgid "7 days"
+msgstr "7 dagen"
+
+msgid "today"
+msgstr "vandaag"
+
+msgid "D-%1"
+msgstr "D-%1"
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr "De monitor heeft nog geen verbreking geregistreerd."
+
+msgid "Restore the link"
+msgstr "Verbinding herstellen"
+
+msgid "Reconnect"
+msgstr "Opnieuw verbinden"
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr ""
+"Koppeling verloren of geweigerd? Koppel opnieuw vanuit een terminal (er "
+"wordt om bevestiging gevraagd): akmctl repair"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Autonomy"
+msgstr "Gebruiksduur"
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 dag"
+msgstr[1] "≈ %1 dagen"
+
+msgid "≈ %1 h"
+msgstr "≈ %1 u"
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr ""
+"Aanduiding van het toetsenbord: zijn eigen percentage, verandert in stappen "
+"(vaak bij opnieuw verbinden)."
+
+msgid "not enough history yet"
+msgstr "nog te weinig geschiedenis"
+
+msgid "%1, up to date"
+msgstr "%1, actueel"
+
+msgid "%1, update %2 at Apple"
+msgstr "%1, update %2 bij Apple"
+
+msgid "%1, not in the table"
+msgstr "%1, niet in de tabel"
+
+msgid "Keyboard name"
+msgstr "Toetsenbordnaam"
+
+msgid "Apply"
+msgstr "Toepassen"
+
+msgid "Keyboard's own name"
+msgstr "Eigen naam van het toetsenbord"
+
+msgid "Cancel"
+msgstr "Annuleren"
+
+msgid "Rename refused: %1"
+msgstr "Hernoemen geweigerd: %1"
+
+msgid "Actions"
+msgstr "Acties"
+
+msgid "Fn: waiting for authorisation…"
+msgstr "Fn: wachten op autorisatie…"
+
+msgid "Rename"
+msgstr "Hernoemen"
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr "%1 — actueel (nieuwste openbare versie bekend bij Apple)"
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr "%1 — update beschikbaar bij Apple (nieuwste bekende: %2)"
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr "%1 — onbekend (model of versie niet in de tabel)"
+
+msgid "Autonomy: %1"
+msgstr "Gebruiksduur: %1"
+
+msgid "media keys first"
+msgstr "mediatoetsen eerst"
+
+msgid "Fn key has no effect"
+msgstr "Fn-toets zonder effect"
+
+msgid "F-keys disabled"
+msgstr "F-toetsen uitgeschakeld"
+
+msgid "Switch to F1–F12 first"
+msgstr "Overschakelen naar F1–F12 eerst"
+
+msgid "Switch to media keys first"
+msgstr "Overschakelen naar mediatoetsen eerst"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1 (pogingen: %2, mislukt: %3)"
+
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+msgid "new batteries, no estimate yet"
+msgstr "nieuwe batterijen, nog geen schatting"
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr "≈ %1% (%2 tot %3%), %4"
+
+msgid "Keyboard not connected"
+msgstr "Toetsenbord niet verbonden"
+
+msgid "Monitor stopped"
+msgstr "Monitor gestopt"
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr "Apple-toetsenbord, batterij %1 procent"
+
+msgid "Apple keyboard, battery level unknown"
+msgstr "Apple-toetsenbord, batterijniveau onbekend"
+
+msgid "Apple keyboard, %1"
+msgstr "Apple-toetsenbord, %1"
+
+msgid "Keyboard indication %1"
+msgstr "Aanduiding van het toetsenbord %1"
+
+msgid "Estimate: %1"
+msgstr "Schatting: %1"
+
+msgid "Apple display: %1%"
+msgstr "Apple-weergave: %1%"
+
+msgid "Signal: %1"
+msgstr "Signaal: %1"
+
+msgid "Firmware: %1"
+msgstr "Firmware: %1"
+
+msgid "Waiting for the Apple keyboard…"
+msgstr "Wachten op het Apple-toetsenbord…"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord staat niet op de sessiebus"
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr "Apple-toetsenbord &configureren…"
+
+msgid "New reading requested."
+msgstr "Nieuwe meting gevraagd."
+
+msgid "Reading not requested: %1"
+msgstr "Meting niet gevraagd: %1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+"Opnieuw verbinden gevraagd. Druk op een toets van het toetsenbord als het "
+"slaapt."
+
+msgid "refused by the monitor"
+msgstr "geweigerd door de monitor"
+
+msgid "Reconnection not requested: %1"
+msgstr "Opnieuw verbinden niet gevraagd: %1"
+
+msgid "excellent"
+msgstr "uitstekend"
+
+msgid "good"
+msgstr "goed"
+
+msgid "weak"
+msgstr "zwak"
+
+msgid "Apple Keyboard"
+msgstr "Apple-toetsenbord"
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr "Vol %1 / Laag %2 / Kritiek %3 / Leeg %4 mV"

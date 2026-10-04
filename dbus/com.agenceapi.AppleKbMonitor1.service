@@ -1,0 +1,6 @@
+[D-BUS Service]
+# Session-bus activation: a script calling the name directly starts the systemd --user unit
+# instead of a second reader; akmctl and the widget never activate, the settings module uses StartUnit.
+Name=com.agenceapi.AppleKbMonitor1
+Exec=/usr/bin/apple-kb-monitord
+SystemdService=apple-kb-monitord.service

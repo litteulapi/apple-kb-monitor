@@ -1,0 +1,160 @@
+# Configuration
+
+Checked against `apihub-app/akm-core/src/config.rs` (parser and defaults), the systemd units and `PKGBUILD` of 3.1.0-15.
+
+## `config.toml` of the daemon
+
+`apple-kb-monitord` reads one optional file, `$XDG_CONFIG_HOME/apple-kb-monitor/config.toml` (default `~/.config/apple-kb-monitor/config.toml`), **once at startup** (`systemctl --user restart apple-kb-monitord.service` after an edit; the System Settings module offers the restart). A missing file means the defaults. The file is read by the `toml` crate and typed through `serde`: any valid TOML is understood (an optional UTF-8 BOM is skipped). An unknown key or a mistyped value is **logged as a warning (`line N: …`) and ignored, the default is kept**; four section names reserved by another program that shares this file, sub-tables included, are skipped without a warning (`FOREIGN_SECTIONS` in `config.rs`). A file that is not valid TOML (a stray word, a section opened twice, `enabled = yes`) is not rejected as a whole: it is read again statement by statement, so one bad line costs one warning and one default. Stricter than the former hand-written reader on three spellings that TOML forbids and that it took: a leading zero (`critical = 05`), a float without digits after the dot (`3.`), an empty array element (`[30,,15]`); each now gives one warning and the default.
+
+Every key, with its default:
+
+```toml
+[alerts]
+thresholds = [30, 15, 5]   # % of the ESTIMATED charge (else of the keyboard's %), 1..99 each; one notification per threshold crossed
+hysteresis = 3             # points above the threshold before it is re-armed (integer or float)
+critical = 5               # thresholds <= critical are sent with the "critical" urgency (0..99)
+enabled = true             # false: no battery alert at all
+
+[battery]
+chemistry = "alkaline"     # "alkaline" | "nimh" | "lithium" | "unknown"
+
+[notifications]
+connection = true          # "disconnected" / "reconnected (N %)" / "switched off", low urgency
+battery_replaced = true    # "new batteries detected"
+link_unstable = true       # "unstable link": more than 3 disconnections within an hour, once per episode
+battery_advice = true      # "batteries changed too often" after two sets in a row under 30 days
+defer_to_powerdevil = true # KDE PowerDevil already warns about this keyboard: one distinct reminder only
+quiet_hours = ""           # e.g. "22:00-07:00": non-critical notifications held until the range ends
+
+[devices]
+reapply_settings = "ask"   # Fn mode remembered for a keyboard, at its reconnection: "ask" | "auto" | "off"
+
+[osd]
+fn_mode = true             # Plasma OSD when hid_apple's Fn mode (or iso_layout) changes
+caps_lock = true           # Plasma OSD "Caps Lock on / off" when the key is pressed
+
+[usage]
+active_time = false        # true: count the minutes per day the keyboard is used; no key is ever recorded
+
+[display]
+apple_percent = true       # also show the percentage "as macOS shows it", labelled "Apple display"
+
+[apple]
+will_shutdown = true           # send WillShutdown (Feature 0x40) once at shutdown / restart, as macOS
+disconnect_on_breaker = true   # after 3 unanswered requests: ask BlueZ once to disconnect, as macOS; false = only stop the requests
+# allow_device_name_write: OBSOLETE, still read, ignored; may be deleted
+```
+
+| Section | Key | Type | Default | Read by | Effect |
+|---|---|---|---|---|---|
+| `[alerts]` | `thresholds` | array of integers 1..99 | `[30, 15, 5]` | daemon | Values outside 1..99 are dropped with a warning; an empty array disables the alerts (warning). |
+| `[alerts]` | `hysteresis` | integer or float | `3` | daemon | A crossed threshold is re-armed when the value climbs back above threshold + hysteresis. |
+| `[alerts]` | `critical` | integer 0..99 | `5` | daemon | Urgency of the notification: critical (persistent) at or below, normal above. |
+| `[alerts]` | `enabled` | bool | `true` | daemon | Master switch of the percentage alerts. The keyboard-driven alerts (Input `0x30`) are separate. |
+| `[battery]` | `chemistry` | string | `"alkaline"` | daemon, widget, module | Discharge curve of the estimate (see below). `"unknown"` = no estimate, alerts on the keyboard's percentage. |
+| `[notifications]` | `connection` | bool | `true` | daemon | Link notifications (`KeyboardDisconnected`, `KeyboardReconnected`, `KeyboardOff`). |
+| `[notifications]` | `battery_replaced` | bool | `true` | daemon | `BatteryReplaced` when fresh cells are detected. |
+| `[notifications]` | `link_unstable` | bool | `true` | daemon | `LinkUnstable` when the keyboard disconnected more than 3 times within an hour, once per episode (the episode ends when the last hour is back to 3 or fewer). Disconnections for a system suspend, asked from the tray, announced by `akmctl repair` or by the keyboard switching off do not count. The counts are kept either way. |
+| `[notifications]` | `battery_advice` | bool | `true` | daemon | `BatteryAdvice`, once, when the second set of batteries in a row is replaced within 30 days. The advice itself stays in `GetState` (`battery_advice: {days, since}`) and in the tray menu until the set in use has lasted 30 days. A set whose beginning is unknown (the history starts with it) is never counted. |
+| `[notifications]` | `defer_to_powerdevil` | bool | `true` | daemon | When PowerDevil shows its own low-battery warning for this keyboard, the 30 / 15 / 5 % alerts shrink to one `BatteryEstimate` reminder ([INTEGRATION-KDE.md](INTEGRATION-KDE.md) §3). |
+| `[notifications]` | `quiet_hours` | string `"HH:MM-HH:MM"`, several separated by commas | `""` (none) | daemon | Local time. Inside a range a notification that is not critical is not sent: it is journalled (`notification held until 07:00 ...`) and shown when the range ends, one per replacement slot (the latest). A range may cross midnight. Critical notifications (critical batteries, re-pairing needed, errors) are always shown at once. What waits is kept in `deferred-notifications.json` and survives a restart. A malformed value is a warning and no quiet hours. |
+| `[devices]` | `reapply_settings` | `"ask"`, `"auto"` or `"off"` | `"ask"` | daemon | `SetFnMode` on a keyboard's object remembers the mode for THAT keyboard (by address). When the keyboard reconnects and another mode is in effect: `ask` raises `SettingsReapply` with an "Apply" button (then the usual polkit authentication); `auto` applies at once (the authentication dialog appears unless the administrator allowed the polkit action); `off` does nothing. `hid_apple` has one Fn mode for every Apple keyboard of the computer: the notification says so. |
+| `[osd]` | `fn_mode` | bool | `true` | daemon | On-screen display of Plasma (`org.kde.osdService.showText` on `org.kde.plasmashell`) with the new state when `hid_apple.fnmode` or `iso_layout` changes, whoever changed it. The first value seen after a start only records the state. Without Plasma nothing is shown. |
+| `[osd]` | `caps_lock` | bool | `true` | daemon | OSD "Caps Lock on / off" when the keyboard's Caps Lock LED changes right after the keyboard sent something (no key is looked at). |
+| `[usage]` | `active_time` | bool | `false` | daemon | Usage statistics **without key logging**: a minute counts as active when at least one input report arrived during it (the passive listener only says "something arrived", with no data). Stored: one counter per local day, 90 days (`usage.json`). Published in `GetState` as `usage: {today_active_minutes, days: [{day, active_minutes, active_hours}]}` (last 7 days); absent while off. |
+| `[display]` | `apple_percent` | bool | `true` | daemon (JSON), widget, `akmctl status` | Secondary figure only; alerts and the estimate never use it. IOBluetooth remaps the raw `0x47` value: 54..100 → 100 %, 21..53 → 21 + (raw − 21) × 2.4375, below 21 unchanged. |
+| `[apple]` | `will_shutdown` | bool | `true` | daemon, `akmctl status` (`Shutdown:` line, JSON `will_shutdown`) | See "WillShutdown" below. |
+| `[apple]` | `disconnect_on_breaker` | bool | `true` | daemon | After the third consecutive silence of the keyboard, one `org.bluez.Device1.Disconnect` (never `RemoveDevice`), bounded to 5 s, never retried. |
+| `[apple]` | `allow_device_name_write` | bool | `false` | nobody | **Obsolete.** Still read so that an existing file raises no warning; ignored. See "Name stored in the keyboard" below. |
+
+The **System Settings module** ("Apple Keyboard" → Notifications page) has it written by the daemon (`…1.Settings.SetConfig`, one key per call, atomic write), which rewrites only the keys that changed and keeps comments and unknown keys.
+
+### WillShutdown (`[apple] will_shutdown`)
+
+Default **true**, because it is what macOS sends to this keyboard at every shutdown and restart. When the computer shuts down or restarts, the daemon sends **one** Feature report, `0x40` (`WillShutdown`), made of the report id alone (`53 40` on the Bluetooth link), exactly as Apple's driver does. Conditions, all required: option on, keyboard connected, nothing sent yet in this run, circuit breaker closed, at least 1 s since the previous hardware access. A failure is logged and never retried, and never delays the shutdown by more than 3.5 s. Two doors lead to the same single write: the logind `PrepareForShutdown` delay inhibitor held by the daemon, and the user unit `apple-kb-monitor-shutdown.service` (`ExecStop=akmctl shutdown-notify --only-if-stopping`). `systemctl --user disable --now apple-kb-monitor-shutdown.service` disables the unit; the inhibitor stays governed by the option. `false` sends nothing. Evidence and context: [APPLE-PARITY.md](APPLE-PARITY.md).
+
+### Name stored in the keyboard (`[apple] allow_device_name_write`, obsolete)
+
+This key was a lock of `akmctl rename --device-name`. It is **obsolete**: the key is still read (no warning) and ignored, whatever its value; it can be deleted. Writing the name stored in the keyboard needs no configuration: `akmctl rename --device-name <name>` asks one confirmation (or takes `--yes`), see [RENAME-KEYBOARD.md](RENAME-KEYBOARD.md). The alias on this computer (`akmctl rename <name>`, BlueZ `Alias`) writes nothing to the keyboard.
+
+## Battery: what is shown and what the alerts use
+
+The keyboard reports a percentage (report `0x47`, = kernel `power_supply`). It is **not a remaining charge**: the firmware interpolates the pair voltage on a factory table (2954 / 2506 / 2404 / 2054 mV for 100 / 75 / 50 / 25 %, read in `0x5A`; the thresholds Full / Low / Critical / Empty of `0x60` are read once per connection). On alkaline cells that scale is optimistic in the middle of the battery's life: firmware 75 % is about 35 % of real charge, 50 % about 25 %, 30 % about 7 % ([BATTERY-CHECK.md](BATTERY-CHECK.md) §2). It is shown as **"keyboard indication"** and never rewritten.
+
+Next to it the daemon shows an **estimate**: the voltage `0x49` (else `0x46`) projected on a discharge curve of the chemistry declared in `[battery] chemistry`, with a range (±10 points for alkaline, ±15 for NiMH and lithium). The curves are a **[hypothesis]**: read by eye from the Energizer E91 and L91 datasheets and from Eneloop-type NiMH curves at a low drain (~1 mA, 21 °C), ±0.03 V per cell, plus about ±50 mV per pair of ADC calibration. Pair voltage to real charge, alkaline, indicative:
+
+| Pair (mV) | 2950 | 2775 | 2600 | 2506 | 2404 | 2200 | 2124 | 2054 |
+|---|---|---|---|---|---|---|---|---|
+| Firmware % | 99 | 90 | 80 | 75 | 50 | 35 | 30 | 25 |
+| Alkaline estimate | ~84 | ~62 | ~44 | ~35 | ~25 | ~10 | ~7 | ~5 |
+
+* `alkaline` (default; also zinc-carbon): the only chemistry consistent with the 2.97-2.99 V measured a few hours after a battery change.
+* `nimh` (Eneloop type): a flat plateau at 1.20-1.25 V per cell; the keyboard's own percentage stays at 50-75 % for most of the life, so the estimate is wide.
+* `lithium` (Li-FeS2): the voltage stays on a plateau, then collapses in a few days; the keyboard's percentage stays high until the end.
+* `unknown`: no estimate is computed; alerts and display fall back on the keyboard's own percentage.
+* The first two days after a detected battery change show **"new batteries, no estimate yet"**: the voltage of fresh cells relaxes during the first hours, no figure is drawn from it.
+
+**Alerts** (`[alerts]`) are computed on the estimate when there is one, else on the keyboard's percentage; the notification says which ("Estimated charge 28%" or "Keyboard indication 28%"). With the default alkaline curve the thresholds 30 / 15 / 5 % fall at about 2460 / 2270 / 2060 mV, i.e. firmware 64 / 40 / 25 %. The keyboard's own low / critical alerts (Input `0x30`, labelled "keyboard alert") are independent of these thresholds and deduplicated with them: the keyboard is authoritative, one alert per event.
+
+### The keyboard's percentage steps down only at reconnections
+
+[measured, correlation] `0x47` is fixed during a continuous session and steps down when the keyboard reconnects (99 → 98 → 96 on 2026-10-01, with no consumption behind it, BATTERY-CHECK.md §1.2bis). The daemon **does not recompute or "repair" this value**. Instead every surface shows the **age of the last reading** (widget "Last reading", `akmctl status` "Updated"), and a drop seen on the first reading after a reconnection raises no alert: the thresholds it crosses are disarmed silently; the next thresholds alert normally.
+
+### History: real voltages
+
+`history.jsonl` lines of schema 2 carry the real voltages in millivolts, `mv_0x46` and `mv_0x49`, and `voltage` (= `mv_0x46 / 1000`) for old readers. Lines written before schema 2 are marked `"voltage_valid":false` once at startup (kept, not deleted; a copy `history.jsonl.pre-schema2` is made once) and are ignored for the estimate, the replacement detection and the charts.
+
+Each line also carries `mac`, the keyboard that gave the sample: the replacement detection, the battery sets, the forecast and the `History`/`BatterySets` of each `/devices/<MAC>` object only use that keyboard's lines (the manager object shows the keyboard followed now, or the one recorded last while none is followed), so following another keyboard is never taken for new batteries. Lines written before the field existed are given once to the first keyboard followed after the upgrade, the one the history was being written for (a copy `history.jsonl.pre-mac` is made once); lines without `mac` that remain (a keyboard whose address is unknown) count for every keyboard.
+
+### Cost of reading the battery and Apple's schedule
+
+Every read of the A1314's battery costs radio traffic, and UPower alone sends two GET_REPORT every 30 s (measured with `btmon`). The daemon follows Apple's own schedule (`akm-core/src/apple_model.rs`, [APPLE-PARITY.md](APPLE-PARITY.md)): first read 60 s after the connection, then every 4 h (1 h after a failure); a routine burst is `0x47`, GET Input `0x30`, `0x46`, `0x49`, at least 1 s apart, a 10 s budget (4 requests × (1 s gap + 1.5 s for a slow answer), `akm-core/src/read_policy.rs` `BUDGET`), stop at the first failure; one reader at a time (process mutex + `flock` shared with `akmctl dump`); circuit breaker after 3 consecutive silences, published in `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state` for the other emitters. A `Refresh()` (tray, D-Bus) is bounded to one per 5 min. The estimate and the voltage history add no read. Optional, outside the daemon: `NoPollBatteries=true` in `UPower.conf` removes UPower's polling (`akmctl doctor --fix --optional` applies it).
+
+### Several keyboards
+
+The daemon reads one keyboard itself (one owner of the HID node, one read policy): the root D-Bus properties and `keyboard` in `GetState` describe that one, as before. `GetState` also carries `devices`, one entry per paired Apple keyboard (`mac`, `name`, `connected`, `battery`, `primary`), the keyboard read by the daemon first. The battery of the others is what BlueZ (`org.bluez.Battery1`) or UPower already holds: no request is added to any keyboard. Each keyboard has its object `/com/agenceapi/AppleKbMonitor1/devices/<MAC>` (`Battery`, `Connected`, `Name`, `ConnectionChanged`). With two keyboards or more the widget menu, its status and its title are those of the **weakest connected** keyboard, and the menu and the tooltip list every keyboard with its level and its link; a keyboard that leaves changes nothing for the others.
+
+### Link quality
+
+The daemon records every disconnection with its reason (`timeout`, `remote`, `local`, `unknown`, `authentication`, `suspend`, `expected`, `off`, `user`) and, by the hour, the relative signal it measures, for 7 days. `GetState` carries `link_quality` for the keyboard followed: `disconnects_last_hour`, `disconnects_last_day`, `disconnects_7d`, `unexpected_last_hour`, `disconnects_by_hour` (24 values, oldest first), `disconnects_by_day` (7 values), `unstable`, `unstable_since`, `signal_7d` and `signal_by_day` (`{samples, mean, min, max}` in relative dB, 0 = ideal range). `Link.Status()` carries the same summary as `quality` (shown by `akmctl doctor` as the `link-quality` line, a warning while unstable), and `Link.Quality()` returns everything kept (events and hourly signal). The signal is the BR/EDR relative value (golden range), not dBm: no alert is tied to a dBm threshold.
+
+### Signal
+
+On the classic Bluetooth link (BR/EDR) the RSSI is **not in dBm**: it is the gap in dB to the controller's *Golden Receive Power Range* (Core Spec Vol 4 Part E §7.5.4); **0 = inside the ideal range**, negative = below, positive = above. The UI shows words first: "Signal: excellent (0)" for 0 or more, "good" for −1 to −5, "weak" below −5, with the raw value (a relative gap in dB, never dBm). JSON: `rssi_rel_db`, `rssi_quality`, `rssi_kind` (`bredr-golden-range`); `rssi_dbm` is kept as a **deprecated mirror** of `rssi_rel_db`. The D-Bus property `Rssi` (127 = unknown) carries the same relative value. `Signal: n/a` means no value was measured; no group is needed (the package gives `rssi-helper` the capability `cap_net_admin`). The daemon says why in `GetState`: `radio.rssi_error` = `{code, detail}` while the keyboard is connected and no value is measured (`null` otherwise). Codes (`akm-core/src/rssi.rs`, `CODE_*` and `explain()`): `helper_missing` (reinstall the package), `helper_failed` (capability lost or Bluetooth refused: reinstall, then `akmctl doctor`), `timeout` (check `systemctl status bluetooth`), `unavailable` (no measure for this link: bring the keyboard closer or reconnect it), `other`. The widget (RADIO, DIAG), `Diagnose()` and `akmctl doctor` show the same explanation and fix.
+
+### History: bounded size and bounded answers
+
+`history.jsonl` keeps 90 days of samples and never stays above 5 MiB: over that size the daemon drops the oldest ordinary samples until the file is back under 4 MiB, in one atomic rewrite, after a copy `history.jsonl.prev`. Lines carrying a battery replacement are kept whatever their age. At one sample per 5 minutes the 90 days weigh about 3 MiB: the bound only bites on a file that grew abnormally. D-Bus `History(t since)` returns at most 2000 points: beyond, the daemon thins the series (first point, last point, every battery replacement, evenly spaced samples); `HistoryMax(t since, u max)` lets the client choose the bound (0 = 2000, at most 20000). `akmctl history` reads the file itself and is not thinned.
+
+## Other files
+
+| File | Owner | Content |
+|---|---|---|
+| `~/.config/apple-kb-monitor/config.toml` | user | this document |
+| `~/.config/apple-kb-monitor/keymap.toml` | user, written by `akmctl keymap` and the D-Bus `Keymap` interface | profiles of the manual key mapping: active profile, `models` (`05ac:0256`), preset (`apple`, `fkeys`, `linux-pc`, `none`), `hid_apple` parameters, `keys` (`F1..F12`, `Eject`, `Fn`… → `KEY_*`). Strict TOML subset, every error fatal. `akmctl keymap show`; installed as a udev hwdb by `akmctl keymap apply` (polkit). [KEYS.md](KEYS.md) §5 |
+| `~/.config/apple-kb-monitor/selfcheck.env` | user, optional | environment of the 15-minute self-check: `AKM_SELFCHECK_ARGS=--gitea-issue` opens one issue per new grave problem on the maintainer's Gitea (maintainer tool, off by default, needs `AKM_GITEA_API`, `AKM_GITEA_REPO` and `~/.config/gitea/token`). [TESTING.md](TESTING.md) |
+| `/etc/apple-kb-monitor/hid-suspend.conf` | root, `backup=` | `enabled = false` (default, also when the file or the key is absent): nothing is sent. `enabled = true` turns on HID_CONTROL SUSPEND (`0x13`) before sleep and EXIT_SUSPEND (`0x14`) at wake, sent by the system units; off by default since 2026-10-02 because SUSPEND was measured to leave the keyboard mute. The file must stay root-owned and not group/world writable, otherwise the feature is off. Alternative: `sudo systemctl mask apple-kb-monitor-suspend.service apple-kb-monitor-resume.service`. [HID-SLEEP.md](HID-SLEEP.md) |
+| `/etc/modprobe.d/hid_apple.conf` | root, `backup=` | `options hid_apple fnmode=1`. Change it with `akmctl set fnmode N` (`--persist` writes the file through polkit) or `akmctl set param <name> <value>` (`fnmode` 0-4, `iso_layout` −1..1, `swap_opt_cmd` 0-2, `swap_ctrl_cmd`, `swap_fn_leftctrl`). Global to every Apple keyboard of the machine. Redundant with the kernel default `auto` on a recent kernel, kept on purpose: it is the file `--persist` rewrites, and removing it from the package would turn a persisted choice into a `.pacsave` at the next upgrade; the reasons are in the file itself. |
+| `/etc/udev/hwdb.d/90-apple-kb-monitor.hwdb` | root, written by `akm-helper install-keymap` only | the installed key mapping (previous file kept as `.akm-bak`; `akmctl keymap rollback`, `reset`). |
+| `/etc/bluetooth/main.conf`, `/etc/UPower/UPower.conf` | root, optional | `FastConnectable = true`, `[Policy] Reconnect*`, `NoPollBatteries = true`: `akmctl doctor --fix [--optional]`. [RECONNECTION-PAIRING.md](RECONNECTION-PAIRING.md) §5.1 |
+| `/usr/lib/udev/rules.d/70-apple-kb-hidraw.rules` | package | `uaccess` on the 17 Bluetooth product ids; override with a file of the same name in `/etc/udev/rules.d/`. |
+
+Environment variable: `RUST_LOG` (`info` in the unit).
+
+## Files written by the daemon and the CLI
+
+| Path | Content |
+|---|---|
+| `~/.local/state/apple-kb-monitor/history.jsonl` | battery history (`ts`, `pct`, `schema`, `mac` of the keyboard, plus `mv_0x46` / `mv_0x49` when the voltages were read, `event` for a battery replacement, `voltage_valid` on lines older than schema 2); invalid points are not written; `akmctl history import FILE` merges an older file without duplicates |
+| `~/.local/state/apple-kb-monitor/history.jsonl.prev`, `.pre-schema2`, `.pre-mac`, `.corrupt` | copies of the history: before each rewrite that bounds its size (`.prev`), once before the schema 2 marking and the keyboard attribution (`.pre-schema2`, `.pre-mac`), unreadable lines set aside (`.corrupt`) |
+| `~/.local/state/apple-kb-monitor/notices.json` | battery level and firmware version already notified, per keyboard address (no notice repeated) |
+| `~/.local/state/apple-kb-monitor/alias.json` | Bluetooth alias last set through this program, per keyboard address: alias, time, who asked |
+| `~/.local/state/apple-kb-monitor/deferred-notifications.json` | `0600`: notifications to be shown later (held by the quiet hours, or "Remind me tomorrow"): due time and the texts shown, at most 32 entries |
+| `~/.local/state/apple-kb-monitor/link-quality.json` | `0600`: per keyboard, the disconnections of the last 7 days (time, reason; at most 2000) and the relative signal by the hour (count, sum, min, max; 168 buckets) |
+| `~/.local/state/apple-kb-monitor/device-settings.json` | `0600`: Fn mode remembered per keyboard address, at most 16 keyboards |
+| `~/.local/state/apple-kb-monitor/usage.json` | `0600`, only with `[usage] active_time = true`: `{"days": {"YYYY-MM-DD": active minutes}}`, 90 days; no key, no key code, no time of day |
+| `~/.local/state/apple-kb-monitor/selfcheck.json` | last result of `akmctl selftest` |
+| `~/.local/state/apple-kb-monitor/devname-backup-<UTC>.json`, `forget-backup-<UTC>.json` | `0600`, never overwritten: name stored in the keyboard before a write; host-side pairing data (no link key) before a clean forget |
+| `$XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state`, `hid.lock`, `keymap.hwdb` | volatile: published circuit breaker, cross-process HID lock, hwdb staged for the helper |
+
+The daemon runs with `UMask=0077` and `StateDirectory=apple-kb-monitor`: everything it writes is private to the user.

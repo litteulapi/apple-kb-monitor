@@ -1,0 +1,657 @@
+# Danish translation of the Plasma widget com.agenceapi.devicehub.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Danish\n"
+"Language: da\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "alkaline"
+msgstr "alkaliske"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "lithium"
+
+msgid "not declared"
+msgstr "ikke angivet"
+
+msgid "State"
+msgstr "Tilstand"
+
+msgid "Radio"
+msgstr "Radio"
+
+msgid "Keys"
+msgstr "Taster"
+
+msgid "Data"
+msgstr "Data"
+
+msgid "Diag"
+msgstr "Diag"
+
+msgid "Apple keyboard monitor"
+msgstr "Overvågning af Apple-tastatur"
+
+msgid "Settings"
+msgstr "Indstillinger"
+
+msgid "READ %1"
+msgstr "LÆST %1"
+
+msgid "NO DAEMON"
+msgstr "INGEN TJENESTE"
+
+msgid "ONLINE"
+msgstr "FORBUNDET"
+
+msgid "OFFLINE"
+msgstr "AFBRUDT"
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr ""
+"Overvågeren apple-kb-monitord er ikke på sessionsbussen: intet kan læses."
+
+msgid "Reading error: %1"
+msgstr "Læsefejl: %1"
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr ""
+"Tastaturet er afbrudt. Tryk på en tast for at vække det, eller forbind det "
+"igen under RADIO."
+
+msgid "Waiting for the keyboard data…"
+msgstr "Venter på tastaturets data…"
+
+msgid "Batteries critical: replace them now."
+msgstr "Batterierne er kritiske: udskift dem nu."
+
+msgid "Batteries low: plan to replace them."
+msgstr "Batterierne er lave: planlæg at udskifte dem."
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] "Ustabil forbindelse: %1 afbrydelse i den seneste time."
+msgstr[1] "Ustabil forbindelse: %1 afbrydelser i den seneste time."
+
+msgid "%1%"
+msgstr "%1 %"
+
+msgid "rssi-helper not installed"
+msgstr "rssi-helper ikke installeret"
+
+msgid "see akmctl doctor"
+msgstr "se akmctl doctor"
+
+msgid "not measured (%1)"
+msgstr "ikke målt (%1)"
+
+msgid "the rssi-helper utility is not installed"
+msgstr "værktøjet rssi-helper er ikke installeret"
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr "værktøjet rssi-helper fejlede (capability mangler, Bluetooth afvist)"
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr "værktøjet rssi-helper svarer ikke i tide"
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "Bluetooth-adapteren giver ingen måling for denne forbindelse"
+
+msgid "the signal cannot be measured"
+msgstr "signalet kan ikke måles"
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr "geninstallér pakken apple-kb-monitor"
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr "geninstallér pakken apple-kb-monitor, og kør derefter akmctl doctor"
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "kontrollér Bluetooth-tjenesten: systemctl status bluetooth"
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "flyt tastaturet tættere på, eller genforbind det"
+
+msgid "run akmctl doctor"
+msgstr "kør akmctl doctor"
+
+msgid "Battery history"
+msgstr "Batterihistorik"
+
+msgid "24 h"
+msgstr "24 t"
+
+msgid "7 d"
+msgstr "7 d"
+
+msgid "30 d"
+msgstr "30 d"
+
+msgid "90 d"
+msgstr "90 d"
+
+msgid "Refresh"
+msgstr "Opdatér"
+
+msgid "LOADING…"
+msgstr "INDLÆSER…"
+
+msgid "Readings: %1"
+msgstr "Målinger: %1"
+
+msgid "%1 V"
+msgstr "%1 V"
+
+msgid "Batteries %"
+msgstr "Batterier %"
+
+msgid "Voltage %1 to %2 V"
+msgstr "Spænding %1 til %2 V"
+
+msgid "History not available: %1"
+msgstr "Historik ikke tilgængelig: %1"
+
+msgid "Monitor stopped: no history."
+msgstr "Overvågeren er stoppet: ingen historik."
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr "For få målinger i perioden til at tegne en kurve."
+
+msgid "Batteries"
+msgstr "Batterier"
+
+msgid "Voltage"
+msgstr "Spænding"
+
+msgid "EMPTY"
+msgstr "TOMME"
+
+msgid "CRITICAL"
+msgstr "KRITISK"
+
+msgid "LOW"
+msgstr "LAV"
+
+msgid "FULL"
+msgstr "FULDE"
+
+msgid "Thresholds"
+msgstr "Tærskler"
+
+msgid "Estimate"
+msgstr "Skøn"
+
+msgid "Apple display"
+msgstr "Apples visning"
+
+msgid "Chemistry"
+msgstr "Kemi"
+
+msgid "Installed on"
+msgstr "Isat den"
+
+msgid "Trend"
+msgstr "Tendens"
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] "−%2 % pr. dag over %1 dag"
+msgstr[1] "−%2 % pr. dag over %1 dage"
+
+msgid "Empty around"
+msgstr "Tomme omkring"
+
+msgid "Last reading"
+msgstr "Seneste måling"
+
+msgid "The last reading missed a report of the keyboard."
+msgstr "Ved seneste måling manglede en rapport fra tastaturet."
+
+msgid "Device"
+msgstr "Enhed"
+
+msgid "Model"
+msgstr "Model"
+
+msgid "Name"
+msgstr "Navn"
+
+msgid "Address"
+msgstr "Adresse"
+
+msgid "Chip"
+msgstr "Chip"
+
+msgid "Driver"
+msgstr "Driver"
+
+msgid "Firmware"
+msgstr "Firmware"
+
+msgid "System diagnostic"
+msgstr "Systemdiagnose"
+
+msgid "Checking…"
+msgstr "Kontrollerer…"
+
+msgid "Run the full check"
+msgstr "Kør hele kontrollen"
+
+msgid "%1/%2 PASSED"
+msgstr "%1/%2 BESTÅET"
+
+msgid "PROBLEMS: %1"
+msgstr "PROBLEMER: %1"
+
+msgid "Check not run: %1"
+msgstr "Kontrollen blev ikke kørt: %1"
+
+msgid "Monitor"
+msgstr "Overvåger"
+
+msgid "RUNNING"
+msgstr "KØRER"
+
+msgid "STOPPED"
+msgstr "STOPPET"
+
+msgid "Version"
+msgstr "Version"
+
+msgid "Keyboard"
+msgstr "Tastatur"
+
+msgid "Link"
+msgstr "Forbindelse"
+
+msgid "Last error"
+msgstr "Seneste fejl"
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr "Start den med: systemctl --user start apple-kb-monitord"
+
+msgid "Log"
+msgstr "Log"
+
+msgid "[FAIL]"
+msgstr "[FEJL]"
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr ""
+"Kontrollen udføres af overvågeren (omkring ti test, aldrig på tastaturet)."
+
+msgid "Function keys"
+msgstr "Funktionstaster"
+
+msgid "Media keys first"
+msgstr "Medietaster først"
+
+msgid "F1–F12 first"
+msgstr "F1–F12 først"
+
+msgid "Current mode: %1"
+msgstr "Aktuel tilstand: %1"
+
+msgid "Fn mode not read yet."
+msgstr "Fn-tilstand endnu ikke læst."
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr "Fn-tilstand ukendt: tastaturet er ikke forbundet."
+
+msgid "Administrator authentication requested…"
+msgstr "Administratorgodkendelse anmodet…"
+
+msgid "Fn mode not changed: %1"
+msgstr "Fn-tilstand ikke ændret: %1"
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr "hid_apple gælder for alle Apple-tastaturer på denne computer."
+
+msgid "Locks"
+msgstr "Låse"
+
+msgid "Caps Lock"
+msgstr "Caps Lock"
+
+msgid "Num Lock"
+msgstr "Num Lock"
+
+msgid "on"
+msgstr "til"
+
+msgid "off"
+msgstr "fra"
+
+msgid "ON"
+msgstr "TIL"
+
+msgid "OFF"
+msgstr "FRA"
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr "Læses fra tastaturets lysdioder ved hver måling."
+
+msgid "Special keys"
+msgstr "Specialtaster"
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+"Tabellen over specialtaster (kode og KDE-handling med og uden Fn) og "
+"tasteeditoren findes i Systemindstillinger, modulet Apple-tastatur, siden "
+"Taster."
+
+msgid "Edit the keys"
+msgstr "Redigér tasterne"
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] "for %1 s siden"
+msgstr[1] "for %1 s siden"
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "for %1 min siden"
+msgstr[1] "for %1 min siden"
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "for %1 t siden"
+msgstr[1] "for %1 t siden"
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "for %1 dag siden"
+msgstr[1] "for %1 dage siden"
+
+msgid "EXCELLENT"
+msgstr "FREMRAGENDE"
+
+msgid "GOOD"
+msgstr "GOD"
+
+msgid "WEAK"
+msgstr "SVAG"
+
+msgid "Signal"
+msgstr "Signal"
+
+msgid "Not measured"
+msgstr "Ikke målt"
+
+msgid "Measured"
+msgstr "Målt"
+
+msgid "at %1"
+msgstr "kl. %1"
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr ""
+"dB i forhold til adapterens ideelle modtageområde (0 = ideelt), ikke dBm."
+
+msgid "Correction: %1"
+msgstr "Korrektion: %1"
+
+msgid "No measurement: the keyboard is not connected."
+msgstr "Ingen måling: tastaturet er ikke forbundet."
+
+msgid "Connected"
+msgstr "Forbundet"
+
+msgid "Yes"
+msgstr "Ja"
+
+msgid "No"
+msgstr "Nej"
+
+msgid "Paired"
+msgstr "Parret"
+
+msgid "TX power"
+msgstr "Sendeeffekt"
+
+msgid "%1 dBm"
+msgstr "%1 dBm"
+
+msgid "Last wake-up"
+msgstr "Seneste vækning"
+
+msgid "Paired host"
+msgstr "Parret vært"
+
+msgid "Monitor's link"
+msgstr "Overvågerens forbindelse"
+
+msgid "connected"
+msgstr "forbundet"
+
+msgid "asleep"
+msgstr "hviler"
+
+msgid "unreachable"
+msgstr "utilgængelig"
+
+msgid "Attempts / failures"
+msgstr "Forsøg / fejl"
+
+msgid "%1 / %2"
+msgstr "%1 / %2"
+
+msgid "Link quality"
+msgstr "Forbindelseskvalitet"
+
+msgid "Disconnections"
+msgstr "Afbrydelser"
+
+msgid "1 h"
+msgstr "1 t"
+
+msgid "7 days"
+msgstr "7 dage"
+
+msgid "today"
+msgstr "i dag"
+
+msgid "D-%1"
+msgstr "D-%1"
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr "Overvågeren har endnu ikke registreret nogen afbrydelse."
+
+msgid "Restore the link"
+msgstr "Genopret forbindelsen"
+
+msgid "Reconnect"
+msgstr "Genforbind"
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr ""
+"Parring mistet eller afvist? Par igen fra en terminal (der bedes om "
+"bekræftelse): akmctl repair"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Autonomy"
+msgstr "Driftstid"
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 dag"
+msgstr[1] "≈ %1 dage"
+
+msgid "≈ %1 h"
+msgstr "≈ %1 t"
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr ""
+"Tastaturets værdi: dets egen procentsats, ændres i trin (ofte ved en "
+"genforbindelse)."
+
+msgid "not enough history yet"
+msgstr "endnu for lidt historik"
+
+msgid "%1, up to date"
+msgstr "%1, opdateret"
+
+msgid "%1, update %2 at Apple"
+msgstr "%1, opdatering %2 hos Apple"
+
+msgid "%1, not in the table"
+msgstr "%1, ikke i tabellen"
+
+msgid "Keyboard name"
+msgstr "Tastaturets navn"
+
+msgid "Apply"
+msgstr "Anvend"
+
+msgid "Keyboard's own name"
+msgstr "Tastaturets eget navn"
+
+msgid "Cancel"
+msgstr "Annullér"
+
+msgid "Rename refused: %1"
+msgstr "Omdøbning afvist: %1"
+
+msgid "Actions"
+msgstr "Handlinger"
+
+msgid "Fn: waiting for authorisation…"
+msgstr "Fn: venter på godkendelse…"
+
+msgid "Rename"
+msgstr "Omdøb"
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr "%1 — opdateret (seneste offentlige version kendt af Apple)"
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr "%1 — opdatering tilgængelig fra Apple (seneste kendte: %2)"
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr "%1 — ukendt (model eller version ikke i tabellen)"
+
+msgid "Autonomy: %1"
+msgstr "Driftstid: %1"
+
+msgid "media keys first"
+msgstr "medietaster først"
+
+msgid "Fn key has no effect"
+msgstr "Fn-tasten uden virkning"
+
+msgid "F-keys disabled"
+msgstr "F-taster deaktiveret"
+
+msgid "Switch to F1–F12 first"
+msgstr "Skift til F1–F12 først"
+
+msgid "Switch to media keys first"
+msgstr "Skift til medietaster først"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1 (forsøg: %2, fejl: %3)"
+
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+msgid "new batteries, no estimate yet"
+msgstr "nye batterier, endnu intet skøn"
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr "≈ %1 % (%2 til %3 %), %4"
+
+msgid "Keyboard not connected"
+msgstr "Tastaturet er ikke forbundet"
+
+msgid "Monitor stopped"
+msgstr "Overvågeren er stoppet"
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr "Apple-tastatur, batteri %1 procent"
+
+msgid "Apple keyboard, battery level unknown"
+msgstr "Apple-tastatur, batteriniveau ukendt"
+
+msgid "Apple keyboard, %1"
+msgstr "Apple-tastatur, %1"
+
+msgid "Keyboard indication %1"
+msgstr "Tastaturets værdi %1"
+
+msgid "Estimate: %1"
+msgstr "Skøn: %1"
+
+msgid "Apple display: %1%"
+msgstr "Apples visning: %1 %"
+
+msgid "Signal: %1"
+msgstr "Signal: %1"
+
+msgid "Firmware: %1"
+msgstr "Firmware: %1"
+
+msgid "Waiting for the Apple keyboard…"
+msgstr "Venter på Apple-tastaturet…"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord er ikke på sessionsbussen"
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr "&Indstil Apple-tastatur…"
+
+msgid "New reading requested."
+msgstr "Ny måling anmodet."
+
+msgid "Reading not requested: %1"
+msgstr "Måling ikke anmodet: %1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+"Genforbindelse anmodet. Tryk på en tast på tastaturet, hvis det hviler."
+
+msgid "refused by the monitor"
+msgstr "afvist af overvågeren"
+
+msgid "Reconnection not requested: %1"
+msgstr "Genforbindelse ikke anmodet: %1"
+
+msgid "excellent"
+msgstr "fremragende"
+
+msgid "good"
+msgstr "god"
+
+msgid "weak"
+msgstr "svag"
+
+msgid "Apple Keyboard"
+msgstr "Apple-tastatur"
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr "Fulde %1 / Lave %2 / Kritiske %3 / Tomme %4 mV"

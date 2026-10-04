@@ -1,0 +1,658 @@
+# Turkish translation of the Plasma widget com.agenceapi.devicehub.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Turkish\n"
+"Language: tr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "alkaline"
+msgstr "alkalin"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "lityum"
+
+msgid "not declared"
+msgstr "belirtilmedi"
+
+msgid "State"
+msgstr "Durum"
+
+msgid "Radio"
+msgstr "Radyo"
+
+msgid "Keys"
+msgstr "Tuşlar"
+
+msgid "Data"
+msgstr "Veri"
+
+msgid "Diag"
+msgstr "Tanı"
+
+msgid "Apple keyboard monitor"
+msgstr "Apple klavye izleyicisi"
+
+msgid "Settings"
+msgstr "Ayarlar"
+
+msgid "READ %1"
+msgstr "OKUNDU %1"
+
+msgid "NO DAEMON"
+msgstr "HİZMET YOK"
+
+msgid "ONLINE"
+msgstr "ÇEVRİM İÇİ"
+
+msgid "OFFLINE"
+msgstr "ÇEVRİM DIŞI"
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr ""
+"apple-kb-monitord izleyicisi oturum veri yolunda değil: hiçbir şey "
+"okunamıyor."
+
+msgid "Reading error: %1"
+msgstr "Okuma hatası: %1"
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr ""
+"Klavyenin bağlantısı kesildi. Uyandırmak için bir tuşa basın veya RADIO "
+"sekmesinden yeniden bağlayın."
+
+msgid "Waiting for the keyboard data…"
+msgstr "Klavye verileri bekleniyor…"
+
+msgid "Batteries critical: replace them now."
+msgstr "Piller kritik düzeyde: hemen değiştirin."
+
+msgid "Batteries low: plan to replace them."
+msgstr "Piller zayıf: değiştirmeyi planlayın."
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] "Kararsız bağlantı: son bir saatte %1 kopma."
+msgstr[1] "Kararsız bağlantı: son bir saatte %1 kopma."
+
+msgid "%1%"
+msgstr "%%1"
+
+msgid "rssi-helper not installed"
+msgstr "rssi-helper kurulu değil"
+
+msgid "see akmctl doctor"
+msgstr "bkz. akmctl doctor"
+
+msgid "not measured (%1)"
+msgstr "ölçülmedi (%1)"
+
+msgid "the rssi-helper utility is not installed"
+msgstr "rssi-helper yardımcı programı kurulu değil"
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+"rssi-helper yardımcı programı başarısız oldu (capability eksik, Bluetooth "
+"reddetti)"
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr "rssi-helper yardımcı programı zamanında yanıt vermiyor"
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "Bluetooth bağdaştırıcısı bu bağlantı için ölçüm vermiyor"
+
+msgid "the signal cannot be measured"
+msgstr "sinyal ölçülemiyor"
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr "apple-kb-monitor paketini yeniden kurun"
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr ""
+"apple-kb-monitor paketini yeniden kurun, ardından akmctl doctor çalıştırın"
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "Bluetooth hizmetini denetleyin: systemctl status bluetooth"
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "klavyeyi yaklaştırın veya yeniden bağlayın"
+
+msgid "run akmctl doctor"
+msgstr "akmctl doctor çalıştırın"
+
+msgid "Battery history"
+msgstr "Pil geçmişi"
+
+msgid "24 h"
+msgstr "24 sa"
+
+msgid "7 d"
+msgstr "7 g"
+
+msgid "30 d"
+msgstr "30 g"
+
+msgid "90 d"
+msgstr "90 g"
+
+msgid "Refresh"
+msgstr "Yenile"
+
+msgid "LOADING…"
+msgstr "YÜKLENİYOR…"
+
+msgid "Readings: %1"
+msgstr "Ölçümler: %1"
+
+msgid "%1 V"
+msgstr "%1 V"
+
+msgid "Batteries %"
+msgstr "Piller %"
+
+msgid "Voltage %1 to %2 V"
+msgstr "Gerilim %1 ile %2 V arası"
+
+msgid "History not available: %1"
+msgstr "Geçmiş kullanılamıyor: %1"
+
+msgid "Monitor stopped: no history."
+msgstr "İzleyici durduruldu: geçmiş yok."
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr "Bu dönemde eğri çizmek için yeterli ölçüm yok."
+
+msgid "Batteries"
+msgstr "Piller"
+
+msgid "Voltage"
+msgstr "Gerilim"
+
+msgid "EMPTY"
+msgstr "BOŞ"
+
+msgid "CRITICAL"
+msgstr "KRİTİK"
+
+msgid "LOW"
+msgstr "DÜŞÜK"
+
+msgid "FULL"
+msgstr "DOLU"
+
+msgid "Thresholds"
+msgstr "Eşikler"
+
+msgid "Estimate"
+msgstr "Tahmin"
+
+msgid "Apple display"
+msgstr "Apple gösterimi"
+
+msgid "Chemistry"
+msgstr "Kimya"
+
+msgid "Installed on"
+msgstr "Takılma tarihi"
+
+msgid "Trend"
+msgstr "Eğilim"
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] "%1 günde günlük −%%2"
+msgstr[1] "%1 günde günlük −%%2"
+
+msgid "Empty around"
+msgstr "Bitiş tahmini"
+
+msgid "Last reading"
+msgstr "Son ölçüm"
+
+msgid "The last reading missed a report of the keyboard."
+msgstr "Son ölçümde klavyeden bir rapor eksikti."
+
+msgid "Device"
+msgstr "Aygıt"
+
+msgid "Model"
+msgstr "Model"
+
+msgid "Name"
+msgstr "Ad"
+
+msgid "Address"
+msgstr "Adres"
+
+msgid "Chip"
+msgstr "Yonga"
+
+msgid "Driver"
+msgstr "Sürücü"
+
+msgid "Firmware"
+msgstr "Donanım yazılımı"
+
+msgid "System diagnostic"
+msgstr "Sistem tanılaması"
+
+msgid "Checking…"
+msgstr "Denetleniyor…"
+
+msgid "Run the full check"
+msgstr "Tam denetimi çalıştır"
+
+msgid "%1/%2 PASSED"
+msgstr "%1/%2 BAŞARILI"
+
+msgid "PROBLEMS: %1"
+msgstr "SORUNLAR: %1"
+
+msgid "Check not run: %1"
+msgstr "Denetim çalıştırılmadı: %1"
+
+msgid "Monitor"
+msgstr "İzleyici"
+
+msgid "RUNNING"
+msgstr "ÇALIŞIYOR"
+
+msgid "STOPPED"
+msgstr "DURDURULDU"
+
+msgid "Version"
+msgstr "Sürüm"
+
+msgid "Keyboard"
+msgstr "Klavye"
+
+msgid "Link"
+msgstr "Bağlantı"
+
+msgid "Last error"
+msgstr "Son hata"
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr "Şu komutla başlatın: systemctl --user start apple-kb-monitord"
+
+msgid "Log"
+msgstr "Günlük"
+
+msgid "[FAIL]"
+msgstr "[BAŞARISIZ]"
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr ""
+"Denetimi izleyici yapar (yaklaşık on test, asla klavye üzerinde değil)."
+
+msgid "Function keys"
+msgstr "İşlev tuşları"
+
+msgid "Media keys first"
+msgstr "Önce ortam tuşları"
+
+msgid "F1–F12 first"
+msgstr "Önce F1–F12"
+
+msgid "Current mode: %1"
+msgstr "Geçerli kip: %1"
+
+msgid "Fn mode not read yet."
+msgstr "Fn kipi henüz okunmadı."
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr "Fn kipi bilinmiyor: klavye bağlı değil."
+
+msgid "Administrator authentication requested…"
+msgstr "Yönetici kimlik doğrulaması istendi…"
+
+msgid "Fn mode not changed: %1"
+msgstr "Fn kipi değiştirilmedi: %1"
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr "hid_apple bu bilgisayardaki tüm Apple klavyelerine uygulanır."
+
+msgid "Locks"
+msgstr "Kilitler"
+
+msgid "Caps Lock"
+msgstr "Caps Lock"
+
+msgid "Num Lock"
+msgstr "Num Lock"
+
+msgid "on"
+msgstr "açık"
+
+msgid "off"
+msgstr "kapalı"
+
+msgid "ON"
+msgstr "AÇIK"
+
+msgid "OFF"
+msgstr "KAPALI"
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr "Her ölçümde klavyenin LED'lerinden okunur."
+
+msgid "Special keys"
+msgstr "Özel tuşlar"
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+"Özel tuşlar tablosu (Fn ile ve Fn olmadan kod ve KDE eylemi) ve tuş "
+"düzenleyici, Sistem Ayarları'nda Apple Klavye modülünün Tuşlar sayfasındadır."
+
+msgid "Edit the keys"
+msgstr "Tuşları düzenle"
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] "%1 sn önce"
+msgstr[1] "%1 sn önce"
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "%1 dk önce"
+msgstr[1] "%1 dk önce"
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "%1 sa önce"
+msgstr[1] "%1 sa önce"
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "%1 gün önce"
+msgstr[1] "%1 gün önce"
+
+msgid "EXCELLENT"
+msgstr "MÜKEMMEL"
+
+msgid "GOOD"
+msgstr "İYİ"
+
+msgid "WEAK"
+msgstr "ZAYIF"
+
+msgid "Signal"
+msgstr "Sinyal"
+
+msgid "Not measured"
+msgstr "Ölçülmedi"
+
+msgid "Measured"
+msgstr "Ölçülen"
+
+msgid "at %1"
+msgstr "%1 itibarıyla"
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr "Bağdaştırıcının ideal alım aralığına göre dB (0 = ideal), dBm değil."
+
+msgid "Correction: %1"
+msgstr "Düzeltme: %1"
+
+msgid "No measurement: the keyboard is not connected."
+msgstr "Ölçüm yok: klavye bağlı değil."
+
+msgid "Connected"
+msgstr "Bağlı"
+
+msgid "Yes"
+msgstr "Evet"
+
+msgid "No"
+msgstr "Hayır"
+
+msgid "Paired"
+msgstr "Eşleştirildi"
+
+msgid "TX power"
+msgstr "Gönderim gücü"
+
+msgid "%1 dBm"
+msgstr "%1 dBm"
+
+msgid "Last wake-up"
+msgstr "Son uyanma"
+
+msgid "Paired host"
+msgstr "Eşleştirilen ana makine"
+
+msgid "Monitor's link"
+msgstr "İzleyicinin bağlantısı"
+
+msgid "connected"
+msgstr "bağlı"
+
+msgid "asleep"
+msgstr "uykuda"
+
+msgid "unreachable"
+msgstr "erişilemiyor"
+
+msgid "Attempts / failures"
+msgstr "Denemeler / başarısızlıklar"
+
+msgid "%1 / %2"
+msgstr "%1 / %2"
+
+msgid "Link quality"
+msgstr "Bağlantı kalitesi"
+
+msgid "Disconnections"
+msgstr "Kopmalar"
+
+msgid "1 h"
+msgstr "1 sa"
+
+msgid "7 days"
+msgstr "7 gün"
+
+msgid "today"
+msgstr "bugün"
+
+msgid "D-%1"
+msgstr "G-%1"
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr "İzleyici henüz bir kopma kaydetmedi."
+
+msgid "Restore the link"
+msgstr "Bağlantıyı onar"
+
+msgid "Reconnect"
+msgstr "Yeniden bağlan"
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr ""
+"Eşleştirme kayboldu ya da reddedildi mi? Bir uçbirimden yeniden eşleştirin "
+"(onay istenir): akmctl repair"
+
+msgid "OK"
+msgstr "Tamam"
+
+msgid "Autonomy"
+msgstr "Kullanım süresi"
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 gün"
+msgstr[1] "≈ %1 gün"
+
+msgid "≈ %1 h"
+msgstr "≈ %1 sa"
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr ""
+"Klavye gösterimi: klavyenin kendi yüzdesi, basamaklar halinde değişir "
+"(çoğunlukla yeniden bağlanırken)."
+
+msgid "not enough history yet"
+msgstr "henüz yeterli geçmiş yok"
+
+msgid "%1, up to date"
+msgstr "%1, güncel"
+
+msgid "%1, update %2 at Apple"
+msgstr "%1, Apple'da güncelleme %2"
+
+msgid "%1, not in the table"
+msgstr "%1, tabloda yok"
+
+msgid "Keyboard name"
+msgstr "Klavye adı"
+
+msgid "Apply"
+msgstr "Uygula"
+
+msgid "Keyboard's own name"
+msgstr "Klavyenin kendi adı"
+
+msgid "Cancel"
+msgstr "İptal"
+
+msgid "Rename refused: %1"
+msgstr "Yeniden adlandırma reddedildi: %1"
+
+msgid "Actions"
+msgstr "Eylemler"
+
+msgid "Fn: waiting for authorisation…"
+msgstr "Fn: yetkilendirme bekleniyor…"
+
+msgid "Rename"
+msgstr "Yeniden adlandır"
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr "%1 — güncel (Apple'ın bildiği en son genel sürüm)"
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr "%1 — Apple'dan güncelleme var (bilinen en son: %2)"
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr "%1 — bilinmiyor (model veya sürüm tabloda yok)"
+
+msgid "Autonomy: %1"
+msgstr "Kullanım süresi: %1"
+
+msgid "media keys first"
+msgstr "önce ortam tuşları"
+
+msgid "Fn key has no effect"
+msgstr "Fn tuşu etkisiz"
+
+msgid "F-keys disabled"
+msgstr "F tuşları devre dışı"
+
+msgid "Switch to F1–F12 first"
+msgstr "Önce F1–F12'ye geç"
+
+msgid "Switch to media keys first"
+msgstr "Önce ortam tuşlarına geç"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1 (denemeler: %2, başarısızlıklar: %3)"
+
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+msgid "new batteries, no estimate yet"
+msgstr "yeni piller, henüz tahmin yok"
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr "≈ %%1 (%%2 ile %%3 arası), %4"
+
+msgid "Keyboard not connected"
+msgstr "Klavye bağlı değil"
+
+msgid "Monitor stopped"
+msgstr "İzleyici durduruldu"
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr "Apple klavye, pil yüzde %1"
+
+msgid "Apple keyboard, battery level unknown"
+msgstr "Apple klavye, pil düzeyi bilinmiyor"
+
+msgid "Apple keyboard, %1"
+msgstr "Apple klavye, %1"
+
+msgid "Keyboard indication %1"
+msgstr "Klavye gösterimi %1"
+
+msgid "Estimate: %1"
+msgstr "Tahmin: %1"
+
+msgid "Apple display: %1%"
+msgstr "Apple gösterimi: %%1"
+
+msgid "Signal: %1"
+msgstr "Sinyal: %1"
+
+msgid "Firmware: %1"
+msgstr "Donanım yazılımı: %1"
+
+msgid "Waiting for the Apple keyboard…"
+msgstr "Apple klavye bekleniyor…"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord oturum veri yolunda değil"
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr "Apple Klavyeyi &Yapılandır…"
+
+msgid "New reading requested."
+msgstr "Yeni ölçüm istendi."
+
+msgid "Reading not requested: %1"
+msgstr "Ölçüm istenmedi: %1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr "Yeniden bağlanma istendi. Klavye uykudaysa bir tuşa basın."
+
+msgid "refused by the monitor"
+msgstr "izleyici tarafından reddedildi"
+
+msgid "Reconnection not requested: %1"
+msgstr "Yeniden bağlanma istenmedi: %1"
+
+msgid "excellent"
+msgstr "mükemmel"
+
+msgid "good"
+msgstr "iyi"
+
+msgid "weak"
+msgstr "zayıf"
+
+msgid "Apple Keyboard"
+msgstr "Apple Klavye"
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr "Dolu %1 / Düşük %2 / Kritik %3 / Boş %4 mV"

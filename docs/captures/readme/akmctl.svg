@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="842" height="590" viewBox="0 0 842 590">
+<style>text{font:14px 'DejaVu Sans Mono',Menlo,Consolas,monospace;white-space:pre;fill:#d6e3d6}.c{fill:#5fff87;font-weight:bold}.p{fill:#7aa2f7}.l{opacity:0;animation:in .01s forwards}@keyframes in{to{opacity:1}}</style>
+<rect width="842" height="590" rx="10" fill="#141a14"/>
+<rect width="842" height="28" rx="10" fill="#273027"/><rect y="18" width="842" height="10" fill="#273027"/>
+<circle cx="18" cy="14" r="5.5" fill="#ff5f57"/><circle cx="36" cy="14" r="5.5" fill="#febc2e"/><circle cx="54" cy="14" r="5.5" fill="#28c840"/>
+<text class="l" xml:space="preserve" x="18" y="54" style="animation-delay:1.20s"><tspan class="p">$ </tspan><tspan class="c">akmctl status</tspan></text>
+<text class="l" xml:space="preserve" x="18" y="73" style="animation-delay:1.26s">Keyboard:  Apple Wireless Keyboard (A1314, aluminum, ISO)</text>
+<text class="l" xml:space="preserve" x="18" y="92" style="animation-delay:1.32s">Name:      alex</text>
+<text class="l" xml:space="preserve" x="18" y="111" style="animation-delay:1.38s">On kb:     n/a (not read yet)</text>
+<text class="l" xml:space="preserve" x="18" y="130" style="animation-delay:1.44s">Kernel:    Apple Wireless Keyboard - KWin and System Settings &gt; Keyboard show this kernel name; </text>
+<text class="l" xml:space="preserve" x="18" y="149" style="animation-delay:1.50s">           Bluetooth and Battery show the alias &quot;alex&quot;. The kernel name changes only after the </text>
+<text class="l" xml:space="preserve" x="18" y="168" style="animation-delay:1.56s">           keyboard reconnects (switch it off and on).</text>
+<text class="l" xml:space="preserve" x="18" y="187" style="animation-delay:1.62s">MAC:       AA:BB:CC:DD:EE:F1</text>
+<text class="l" xml:space="preserve" x="18" y="206" style="animation-delay:1.68s">Connected: yes</text>
+<text class="l" xml:space="preserve" x="18" y="225" style="animation-delay:1.74s">Battery:   86 % (keyboard indication)</text>
+<text class="l" xml:space="preserve" x="18" y="244" style="animation-delay:1.80s">Apple:     100 % (macOS-style display)</text>
+<text class="l" xml:space="preserve" x="18" y="263" style="animation-delay:1.86s">Limits:    Full 2954 / Low 2506 / Critical 2404 / Empty 2054 mV</text>
+<text class="l" xml:space="preserve" x="18" y="282" style="animation-delay:1.92s">Firmware:  0x0050 - up to date (latest public version known)</text>
+<text class="l" xml:space="preserve" x="18" y="301" style="animation-delay:1.98s">Voltage:   2.91 V</text>
+<text class="l" xml:space="preserve" x="18" y="320" style="animation-delay:2.04s">Signal:    good (−1)</text>
+<text class="l" xml:space="preserve" x="18" y="339" style="animation-delay:2.10s">Updated:   60 s ago</text>
+<text class="l" xml:space="preserve" x="18" y="358" style="animation-delay:2.16s">Fn mode:   1 - fkeyslast (media keys by default, Fn+Fx = F-key)</text>
+<text class="l" xml:space="preserve" x="18" y="377" style="animation-delay:2.22s">Shutdown:  on (WillShutdown sent once at shutdown, as macOS; [apple] will_shutdown)</text>
+<text class="l" xml:space="preserve" x="18" y="396" style="animation-delay:3.12s"><tspan class="p">$ </tspan><tspan class="c">akmctl graph --span 7d</tspan></text>
+<text class="l" xml:space="preserve" x="18" y="415" style="animation-delay:3.18s">BATTERY % - last 7 d</text>
+<text class="l" xml:space="preserve" x="18" y="434" style="animation-delay:3.24s">                                     ██████████▇▇ ▇▇▇▇▇▇▇▇▇▇ ▇</text>
+<text class="l" xml:space="preserve" x="18" y="453" style="animation-delay:3.30s">  2026-09-26 22:02                            2026-10-03 22:02</text>
+<text class="l" xml:space="preserve" x="18" y="472" style="animation-delay:3.36s">  min 90 %  max 100 %  last 91 %  (123 samples)</text>
+<text class="l" xml:space="preserve" x="18" y="491" style="animation-delay:3.42s"></text>
+<text class="l" xml:space="preserve" x="18" y="510" style="animation-delay:3.48s">VOLTAGE - last 7 d</text>
+<text class="l" xml:space="preserve" x="18" y="529" style="animation-delay:3.54s">                                                          ▅▁ ▇</text>
+<text class="l" xml:space="preserve" x="18" y="548" style="animation-delay:3.60s">  2026-09-26 22:02                            2026-10-03 22:02</text>
+<text class="l" xml:space="preserve" x="18" y="567" style="animation-delay:3.66s">  min 2.961 V  max 2.969 V  last 2.965 V  (5 samples)</text>
+</svg>

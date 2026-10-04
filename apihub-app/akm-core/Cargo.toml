@@ -1,0 +1,30 @@
+[package]
+name = "akm-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Apple Bluetooth keyboard: models, HID decoding, kernel battery, history, connection state machine (no GUI, no D-Bus)"
+
+[features]
+# Source-text checks for the tests of the other crates (src/srclint.rs), absent from release builds.
+srclint = []
+# Test seams for the tests of the other crates, absent from release builds.
+testseam = []
+
+[dependencies]
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Why the signal is not measured, at warning priority in the journal.
+tracing = "0.1"
+# Reading of config.toml. No `display`: nothing here writes TOML.
+toml = { version = "1", default-features = false, features = ["std", "parse", "serde"] }
+
+[dev-dependencies]
+# The integration tests under tests/ use the test seams.
+akm-core = { path = ".", features = ["testseam"] }
+proptest = { version = "1", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

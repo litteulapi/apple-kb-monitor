@@ -1,0 +1,668 @@
+# Ukrainian translation of the Plasma widget com.agenceapi.devicehub.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Ukrainian\n"
+"Language: uk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "alkaline"
+msgstr "лужні"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "літієві"
+
+msgid "not declared"
+msgstr "не вказано"
+
+msgid "State"
+msgstr "Стан"
+
+msgid "Radio"
+msgstr "Радіо"
+
+msgid "Keys"
+msgstr "Клавіші"
+
+msgid "Data"
+msgstr "Дані"
+
+msgid "Diag"
+msgstr "Діаг."
+
+msgid "Apple keyboard monitor"
+msgstr "Монітор клавіатури Apple"
+
+msgid "Settings"
+msgstr "Параметри"
+
+msgid "READ %1"
+msgstr "ПРОЧИТАНО %1"
+
+msgid "NO DAEMON"
+msgstr "НЕМАЄ СЛУЖБИ"
+
+msgid "ONLINE"
+msgstr "У МЕРЕЖІ"
+
+msgid "OFFLINE"
+msgstr "ПОЗА МЕРЕЖЕЮ"
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr ""
+"Монітора apple-kb-monitord немає на шині сеансу: нічого не можна прочитати."
+
+msgid "Reading error: %1"
+msgstr "Помилка читання: %1"
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr ""
+"Клавіатуру від'єднано. Натисніть клавішу, щоб розбудити її, або повторно "
+"під'єднайте її на вкладці RADIO."
+
+msgid "Waiting for the keyboard data…"
+msgstr "Очікування даних клавіатури…"
+
+msgid "Batteries critical: replace them now."
+msgstr "Батарейки майже розряджені: замініть їх зараз."
+
+msgid "Batteries low: plan to replace them."
+msgstr "Батарейки сідають: заплануйте заміну."
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] "Нестабільний зв'язок: %1 від'єднання за останню годину."
+msgstr[1] "Нестабільний зв'язок: %1 від'єднання за останню годину."
+msgstr[2] "Нестабільний зв'язок: %1 від'єднань за останню годину."
+
+msgid "%1%"
+msgstr "%1 %"
+
+msgid "rssi-helper not installed"
+msgstr "rssi-helper не встановлено"
+
+msgid "see akmctl doctor"
+msgstr "див. akmctl doctor"
+
+msgid "not measured (%1)"
+msgstr "не виміряно (%1)"
+
+msgid "the rssi-helper utility is not installed"
+msgstr "допоміжну програму rssi-helper не встановлено"
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+"допоміжна програма rssi-helper завершилася з помилкою (немає capability, "
+"відмова Bluetooth)"
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr "допоміжна програма rssi-helper не відповідає вчасно"
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "адаптер Bluetooth не надає вимірювань для цього зв'язку"
+
+msgid "the signal cannot be measured"
+msgstr "сигнал неможливо виміряти"
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr "перевстановіть пакунок apple-kb-monitor"
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr "перевстановіть пакунок apple-kb-monitor, потім виконайте akmctl doctor"
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "перевірте службу Bluetooth: systemctl status bluetooth"
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "наблизьте клавіатуру або повторно під'єднайте її"
+
+msgid "run akmctl doctor"
+msgstr "виконайте akmctl doctor"
+
+msgid "Battery history"
+msgstr "Історія батарейок"
+
+msgid "24 h"
+msgstr "24 год"
+
+msgid "7 d"
+msgstr "7 дн."
+
+msgid "30 d"
+msgstr "30 дн."
+
+msgid "90 d"
+msgstr "90 дн."
+
+msgid "Refresh"
+msgstr "Оновити"
+
+msgid "LOADING…"
+msgstr "ЗАВАНТАЖЕННЯ…"
+
+msgid "Readings: %1"
+msgstr "Вимірювання: %1"
+
+msgid "%1 V"
+msgstr "%1 В"
+
+msgid "Batteries %"
+msgstr "Батарейки %"
+
+msgid "Voltage %1 to %2 V"
+msgstr "Напруга від %1 до %2 В"
+
+msgid "History not available: %1"
+msgstr "Історія недоступна: %1"
+
+msgid "Monitor stopped: no history."
+msgstr "Монітор зупинено: історії немає."
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr "Замало вимірювань за цей період, щоб побудувати криву."
+
+msgid "Batteries"
+msgstr "Батарейки"
+
+msgid "Voltage"
+msgstr "Напруга"
+
+msgid "EMPTY"
+msgstr "ПОРОЖНІ"
+
+msgid "CRITICAL"
+msgstr "КРИТИЧНИЙ"
+
+msgid "LOW"
+msgstr "НИЗЬКИЙ"
+
+msgid "FULL"
+msgstr "ПОВНІ"
+
+msgid "Thresholds"
+msgstr "Пороги"
+
+msgid "Estimate"
+msgstr "Оцінка"
+
+msgid "Apple display"
+msgstr "Показ Apple"
+
+msgid "Chemistry"
+msgstr "Хімія"
+
+msgid "Installed on"
+msgstr "Встановлено"
+
+msgid "Trend"
+msgstr "Тенденція"
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] "−%2 % на день за %1 день"
+msgstr[1] "−%2 % на день за %1 дні"
+msgstr[2] "−%2 % на день за %1 днів"
+
+msgid "Empty around"
+msgstr "Розрядяться близько"
+
+msgid "Last reading"
+msgstr "Останнє вимірювання"
+
+msgid "The last reading missed a report of the keyboard."
+msgstr "В останньому вимірюванні бракувало звіту клавіатури."
+
+msgid "Device"
+msgstr "Пристрій"
+
+msgid "Model"
+msgstr "Модель"
+
+msgid "Name"
+msgstr "Назва"
+
+msgid "Address"
+msgstr "Адреса"
+
+msgid "Chip"
+msgstr "Мікросхема"
+
+msgid "Driver"
+msgstr "Драйвер"
+
+msgid "Firmware"
+msgstr "Мікропрограма"
+
+msgid "System diagnostic"
+msgstr "Діагностика системи"
+
+msgid "Checking…"
+msgstr "Перевірка…"
+
+msgid "Run the full check"
+msgstr "Запустити повну перевірку"
+
+msgid "%1/%2 PASSED"
+msgstr "%1/%2 ПРОЙДЕНО"
+
+msgid "PROBLEMS: %1"
+msgstr "ПРОБЛЕМИ: %1"
+
+msgid "Check not run: %1"
+msgstr "Перевірку не запущено: %1"
+
+msgid "Monitor"
+msgstr "Монітор"
+
+msgid "RUNNING"
+msgstr "ПРАЦЮЄ"
+
+msgid "STOPPED"
+msgstr "ЗУПИНЕНО"
+
+msgid "Version"
+msgstr "Версія"
+
+msgid "Keyboard"
+msgstr "Клавіатура"
+
+msgid "Link"
+msgstr "Зв'язок"
+
+msgid "Last error"
+msgstr "Остання помилка"
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr "Запустіть його командою: systemctl --user start apple-kb-monitord"
+
+msgid "Log"
+msgstr "Журнал"
+
+msgid "[FAIL]"
+msgstr "[ЗБІЙ]"
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr ""
+"Перевірку виконує монітор (близько десяти тестів, ніколи на клавіатурі)."
+
+msgid "Function keys"
+msgstr "Функціональні клавіші"
+
+msgid "Media keys first"
+msgstr "Спочатку мультимедійні клавіші"
+
+msgid "F1–F12 first"
+msgstr "Спочатку F1–F12"
+
+msgid "Current mode: %1"
+msgstr "Поточний режим: %1"
+
+msgid "Fn mode not read yet."
+msgstr "Режим Fn ще не прочитано."
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr "Режим Fn невідомий: клавіатуру не під'єднано."
+
+msgid "Administrator authentication requested…"
+msgstr "Запитано автентифікацію адміністратора…"
+
+msgid "Fn mode not changed: %1"
+msgstr "Режим Fn не змінено: %1"
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr "hid_apple діє на всі клавіатури Apple цього комп'ютера."
+
+msgid "Locks"
+msgstr "Фіксатори"
+
+msgid "Caps Lock"
+msgstr "Caps Lock"
+
+msgid "Num Lock"
+msgstr "Num Lock"
+
+msgid "on"
+msgstr "увімк."
+
+msgid "off"
+msgstr "вимк."
+
+msgid "ON"
+msgstr "УВІМК."
+
+msgid "OFF"
+msgstr "ВИМК."
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr "Зчитується з індикаторів клавіатури під час кожного вимірювання."
+
+msgid "Special keys"
+msgstr "Спеціальні клавіші"
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+"Таблиця спеціальних клавіш (код і дія KDE з Fn і без) та редактор клавіш "
+"містяться у Системних параметрах, модуль «Клавіатура Apple», сторінка "
+"«Клавіші»."
+
+msgid "Edit the keys"
+msgstr "Змінити клавіші"
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] "%1 с тому"
+msgstr[1] "%1 с тому"
+msgstr[2] "%1 с тому"
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "%1 хв тому"
+msgstr[1] "%1 хв тому"
+msgstr[2] "%1 хв тому"
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "%1 год тому"
+msgstr[1] "%1 год тому"
+msgstr[2] "%1 год тому"
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "%1 день тому"
+msgstr[1] "%1 дні тому"
+msgstr[2] "%1 днів тому"
+
+msgid "EXCELLENT"
+msgstr "ВІДМІННИЙ"
+
+msgid "GOOD"
+msgstr "ДОБРИЙ"
+
+msgid "WEAK"
+msgstr "СЛАБКИЙ"
+
+msgid "Signal"
+msgstr "Сигнал"
+
+msgid "Not measured"
+msgstr "Не виміряно"
+
+msgid "Measured"
+msgstr "Виміряно"
+
+msgid "at %1"
+msgstr "о %1"
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr ""
+"дБ відносно ідеального діапазону приймання адаптера (0 = ідеал), не дБм."
+
+msgid "Correction: %1"
+msgstr "Поправка: %1"
+
+msgid "No measurement: the keyboard is not connected."
+msgstr "Немає вимірювання: клавіатуру не під'єднано."
+
+msgid "Connected"
+msgstr "Під'єднано"
+
+msgid "Yes"
+msgstr "Так"
+
+msgid "No"
+msgstr "Ні"
+
+msgid "Paired"
+msgstr "Пов'язано"
+
+msgid "TX power"
+msgstr "Потужність передавання"
+
+msgid "%1 dBm"
+msgstr "%1 дБм"
+
+msgid "Last wake-up"
+msgstr "Останнє пробудження"
+
+msgid "Paired host"
+msgstr "Пов'язаний вузол"
+
+msgid "Monitor's link"
+msgstr "Зв'язок монітора"
+
+msgid "connected"
+msgstr "під'єднано"
+
+msgid "asleep"
+msgstr "спить"
+
+msgid "unreachable"
+msgstr "недоступна"
+
+msgid "Attempts / failures"
+msgstr "Спроби / збої"
+
+msgid "%1 / %2"
+msgstr "%1 / %2"
+
+msgid "Link quality"
+msgstr "Якість зв'язку"
+
+msgid "Disconnections"
+msgstr "Від'єднання"
+
+msgid "1 h"
+msgstr "1 год"
+
+msgid "7 days"
+msgstr "7 днів"
+
+msgid "today"
+msgstr "сьогодні"
+
+msgid "D-%1"
+msgstr "Д-%1"
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr "Монітор ще не зареєстрував жодного від'єднання."
+
+msgid "Restore the link"
+msgstr "Відновити зв'язок"
+
+msgid "Reconnect"
+msgstr "Під'єднати повторно"
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr ""
+"Пов'язування втрачено або відхилено? Пов'яжіть повторно в терміналі "
+"(потрібне підтвердження): akmctl repair"
+
+msgid "OK"
+msgstr "Гаразд"
+
+msgid "Autonomy"
+msgstr "Час роботи"
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 день"
+msgstr[1] "≈ %1 дні"
+msgstr[2] "≈ %1 днів"
+
+msgid "≈ %1 h"
+msgstr "≈ %1 год"
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr ""
+"Показ клавіатури: її власний відсоток, змінюється стрибками (часто під час "
+"повторного під'єднання)."
+
+msgid "not enough history yet"
+msgstr "поки що замало історії"
+
+msgid "%1, up to date"
+msgstr "%1, актуальна"
+
+msgid "%1, update %2 at Apple"
+msgstr "%1, оновлення %2 в Apple"
+
+msgid "%1, not in the table"
+msgstr "%1, немає в таблиці"
+
+msgid "Keyboard name"
+msgstr "Назва клавіатури"
+
+msgid "Apply"
+msgstr "Застосувати"
+
+msgid "Keyboard's own name"
+msgstr "Власна назва клавіатури"
+
+msgid "Cancel"
+msgstr "Скасувати"
+
+msgid "Rename refused: %1"
+msgstr "Перейменування відхилено: %1"
+
+msgid "Actions"
+msgstr "Дії"
+
+msgid "Fn: waiting for authorisation…"
+msgstr "Fn: очікування уповноваження…"
+
+msgid "Rename"
+msgstr "Перейменувати"
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr "%1 — актуальна (найновіша публічна версія, відома Apple)"
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr "%1 — від Apple доступне оновлення (найновіша відома: %2)"
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr "%1 — невідомо (моделі чи версії немає в таблиці)"
+
+msgid "Autonomy: %1"
+msgstr "Час роботи: %1"
+
+msgid "media keys first"
+msgstr "спочатку мультимедійні клавіші"
+
+msgid "Fn key has no effect"
+msgstr "клавіша Fn не діє"
+
+msgid "F-keys disabled"
+msgstr "клавіші F вимкнено"
+
+msgid "Switch to F1–F12 first"
+msgstr "Перемкнути на «спочатку F1–F12»"
+
+msgid "Switch to media keys first"
+msgstr "Перемкнути на «спочатку мультимедійні клавіші»"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1 (спроби: %2, збої: %3)"
+
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+msgid "new batteries, no estimate yet"
+msgstr "нові батарейки, оцінки поки немає"
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr "≈ %1 % (від %2 до %3 %), %4"
+
+msgid "Keyboard not connected"
+msgstr "Клавіатуру не під'єднано"
+
+msgid "Monitor stopped"
+msgstr "Монітор зупинено"
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr "Клавіатура Apple, заряд %1 відсотків"
+
+msgid "Apple keyboard, battery level unknown"
+msgstr "Клавіатура Apple, заряд невідомий"
+
+msgid "Apple keyboard, %1"
+msgstr "Клавіатура Apple, %1"
+
+msgid "Keyboard indication %1"
+msgstr "Показ клавіатури %1"
+
+msgid "Estimate: %1"
+msgstr "Оцінка: %1"
+
+msgid "Apple display: %1%"
+msgstr "Показ Apple: %1 %"
+
+msgid "Signal: %1"
+msgstr "Сигнал: %1"
+
+msgid "Firmware: %1"
+msgstr "Мікропрограма: %1"
+
+msgid "Waiting for the Apple keyboard…"
+msgstr "Очікування клавіатури Apple…"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord немає на шині сеансу"
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr "&Налаштувати клавіатуру Apple…"
+
+msgid "New reading requested."
+msgstr "Запитано нове вимірювання."
+
+msgid "Reading not requested: %1"
+msgstr "Вимірювання не запитано: %1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+"Повторне під'єднання запитано. Натисніть клавішу на клавіатурі, якщо вона "
+"спить."
+
+msgid "refused by the monitor"
+msgstr "відхилено монітором"
+
+msgid "Reconnection not requested: %1"
+msgstr "Повторне під'єднання не запитано: %1"
+
+msgid "excellent"
+msgstr "відмінний"
+
+msgid "good"
+msgstr "добрий"
+
+msgid "weak"
+msgstr "слабкий"
+
+msgid "Apple Keyboard"
+msgstr "Клавіатура Apple"
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr "Повні %1 / Низький %2 / Критичний %3 / Порожні %4 мВ"

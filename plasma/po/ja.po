@@ -1,0 +1,654 @@
+# Japanese translation of the Plasma widget com.agenceapi.devicehub.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Japanese\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "alkaline"
+msgstr "アルカリ"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "リチウム"
+
+msgid "not declared"
+msgstr "未指定"
+
+msgid "State"
+msgstr "状態"
+
+msgid "Radio"
+msgstr "無線"
+
+msgid "Keys"
+msgstr "キー"
+
+msgid "Data"
+msgstr "データ"
+
+msgid "Diag"
+msgstr "診断"
+
+msgid "Apple keyboard monitor"
+msgstr "Apple キーボードモニター"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "READ %1"
+msgstr "読み取り %1"
+
+msgid "NO DAEMON"
+msgstr "サービスなし"
+
+msgid "ONLINE"
+msgstr "オンライン"
+
+msgid "OFFLINE"
+msgstr "オフライン"
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr ""
+"モニター apple-kb-monitord がセッションバス上にありません: 何も読み取れませ"
+"ん。"
+
+msgid "Reading error: %1"
+msgstr "読み取りエラー: %1"
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr ""
+"キーボードが切断されています。キーを押して復帰させるか、RADIO から再接続して"
+"ください。"
+
+msgid "Waiting for the keyboard data…"
+msgstr "キーボードのデータを待っています…"
+
+msgid "Batteries critical: replace them now."
+msgstr "電池残量が危険な水準です: 今すぐ交換してください。"
+
+msgid "Batteries low: plan to replace them."
+msgstr "電池残量が少なくなっています: 交換を予定してください。"
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] "接続が不安定です: 直近 1 時間に %1 回切断されました。"
+
+msgid "%1%"
+msgstr "%1%"
+
+msgid "rssi-helper not installed"
+msgstr "rssi-helper 未インストール"
+
+msgid "see akmctl doctor"
+msgstr "akmctl doctor を参照"
+
+msgid "not measured (%1)"
+msgstr "未測定 (%1)"
+
+msgid "the rssi-helper utility is not installed"
+msgstr "rssi-helper ユーティリティがインストールされていません"
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+"rssi-helper ユーティリティが失敗しました (ケーパビリティ不足、Bluetooth が拒"
+"否)"
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr "rssi-helper ユーティリティが時間内に応答しません"
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "Bluetooth アダプタがこの接続の測定値を返しません"
+
+msgid "the signal cannot be measured"
+msgstr "信号を測定できません"
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr "apple-kb-monitor パッケージを再インストールしてください"
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr ""
+"apple-kb-monitor パッケージを再インストールし、akmctl doctor を実行してくださ"
+"い"
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "Bluetooth サービスを確認してください: systemctl status bluetooth"
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "キーボードを近づけるか、再接続してください"
+
+msgid "run akmctl doctor"
+msgstr "akmctl doctor を実行してください"
+
+msgid "Battery history"
+msgstr "電池の履歴"
+
+msgid "24 h"
+msgstr "24 時間"
+
+msgid "7 d"
+msgstr "7 日"
+
+msgid "30 d"
+msgstr "30 日"
+
+msgid "90 d"
+msgstr "90 日"
+
+msgid "Refresh"
+msgstr "更新"
+
+msgid "LOADING…"
+msgstr "読み込み中…"
+
+msgid "Readings: %1"
+msgstr "測定回数: %1"
+
+msgid "%1 V"
+msgstr "%1 V"
+
+msgid "Batteries %"
+msgstr "電池 %"
+
+msgid "Voltage %1 to %2 V"
+msgstr "電圧 %1〜%2 V"
+
+msgid "History not available: %1"
+msgstr "履歴を利用できません: %1"
+
+msgid "Monitor stopped: no history."
+msgstr "モニター停止中: 履歴はありません。"
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr "この期間の測定値が少なすぎて曲線を描けません。"
+
+msgid "Batteries"
+msgstr "電池"
+
+msgid "Voltage"
+msgstr "電圧"
+
+msgid "EMPTY"
+msgstr "空"
+
+msgid "CRITICAL"
+msgstr "危険"
+
+msgid "LOW"
+msgstr "低"
+
+msgid "FULL"
+msgstr "満充電"
+
+msgid "Thresholds"
+msgstr "しきい値"
+
+msgid "Estimate"
+msgstr "推定"
+
+msgid "Apple display"
+msgstr "Apple の表示"
+
+msgid "Chemistry"
+msgstr "種類"
+
+msgid "Installed on"
+msgstr "装着日"
+
+msgid "Trend"
+msgstr "傾向"
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] "%1 日間で 1 日あたり −%2%"
+
+msgid "Empty around"
+msgstr "切れる頃"
+
+msgid "Last reading"
+msgstr "最終測定"
+
+msgid "The last reading missed a report of the keyboard."
+msgstr "前回の測定でキーボードからのレポートが欠けていました。"
+
+msgid "Device"
+msgstr "デバイス"
+
+msgid "Model"
+msgstr "モデル"
+
+msgid "Name"
+msgstr "名前"
+
+msgid "Address"
+msgstr "アドレス"
+
+msgid "Chip"
+msgstr "チップ"
+
+msgid "Driver"
+msgstr "ドライバ"
+
+msgid "Firmware"
+msgstr "ファームウェア"
+
+msgid "System diagnostic"
+msgstr "システム診断"
+
+msgid "Checking…"
+msgstr "確認中…"
+
+msgid "Run the full check"
+msgstr "完全な確認を実行"
+
+msgid "%1/%2 PASSED"
+msgstr "%1/%2 合格"
+
+msgid "PROBLEMS: %1"
+msgstr "問題: %1"
+
+msgid "Check not run: %1"
+msgstr "確認を実行できませんでした: %1"
+
+msgid "Monitor"
+msgstr "モニター"
+
+msgid "RUNNING"
+msgstr "動作中"
+
+msgid "STOPPED"
+msgstr "停止"
+
+msgid "Version"
+msgstr "バージョン"
+
+msgid "Keyboard"
+msgstr "キーボード"
+
+msgid "Link"
+msgstr "接続"
+
+msgid "Last error"
+msgstr "最後のエラー"
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr ""
+"次のコマンドで起動してください: systemctl --user start apple-kb-monitord"
+
+msgid "Log"
+msgstr "ログ"
+
+msgid "[FAIL]"
+msgstr "[失敗]"
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr ""
+"確認はモニターが行います (約 10 項目、キーボードには一切書き込みません)。"
+
+msgid "Function keys"
+msgstr "ファンクションキー"
+
+msgid "Media keys first"
+msgstr "メディアキー優先"
+
+msgid "F1–F12 first"
+msgstr "F1–F12 優先"
+
+msgid "Current mode: %1"
+msgstr "現在のモード: %1"
+
+msgid "Fn mode not read yet."
+msgstr "Fn モードはまだ読み取られていません。"
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr "Fn モード不明: キーボードが接続されていません。"
+
+msgid "Administrator authentication requested…"
+msgstr "管理者認証を要求しました…"
+
+msgid "Fn mode not changed: %1"
+msgstr "Fn モードは変更されませんでした: %1"
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr ""
+"hid_apple はこのコンピュータのすべての Apple キーボードに適用されます。"
+
+msgid "Locks"
+msgstr "ロック"
+
+msgid "Caps Lock"
+msgstr "Caps Lock"
+
+msgid "Num Lock"
+msgstr "Num Lock"
+
+msgid "on"
+msgstr "オン"
+
+msgid "off"
+msgstr "オフ"
+
+msgid "ON"
+msgstr "オン"
+
+msgid "OFF"
+msgstr "オフ"
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr "測定のたびにキーボードの LED から読み取ります。"
+
+msgid "Special keys"
+msgstr "特殊キー"
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+"特殊キーの表 (Fn あり・なしのコードと KDE のアクション) とキー編集は、システ"
+"ム設定の「Apple キーボード」モジュールの「キー」ページにあります。"
+
+msgid "Edit the keys"
+msgstr "キーを編集"
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] "%1 秒前"
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "%1 分前"
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "%1 時間前"
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "%1 日前"
+
+msgid "EXCELLENT"
+msgstr "非常に良好"
+
+msgid "GOOD"
+msgstr "良好"
+
+msgid "WEAK"
+msgstr "弱い"
+
+msgid "Signal"
+msgstr "信号"
+
+msgid "Not measured"
+msgstr "未測定"
+
+msgid "Measured"
+msgstr "測定値"
+
+msgid "at %1"
+msgstr "%1 に"
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr "アダプタの理想的な受信範囲に対する dB (0 = 理想)。dBm ではありません。"
+
+msgid "Correction: %1"
+msgstr "補正: %1"
+
+msgid "No measurement: the keyboard is not connected."
+msgstr "測定なし: キーボードが接続されていません。"
+
+msgid "Connected"
+msgstr "接続済み"
+
+msgid "Yes"
+msgstr "はい"
+
+msgid "No"
+msgstr "いいえ"
+
+msgid "Paired"
+msgstr "ペアリング済み"
+
+msgid "TX power"
+msgstr "送信出力"
+
+msgid "%1 dBm"
+msgstr "%1 dBm"
+
+msgid "Last wake-up"
+msgstr "最後の復帰"
+
+msgid "Paired host"
+msgstr "ペアリング先ホスト"
+
+msgid "Monitor's link"
+msgstr "モニターの接続"
+
+msgid "connected"
+msgstr "接続済み"
+
+msgid "asleep"
+msgstr "スリープ中"
+
+msgid "unreachable"
+msgstr "到達不能"
+
+msgid "Attempts / failures"
+msgstr "試行 / 失敗"
+
+msgid "%1 / %2"
+msgstr "%1 / %2"
+
+msgid "Link quality"
+msgstr "接続品質"
+
+msgid "Disconnections"
+msgstr "切断"
+
+msgid "1 h"
+msgstr "1 時間"
+
+msgid "7 days"
+msgstr "7 日間"
+
+msgid "today"
+msgstr "今日"
+
+msgid "D-%1"
+msgstr "%1 日前"
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr "モニターはまだ切断を記録していません。"
+
+msgid "Restore the link"
+msgstr "接続を復旧"
+
+msgid "Reconnect"
+msgstr "再接続"
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr ""
+"ペアリングが失われたか拒否されましたか? ターミナルから再ペアリングしてくださ"
+"い (確認を求められます): akmctl repair"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Autonomy"
+msgstr "持続時間"
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 日"
+
+msgid "≈ %1 h"
+msgstr "≈ %1 時間"
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr ""
+"キーボードの表示: キーボード自身のパーセント値で、段階的に変わります (多くは"
+"再接続時)。"
+
+msgid "not enough history yet"
+msgstr "まだ履歴が不足しています"
+
+msgid "%1, up to date"
+msgstr "%1、最新"
+
+msgid "%1, update %2 at Apple"
+msgstr "%1、Apple に更新 %2 あり"
+
+msgid "%1, not in the table"
+msgstr "%1、表にありません"
+
+msgid "Keyboard name"
+msgstr "キーボード名"
+
+msgid "Apply"
+msgstr "適用"
+
+msgid "Keyboard's own name"
+msgstr "キーボード本来の名前"
+
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgid "Rename refused: %1"
+msgstr "名前の変更が拒否されました: %1"
+
+msgid "Actions"
+msgstr "操作"
+
+msgid "Fn: waiting for authorisation…"
+msgstr "Fn: 認可を待っています…"
+
+msgid "Rename"
+msgstr "名前を変更"
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr "%1 — 最新 (Apple が公開している最新バージョン)"
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr "%1 — Apple から更新があります (既知の最新: %2)"
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr "%1 — 不明 (モデルまたはバージョンが表にありません)"
+
+msgid "Autonomy: %1"
+msgstr "持続時間: %1"
+
+msgid "media keys first"
+msgstr "メディアキー優先"
+
+msgid "Fn key has no effect"
+msgstr "Fn キーは無効"
+
+msgid "F-keys disabled"
+msgstr "F キー無効"
+
+msgid "Switch to F1–F12 first"
+msgstr "F1–F12 優先に切り替え"
+
+msgid "Switch to media keys first"
+msgstr "メディアキー優先に切り替え"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1 (試行: %2、失敗: %3)"
+
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+msgid "new batteries, no estimate yet"
+msgstr "新しい電池、まだ推定なし"
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr "≈ %1% (%2〜%3%)、%4"
+
+msgid "Keyboard not connected"
+msgstr "キーボード未接続"
+
+msgid "Monitor stopped"
+msgstr "モニター停止中"
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr "Apple キーボード、電池 %1 パーセント"
+
+msgid "Apple keyboard, battery level unknown"
+msgstr "Apple キーボード、電池残量不明"
+
+msgid "Apple keyboard, %1"
+msgstr "Apple キーボード、%1"
+
+msgid "Keyboard indication %1"
+msgstr "キーボードの表示 %1"
+
+msgid "Estimate: %1"
+msgstr "推定: %1"
+
+msgid "Apple display: %1%"
+msgstr "Apple の表示: %1%"
+
+msgid "Signal: %1"
+msgstr "信号: %1"
+
+msgid "Firmware: %1"
+msgstr "ファームウェア: %1"
+
+msgid "Waiting for the Apple keyboard…"
+msgstr "Apple キーボードを待っています…"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord がセッションバス上にありません"
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr "Apple キーボードを設定(&C)…"
+
+msgid "New reading requested."
+msgstr "新しい測定を要求しました。"
+
+msgid "Reading not requested: %1"
+msgstr "測定を要求できませんでした: %1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr "再接続を要求しました。キーボードがスリープ中ならキーを押してください。"
+
+msgid "refused by the monitor"
+msgstr "モニターが拒否しました"
+
+msgid "Reconnection not requested: %1"
+msgstr "再接続を要求できませんでした: %1"
+
+msgid "excellent"
+msgstr "非常に良好"
+
+msgid "good"
+msgstr "良好"
+
+msgid "weak"
+msgstr "弱い"
+
+msgid "Apple Keyboard"
+msgstr "Apple キーボード"
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr "満充電 %1 / 低 %2 / 危険 %3 / 空 %4 mV"

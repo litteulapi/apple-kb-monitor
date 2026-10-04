@@ -1,0 +1,54 @@
+[Unit]
+Description=HID_CONTROL SUSPEND (0x13) to the Apple Bluetooth keyboards before the computer sleeps (as macOS bluetoothd)
+Documentation=https://github.com/litteulapi/apple-kb-monitor/blob/main/docs/HID-SLEEP.md
+# Runs once per sleep, after logind has told the user daemon
+# (PrepareForSleep: it pauses its HID reads and releases its delay inhibitor)
+# and before systemd-suspend.service, while the Bluetooth link is still up.
+Before=sleep.target
+After=bluetooth.service
+ConditionPathIsDirectory=/sys/class/bluetooth
+
+[Service]
+Type=oneshot
+# One byte per connected Apple keyboard, never retried, then at most 1 s for it
+# to leave the socket queue. "-" and the short timeout: a failure or a hang
+# never delays the sleep of the computer by more than 2 s.
+ExecStart=-/usr/lib/apple-kb-monitor/akm-helper hid-control suspend
+TimeoutStartSec=2s
+# Hardening: root is needed only for pidfd_getfd() on bluetoothd (ptrace
+# "attach" check, Yama ptrace_scope 1 requires CAP_SYS_PTRACE) and for reading
+# /proc/<pid>/fd. No socket of its own except AF_UNIX (systemctl -> PID 1); the
+# Bluetooth socket is borrowed from bluetoothd, never created.
+# NoNewPrivileges=yes is compatible: it does not affect ptrace / pidfd_getfd.
+# pidfd_getfd is in @debug, not @system-service: added by name.
+User=root
+CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+NoNewPrivileges=yes
+ProtectSystem=strict
+# read-only, not "yes": "yes" hides /run/user, where the daemon publishes its
+# circuit-breaker state ($XDG_RUNTIME_DIR/apple-kb-monitor/breaker.state). The
+# helper then saw "NoState" and sent even with the breaker open (measured
+# 2026-10-02 in this very sandbox; with read-only it reads "Closed").
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectProc=default
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service pidfd_getfd
+SystemCallErrorNumber=EPERM
+UMask=0077
+
+[Install]
+WantedBy=sleep.target

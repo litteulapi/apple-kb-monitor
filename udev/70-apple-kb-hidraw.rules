@@ -1,0 +1,11 @@
+# Apple Bluetooth KEYBOARDS only: hidraw access for the active seat user (logind ACL).
+# Restricted to the product ids of the keyboard table (akm-core model.rs
+# APPLE_MODELS): Magic Mouse / Magic Trackpad and wired USB devices get no tag.
+# Accepted trade-off (keylogger risk), see udev/README.md.
+# Must sort before 73-seat-late.rules, which applies the uaccess tag.
+# Kernel name of a Bluetooth HID device: <bus 0005>:<vendor>:<product>.<instance>;
+# vendor 05AC (Apple USB id) or 004C (Bluetooth SIG id, Magic Keyboard 2015+).
+ACTION=="remove", GOTO="apple_kb_end"
+SUBSYSTEM!="hidraw", GOTO="apple_kb_end"
+KERNELS=="0005:05AC:022C.*|0005:004C:022C.*|0005:05AC:022D.*|0005:004C:022D.*|0005:05AC:022E.*|0005:004C:022E.*|0005:05AC:0239.*|0005:004C:0239.*|0005:05AC:023A.*|0005:004C:023A.*|0005:05AC:023B.*|0005:004C:023B.*|0005:05AC:0255.*|0005:004C:0255.*|0005:05AC:0256.*|0005:004C:0256.*|0005:05AC:0257.*|0005:004C:0257.*|0005:05AC:0267.*|0005:004C:0267.*|0005:05AC:026C.*|0005:004C:026C.*|0005:05AC:029C.*|0005:004C:029C.*|0005:05AC:029A.*|0005:004C:029A.*|0005:05AC:029F.*|0005:004C:029F.*|0005:05AC:0320.*|0005:004C:0320.*|0005:05AC:0321.*|0005:004C:0321.*|0005:05AC:0322.*|0005:004C:0322.*", TAG+="uaccess"
+LABEL="apple_kb_end"

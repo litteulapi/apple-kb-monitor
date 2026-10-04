@@ -1,0 +1,27 @@
+[Unit]
+Description=Apple keyboard monitor self-check (daemon, link, journal, crashes, disk)
+Documentation=file:///usr/share/doc/apple-kb-monitor/TESTING.md
+After=apple-kb-monitord.service
+
+[Service]
+# One pass of `akmctl selftest`: queries the daemon (D-Bus, 5 s timeout),
+# systemd, the journal, coredump records, /proc and statvfs. Never touches
+# the keyboard. Result: $XDG_STATE_HOME/apple-kb-monitor/selfcheck.json.
+# A NEW grave problem raises one desktop notification (deduplicated).
+# Exit 1 = a grave problem is present: the unit shows in
+# `systemctl --user --failed` until it is gone.
+Type=oneshot
+# Optional: AKM_SELFCHECK_ARGS=--gitea-issue (one deduplicated Gitea issue
+# per new grave problem, needs ~/.config/gitea/token). Off by default.
+# Default empty so systemd does not warn about an unset variable at each run;
+# selfcheck.env (below) overrides it.
+Environment=AKM_SELFCHECK_ARGS=
+EnvironmentFile=-%h/.config/apple-kb-monitor/selfcheck.env
+ExecStart=/usr/bin/akmctl selftest --notify $AKM_SELFCHECK_ARGS
+TimeoutStartSec=120
+Nice=10
+IOSchedulingClass=idle
+UMask=0077
+LimitCORE=0
+# No privilege is needed (unlike the daemon, which runs pkexec/rssi-helper).
+NoNewPrivileges=yes

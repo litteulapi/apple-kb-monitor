@@ -1,0 +1,6 @@
+# User units of apple-kb-monitor, enabled by `systemctl --user preset` (or
+# `preset-all`) and on a first login with presets applied. Enable by hand:
+#   systemctl --user enable --now apple-kb-monitord.service apple-kb-monitor-shutdown.service apple-kb-monitor-selfcheck.timer
+enable apple-kb-monitord.service
+enable apple-kb-monitor-shutdown.service
+enable apple-kb-monitor-selfcheck.timer

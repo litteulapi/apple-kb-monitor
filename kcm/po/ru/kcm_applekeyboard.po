@@ -1,0 +1,2071 @@
+# Russian translation of the System Settings module kcm_applekeyboard.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:57+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Russian\n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+#: ui/AlertsPage.qml:50 ui/StatePage.qml:104
+msgid ""
+"The keyboard service did not answer within 5 seconds. It is busy or stuck; "
+"the values shown may be old."
+msgstr ""
+"Служба клавиатуры не ответила за 5 секунд. Она занята или зависла; "
+"показанные значения могут быть устаревшими."
+
+#: ui/AlertsPage.qml:51 ui/StatePage.qml:105
+msgid "The keyboard service answered with an error: %1"
+msgstr "Служба клавиатуры ответила ошибкой: %1"
+
+#: ui/AlertsPage.qml:230 ui/main.qml:27
+msgid ""
+"The keyboard service (apple-kb-monitord) is not running: every setting is "
+"read and written by it, nothing can be shown or changed until it starts."
+msgstr ""
+"Служба клавиатуры (apple-kb-monitord) не запущена: она читает и записывает "
+"все настройки, поэтому ничего нельзя показать или изменить, пока она не "
+"запустится."
+
+#: ui/AlertsPage.qml:235
+msgid ""
+"Not saved: the keyboard service did not answer in time, the settings could "
+"not be read. Try again in a moment."
+msgstr ""
+"Не сохранено: служба клавиатуры не ответила вовремя, настройки не удалось "
+"прочитать. Повторите попытку чуть позже."
+
+#: ui/AlertsPage.qml:236
+msgid ""
+"Not saved: the keyboard service could not read the settings (%1). Try again "
+"in a moment."
+msgstr ""
+"Не сохранено: служба клавиатуры не смогла прочитать настройки (%1). "
+"Повторите попытку чуть позже."
+
+#: ui/AlertsPage.qml:240
+msgid ""
+"Not saved: the settings file could not be read (%1), so it is not written "
+"over. Fix the file or move it away, then reopen this page."
+msgstr ""
+"Не сохранено: не удалось прочитать файл настроек (%1), поэтому он не "
+"перезаписывается. Исправьте или переместите файл, затем снова откройте эту "
+"страницу."
+
+#: ui/AlertsPage.qml:245
+msgid ""
+"Not saved: the thresholds must be whole numbers between 1 and 99, separated "
+"by commas."
+msgstr ""
+"Не сохранено: пороги должны быть целыми числами от 1 до 99 через запятую."
+
+#: ui/AlertsPage.qml:249
+msgid "Not saved: the critical level must be a whole number between 0 and 99."
+msgstr "Не сохранено: критический уровень должен быть целым числом от 0 до 99."
+
+#: ui/AlertsPage.qml:253
+msgid ""
+"Not saved: the re-arm margin must be a number between 1 and 20 (for example "
+"3 or 2.5)."
+msgstr ""
+"Не сохранено: запас повторного взвода должен быть числом от 1 до 20 "
+"(например, 3 или 2,5)."
+
+#: ui/AlertsPage.qml:278
+msgid ""
+"Saved. The service reads these settings when it starts: restart it to use "
+"them now."
+msgstr ""
+"Сохранено. Служба читает эти настройки при запуске: перезапустите её, чтобы "
+"применить их сейчас."
+
+#: ui/AlertsPage.qml:279
+msgid "Saved. They will be used when the service starts."
+msgstr "Сохранено. Они будут использованы при запуске службы."
+
+#: ui/AlertsPage.qml:283
+msgid ""
+"Not saved: the settings file was changed by another program since this page "
+"read it. Nothing was written; use Reset to read it again."
+msgstr ""
+"Не сохранено: файл настроек был изменён другой программой после того, как "
+"эта страница его прочитала. Ничего не записано; нажмите «Сбросить», чтобы "
+"прочитать его заново."
+
+#: ui/AlertsPage.qml:284
+msgid "Not saved: %1"
+msgstr "Не сохранено: %1"
+
+#: ui/AlertsPage.qml:307
+msgid "Restart the service"
+msgstr "Перезапустить службу"
+
+#: ui/AlertsPage.qml:312
+msgid "Service restarted with the new settings."
+msgstr "Служба перезапущена с новыми настройками."
+
+#: ui/AlertsPage.qml:312
+msgid "The service could not be restarted: %1"
+msgstr "Не удалось перезапустить службу: %1"
+
+#: ui/AlertsPage.qml:326
+msgid ""
+"The settings file could not be read (%1): the defaults are shown and nothing "
+"can be saved, so that the file is never written over."
+msgstr ""
+"Не удалось прочитать файл настроек (%1): показаны значения по умолчанию, и "
+"ничего нельзя сохранить, чтобы файл никогда не был перезаписан."
+
+#: ui/AlertsPage.qml:328
+msgid ""
+"Some lines of the settings file are not understood (%1); they are kept as "
+"they are."
+msgstr ""
+"Некоторые строки файла настроек не распознаны (%1); они сохраняются как есть."
+
+#: ui/AlertsPage.qml:337
+msgid ""
+"The service does not take these values of the settings file as they are "
+"written: %1. They are shown as written and kept unless you change them."
+msgstr ""
+"Служба не принимает эти значения файла настроек в записанном виде: %1. Они "
+"показаны как записаны и сохраняются, пока вы их не измените."
+
+#: ui/AlertsPage.qml:346
+msgctxt "@title:group"
+msgid "Low battery"
+msgstr "Низкий заряд"
+
+#: ui/AlertsPage.qml:351
+msgid "Alerts:"
+msgstr "Оповещения:"
+
+#: ui/AlertsPage.qml:352
+msgid "Notify when the battery is low"
+msgstr "Уведомлять о низком заряде"
+
+#: ui/AlertsPage.qml:358
+msgid "Thresholds (%):"
+msgstr "Пороги (%):"
+
+#: ui/AlertsPage.qml:362
+msgid "Alert thresholds in percent, separated by commas"
+msgstr "Пороги оповещения в процентах через запятую"
+
+#: ui/AlertsPage.qml:365
+msgid "Whole numbers from 1 to 99"
+msgstr "Целые числа от 1 до 99"
+
+#: ui/AlertsPage.qml:373
+msgid "One notification per threshold crossed, on the estimated charge."
+msgstr "Одно уведомление на каждый пересечённый порог по оценке заряда."
+
+#: ui/AlertsPage.qml:378
+msgid "With KDE:"
+msgstr "С KDE:"
+
+#: ui/AlertsPage.qml:380
+msgid "When KDE already warns about this keyboard, send only one reminder"
+msgstr ""
+"Если KDE уже предупреждает об этой клавиатуре, отправлять только одно "
+"напоминание"
+
+#: ui/AlertsPage.qml:386
+msgid "Critical at or below (%):"
+msgstr "Критический при (%) и ниже:"
+
+#: ui/AlertsPage.qml:390
+msgid "Critical threshold in percent"
+msgstr "Критический порог в процентах"
+
+#: ui/AlertsPage.qml:396
+msgid "Re-arm after (points):"
+msgstr "Повторный взвод через (пунктов):"
+
+#: ui/AlertsPage.qml:400
+msgid "Points above a threshold before it can notify again"
+msgstr "Пункты выше порога, прежде чем он сможет снова уведомить"
+
+#: ui/AlertsPage.qml:401
+msgid "A number from 1 to 20, decimals allowed"
+msgstr "Число от 1 до 20, допускаются дробные"
+
+#: ui/AlertsPage.qml:408
+msgctxt "@title:group"
+msgid "Batteries"
+msgstr "Батарейки"
+
+#: ui/AlertsPage.qml:413
+msgid "Battery type:"
+msgstr "Тип батареек:"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:56
+msgctxt "battery chemistry"
+msgid "alkaline"
+msgstr "щелочные"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:57
+msgctxt "battery chemistry"
+msgid "NiMH (rechargeable)"
+msgstr "NiMH (аккумуляторы)"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:58
+msgctxt "battery chemistry"
+msgid "lithium"
+msgstr "литиевые"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:59
+msgctxt "battery chemistry"
+msgid "unknown"
+msgstr "неизвестно"
+
+#: ui/AlertsPage.qml:415
+msgid "Battery type"
+msgstr "Тип батареек"
+
+#: ui/AlertsPage.qml:424
+msgid ""
+"Used for the estimated charge and its range; the keyboard's own indication "
+"does not depend on it."
+msgstr ""
+"Используется для оценки заряда и её диапазона; собственное показание "
+"клавиатуры от этого не зависит."
+
+#: ui/AlertsPage.qml:429
+msgid "Display:"
+msgstr "Отображение:"
+
+#: ui/AlertsPage.qml:430
+msgid "Also show the percentage as macOS shows it"
+msgstr "Также показывать процент так, как его показывает macOS"
+
+#: ui/AlertsPage.qml:436
+msgctxt "@title:group"
+msgid "Other notifications"
+msgstr "Другие уведомления"
+
+#: ui/AlertsPage.qml:441 ui/StatePage.qml:152
+msgid "Connection:"
+msgstr "Связь:"
+
+#: ui/AlertsPage.qml:442
+msgid "Notify on disconnection and reconnection"
+msgstr "Уведомлять об отключении и переподключении"
+
+#: ui/AlertsPage.qml:448
+msgid "New batteries:"
+msgstr "Новые батарейки:"
+
+#: ui/AlertsPage.qml:449
+msgid "Notify when new batteries are detected"
+msgstr "Уведомлять об обнаружении новых батареек"
+
+#: ui/AlertsPage.qml:455
+msgctxt "@title:group"
+msgid "Shutdown"
+msgstr "Выключение"
+
+#: ui/AlertsPage.qml:460
+msgid "WillShutdown:"
+msgstr "WillShutdown:"
+
+#: ui/AlertsPage.qml:461
+msgid "Tell the keyboard when the computer shuts down or restarts"
+msgstr "Сообщать клавиатуре о выключении или перезагрузке компьютера"
+
+#: ui/AlertsPage.qml:470
+msgid ""
+"What macOS sends at every shutdown (one message, nothing else is written). "
+"Off = the keyboard is left untouched."
+msgstr ""
+"То, что macOS отправляет при каждом выключении (одно сообщение, больше "
+"ничего не записывается). Выкл. = клавиатура не затрагивается."
+
+#: ui/AlertsPage.qml:478
+msgid "File:"
+msgstr "Файл:"
+
+#: ui/DiagPage.qml:39
+msgctxt "diagnosis level"
+msgid "OK"
+msgstr "OK"
+
+#: ui/DiagPage.qml:40
+msgctxt "diagnosis level"
+msgid "information"
+msgstr "информация"
+
+#: ui/DiagPage.qml:41
+msgctxt "diagnosis level"
+msgid "warning"
+msgstr "предупреждение"
+
+#: ui/DiagPage.qml:42
+msgctxt "diagnosis level"
+msgid "problem"
+msgstr "проблема"
+
+#: ui/DiagPage.qml:47
+msgctxt "doctor topic"
+msgid "adapter"
+msgstr "адаптер"
+
+#: ui/DiagPage.qml:48
+msgctxt "doctor topic"
+msgid "adapter power"
+msgstr "питание адаптера"
+
+#: ui/DiagPage.qml:49
+msgctxt "doctor topic"
+msgid "BlueZ settings"
+msgstr "настройки BlueZ"
+
+#: ui/DiagPage.qml:50
+msgctxt "doctor topic"
+msgid "service"
+msgstr "служба"
+
+#: ui/DiagPage.qml:51
+msgctxt "doctor topic"
+msgid "HID access"
+msgstr "доступ HID"
+
+#: ui/DiagPage.qml:52
+msgctxt "doctor topic"
+msgid "journal"
+msgstr "журнал"
+
+#: ui/DiagPage.qml:53
+msgctxt "doctor topic"
+msgid "link"
+msgstr "связь"
+
+#: ui/DiagPage.qml:54
+msgctxt "doctor topic"
+msgid "link key"
+msgstr "ключ связи"
+
+#: ui/DiagPage.qml:55
+msgctxt "doctor topic"
+msgid "link quality"
+msgstr "качество связи"
+
+#: ui/DiagPage.qml:56
+msgctxt "doctor topic"
+msgid "pairing"
+msgstr "сопряжение"
+
+#: ui/DiagPage.qml:57
+msgctxt "doctor topic"
+msgid "signal"
+msgstr "сигнал"
+
+#: ui/DiagPage.qml:58
+msgctxt "doctor topic"
+msgid "UPower"
+msgstr "UPower"
+
+#: ui/DiagPage.qml:59
+msgctxt "doctor topic"
+msgid "versions"
+msgstr "версии"
+
+#: ui/DiagPage.qml:66
+msgctxt "doctor verdict"
+msgid "the pairing is refused or missing: run `akmctl repair`"
+msgstr "сопряжение отклонено или отсутствует: выполните `akmctl repair`"
+
+#: ui/DiagPage.qml:67
+msgctxt "doctor verdict"
+msgid "no usable pairing: run `akmctl repair`"
+msgstr "нет пригодного сопряжения: выполните `akmctl repair`"
+
+#. i18n: %1 = the doctor topics to check, comma-separated
+#: ui/DiagPage.qml:69
+msgctxt "doctor verdict"
+msgid "Link up; to check: %1 (akmctl doctor)"
+msgstr "Связь установлена; проверить: %1 (akmctl doctor)"
+
+#: ui/DiagPage.qml:70
+msgctxt "doctor verdict"
+msgid "link up and configuration sound"
+msgstr "связь установлена, конфигурация в порядке"
+
+#: ui/DiagPage.qml:71
+msgctxt "doctor verdict"
+msgid ""
+"keyboard not connected: press a key and wait 10 s; the service pages it on "
+"its own. Pair it again only if `akmctl doctor` reports auth-failed"
+msgstr ""
+"клавиатура не подключена: нажмите клавишу и подождите 10 с; служба вызовет "
+"её сама. Повторяйте сопряжение, только если `akmctl doctor` сообщает auth-"
+"failed"
+
+#: ui/DiagPage.qml:78
+msgctxt "doctor finding"
+msgid "rssi-helper executable, capability cap_net_admin present"
+msgstr "rssi-helper исполняемый, capability cap_net_admin присутствует"
+
+#: ui/DiagPage.qml:79
+msgctxt "doctor finding"
+msgid "the rssi-helper utility is not installed"
+msgstr "утилита rssi-helper не установлена"
+
+#: ui/DiagPage.qml:80
+msgctxt "doctor finding"
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+"утилита rssi-helper завершилась с ошибкой (нет capability, отказ Bluetooth)"
+
+#: ui/DiagPage.qml:81
+msgctxt "doctor finding"
+msgid "the rssi-helper utility does not answer in time"
+msgstr "утилита rssi-helper не отвечает вовремя"
+
+#: ui/DiagPage.qml:82
+msgctxt "doctor finding"
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "адаптер Bluetooth не даёт измерений для этой связи"
+
+#: ui/DiagPage.qml:83
+msgctxt "doctor finding"
+msgid "the signal cannot be measured"
+msgstr "сигнал невозможно измерить"
+
+#: ui/DiagPage.qml:84
+msgctxt "doctor finding, %1 = settings"
+msgid "ignored by bluetoothd: %1"
+msgstr "игнорируется bluetoothd: %1"
+
+#: ui/DiagPage.qml:85
+msgctxt "doctor finding"
+msgid "[Policy] Reconnect* in place"
+msgstr "[Policy] Reconnect* на месте"
+
+#: ui/DiagPage.qml:86
+msgctxt "doctor finding"
+msgid "FastConnectable = true"
+msgstr "FastConnectable = true"
+
+#: ui/DiagPage.qml:87
+msgctxt "doctor finding"
+msgid ""
+"FastConnectable off: slower answer to the keyboard's page after a key press"
+msgstr ""
+"FastConnectable выключен: более медленный ответ на вызов клавиатуры после "
+"нажатия клавиши"
+
+#: ui/DiagPage.qml:88
+msgctxt "doctor finding, %1 = file, %2 = error"
+msgid "%1: %2"
+msgstr "%1: %2"
+
+#: ui/DiagPage.qml:89
+msgctxt "doctor finding"
+msgid "NoPollBatteries = true (no 30 s HID polling)"
+msgstr "NoPollBatteries = true (нет опроса HID каждые 30 с)"
+
+#: ui/DiagPage.qml:90
+msgctxt "doctor finding"
+msgid ""
+"UPower reads the keyboard battery every 30 s (2 GET_REPORT over the air): "
+"the keyboard never sleeps"
+msgstr ""
+"UPower читает заряд клавиатуры каждые 30 с (2 GET_REPORT по радио): "
+"клавиатура никогда не засыпает"
+
+#: ui/DiagPage.qml:91
+msgctxt "doctor finding"
+msgid "adapter is not on USB (or not found)"
+msgstr "адаптер не на USB (или не найден)"
+
+#: ui/DiagPage.qml:92
+msgctxt "doctor finding, %1 = USB id"
+msgid "%1 autosuspend off (power/control=on)"
+msgstr "%1 автоприостановка USB выключена (power/control=on)"
+
+#: ui/DiagPage.qml:94
+msgctxt "doctor finding"
+msgid ""
+"%1 USB autosuspend active (control=%2, delay %3 ms, now %4, %5 s suspended "
+"since boot)"
+msgstr ""
+"%1 автоприостановка USB активна (control=%2, задержка %3 мс, сейчас %4, %5 с "
+"в приостановке с момента загрузки)"
+
+#: ui/DiagPage.qml:95
+msgctxt "doctor finding, appended"
+msgid "; rule installed but not applied yet"
+msgstr "; правило установлено, но ещё не применено"
+
+#: ui/DiagPage.qml:96
+msgctxt "doctor finding"
+msgid "btusb enable_autosuspend = %1"
+msgstr "btusb enable_autosuspend = %1"
+
+#: ui/DiagPage.qml:97
+msgctxt "doctor finding"
+msgid "Bluetooth adapter powered"
+msgstr "адаптер Bluetooth включён"
+
+#: ui/DiagPage.qml:98
+msgctxt "doctor finding"
+msgid "Bluetooth adapter off"
+msgstr "адаптер Bluetooth выключен"
+
+#: ui/DiagPage.qml:99
+msgctxt "doctor finding"
+msgid "BlueZ unreachable (bluetooth.service stopped?)"
+msgstr "BlueZ недоступен (bluetooth.service остановлена?)"
+
+#: ui/DiagPage.qml:100
+msgctxt "doctor finding"
+msgid "no paired Apple keyboard known to BlueZ"
+msgstr "BlueZ не знает ни одной сопряжённой клавиатуры Apple"
+
+#: ui/DiagPage.qml:101
+msgctxt "doctor finding, %1 = address"
+msgid "%1 is not paired"
+msgstr "%1 не сопряжена"
+
+#: ui/DiagPage.qml:103
+msgctxt "doctor finding, %1 = address, %2 = name"
+msgid "%1 “%2” paired"
+msgstr "%1 «%2» сопряжена"
+
+#: ui/DiagPage.qml:104
+msgctxt "doctor finding, appended"
+msgid ", bonded"
+msgstr ", связана"
+
+#: ui/DiagPage.qml:105
+msgctxt "doctor finding, appended"
+msgid ", legacy PIN pairing"
+msgstr ", устаревшее сопряжение по PIN"
+
+#: ui/DiagPage.qml:106
+msgctxt "doctor finding"
+msgid "not trusted: BlueZ may refuse the keyboard's own reconnection"
+msgstr ""
+"не доверенная: BlueZ может отклонить переподключение со стороны клавиатуры"
+
+#: ui/DiagPage.qml:107
+msgctxt "doctor finding"
+msgid "blocked in BlueZ"
+msgstr "заблокирована в BlueZ"
+
+#: ui/DiagPage.qml:108
+msgctxt "doctor finding"
+msgid "connected"
+msgstr "подключена"
+
+#: ui/DiagPage.qml:109
+msgctxt "doctor finding"
+msgid "not connected (asleep? press a key)"
+msgstr "не подключена (спит? нажмите клавишу)"
+
+#: ui/DiagPage.qml:110
+msgctxt "doctor finding"
+msgid "link key not checked (needs root: sudo akmctl doctor)"
+msgstr "ключ связи не проверен (нужен root: sudo akmctl doctor)"
+
+#: ui/DiagPage.qml:111
+msgctxt "doctor finding"
+msgid "no [LinkKey] stored for the keyboard"
+msgstr "для клавиатуры не сохранён [LinkKey]"
+
+#: ui/DiagPage.qml:112
+msgctxt "doctor finding"
+msgid "stored key == kernel key (fingerprint %1)"
+msgstr "сохранённый ключ == ключ ядра (отпечаток %1)"
+
+#: ui/DiagPage.qml:113
+msgctxt "doctor finding"
+msgid "stored key %1 != kernel key %2: will change at next restart"
+msgstr ""
+"сохранённый ключ %1 != ключ ядра %2: изменится при следующей перезагрузке"
+
+#: ui/DiagPage.qml:114
+msgctxt "doctor finding"
+msgid "stored key %1; kernel copy not readable (debugfs not mounted?)"
+msgstr "сохранённый ключ %1; копия ядра нечитаема (debugfs не смонтирована?)"
+
+#: ui/DiagPage.qml:116
+msgctxt "doctor finding"
+msgid ""
+"link quality: %1 disconnection in the last hour, %2 in 24 h, %3 in 7 days"
+msgid_plural ""
+"link quality: %1 disconnections in the last hour, %2 in 24 h, %3 in 7 days"
+msgstr[0] ""
+"качество связи: %1 отключение за последний час, %2 за 24 ч, %3 за 7 дней"
+msgstr[1] ""
+"качество связи: %1 отключения за последний час, %2 за 24 ч, %3 за 7 дней"
+msgstr[2] ""
+"качество связи: %1 отключений за последний час, %2 за 24 ч, %3 за 7 дней"
+
+#: ui/DiagPage.qml:117
+msgctxt "doctor finding, appended"
+msgid "; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurement)"
+msgid_plural ""
+"; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurements)"
+msgstr[0] ""
+"; относительный сигнал за 7 дней: среднее %2 дБ, мин. %3 дБ (%1 измерение)"
+msgstr[1] ""
+"; относительный сигнал за 7 дней: среднее %2 дБ, мин. %3 дБ (%1 измерения)"
+msgstr[2] ""
+"; относительный сигнал за 7 дней: среднее %2 дБ, мин. %3 дБ (%1 измерений)"
+
+#: ui/DiagPage.qml:118
+msgctxt "doctor finding, appended"
+msgid " — UNSTABLE: %1 unexpected within the hour"
+msgstr " — НЕСТАБИЛЬНО: неожиданных за час: %1"
+
+#: ui/DiagPage.qml:119
+msgctxt "doctor finding, %1 = device"
+msgid "%1 readable"
+msgstr "%1 читаем"
+
+#: ui/DiagPage.qml:120
+msgctxt "doctor finding, %1 = device"
+msgid "%1 not readable by this user"
+msgstr "%1 нечитаем для этого пользователя"
+
+#: ui/DiagPage.qml:121
+msgctxt "doctor finding"
+msgid "connected but no hidraw node (uhid not created yet?)"
+msgstr "подключена, но нет узла hidraw (uhid ещё не создан?)"
+
+#: ui/DiagPage.qml:122
+msgctxt "doctor finding"
+msgid "no bluetoothd error in the last 6 hours of this boot"
+msgstr "нет ошибок bluetoothd за последние 6 часов с момента загрузки"
+
+#: ui/DiagPage.qml:123
+msgctxt "doctor finding"
+msgid ""
+"bluetoothd journal not readable (add yourself to group systemd-journal, or "
+"use sudo)"
+msgstr ""
+"журнал bluetoothd нечитаем (добавьте себя в группу systemd-journal или "
+"используйте sudo)"
+
+#: ui/DiagPage.qml:124
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 page timeout (keyboard asleep or not listening), last %2"
+msgid_plural "%1 page timeouts (keyboard asleep or not listening), last %2"
+msgstr[0] ""
+"%1 тайм-аут пейджинга (клавиатура спит или не слушает), последний %2"
+msgstr[1] ""
+"%1 тайм-аута пейджинга (клавиатура спит или не слушает), последний %2"
+msgstr[2] ""
+"%1 тайм-аутов пейджинга (клавиатура спит или не слушает), последний %2"
+
+#: ui/DiagPage.qml:125
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 HIDP GET_REPORT timeout, last %2"
+msgid_plural "%1 HIDP GET_REPORT timeouts, last %2"
+msgstr[0] "%1 тайм-аут HIDP GET_REPORT, последний %2"
+msgstr[1] "%1 тайм-аута HIDP GET_REPORT, последний %2"
+msgstr[2] "%1 тайм-аутов HIDP GET_REPORT, последний %2"
+
+#: ui/DiagPage.qml:126
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 authentication / key error, last %2"
+msgid_plural "%1 authentication / key errors, last %2"
+msgstr[0] "%1 ошибка аутентификации / ключа, последняя %2"
+msgstr[1] "%1 ошибки аутентификации / ключа, последняя %2"
+msgstr[2] "%1 ошибок аутентификации / ключа, последняя %2"
+
+#: ui/DiagPage.qml:127
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 connection reset/refused by the keyboard, last %2"
+msgid_plural "%1 connections reset/refused by the keyboard, last %2"
+msgstr[0] "%1 подключение сброшено/отклонено клавиатурой, последнее %2"
+msgstr[1] "%1 подключения сброшены/отклонены клавиатурой, последнее %2"
+msgstr[2] "%1 подключений сброшено/отклонено клавиатурой, последнее %2"
+
+#: ui/DiagPage.qml:128
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 main.conf key ignored by bluetoothd at start, last %2"
+msgid_plural "%1 main.conf keys ignored by bluetoothd at start, last %2"
+msgstr[0] ""
+"%1 ключ main.conf проигнорирован bluetoothd при запуске, последний %2"
+msgstr[1] ""
+"%1 ключа main.conf проигнорированы bluetoothd при запуске, последний %2"
+msgstr[2] ""
+"%1 ключей main.conf проигнорировано bluetoothd при запуске, последний %2"
+
+#: ui/DiagPage.qml:129
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid ""
+"%1 BlueZ storage write failure (a new link key may be lost at reboot), last "
+"%2"
+msgid_plural ""
+"%1 BlueZ storage write failures (a new link key may be lost at reboot), last "
+"%2"
+msgstr[0] ""
+"%1 сбой записи в хранилище BlueZ (новый ключ связи может потеряться при "
+"перезагрузке), последний %2"
+msgstr[1] ""
+"%1 сбоя записи в хранилище BlueZ (новый ключ связи может потеряться при "
+"перезагрузке), последний %2"
+msgstr[2] ""
+"%1 сбоев записи в хранилище BlueZ (новый ключ связи может потеряться при "
+"перезагрузке), последний %2"
+
+#: ui/DiagPage.qml:130
+msgctxt "doctor finding"
+msgid "apple-kb-monitord link keeper not reachable (no automatic reconnection)"
+msgstr ""
+"страж связи apple-kb-monitord недоступен (нет автоматического "
+"переподключения)"
+
+#: ui/DiagPage.qml:131
+msgctxt "doctor finding, %1 = state"
+msgid "link health: %1"
+msgstr "состояние связи: %1"
+
+#: ui/DiagPage.qml:132
+msgctxt "doctor finding"
+msgid "keeper running, keyboard not tracked"
+msgstr "страж работает, клавиатура не отслеживается"
+
+#: ui/DiagPage.qml:133
+msgctxt "doctor finding, %1 = program, %2 = pid, %3 = path"
+msgid ""
+"%1 (pid %2) still runs the replaced binary %3 (deleted): the old version"
+msgstr ""
+"%1 (pid %2) всё ещё выполняет заменённый файл %3 (удалён): старую версию"
+
+#: ui/DiagPage.qml:134
+msgctxt "doctor finding, %1 = pid"
+msgid ""
+"plasmashell (pid %1) started before the widget was installed: it shows the "
+"old widget"
+msgstr ""
+"plasmashell (pid %1) запущен до установки виджета: он показывает старый "
+"виджет"
+
+#: ui/DiagPage.qml:141
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package"
+msgstr "переустановите пакет apple-kb-monitor"
+
+#: ui/DiagPage.qml:142
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr "переустановите пакет apple-kb-monitor, затем выполните akmctl doctor"
+
+#: ui/DiagPage.qml:143
+msgctxt "doctor fix"
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "проверьте службу Bluetooth: systemctl status bluetooth"
+
+#: ui/DiagPage.qml:144
+msgctxt "doctor fix"
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "поднесите клавиатуру ближе или переподключите её"
+
+#: ui/DiagPage.qml:145
+msgctxt "doctor fix"
+msgid "run akmctl doctor"
+msgstr "выполните akmctl doctor"
+
+#: ui/DiagPage.qml:146
+msgctxt "doctor fix, %1 = command"
+msgid "optional: %1"
+msgstr "необязательно: %1"
+
+#: ui/DiagPage.qml:147
+msgctxt "doctor fix"
+msgid "akmctl repair (pairing assistant)"
+msgstr "akmctl repair (помощник сопряжения)"
+
+#: ui/DiagPage.qml:148
+msgctxt "doctor fix"
+msgid "check disk space, then akmctl repair if the keyboard is refused"
+msgstr ""
+"проверьте место на диске, затем akmctl repair, если клавиатура отклоняется"
+
+#: ui/DiagPage.qml:149
+msgctxt "doctor fix"
+msgid "check the batteries, the distance, USB 3 devices near the adapter"
+msgstr "проверьте батарейки, расстояние и устройства USB 3 рядом с адаптером"
+
+#: ui/DiagPage.qml:150
+msgctxt "doctor fix"
+msgid "install udev/70-apple-kb-hidraw.rules (uaccess)"
+msgstr "установите udev/70-apple-kb-hidraw.rules (uaccess)"
+
+#: ui/DiagPage.qml:151
+msgctxt "doctor fix"
+msgid ""
+"avoid HID scanning tools while measuring; see docs/RECONNECTION-PAIRING.md "
+"§3.5"
+msgstr ""
+"не используйте средства сканирования HID во время измерения; см. docs/"
+"RECONNECTION-PAIRING.md §3.5"
+
+#: ui/DiagPage.qml:152
+msgctxt "doctor fix"
+msgid ""
+"free disk space (btrfs: check metadata), then verify with sudo akmctl doctor"
+msgstr ""
+"освободите место на диске (btrfs: проверьте метаданные), затем проверьте "
+"через sudo akmctl doctor"
+
+#. i18n: %1 = daemon version, %2 = akmctl version, %3 = package version
+#: ui/DiagPage.qml:161
+msgctxt "selftest check"
+msgid ""
+"versions differ: daemon %1, akmctl %2, package %3: restart the daemon after "
+"an upgrade (systemctl --user restart apple-kb-monitord.service)"
+msgstr ""
+"версии различаются: служба %1, akmctl %2, пакет %3: перезапустите службу "
+"после обновления (systemctl --user restart apple-kb-monitord.service)"
+
+#. i18n: %1 = daemon version, %2 = package version
+#: ui/DiagPage.qml:163
+msgctxt "selftest check"
+msgid "daemon %1 = akmctl, package %2"
+msgstr "служба %1 = akmctl, пакет %2"
+
+#: ui/DiagPage.qml:164
+msgctxt "selftest check"
+msgid "daemon version unknown (old interface)"
+msgstr "версия службы неизвестна (старый интерфейс)"
+
+#: ui/DiagPage.qml:167
+msgctxt "selftest check"
+msgid "keyboard alias as last set through this monitor"
+msgstr "псевдоним клавиатуры совпадает с последним заданным через этот монитор"
+
+#. i18n: %1 = current alias, %2 = alias set last, %3 = by whom, %4 = Unix time
+#: ui/DiagPage.qml:169
+msgctxt "selftest check"
+msgid ""
+"keyboard alias is %1, last set to %2 by %3 at %4 (unix): changed elsewhere "
+"(KDE Bluetooth settings, bluetoothctl) or the pairing was removed (akmctl "
+"repair, Plasma Forget); see the daemon journal for \"BlueZ alias\" lines"
+msgstr ""
+"псевдоним клавиатуры — %1, последний раз задан как %2 через %3 в %4 (unix): "
+"изменён в другом месте (параметры Bluetooth KDE, bluetoothctl) или "
+"сопряжение было удалено (akmctl repair, «Забыть» в Plasma); см. строки "
+"\"BlueZ alias\" в журнале службы"
+
+#: ui/DiagPage.qml:170
+msgctxt "selftest check"
+msgid ""
+"apple-kb-monitord restarted %1 time by systemd since the last pass (crash "
+"loop?)"
+msgid_plural ""
+"apple-kb-monitord restarted %1 times by systemd since the last pass (crash "
+"loop?)"
+msgstr[0] ""
+"apple-kb-monitord перезапущен systemd %1 раз с последней проверки (цикл "
+"сбоев?)"
+msgstr[1] ""
+"apple-kb-monitord перезапущен systemd %1 раза с последней проверки (цикл "
+"сбоев?)"
+msgstr[2] ""
+"apple-kb-monitord перезапущен systemd %1 раз с последней проверки (цикл "
+"сбоев?)"
+
+#. i18n: %1 = old process id, %2 = new process id
+#: ui/DiagPage.qml:172
+msgctxt "selftest check"
+msgid "daemon pid changed %1 -> %2 (restart)"
+msgstr "pid службы изменился %1 -> %2 (перезапуск)"
+
+#: ui/DiagPage.qml:173
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon answered GetState in %1 ms (> 1 s)"
+msgstr "служба ответила на GetState за %1 мс (> 1 с)"
+
+#: ui/DiagPage.qml:174
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon on the bus, GetState in %1 ms"
+msgstr "служба на шине, GetState за %1 мс"
+
+#. i18n: %1 = error, %2 = systemd unit state
+#: ui/DiagPage.qml:176
+msgctxt "selftest check"
+msgid "daemon unreachable (%1); unit state: %2"
+msgstr "служба недоступна (%1); состояние юнита: %2"
+
+#: ui/DiagPage.qml:177
+msgctxt "selftest check, %1 = error"
+msgid "daemon last_error: %1"
+msgstr "last_error службы: %1"
+
+#: ui/DiagPage.qml:178
+msgctxt "selftest check"
+msgid "keyboard connected but never acquired"
+msgstr "клавиатура подключена, но ни разу не опрошена"
+
+#: ui/DiagPage.qml:179
+msgctxt "selftest check, %1 = hours"
+msgid "keyboard connected, last acquisition %1 h ago"
+msgstr "клавиатура подключена, последний опрос %1 ч назад"
+
+#: ui/DiagPage.qml:180
+msgctxt "selftest check, %1 = minutes"
+msgid "last acquisition %1 min ago"
+msgstr "последний опрос %1 мин назад"
+
+#: ui/DiagPage.qml:181
+msgctxt "selftest check"
+msgid "keyboard not connected (nothing to acquire)"
+msgstr "клавиатура не подключена (опрашивать нечего)"
+
+#: ui/DiagPage.qml:182
+msgctxt "selftest check"
+msgid "no daemon warning since the last pass"
+msgstr "предупреждений службы с последней проверки нет"
+
+#: ui/DiagPage.qml:183
+msgctxt "selftest check, %2 = journal line"
+msgid "%1 daemon warning/error line since the last pass, last: %2"
+msgid_plural "%1 daemon warning/error lines since the last pass, last: %2"
+msgstr[0] ""
+"%1 строка предупреждений/ошибок службы с последней проверки, последняя: %2"
+msgstr[1] ""
+"%1 строки предупреждений/ошибок службы с последней проверки, последняя: %2"
+msgstr[2] ""
+"%1 строк предупреждений/ошибок службы с последней проверки, последняя: %2"
+
+#: ui/DiagPage.qml:184
+msgctxt "selftest check"
+msgid "user journal not readable"
+msgstr "пользовательский журнал недоступен для чтения"
+
+#: ui/DiagPage.qml:185
+msgctxt "selftest check"
+msgid "no bluetoothd error since the last pass"
+msgstr "ошибок bluetoothd с последней проверки нет"
+
+#: ui/DiagPage.qml:186
+msgctxt "selftest check"
+msgid "%1 bluetoothd error line since the last pass"
+msgid_plural "%1 bluetoothd error lines since the last pass"
+msgstr[0] "%1 строка ошибок bluetoothd с последней проверки"
+msgstr[1] "%1 строки ошибок bluetoothd с последней проверки"
+msgstr[2] "%1 строк ошибок bluetoothd с последней проверки"
+
+#: ui/DiagPage.qml:187
+msgctxt "selftest check"
+msgid "system journal not readable (group systemd-journal)"
+msgstr "системный журнал недоступен для чтения (группа systemd-journal)"
+
+#: ui/DiagPage.qml:188
+msgctxt "selftest check"
+msgid "no crash of our programs since the last pass"
+msgstr "сбоев наших программ с последней проверки нет"
+
+#. i18n: %1 = program, %2 = signal, %3 = process id
+#: ui/DiagPage.qml:190
+msgctxt "selftest check"
+msgid "%1 crashed (%2, pid %3): coredumpctl info %3"
+msgstr "%1 аварийно завершился (%2, pid %3): coredumpctl info %3"
+
+#: ui/DiagPage.qml:191
+msgctxt "selftest check"
+msgid "coredump journal not readable"
+msgstr "журнал coredump недоступен для чтения"
+
+#. i18n: %1 = directory, %2 = free MiB, %3 = total MiB
+#: ui/DiagPage.qml:193
+msgctxt "selftest check"
+msgid "%1: %2 MiB free of %3 MiB"
+msgstr "%1: свободно %2 МиБ из %3 МиБ"
+
+#: ui/DiagPage.qml:194
+msgctxt "selftest check, %1 = directory"
+msgid "%1: statvfs failed"
+msgstr "%1: ошибка statvfs"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check, history size"
+msgid "%1 line"
+msgid_plural "%1 lines"
+msgstr[0] "%1 строка"
+msgstr[1] "%1 строки"
+msgstr[2] "%1 строк"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check"
+msgid "%2: %3, %4 KiB, %1 unreadable line in the last 1000"
+msgid_plural "%2: %3, %4 KiB, %1 unreadable lines in the last 1000"
+msgstr[0] "%2: %3, %4 КиБ, %1 нечитаемая строка среди последних 1000"
+msgstr[1] "%2: %3, %4 КиБ, %1 нечитаемые строки среди последних 1000"
+msgstr[2] "%2: %3, %4 КиБ, %1 нечитаемых строк среди последних 1000"
+
+#: ui/DiagPage.qml:197
+msgctxt "selftest check"
+msgid "no history yet"
+msgstr "истории пока нет"
+
+#: ui/DiagPage.qml:198
+msgctxt "selftest check, %1 = doctor verdict"
+msgid "akmctl doctor: %1"
+msgstr "akmctl doctor: %1"
+
+#: ui/DiagPage.qml:199
+msgctxt "selftest check, %1 = seconds"
+msgid ""
+"akmctl doctor did not finish within %1 s (BlueZ or the daemon does not "
+"answer)"
+msgstr "akmctl doctor не завершился за %1 с (BlueZ или служба не отвечают)"
+
+#: ui/DiagPage.qml:208 ui/DiagPage.qml:223
+msgid "no answer within 60 seconds"
+msgstr "нет ответа в течение 60 секунд"
+
+#: ui/DiagPage.qml:259
+msgid "Check the link"
+msgstr "Проверить связь"
+
+#: ui/DiagPage.qml:262
+msgid ""
+"Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. "
+"Reads only."
+msgstr ""
+"Запускает akmctl doctor: Bluetooth, сопряжение, конфигурация, журнал, "
+"служба. Только чтение."
+
+#: ui/DiagPage.qml:266
+msgid "Self-check"
+msgstr "Самопроверка"
+
+#: ui/DiagPage.qml:268
+msgid ""
+"Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
+msgstr ""
+"Запускает akmctl selftest: служба, связь, журнал, сбои, диск. Только чтение."
+
+#: ui/DiagPage.qml:273
+msgid "Reconnect"
+msgstr "Переподключить"
+
+#: ui/DiagPage.qml:276
+msgid ""
+"Asks the service to page the keyboard now (at most once every 20 seconds)"
+msgstr ""
+"Просит службу вызвать клавиатуру сейчас (не чаще одного раза в 20 секунд)"
+
+#: ui/DiagPage.qml:282
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+"Переподключение запрошено. Нажмите клавишу на клавиатуре, если она спит."
+
+#: ui/DiagPage.qml:283
+msgid "refused by the service (asleep, too soon, or pairing refused)"
+msgstr "отклонено службой (сон, слишком рано или сопряжение отклонено)"
+
+#: ui/DiagPage.qml:283
+msgid "Reconnection not requested: %1"
+msgstr "Переподключение не запрошено: %1"
+
+#: ui/DiagPage.qml:289
+msgid "Copy the diagnosis"
+msgstr "Копировать диагностику"
+
+#: ui/DiagPage.qml:294
+msgid "Diagnosis copied: paste it into a bug report."
+msgstr "Диагностика скопирована: вставьте её в отчёт об ошибке."
+
+#: ui/DiagPage.qml:299
+msgid "Documentation"
+msgstr "Документация"
+
+#: ui/DiagPage.qml:310
+msgctxt "@title:group"
+msgid "Link check (akmctl doctor)"
+msgstr "Проверка связи (akmctl doctor)"
+
+#: ui/DiagPage.qml:316
+msgid "Link check running"
+msgstr "Выполняется проверка связи"
+
+#: ui/DiagPage.qml:327
+msgctxt "level, advice"
+msgid "Verdict: %1 — %2"
+msgstr "Вердикт: %1 — %2"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379 ui/KeysPage.qml:38
+msgid "Failed: %1"
+msgstr "Сбой: %1"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379
+msgid "Not run yet."
+msgstr "Ещё не запускалось."
+
+#: ui/DiagPage.qml:364
+msgctxt "@title:group"
+msgid "Self-check (akmctl selftest)"
+msgstr "Самопроверка (akmctl selftest)"
+
+#: ui/DiagPage.qml:370
+msgid "Self-check running"
+msgstr "Выполняется самопроверка"
+
+#: ui/DiagPage.qml:378
+msgid "Verdict: %1"
+msgstr "Вердикт: %1"
+
+#: ui/KeysPage.qml:33
+msgctxt "result, then the detail"
+msgid "%1 — %2"
+msgstr "%1 — %2"
+
+#: ui/KeysPage.qml:35
+msgid ""
+"No answer in time: nothing was confirmed. Check the state before trying "
+"again."
+msgstr ""
+"Нет ответа вовремя: ничего не подтверждено. Проверьте состояние перед "
+"повторной попыткой."
+
+#: ui/KeysPage.qml:37 ui/main.qml:38
+msgid "unknown error"
+msgstr "неизвестная ошибка"
+
+#: ui/KeysPage.qml:38
+msgctxt "parameter, error"
+msgid "%1: %2"
+msgstr "%1: %2"
+
+#: ui/KeysPage.qml:45
+msgctxt "fnmode 0"
+msgid "0 — Fn key disabled"
+msgstr "0 — клавиша Fn отключена"
+
+#: ui/KeysPage.qml:46
+msgctxt "fnmode 1"
+msgid "1 — special functions first (Apple legend), F1-F12 with fn"
+msgstr "1 — сначала специальные функции (надписи Apple), F1-F12 с Fn"
+
+#: ui/KeysPage.qml:47
+msgctxt "fnmode 2"
+msgid "2 — F1-F12 first, special functions with fn"
+msgstr "2 — сначала F1-F12, специальные функции с Fn"
+
+#: ui/KeysPage.qml:48
+msgctxt "fnmode 3"
+msgid "3 — automatic (same as 1 on this keyboard)"
+msgstr "3 — автоматически (как 1 на этой клавиатуре)"
+
+#: ui/KeysPage.qml:49
+msgctxt "fnmode 4"
+msgid "4 — F1-F12 only, special functions disabled"
+msgstr "4 — только F1-F12, специальные функции отключены"
+
+#: ui/KeysPage.qml:50
+msgid "unknown"
+msgstr "неизвестно"
+
+#: ui/KeysPage.qml:60
+msgctxt "KDE shortcut action"
+msgid "KDE: %1"
+msgstr "KDE: %1"
+
+#: ui/KeysPage.qml:61
+msgid "no KDE shortcut"
+msgstr "нет комбинации клавиш KDE"
+
+#: ui/KeysPage.qml:81
+msgid ""
+"The key table could not be read: the keyboard service did not answer in time."
+msgstr ""
+"Не удалось прочитать таблицу клавиш: служба клавиатуры не ответила вовремя."
+
+#: ui/KeysPage.qml:82
+msgid "The key table could not be read: %1"
+msgstr "Не удалось прочитать таблицу клавиш: %1"
+
+#: ui/KeysPage.qml:85 ui/KeysPage.qml:101 ui/StatePage.qml:108
+msgid "Try again"
+msgstr "Повторить"
+
+#: ui/KeysPage.qml:98
+msgid "The key mapping could not be read: %1"
+msgstr "Не удалось прочитать сопоставление клавиш: %1"
+
+#: ui/KeysPage.qml:114
+msgctxt "@title:group"
+msgid "What each key does now"
+msgstr "Что сейчас делает каждая клавиша"
+
+#: ui/KeysPage.qml:123
+msgid ""
+"Fn mode %1. Read from the kernel and the installed mapping; no key press is "
+"read."
+msgstr ""
+"Режим Fn %1. Прочитано из ядра и установленного сопоставления; нажатия "
+"клавиш не считываются."
+
+#: ui/KeysPage.qml:124
+msgid "Reading the key table…"
+msgstr "Чтение таблицы клавиш…"
+
+#: ui/KeysPage.qml:134
+msgctxt "@title:column"
+msgid "Key"
+msgstr "Клавиша"
+
+#: ui/KeysPage.qml:135
+msgctxt "@title:column"
+msgid "Pressed alone"
+msgstr "Нажата отдельно"
+
+#: ui/KeysPage.qml:136
+msgctxt "@title:column"
+msgid "With fn"
+msgstr "С Fn"
+
+#: ui/KeysPage.qml:149
+msgctxt "key, legend, alone, with fn"
+msgid "%1 (%2): alone %3; with fn %4"
+msgstr "%1 (%2): отдельно %3; с Fn %4"
+
+#: ui/KeysPage.qml:185
+msgid "* = changed by the installed manual mapping."
+msgstr "* = изменено установленным ручным сопоставлением."
+
+#: ui/KeysPage.qml:185
+msgid ""
+"The active profile differs from what is installed: use “Install the mapping”."
+msgstr ""
+"Активный профиль отличается от установленного: используйте «Установить "
+"сопоставление»."
+
+#: ui/KeysPage.qml:193
+msgctxt "@title:group"
+msgid "Fn key and modifier keys"
+msgstr "Клавиша Fn и клавиши-модификаторы"
+
+#: ui/KeysPage.qml:200
+msgid ""
+"These are parameters of the kernel driver hid_apple: they apply to ALL Apple "
+"keyboards of this computer, are kept after a restart, and each change asks "
+"for the administrator password."
+msgstr ""
+"Это параметры драйвера ядра hid_apple: они действуют на ВСЕ клавиатуры Apple "
+"этого компьютера, сохраняются после перезагрузки, и каждое изменение "
+"запрашивает пароль администратора."
+
+#: ui/KeysPage.qml:205
+msgid "Fn mode:"
+msgstr "Режим Fn:"
+
+#: ui/KeysPage.qml:209
+msgid "Fn mode"
+msgstr "Режим Fn"
+
+#: ui/KeysPage.qml:213
+msgid "Option and Command:"
+msgstr "Option и Command:"
+
+#: ui/KeysPage.qml:215
+msgid "Mac order (Option = Alt, Command = Meta)"
+msgstr "порядок Mac (Option = Alt, Command = Meta)"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on both sides (PC order)"
+msgstr "поменяны с обеих сторон (порядок PC)"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on the left side only"
+msgstr "поменяны только слева"
+
+#: ui/KeysPage.qml:217
+msgid "Option and Command keys"
+msgstr "Клавиши Option и Command"
+
+#: ui/KeysPage.qml:222
+msgid "Control and Command:"
+msgstr "Control и Command:"
+
+#: ui/KeysPage.qml:223
+msgid "Swap Control and Command"
+msgstr "Поменять местами Control и Command"
+
+#: ui/KeysPage.qml:228
+msgid "fn and left Control:"
+msgstr "Fn и левый Control:"
+
+#: ui/KeysPage.qml:229
+msgid "Swap fn and the left Control key"
+msgstr "Поменять местами Fn и левую клавишу Control"
+
+#: ui/KeysPage.qml:234
+msgid "ISO keys ` and <:"
+msgstr "Клавиши ISO ` и <:"
+
+#: ui/KeysPage.qml:236
+msgid "automatic"
+msgstr "автоматически"
+
+#: ui/KeysPage.qml:236
+msgid "as engraved"
+msgstr "как на клавишах"
+
+#: ui/KeysPage.qml:236
+msgid "swapped"
+msgstr "поменяны"
+
+#: ui/KeysPage.qml:238
+msgid "ISO keys"
+msgstr "Клавиши ISO"
+
+#: ui/KeysPage.qml:244
+msgid "Apply these parameters…"
+msgstr "Применить эти параметры…"
+
+#: ui/KeysPage.qml:257
+msgid "Asks for the administrator password once per changed parameter"
+msgstr ""
+"Запрашивает пароль администратора один раз для каждого изменённого параметра"
+
+#: ui/KeysPage.qml:264
+msgid "Parameters applied to every Apple keyboard."
+msgstr "Параметры применены ко всем клавиатурам Apple."
+
+#: ui/KeysPage.qml:282
+msgid "Undo changes"
+msgstr "Отменить изменения"
+
+#: ui/KeysPage.qml:299
+msgid "Waiting for the authentication"
+msgstr "Ожидание аутентификации"
+
+#: ui/KeysPage.qml:305
+msgctxt "@title:group"
+msgid "Manual key mapping"
+msgstr "Ручное сопоставление клавиш"
+
+#: ui/KeysPage.qml:309
+msgid "Profile:"
+msgstr "Профиль:"
+
+#: ui/KeysPage.qml:313
+msgid "Preset:"
+msgstr "Предустановка:"
+
+#: ui/KeysPage.qml:317
+msgid "none (parameters left as they are)"
+msgstr "нет (параметры остаются как есть)"
+
+#: ui/KeysPage.qml:319
+msgid "Preset of the profile"
+msgstr "Предустановка профиля"
+
+#: ui/KeysPage.qml:322
+msgid "Use this preset"
+msgstr "Использовать эту предустановку"
+
+#: ui/KeysPage.qml:328
+msgid "Preset saved in the profile; use “Install the mapping” to apply it."
+msgstr ""
+"Предустановка сохранена в профиле; используйте «Установить сопоставление», "
+"чтобы применить её."
+
+#: ui/KeysPage.qml:334
+msgid "Remapped keys:"
+msgstr "Переназначенные клавиши:"
+
+#: ui/KeysPage.qml:339
+msgid "none"
+msgstr "нет"
+
+#: ui/KeysPage.qml:348
+msgctxt "key -> code"
+msgid "%1 → %2"
+msgstr "%1 → %2"
+
+#: ui/KeysPage.qml:353
+msgid "Remove"
+msgstr "Удалить"
+
+#: ui/KeysPage.qml:356
+msgid "Remove the mapping of %1"
+msgstr "Удалить сопоставление %1"
+
+#: ui/KeysPage.qml:363
+msgid "Mapping removed from the profile."
+msgstr "Сопоставление удалено из профиля."
+
+#: ui/KeysPage.qml:371
+msgid "Remap:"
+msgstr "Переназначить:"
+
+#: ui/KeysPage.qml:376
+msgid "Key to remap"
+msgstr "Клавиша для переназначения"
+
+#: ui/KeysPage.qml:382
+msgid "Linux key code (KEY_…)"
+msgstr "Код клавиши Linux (KEY_…)"
+
+#: ui/KeysPage.qml:387
+msgid "Add"
+msgstr "Добавить"
+
+#: ui/KeysPage.qml:395
+msgid "Mapping saved in the profile; use “Install the mapping” to apply it."
+msgstr ""
+"Сопоставление сохранено в профиле; используйте «Установить сопоставление», "
+"чтобы применить его."
+
+#: ui/KeysPage.qml:402
+msgid "Install the mapping…"
+msgstr "Установить сопоставление…"
+
+#: ui/KeysPage.qml:405
+msgid ""
+"Installs the active profile (udev hwdb and its parameters); asks for the "
+"administrator password"
+msgstr ""
+"Устанавливает активный профиль (hwdb udev и его параметры); запрашивает "
+"пароль администратора"
+
+#: ui/KeysPage.qml:410
+msgid "Mapping installed."
+msgstr "Сопоставление установлено."
+
+#: ui/KeysPage.qml:415
+msgid "Back to the kernel mapping…"
+msgstr "Вернуться к сопоставлению ядра…"
+
+#: ui/KeysPage.qml:422
+msgid "Kernel mapping restored."
+msgstr "Сопоставление ядра восстановлено."
+
+#: ui/KeysPage.qml:430
+msgctxt "@title:group"
+msgid "KDE shortcuts"
+msgstr "Комбинации клавиш KDE"
+
+#: ui/KeysPage.qml:433
+msgid "F4 (Launchpad):"
+msgstr "F4 (Launchpad):"
+
+#: ui/KeysPage.qml:435
+msgid "Bind F4 to the application launcher"
+msgstr "Назначить F4 меню запуска приложений"
+
+#: ui/KeysPage.qml:438
+msgid ""
+"Adds the missing KDE shortcut for the Launch (D) key, never replacing an "
+"existing one"
+msgstr ""
+"Добавляет отсутствующую комбинацию клавиш KDE для клавиши Launch (D), "
+"никогда не заменяя существующую"
+
+#: ui/KeysPage.qml:443
+msgid "KDE shortcuts updated."
+msgstr "Комбинации клавиш KDE обновлены."
+
+#: ui/KeysPage.qml:454
+msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
+msgstr "Отмена в терминале: akmctl keymap kde-apply --undo"
+
+#: ui/NamePage.qml:46
+msgid "akmctl stopped abruptly before giving its verdict (crash or signal)."
+msgstr "akmctl внезапно завершился, не вынеся вердикт (сбой или сигнал)."
+
+#: ui/NamePage.qml:49
+msgid ""
+"No answer in time. Nothing more is attempted; look at the stored name above "
+"in a moment."
+msgstr ""
+"Нет ответа вовремя. Больше ничего не предпринимается; через минуту "
+"посмотрите на сохранённое имя выше."
+
+#: ui/NamePage.qml:52
+msgid "Check passed: “%1” can be written. Nothing was written."
+msgstr "Проверка пройдена: «%1» можно записать. Ничего не записано."
+
+#: ui/NamePage.qml:55
+msgid ""
+"“%1” is now stored in the keyboard: written, then read back identical. This "
+"computer may show the old name until a later connection."
+msgstr ""
+"«%1» теперь сохранено в клавиатуре: записано и прочитано обратно без "
+"изменений. Этот компьютер может показывать старое имя до следующего "
+"подключения."
+
+#: ui/NamePage.qml:58
+msgid ""
+"The name was written, but it could not be read back. Look at the stored name "
+"above in a moment.\n"
+"%1"
+msgstr ""
+"Имя записано, но прочитать его обратно не удалось. Через минуту посмотрите "
+"на сохранённое имя выше.\n"
+"%1"
+
+#: ui/NamePage.qml:61
+msgid ""
+"The name was written, but the keyboard reads back another one.\n"
+"%1"
+msgstr ""
+"Имя записано, но клавиатура возвращает другое.\n"
+"%1"
+
+#: ui/NamePage.qml:64
+msgid ""
+"The write failed on its way: the name may or may not have been written. Look "
+"at the stored name above in a moment.\n"
+"%1"
+msgstr ""
+"Запись прервалась на полпути: имя могло быть записано, а могло и нет. Через "
+"минуту посмотрите на сохранённое имя выше.\n"
+"%1"
+
+#: ui/NamePage.qml:67
+msgid ""
+"Check failed, nothing was written.\n"
+"%1"
+msgstr ""
+"Проверка не пройдена, ничего не записано.\n"
+"%1"
+
+#: ui/NamePage.qml:70
+msgid ""
+"Not written.\n"
+"%1"
+msgstr ""
+"Не записано.\n"
+"%1"
+
+#: ui/NamePage.qml:81
+msgctxt "@title:window"
+msgid "Write the name into the keyboard"
+msgstr "Запись имени в клавиатуру"
+
+#: ui/NamePage.qml:86
+msgctxt "@action:button"
+msgid "Write"
+msgstr "Записать"
+
+#: ui/NamePage.qml:97
+msgid "Write “%1” into the keyboard's memory?"
+msgstr "Записать «%1» в память клавиатуры?"
+
+#: ui/NamePage.qml:114
+msgctxt "@title:group"
+msgid "Name on this computer"
+msgstr "Имя на этом компьютере"
+
+#: ui/NamePage.qml:118
+msgid "Shown as:"
+msgstr "Отображается как:"
+
+#: ui/NamePage.qml:125
+msgid "Keyboard's own name:"
+msgstr "Собственное имя клавиатуры:"
+
+#: ui/NamePage.qml:133
+msgid "New name:"
+msgstr "Новое имя:"
+
+#: ui/NamePage.qml:137
+msgid "e.g. Office keyboard"
+msgstr "например, Офисная клавиатура"
+
+#: ui/NamePage.qml:139
+msgid "New name of the keyboard on this computer"
+msgstr "Новое имя клавиатуры на этом компьютере"
+
+#: ui/NamePage.qml:145
+msgid "Rename"
+msgstr "Переименовать"
+
+#: ui/NamePage.qml:153
+msgid "Renamed to “%1” on this computer."
+msgstr "Переименовано в «%1» на этом компьютере."
+
+#: ui/NamePage.qml:153 ui/NamePage.qml:168
+msgid "Not renamed: %1"
+msgstr "Не переименовано: %1"
+
+#: ui/NamePage.qml:160
+msgid "Use the keyboard's own name"
+msgstr "Использовать собственное имя клавиатуры"
+
+#: ui/NamePage.qml:168
+msgid "The keyboard's own name is used again."
+msgstr "Снова используется собственное имя клавиатуры."
+
+#: ui/NamePage.qml:180
+msgid "Renaming needs the keyboard service."
+msgstr "Для переименования нужна служба клавиатуры."
+
+#: ui/NamePage.qml:181
+msgid "No keyboard is known yet."
+msgstr "Пока не известно ни одной клавиатуры."
+
+#: ui/NamePage.qml:182
+msgid ""
+"Only this computer sees this name (Bluetooth alias); the keyboard itself is "
+"not changed."
+msgstr ""
+"Это имя видит только этот компьютер (псевдоним Bluetooth); сама клавиатура "
+"не изменяется."
+
+#: ui/NamePage.qml:187
+msgctxt "@title:group"
+msgid "Name stored inside the keyboard"
+msgstr "Имя, сохранённое в клавиатуре"
+
+#: ui/NamePage.qml:191
+msgid "Stored now:"
+msgstr "Сохранено сейчас:"
+
+#: ui/NamePage.qml:192
+msgid "not read yet (the service reads it once per connection)"
+msgstr "ещё не прочитано (служба читает его один раз за подключение)"
+
+#: ui/NamePage.qml:199
+msgid "Name to write:"
+msgstr "Имя для записи:"
+
+#: ui/NamePage.qml:203
+msgid "1 to 32 ASCII characters"
+msgstr "От 1 до 32 символов ASCII"
+
+#: ui/NamePage.qml:205
+msgid "Name to write into the keyboard"
+msgstr "Имя для записи в клавиатуру"
+
+#: ui/NamePage.qml:206
+msgid ""
+"1 to 32 printable ASCII characters, no leading or trailing space, no "
+"backslash"
+msgstr ""
+"От 1 до 32 печатных символов ASCII, без пробела в начале или в конце, без "
+"обратной косой черты"
+
+#: ui/NamePage.qml:212
+msgid "Check (nothing written)"
+msgstr "Проверить (без записи)"
+
+#: ui/NamePage.qml:215
+msgid ""
+"Runs every check that precedes the write and saves the current name; nothing "
+"is written"
+msgstr ""
+"Выполняет все проверки, предшествующие записи, и сохраняет копию текущего "
+"имени; ничего не записывается"
+
+#: ui/NamePage.qml:221
+msgid "Write the name into the keyboard…"
+msgstr "Записать имя в клавиатуру…"
+
+#: ui/NamePage.qml:224
+msgid ""
+"Asks for a confirmation, then writes the name into the keyboard and reads it "
+"back"
+msgstr ""
+"Запрашивает подтверждение, затем записывает имя в клавиатуру и читает его "
+"обратно"
+
+#: ui/NamePage.qml:244
+msgid ""
+"Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
+"no backslash."
+msgstr ""
+"Отклонено: от 1 до 32 печатных символов ASCII, без пробела в начале или в "
+"конце, без обратной косой черты."
+
+#: ui/NamePage.qml:245
+msgid ""
+"Every computer and phone sees this name. The current name is saved first, "
+"the keyboard is checked, the name is written once and read back at once. Not "
+"measured: whether the name survives a battery change."
+msgstr ""
+"Это имя видят все компьютеры и телефоны. Сначала сохраняется копия текущего "
+"имени, проверяется клавиатура, имя записывается один раз и сразу читается "
+"обратно. Не измерено: сохраняется ли имя после замены батареек."
+
+#: ui/NamePage.qml:265
+msgctxt "@title:group"
+msgid "Same operations, to copy into a terminal"
+msgstr "Те же операции для копирования в терминал"
+
+#: ui/NamePage.qml:270
+msgid ""
+"Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
+"authentication):"
+msgstr ""
+"Имя, сохранённое в клавиатуре, предпросмотр (показывает байты, ничего не "
+"записывает, без аутентификации):"
+
+#: ui/NamePage.qml:272
+msgid "Every check and the backup of the current name (writes nothing):"
+msgstr "Все проверки и резервная копия текущего имени (ничего не записывает):"
+
+#: ui/NamePage.qml:274
+msgid ""
+"The write itself (checks, backup, one confirmation, one write, read back):"
+msgstr ""
+"Сама запись (проверки, резервная копия, одно подтверждение, одна запись, "
+"обратное чтение):"
+
+#: ui/NamePage.qml:276
+msgid ""
+"Forget the keyboard cleanly, as macOS does, then pair it again (only after "
+"typing the confirmation word):"
+msgstr ""
+"Аккуратно забыть клавиатуру, как это делает macOS, а затем снова выполнить "
+"сопряжение (только после ввода слова подтверждения):"
+
+#: ui/NamePage.qml:299
+msgid "Type a valid name to write above first"
+msgstr "Сначала введите выше допустимое имя"
+
+#: ui/NamePage.qml:301
+msgid "Command: %1"
+msgstr "Команда: %1"
+
+#: ui/NamePage.qml:305
+msgid "Copy"
+msgstr "Копировать"
+
+#: ui/NamePage.qml:307
+msgid "Copy the command"
+msgstr "Копировать команду"
+
+#: ui/NamePage.qml:312
+msgid "Command copied."
+msgstr "Команда скопирована."
+
+#: ui/StatePage.qml:37
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 день"
+msgstr[1] "≈ %1 дня"
+msgstr[2] "≈ %1 дней"
+
+#: ui/StatePage.qml:38
+msgid "≈ %1 h"
+msgstr "≈ %1 ч"
+
+#: ui/StatePage.qml:45
+#, no-javascript-format
+msgctxt "percentage"
+msgid "%1%"
+msgstr "%1 %"
+
+#: ui/StatePage.qml:49
+msgid "%1 second ago"
+msgid_plural "%1 seconds ago"
+msgstr[0] "%1 секунду назад"
+msgstr[1] "%1 секунды назад"
+msgstr[2] "%1 секунд назад"
+
+#: ui/StatePage.qml:50
+msgid "%1 minute ago"
+msgid_plural "%1 minutes ago"
+msgstr[0] "%1 минуту назад"
+msgstr[1] "%1 минуты назад"
+msgstr[2] "%1 минут назад"
+
+#: ui/StatePage.qml:51
+msgid "%1 hour ago"
+msgid_plural "%1 hours ago"
+msgstr[0] "%1 час назад"
+msgstr[1] "%1 часа назад"
+msgstr[2] "%1 часов назад"
+
+#: ui/StatePage.qml:52
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "%1 день назад"
+msgstr[1] "%1 дня назад"
+msgstr[2] "%1 дней назад"
+
+#: ui/StatePage.qml:67
+msgid "rssi-helper not installed"
+msgstr "rssi-helper не установлен"
+
+#: ui/StatePage.qml:68
+msgid "see akmctl doctor"
+msgstr "см. akmctl doctor"
+
+#: ui/StatePage.qml:69
+msgid "not measured (%1)"
+msgstr "не измерено (%1)"
+
+#: ui/StatePage.qml:73 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "excellent"
+msgstr "отличный"
+
+#: ui/StatePage.qml:74 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "good"
+msgstr "хороший"
+
+#: ui/StatePage.qml:75 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "weak"
+msgstr "слабый"
+
+#: ui/StatePage.qml:78
+msgctxt "signal quality, then the relative value in dB (0 = ideal range)"
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+#: ui/StatePage.qml:82
+msgid "up to date"
+msgstr "актуальна"
+
+#: ui/StatePage.qml:83
+msgid "a newer version exists (this module never updates the firmware)"
+msgstr ""
+"существует более новая версия (этот модуль никогда не обновляет "
+"микропрограмму)"
+
+#: ui/StatePage.qml:84
+msgid "model not in the table"
+msgstr "модели нет в таблице"
+
+#: ui/StatePage.qml:85
+msgid "not assessed yet"
+msgstr "ещё не оценено"
+
+#: ui/StatePage.qml:94
+msgid "No data: the keyboard service is not running"
+msgstr "Нет данных: служба клавиатуры не запущена"
+
+#: ui/StatePage.qml:95
+msgid ""
+"Use “Start the service” above, or run: systemctl --user start apple-kb-"
+"monitord.service"
+msgstr ""
+"Нажмите «Запустить службу» выше или выполните: systemctl --user start apple-"
+"kb-monitord.service"
+
+#: ui/StatePage.qml:119
+msgid "Loading the keyboard state"
+msgstr "Загрузка состояния клавиатуры"
+
+#: ui/StatePage.qml:128
+msgctxt "@title:group"
+msgid "Keyboard"
+msgstr "Клавиатура"
+
+#: ui/StatePage.qml:132
+msgid "Name:"
+msgstr "Имя:"
+
+#: ui/StatePage.qml:136
+msgid "Name: %1"
+msgstr "Имя: %1"
+
+#: ui/StatePage.qml:140
+msgid "Model:"
+msgstr "Модель:"
+
+#: ui/StatePage.qml:147
+msgid "Address:"
+msgstr "Адрес:"
+
+#: ui/StatePage.qml:161
+msgid "connected"
+msgstr "подключена"
+
+#: ui/StatePage.qml:161
+msgid "disconnected"
+msgstr "отключена"
+
+#: ui/StatePage.qml:162
+msgid "Connection: %1"
+msgstr "Связь: %1"
+
+#: ui/StatePage.qml:167
+msgid "Problem:"
+msgstr "Проблема:"
+
+#: ui/StatePage.qml:176
+msgctxt "@title:group"
+msgid "Battery"
+msgstr "Батарейки"
+
+#: ui/StatePage.qml:180
+msgid "Keyboard indication:"
+msgstr "Показание клавиатуры:"
+
+#: ui/StatePage.qml:182
+msgid "Keyboard indication: %1"
+msgstr "Показание клавиатуры: %1"
+
+#: ui/StatePage.qml:186
+msgid "Apple display:"
+msgstr "Показание Apple:"
+
+#: ui/StatePage.qml:188
+msgctxt "percentage as macOS shows it"
+msgid "%1 (as macOS shows it)"
+msgstr "%1 (как показывает macOS)"
+
+#: ui/StatePage.qml:192
+msgid "Estimated charge:"
+msgstr "Оценка заряда:"
+
+#: ui/StatePage.qml:195
+msgid "new batteries: no estimate during the first two days"
+msgstr "новые батарейки: без оценки в первые два дня"
+
+#: ui/StatePage.qml:196
+msgctxt "estimate, low bound, high bound, chemistry"
+msgid "%1 (between %2 and %3, %4 batteries)"
+msgstr "%1 (от %2 до %3, батарейки: %4)"
+
+#: ui/StatePage.qml:198
+msgid "not available"
+msgstr "недоступно"
+
+#: ui/StatePage.qml:201
+msgid "Estimated charge: %1"
+msgstr "Оценка заряда: %1"
+
+#: ui/StatePage.qml:205
+msgid "Voltage:"
+msgstr "Напряжение:"
+
+#: ui/StatePage.qml:207
+msgctxt "volts"
+msgid "%1 V"
+msgstr "%1 В"
+
+#: ui/StatePage.qml:211
+msgid "Remaining:"
+msgstr "Осталось:"
+
+#: ui/StatePage.qml:217
+msgid "Batteries installed:"
+msgstr "Батарейки установлены:"
+
+#: ui/StatePage.qml:225
+msgctxt "@title:group"
+msgid "Link"
+msgstr "Связь"
+
+#: ui/StatePage.qml:229
+msgid "Signal:"
+msgstr "Сигнал:"
+
+#: ui/StatePage.qml:231
+msgid "Signal: %1"
+msgstr "Сигнал: %1"
+
+#: ui/StatePage.qml:236
+msgid "Last measurement:"
+msgstr "Последнее измерение:"
+
+#: ui/StatePage.qml:237
+msgid "never"
+msgstr "никогда"
+
+#: ui/StatePage.qml:238
+msgid "Last measurement: %1"
+msgstr "Последнее измерение: %1"
+
+#: ui/StatePage.qml:243
+msgctxt "@title:group"
+msgid "Firmware"
+msgstr "Микропрограмма"
+
+#: ui/StatePage.qml:247 ui/StatePage.qml:272
+msgid "Version:"
+msgstr "Версия:"
+
+#: ui/StatePage.qml:253
+msgid "Latest known:"
+msgstr "Последняя известная:"
+
+#: ui/StatePage.qml:260
+msgid "Status:"
+msgstr "Статус:"
+
+#: ui/StatePage.qml:268
+msgctxt "@title:group"
+msgid "Service"
+msgstr "Служба"
+
+#: ui/StatePage.qml:277
+msgid "Last error:"
+msgstr "Последняя ошибка:"
+
+#: ui/Store.qml:158
+msgid "The keyboard service (apple-kb-monitord) is not running"
+msgstr "Служба клавиатуры (apple-kb-monitord) не запущена"
+
+#: ui/Store.qml:159
+msgid "command not allowed"
+msgstr "команда не разрешена"
+
+#: ui/Store.qml:160
+msgid "no answer in time"
+msgstr "нет ответа вовремя"
+
+#: ui/Store.qml:161
+msgctxt "%1 is a JSON parser error"
+msgid "unreadable reply: %1"
+msgstr "нечитаемый ответ: %1"
+
+#: ui/main.qml:26
+msgid "The service could not be started: %1"
+msgstr "Не удалось запустить службу: %1"
+
+#: ui/main.qml:31
+msgid "Starting…"
+msgstr "Запуск…"
+
+#: ui/main.qml:31
+msgid "Start the service"
+msgstr "Запустить службу"
+
+#: ui/main.qml:49
+msgid "Sections of the Apple keyboard settings"
+msgstr "Разделы настроек клавиатуры Apple"
+
+#: ui/main.qml:50
+msgctxt "@title:tab"
+msgid "State"
+msgstr "Состояние"
+
+#: ui/main.qml:51
+msgctxt "@title:tab"
+msgid "Keys"
+msgstr "Клавиши"
+
+#: ui/main.qml:52
+msgctxt "@title:tab"
+msgid "Notifications"
+msgstr "Уведомления"
+
+#: ui/main.qml:53
+msgctxt "@title:tab"
+msgid "Name"
+msgstr "Имя"
+
+#: ui/main.qml:54
+msgctxt "@title:tab"
+msgid "Diagnostics"
+msgstr "Диагностика"

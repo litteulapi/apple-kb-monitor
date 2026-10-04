@@ -1,0 +1,663 @@
+# Finnish translation of the Plasma widget com.agenceapi.devicehub.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Finnish\n"
+"Language: fi\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "alkaline"
+msgstr "alkaliparistot"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "litium"
+
+msgid "not declared"
+msgstr "ei ilmoitettu"
+
+msgid "State"
+msgstr "Tila"
+
+msgid "Radio"
+msgstr "Radio"
+
+msgid "Keys"
+msgstr "Näppäimet"
+
+msgid "Data"
+msgstr "Tiedot"
+
+msgid "Diag"
+msgstr "Diag"
+
+msgid "Apple keyboard monitor"
+msgstr "Apple-näppäimistön valvonta"
+
+msgid "Settings"
+msgstr "Asetukset"
+
+msgid "READ %1"
+msgstr "LUETTU %1"
+
+msgid "NO DAEMON"
+msgstr "EI PALVELUA"
+
+msgid "ONLINE"
+msgstr "YHDISTETTY"
+
+msgid "OFFLINE"
+msgstr "EI YHTEYTTÄ"
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr ""
+"Valvontapalvelu apple-kb-monitord ei ole istuntoväylällä: mitään ei voi "
+"lukea."
+
+msgid "Reading error: %1"
+msgstr "Lukuvirhe: %1"
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr ""
+"Näppäimistö ei ole yhteydessä. Herätä se painamalla näppäintä tai yhdistä se "
+"uudelleen RADIO-välilehdeltä."
+
+msgid "Waiting for the keyboard data…"
+msgstr "Odotetaan näppäimistön tietoja…"
+
+msgid "Batteries critical: replace them now."
+msgstr "Paristot kriittisen vähissä: vaihda ne nyt."
+
+msgid "Batteries low: plan to replace them."
+msgstr "Paristot vähissä: varaudu vaihtamaan ne."
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] "Epävakaa yhteys: %1 katkos viimeisen tunnin aikana."
+msgstr[1] "Epävakaa yhteys: %1 katkosta viimeisen tunnin aikana."
+
+msgid "%1%"
+msgstr "%1 %"
+
+msgid "rssi-helper not installed"
+msgstr "rssi-helper ei asennettu"
+
+msgid "see akmctl doctor"
+msgstr "katso akmctl doctor"
+
+msgid "not measured (%1)"
+msgstr "ei mitattu (%1)"
+
+msgid "the rssi-helper utility is not installed"
+msgstr "apuohjelmaa rssi-helper ei ole asennettu"
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+"apuohjelma rssi-helper epäonnistui (capability puuttuu, Bluetooth kieltäytyi)"
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr "apuohjelma rssi-helper ei vastaa ajoissa"
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "Bluetooth-sovitin ei anna mittausta tälle yhteydelle"
+
+msgid "the signal cannot be measured"
+msgstr "signaalia ei voi mitata"
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr "asenna paketti apple-kb-monitor uudelleen"
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr ""
+"asenna paketti apple-kb-monitor uudelleen ja suorita sitten akmctl doctor"
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "tarkista Bluetooth-palvelu: systemctl status bluetooth"
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "tuo näppäimistö lähemmäs tai yhdistä se uudelleen"
+
+msgid "run akmctl doctor"
+msgstr "suorita akmctl doctor"
+
+msgid "Battery history"
+msgstr "Paristohistoria"
+
+msgid "24 h"
+msgstr "24 h"
+
+msgid "7 d"
+msgstr "7 pv"
+
+msgid "30 d"
+msgstr "30 pv"
+
+msgid "90 d"
+msgstr "90 pv"
+
+msgid "Refresh"
+msgstr "Päivitä"
+
+msgid "LOADING…"
+msgstr "LADATAAN…"
+
+msgid "Readings: %1"
+msgstr "Lukemat: %1"
+
+msgid "%1 V"
+msgstr "%1 V"
+
+msgid "Batteries %"
+msgstr "Paristot %"
+
+msgid "Voltage %1 to %2 V"
+msgstr "Jännite %1–%2 V"
+
+msgid "History not available: %1"
+msgstr "Historia ei ole saatavilla: %1"
+
+msgid "Monitor stopped: no history."
+msgstr "Valvonta pysäytetty: ei historiaa."
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr "Tällä jaksolla on liian vähän lukemia käyrän piirtämiseen."
+
+msgid "Batteries"
+msgstr "Paristot"
+
+msgid "Voltage"
+msgstr "Jännite"
+
+msgid "EMPTY"
+msgstr "TYHJÄT"
+
+msgid "CRITICAL"
+msgstr "KRIITTINEN"
+
+msgid "LOW"
+msgstr "MATALA"
+
+msgid "FULL"
+msgstr "TÄYDET"
+
+msgid "Thresholds"
+msgstr "Kynnysarvot"
+
+msgid "Estimate"
+msgstr "Arvio"
+
+msgid "Apple display"
+msgstr "Applen näyttämä"
+
+msgid "Chemistry"
+msgstr "Kemia"
+
+msgid "Installed on"
+msgstr "Asennettu"
+
+msgid "Trend"
+msgstr "Suuntaus"
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] "−%2 % päivässä %1 päivän aikana"
+msgstr[1] "−%2 % päivässä %1 päivän aikana"
+
+msgid "Empty around"
+msgstr "Tyhjät noin"
+
+msgid "Last reading"
+msgstr "Viimeisin lukema"
+
+msgid "The last reading missed a report of the keyboard."
+msgstr "Viimeisimmästä lukemasta puuttui näppäimistön raportti."
+
+msgid "Device"
+msgstr "Laite"
+
+msgid "Model"
+msgstr "Malli"
+
+msgid "Name"
+msgstr "Nimi"
+
+msgid "Address"
+msgstr "Osoite"
+
+msgid "Chip"
+msgstr "Piiri"
+
+msgid "Driver"
+msgstr "Ajuri"
+
+msgid "Firmware"
+msgstr "Laiteohjelmisto"
+
+msgid "System diagnostic"
+msgstr "Järjestelmän diagnostiikka"
+
+msgid "Checking…"
+msgstr "Tarkistetaan…"
+
+msgid "Run the full check"
+msgstr "Suorita täysi tarkistus"
+
+msgid "%1/%2 PASSED"
+msgstr "%1/%2 HYVÄKSYTTY"
+
+msgid "PROBLEMS: %1"
+msgstr "ONGELMIA: %1"
+
+msgid "Check not run: %1"
+msgstr "Tarkistusta ei suoritettu: %1"
+
+msgid "Monitor"
+msgstr "Valvonta"
+
+msgid "RUNNING"
+msgstr "KÄYNNISSÄ"
+
+msgid "STOPPED"
+msgstr "PYSÄYTETTY"
+
+msgid "Version"
+msgstr "Versio"
+
+msgid "Keyboard"
+msgstr "Näppäimistö"
+
+msgid "Link"
+msgstr "Yhteys"
+
+msgid "Last error"
+msgstr "Viimeisin virhe"
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr "Käynnistä se komennolla: systemctl --user start apple-kb-monitord"
+
+msgid "Log"
+msgstr "Loki"
+
+msgid "[FAIL]"
+msgstr "[VIRHE]"
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr ""
+"Tarkistuksen tekee valvontapalvelu (noin kymmenen testiä, ei koskaan "
+"näppäimistöllä)."
+
+msgid "Function keys"
+msgstr "Toimintonäppäimet"
+
+msgid "Media keys first"
+msgstr "Medianäppäimet ensin"
+
+msgid "F1–F12 first"
+msgstr "F1–F12 ensin"
+
+msgid "Current mode: %1"
+msgstr "Nykyinen tila: %1"
+
+msgid "Fn mode not read yet."
+msgstr "Fn-tilaa ei ole vielä luettu."
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr "Fn-tila tuntematon: näppäimistö ei ole yhteydessä."
+
+msgid "Administrator authentication requested…"
+msgstr "Pääkäyttäjän tunnistautumista pyydetty…"
+
+msgid "Fn mode not changed: %1"
+msgstr "Fn-tilaa ei muutettu: %1"
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr "hid_apple koskee kaikkia tämän tietokoneen Apple-näppäimistöjä."
+
+msgid "Locks"
+msgstr "Lukitukset"
+
+msgid "Caps Lock"
+msgstr "Caps Lock"
+
+msgid "Num Lock"
+msgstr "Num Lock"
+
+msgid "on"
+msgstr "päällä"
+
+msgid "off"
+msgstr "pois"
+
+msgid "ON"
+msgstr "PÄÄLLÄ"
+
+msgid "OFF"
+msgstr "POIS"
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr "Luetaan näppäimistön merkkivaloista jokaisella lukukerralla."
+
+msgid "Special keys"
+msgstr "Erikoisnäppäimet"
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+"Erikoisnäppäinten taulukko (koodi ja KDE-toiminto Fn:n kanssa ja ilman) sekä "
+"näppäinmuokkain ovat Järjestelmäasetuksissa, moduulissa Apple-näppäimistö, "
+"sivulla Näppäimet."
+
+msgid "Edit the keys"
+msgstr "Muokkaa näppäimiä"
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] "%1 s sitten"
+msgstr[1] "%1 s sitten"
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "%1 min sitten"
+msgstr[1] "%1 min sitten"
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "%1 h sitten"
+msgstr[1] "%1 h sitten"
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "%1 päivä sitten"
+msgstr[1] "%1 päivää sitten"
+
+msgid "EXCELLENT"
+msgstr "ERINOMAINEN"
+
+msgid "GOOD"
+msgstr "HYVÄ"
+
+msgid "WEAK"
+msgstr "HEIKKO"
+
+msgid "Signal"
+msgstr "Signaali"
+
+msgid "Not measured"
+msgstr "Ei mitattu"
+
+msgid "Measured"
+msgstr "Mitattu"
+
+msgid "at %1"
+msgstr "klo %1"
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr ""
+"dB suhteessa sovittimen ihanteelliseen vastaanottoalueeseen (0 = "
+"ihanteellinen), ei dBm."
+
+msgid "Correction: %1"
+msgstr "Korjaus: %1"
+
+msgid "No measurement: the keyboard is not connected."
+msgstr "Ei mittausta: näppäimistö ei ole yhteydessä."
+
+msgid "Connected"
+msgstr "Yhdistetty"
+
+msgid "Yes"
+msgstr "Kyllä"
+
+msgid "No"
+msgstr "Ei"
+
+msgid "Paired"
+msgstr "Paritettu"
+
+msgid "TX power"
+msgstr "Lähetysteho"
+
+msgid "%1 dBm"
+msgstr "%1 dBm"
+
+msgid "Last wake-up"
+msgstr "Viimeisin herätys"
+
+msgid "Paired host"
+msgstr "Paritettu isäntä"
+
+msgid "Monitor's link"
+msgstr "Valvonnan yhteys"
+
+msgid "connected"
+msgstr "yhdistetty"
+
+msgid "asleep"
+msgstr "lepotilassa"
+
+msgid "unreachable"
+msgstr "ei tavoitettavissa"
+
+msgid "Attempts / failures"
+msgstr "Yritykset / epäonnistumiset"
+
+msgid "%1 / %2"
+msgstr "%1 / %2"
+
+msgid "Link quality"
+msgstr "Yhteyden laatu"
+
+msgid "Disconnections"
+msgstr "Katkokset"
+
+msgid "1 h"
+msgstr "1 h"
+
+msgid "7 days"
+msgstr "7 päivää"
+
+msgid "today"
+msgstr "tänään"
+
+msgid "D-%1"
+msgstr "P-%1"
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr "Valvonta ei ole vielä kirjannut yhtään katkosta."
+
+msgid "Restore the link"
+msgstr "Palauta yhteys"
+
+msgid "Reconnect"
+msgstr "Yhdistä uudelleen"
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr ""
+"Paritus menetetty tai hylätty? Paritä uudelleen päätteessä (vahvistus "
+"pyydetään): akmctl repair"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Autonomy"
+msgstr "Käyttöaika"
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 päivä"
+msgstr[1] "≈ %1 päivää"
+
+msgid "≈ %1 h"
+msgstr "≈ %1 h"
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr ""
+"Näppäimistön ilmoittama: sen oma prosenttiluku, muuttuu portaittain (usein "
+"uudelleenyhdistämisen yhteydessä)."
+
+msgid "not enough history yet"
+msgstr "historiaa ei vielä tarpeeksi"
+
+msgid "%1, up to date"
+msgstr "%1, ajan tasalla"
+
+msgid "%1, update %2 at Apple"
+msgstr "%1, päivitys %2 Applella"
+
+msgid "%1, not in the table"
+msgstr "%1, ei taulukossa"
+
+msgid "Keyboard name"
+msgstr "Näppäimistön nimi"
+
+msgid "Apply"
+msgstr "Käytä"
+
+msgid "Keyboard's own name"
+msgstr "Näppäimistön oma nimi"
+
+msgid "Cancel"
+msgstr "Peru"
+
+msgid "Rename refused: %1"
+msgstr "Nimeäminen hylätty: %1"
+
+msgid "Actions"
+msgstr "Toiminnot"
+
+msgid "Fn: waiting for authorisation…"
+msgstr "Fn: odotetaan valtuutusta…"
+
+msgid "Rename"
+msgstr "Nimeä uudelleen"
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr "%1 — ajan tasalla (uusin Applen tuntema julkinen versio)"
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr "%1 — päivitys saatavilla Applelta (uusin tunnettu: %2)"
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr "%1 — tuntematon (malli tai versio puuttuu taulukosta)"
+
+msgid "Autonomy: %1"
+msgstr "Käyttöaika: %1"
+
+msgid "media keys first"
+msgstr "medianäppäimet ensin"
+
+msgid "Fn key has no effect"
+msgstr "Fn-näppäimellä ei vaikutusta"
+
+msgid "F-keys disabled"
+msgstr "F-näppäimet pois käytöstä"
+
+msgid "Switch to F1–F12 first"
+msgstr "Vaihda F1–F12 ensin"
+
+msgid "Switch to media keys first"
+msgstr "Vaihda medianäppäimet ensin"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1 (yrityksiä: %2, epäonnistumisia: %3)"
+
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+msgid "new batteries, no estimate yet"
+msgstr "uudet paristot, ei vielä arviota"
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr "≈ %1 % (%2–%3 %), %4"
+
+msgid "Keyboard not connected"
+msgstr "Näppäimistö ei ole yhteydessä"
+
+msgid "Monitor stopped"
+msgstr "Valvonta pysäytetty"
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr "Apple-näppäimistö, paristo %1 prosenttia"
+
+msgid "Apple keyboard, battery level unknown"
+msgstr "Apple-näppäimistö, paristotaso tuntematon"
+
+msgid "Apple keyboard, %1"
+msgstr "Apple-näppäimistö, %1"
+
+msgid "Keyboard indication %1"
+msgstr "Näppäimistön ilmoittama %1"
+
+msgid "Estimate: %1"
+msgstr "Arvio: %1"
+
+msgid "Apple display: %1%"
+msgstr "Applen näyttämä: %1 %"
+
+msgid "Signal: %1"
+msgstr "Signaali: %1"
+
+msgid "Firmware: %1"
+msgstr "Laiteohjelmisto: %1"
+
+msgid "Waiting for the Apple keyboard…"
+msgstr "Odotetaan Apple-näppäimistöä…"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord ei ole istuntoväylällä"
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr "&Apple-näppäimistön asetukset…"
+
+msgid "New reading requested."
+msgstr "Uusi lukema pyydetty."
+
+msgid "Reading not requested: %1"
+msgstr "Lukemaa ei pyydetty: %1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+"Uudelleenyhdistäminen pyydetty. Paina näppäintä, jos näppäimistö on "
+"lepotilassa."
+
+msgid "refused by the monitor"
+msgstr "valvonta hylkäsi"
+
+msgid "Reconnection not requested: %1"
+msgstr "Uudelleenyhdistämistä ei pyydetty: %1"
+
+msgid "excellent"
+msgstr "erinomainen"
+
+msgid "good"
+msgstr "hyvä"
+
+msgid "weak"
+msgstr "heikko"
+
+msgid "Apple Keyboard"
+msgstr "Apple-näppäimistö"
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr "Täydet %1 / Matala %2 / Kriittinen %3 / Tyhjät %4 mV"

@@ -1,0 +1,31 @@
+{
+  "_doc": "SYNTHETIC cases, one per family (except 'captured'). hid_id = HID_ID value of a hidraw uevent; modalias = BlueZ Device1.Modalias property; expected_family = what the driver MUST decide (Bcm2042 / MagicKeyboard / None = not a supported keyboard); rdesc = reference descriptor (null = not published, to be captured). Sources: see README.md of this directory.",
+  "cases": [
+    {"name": "A1314 2011 ISO (real)", "hid_id": "0005:000005AC:00000256", "modalias": "usb:v05ACp0256d0050", "expected_family": "Bcm2042", "rdesc": "../a1314_iso/report_descriptor.hex", "source": "captured"},
+    {"name": "A1314 2011 ANSI", "hid_id": "0005:000005AC:00000255", "modalias": "usb:v05ACp0255d0050", "expected_family": "Bcm2042", "rdesc": "kernel_selftest_0005_05ac_0256.hex", "source": "hypothesis: same BCM2042 firmware as 0x0256"},
+    {"name": "A1314 2011 JIS", "hid_id": "0005:000005AC:00000257", "modalias": "usb:v05ACp0257d0050", "expected_family": "Bcm2042", "rdesc": null, "source": "hid-ids.h; JIS descriptor not published"},
+    {"name": "A1314 2009 ANSI", "hid_id": "0005:000005AC:00000239", "modalias": "usb:v05ACp0239d0050", "expected_family": "Bcm2042", "rdesc": null, "source": "hid-ids.h"},
+    {"name": "A1314 2009 ISO", "hid_id": "0005:000005AC:0000023A", "modalias": "usb:v05ACp023Ad0050", "expected_family": "Bcm2042", "rdesc": null, "source": "hid-ids.h"},
+    {"name": "A1314 2009 JIS", "hid_id": "0005:000005AC:0000023B", "modalias": "usb:v05ACp023Bd0050", "expected_family": "Bcm2042", "rdesc": null, "source": "hid-ids.h"},
+    {"name": "A1255 ANSI", "hid_id": "0005:000005AC:0000022C", "modalias": "usb:v05ACp022Cd0050", "expected_family": "Bcm2042", "rdesc": null, "source": "hid-ids.h ALU_WIRELESS_ANSI"},
+    {"name": "A1255 ISO", "hid_id": "0005:000005AC:0000022D", "modalias": "usb:v05ACp022Dd0050", "expected_family": "Bcm2042", "rdesc": null, "source": "hid-ids.h ALU_WIRELESS_ISO"},
+    {"name": "A1255 JIS", "hid_id": "0005:000005AC:0000022E", "modalias": "usb:v05ACp022Ed0050", "expected_family": "Bcm2042", "rdesc": null, "source": "hid-ids.h ALU_WIRELESS_JIS"},
+    {"name": "Magic Keyboard 2015 A1644 (BT)", "hid_id": "0005:0000004C:00000267", "modalias": "bluetooth:v004Cp0267d0001", "expected_family": "MagicKeyboard", "rdesc": null, "source": "hid-apple.c HID_BLUETOOTH_DEVICE(BT_VENDOR_ID_APPLE, 0x0267)"},
+    {"name": "Magic Keyboard 2015 A1644 (USB cable)", "hid_id": "0003:000005AC:00000267", "modalias": null, "expected_family": "MagicKeyboard", "rdesc": null, "source": "hid-apple.c HID_USB_DEVICE + APPLE_RDESC_BATTERY"},
+    {"name": "Magic Keyboard numpad 2015 A1843 (BT)", "hid_id": "0005:0000004C:0000026C", "modalias": "bluetooth:v004Cp026Cd0001", "expected_family": "MagicKeyboard", "rdesc": null, "source": "hid-ids.h"},
+    {"name": "Magic Keyboard 2021 A2450 (BT)", "hid_id": "0005:0000004C:0000029C", "modalias": "bluetooth:v004Cp029Cd0206", "expected_family": "MagicKeyboard", "rdesc": "mk2021_0005_004c_029c_bt.hex", "source": "gist xloc/9f1ecca9 (ESP32 esp_hidh dump, VERSION 0x0206)"},
+    {"name": "Magic Keyboard Touch ID 2021 A2449 (BT)", "hid_id": "0005:0000004C:0000029A", "modalias": "bluetooth:v004Cp029Ad0001", "expected_family": "MagicKeyboard", "rdesc": null, "source": "hid-ids.h; descriptor assumed close to 0x029C, Touch ID not exposed over BT"},
+    {"name": "Magic Keyboard Touch ID numpad 2021 A2520 (BT)", "hid_id": "0005:0000004C:0000029F", "modalias": "bluetooth:v004Cp029Fd0001", "expected_family": "MagicKeyboard", "rdesc": null, "source": "hid-ids.h"},
+    {"name": "Magic Keyboard 2024 USB-C (BT)", "hid_id": "0005:0000004C:00000320", "modalias": "bluetooth:v004Cp0320d0001", "expected_family": "MagicKeyboard", "rdesc": null, "source": "hid-ids.h"},
+    {"name": "Magic Keyboard Touch ID 2024 (BT)", "hid_id": "0005:0000004C:00000321", "modalias": "bluetooth:v004Cp0321d0001", "expected_family": "MagicKeyboard", "rdesc": null, "source": "hid-ids.h"},
+    {"name": "Magic Keyboard Touch ID numpad 2024 (USB-C cable)", "hid_id": "0003:000005AC:00000322", "modalias": null, "expected_family": "MagicKeyboard", "rdesc": null, "source": "hid-ids.h"},
+    {"name": "NEGATIVE Magic Mouse 1 (BT)", "hid_id": "0005:000005AC:0000030D", "modalias": "usb:v05ACp030Dd0001", "expected_family": null, "rdesc": null, "source": "hid-ids.h MAGICMOUSE"},
+    {"name": "NEGATIVE Magic Trackpad 1 (BT)", "hid_id": "0005:000005AC:0000030E", "modalias": "usb:v05ACp030Ed0001", "expected_family": null, "rdesc": null, "source": "hid-ids.h MAGICTRACKPAD"},
+    {"name": "NEGATIVE Magic Mouse 2 (BT)", "hid_id": "0005:0000004C:00000269", "modalias": "bluetooth:v004Cp0269d0001", "expected_family": null, "rdesc": null, "source": "hid-ids.h MAGICMOUSE2; mouse report 0x12 (hid-magicmouse.c MOUSE2_REPORT_ID)"},
+    {"name": "NEGATIVE Magic Trackpad 2 (BT)", "hid_id": "0005:0000004C:00000265", "modalias": "bluetooth:v004Cp0265d0001", "expected_family": null, "rdesc": null, "source": "hid-ids.h MAGICTRACKPAD2"},
+    {"name": "NEGATIVE Magic Trackpad 2 USB-C (BT)", "hid_id": "0005:0000004C:00000324", "modalias": "bluetooth:v004Cp0324d0001", "expected_family": null, "rdesc": null, "source": "hid-ids.h MAGICTRACKPAD2_USBC"},
+    {"name": "NEGATIVE AirPods (not HID)", "hid_id": null, "modalias": "bluetooth:v004Cp200Ed0001", "expected_family": null, "rdesc": null, "source": "typical BlueZ Modalias of 2nd gen. AirPods (PID 0x200E)"},
+    {"name": "NEGATIVE wired Apple ALU keyboard (USB)", "hid_id": "0003:000005AC:00000220", "modalias": null, "expected_family": null, "rdesc": null, "source": "hid-ids.h ALU_ANSI (wired, deliberately excluded)"},
+    {"name": "NEGATIVE Logitech same PID", "hid_id": "0005:0000046D:00000256", "modalias": "usb:v046Dp0256d0001", "expected_family": null, "rdesc": null, "source": "vendor guard"}
+  ]
+}

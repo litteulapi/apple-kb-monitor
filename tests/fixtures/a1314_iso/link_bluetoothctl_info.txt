@@ -1,0 +1,20 @@
+Device AA:BB:CC:DD:EE:F1 (public)
+	Name: Clavier de alice #1
+	Alias: Clavier de alice #1
+	Class: 0x00002540 (9536)
+	Icon: input-keyboard
+	Paired: yes
+	Bonded: yes
+	Trusted: yes
+	Blocked: no
+	Connected: yes
+	WakeAllowed: yes
+	LegacyPairing: yes
+	CablePairing: no
+	UUID: Human Interface Device... (00001124-0000-1000-8000-00805f9b34fb)
+	UUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)
+	Modalias: usb:v05ACp0256d0050
+	Battery Percentage: 0x62 (98)
+	BREDR.Paired: yes
+	BREDR.Bonded: yes
+	BREDR.Connected: yes

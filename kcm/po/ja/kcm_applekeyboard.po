@@ -1,0 +1,2011 @@
+# Japanese translation of the System Settings module kcm_applekeyboard.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:57+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Japanese\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: ui/AlertsPage.qml:50 ui/StatePage.qml:104
+msgid ""
+"The keyboard service did not answer within 5 seconds. It is busy or stuck; "
+"the values shown may be old."
+msgstr ""
+"キーボードサービスが 5 秒以内に応答しませんでした。処理中か停止しています。表"
+"示中の値は古い可能性があります。"
+
+#: ui/AlertsPage.qml:51 ui/StatePage.qml:105
+msgid "The keyboard service answered with an error: %1"
+msgstr "キーボードサービスがエラーを返しました: %1"
+
+#: ui/AlertsPage.qml:230 ui/main.qml:27
+msgid ""
+"The keyboard service (apple-kb-monitord) is not running: every setting is "
+"read and written by it, nothing can be shown or changed until it starts."
+msgstr ""
+"キーボードサービス (apple-kb-monitord) が動作していません: すべての設定はこの"
+"サービスが読み書きするため、起動するまで何も表示・変更できません。"
+
+#: ui/AlertsPage.qml:235
+msgid ""
+"Not saved: the keyboard service did not answer in time, the settings could "
+"not be read. Try again in a moment."
+msgstr ""
+"保存されていません: キーボードサービスが時間内に応答せず、設定を読み取れませ"
+"んでした。しばらくしてからもう一度お試しください。"
+
+#: ui/AlertsPage.qml:236
+msgid ""
+"Not saved: the keyboard service could not read the settings (%1). Try again "
+"in a moment."
+msgstr ""
+"保存されていません: キーボードサービスが設定を読み取れませんでした (%1)。しば"
+"らくしてからもう一度お試しください。"
+
+#: ui/AlertsPage.qml:240
+msgid ""
+"Not saved: the settings file could not be read (%1), so it is not written "
+"over. Fix the file or move it away, then reopen this page."
+msgstr ""
+"保存されていません: 設定ファイルを読み取れなかったため (%1)、上書きしません。"
+"ファイルを修正するか移動してから、このページを開き直してください。"
+
+#: ui/AlertsPage.qml:245
+msgid ""
+"Not saved: the thresholds must be whole numbers between 1 and 99, separated "
+"by commas."
+msgstr ""
+"保存されていません: しきい値は 1〜99 の整数をカンマ区切りで指定してください。"
+
+#: ui/AlertsPage.qml:249
+msgid "Not saved: the critical level must be a whole number between 0 and 99."
+msgstr "保存されていません: 危険レベルは 0〜99 の整数で指定してください。"
+
+#: ui/AlertsPage.qml:253
+msgid ""
+"Not saved: the re-arm margin must be a number between 1 and 20 (for example "
+"3 or 2.5)."
+msgstr ""
+"保存されていません: 再通知マージンは 1〜20 の数値で指定してください (例: 3 ま"
+"たは 2.5)。"
+
+#: ui/AlertsPage.qml:278
+msgid ""
+"Saved. The service reads these settings when it starts: restart it to use "
+"them now."
+msgstr ""
+"保存しました。サービスは起動時にこの設定を読み込みます: 今すぐ反映するには再"
+"起動してください。"
+
+#: ui/AlertsPage.qml:279
+msgid "Saved. They will be used when the service starts."
+msgstr "保存しました。サービスの起動時に使用されます。"
+
+#: ui/AlertsPage.qml:283
+msgid ""
+"Not saved: the settings file was changed by another program since this page "
+"read it. Nothing was written; use Reset to read it again."
+msgstr ""
+"保存されていません: このページが読み込んだ後に、別のプログラムが設定ファイル"
+"を変更しました。何も書き込んでいません。「リセット」で読み込み直してくださ"
+"い。"
+
+#: ui/AlertsPage.qml:284
+msgid "Not saved: %1"
+msgstr "保存されていません: %1"
+
+#: ui/AlertsPage.qml:307
+msgid "Restart the service"
+msgstr "サービスを再起動"
+
+#: ui/AlertsPage.qml:312
+msgid "Service restarted with the new settings."
+msgstr "新しい設定でサービスを再起動しました。"
+
+#: ui/AlertsPage.qml:312
+msgid "The service could not be restarted: %1"
+msgstr "サービスを再起動できませんでした: %1"
+
+#: ui/AlertsPage.qml:326
+msgid ""
+"The settings file could not be read (%1): the defaults are shown and nothing "
+"can be saved, so that the file is never written over."
+msgstr ""
+"設定ファイルを読み取れませんでした (%1): 既定値を表示しています。ファイルを上"
+"書きしないよう、何も保存できません。"
+
+#: ui/AlertsPage.qml:328
+msgid ""
+"Some lines of the settings file are not understood (%1); they are kept as "
+"they are."
+msgstr ""
+"設定ファイルの一部の行を解釈できません (%1)。それらはそのまま保持されます。"
+
+#: ui/AlertsPage.qml:337
+msgid ""
+"The service does not take these values of the settings file as they are "
+"written: %1. They are shown as written and kept unless you change them."
+msgstr ""
+"サービスは設定ファイルの次の値を書かれたとおりには受け付けません: %1。書かれ"
+"たとおりに表示し、変更しない限り保持します。"
+
+#: ui/AlertsPage.qml:346
+msgctxt "@title:group"
+msgid "Low battery"
+msgstr "電池残量低下"
+
+#: ui/AlertsPage.qml:351
+msgid "Alerts:"
+msgstr "アラート:"
+
+#: ui/AlertsPage.qml:352
+msgid "Notify when the battery is low"
+msgstr "電池残量が少なくなったら通知する"
+
+#: ui/AlertsPage.qml:358
+msgid "Thresholds (%):"
+msgstr "しきい値 (%):"
+
+#: ui/AlertsPage.qml:362
+msgid "Alert thresholds in percent, separated by commas"
+msgstr "アラートのしきい値 (パーセント、カンマ区切り)"
+
+#: ui/AlertsPage.qml:365
+msgid "Whole numbers from 1 to 99"
+msgstr "1〜99 の整数"
+
+#: ui/AlertsPage.qml:373
+msgid "One notification per threshold crossed, on the estimated charge."
+msgstr "推定充電量がしきい値を下回るたびに 1 回通知します。"
+
+#: ui/AlertsPage.qml:378
+msgid "With KDE:"
+msgstr "KDE との連携:"
+
+#: ui/AlertsPage.qml:380
+msgid "When KDE already warns about this keyboard, send only one reminder"
+msgstr ""
+"KDE がこのキーボードについてすでに警告している場合は、リマインダーを 1 回だけ"
+"送る"
+
+#: ui/AlertsPage.qml:386
+msgid "Critical at or below (%):"
+msgstr "危険とみなす値 (%) 以下:"
+
+#: ui/AlertsPage.qml:390
+msgid "Critical threshold in percent"
+msgstr "危険しきい値 (パーセント)"
+
+#: ui/AlertsPage.qml:396
+msgid "Re-arm after (points):"
+msgstr "再通知までの回復幅 (ポイント):"
+
+#: ui/AlertsPage.qml:400
+msgid "Points above a threshold before it can notify again"
+msgstr "再び通知できるようになるまでに、しきい値を上回る必要のあるポイント"
+
+#: ui/AlertsPage.qml:401
+msgid "A number from 1 to 20, decimals allowed"
+msgstr "1〜20 の数値 (小数可)"
+
+#: ui/AlertsPage.qml:408
+msgctxt "@title:group"
+msgid "Batteries"
+msgstr "電池"
+
+#: ui/AlertsPage.qml:413
+msgid "Battery type:"
+msgstr "電池の種類:"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:56
+msgctxt "battery chemistry"
+msgid "alkaline"
+msgstr "アルカリ"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:57
+msgctxt "battery chemistry"
+msgid "NiMH (rechargeable)"
+msgstr "NiMH (充電式)"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:58
+msgctxt "battery chemistry"
+msgid "lithium"
+msgstr "リチウム"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:59
+msgctxt "battery chemistry"
+msgid "unknown"
+msgstr "不明"
+
+#: ui/AlertsPage.qml:415
+msgid "Battery type"
+msgstr "電池の種類"
+
+#: ui/AlertsPage.qml:424
+msgid ""
+"Used for the estimated charge and its range; the keyboard's own indication "
+"does not depend on it."
+msgstr ""
+"推定充電量とその範囲の計算に使用します。キーボード自身の表示には影響しませ"
+"ん。"
+
+#: ui/AlertsPage.qml:429
+msgid "Display:"
+msgstr "表示:"
+
+#: ui/AlertsPage.qml:430
+msgid "Also show the percentage as macOS shows it"
+msgstr "macOS と同じ形式のパーセントも表示する"
+
+#: ui/AlertsPage.qml:436
+msgctxt "@title:group"
+msgid "Other notifications"
+msgstr "その他の通知"
+
+#: ui/AlertsPage.qml:441 ui/StatePage.qml:152
+msgid "Connection:"
+msgstr "接続:"
+
+#: ui/AlertsPage.qml:442
+msgid "Notify on disconnection and reconnection"
+msgstr "切断時と再接続時に通知する"
+
+#: ui/AlertsPage.qml:448
+msgid "New batteries:"
+msgstr "新しい電池:"
+
+#: ui/AlertsPage.qml:449
+msgid "Notify when new batteries are detected"
+msgstr "新しい電池を検出したら通知する"
+
+#: ui/AlertsPage.qml:455
+msgctxt "@title:group"
+msgid "Shutdown"
+msgstr "シャットダウン"
+
+#: ui/AlertsPage.qml:460
+msgid "WillShutdown:"
+msgstr "WillShutdown:"
+
+#: ui/AlertsPage.qml:461
+msgid "Tell the keyboard when the computer shuts down or restarts"
+msgstr "コンピュータのシャットダウンや再起動をキーボードに伝える"
+
+#: ui/AlertsPage.qml:470
+msgid ""
+"What macOS sends at every shutdown (one message, nothing else is written). "
+"Off = the keyboard is left untouched."
+msgstr ""
+"macOS がシャットダウンのたびに送るもの (メッセージ 1 件のみで、他には何も書き"
+"込みません)。オフ = キーボードには触れません。"
+
+#: ui/AlertsPage.qml:478
+msgid "File:"
+msgstr "ファイル:"
+
+#: ui/DiagPage.qml:39
+msgctxt "diagnosis level"
+msgid "OK"
+msgstr "OK"
+
+#: ui/DiagPage.qml:40
+msgctxt "diagnosis level"
+msgid "information"
+msgstr "情報"
+
+#: ui/DiagPage.qml:41
+msgctxt "diagnosis level"
+msgid "warning"
+msgstr "警告"
+
+#: ui/DiagPage.qml:42
+msgctxt "diagnosis level"
+msgid "problem"
+msgstr "問題"
+
+#: ui/DiagPage.qml:47
+msgctxt "doctor topic"
+msgid "adapter"
+msgstr "アダプタ"
+
+#: ui/DiagPage.qml:48
+msgctxt "doctor topic"
+msgid "adapter power"
+msgstr "アダプタの電源"
+
+#: ui/DiagPage.qml:49
+msgctxt "doctor topic"
+msgid "BlueZ settings"
+msgstr "BlueZ の設定"
+
+#: ui/DiagPage.qml:50
+msgctxt "doctor topic"
+msgid "service"
+msgstr "サービス"
+
+#: ui/DiagPage.qml:51
+msgctxt "doctor topic"
+msgid "HID access"
+msgstr "HID アクセス"
+
+#: ui/DiagPage.qml:52
+msgctxt "doctor topic"
+msgid "journal"
+msgstr "ジャーナル"
+
+#: ui/DiagPage.qml:53
+msgctxt "doctor topic"
+msgid "link"
+msgstr "接続"
+
+#: ui/DiagPage.qml:54
+msgctxt "doctor topic"
+msgid "link key"
+msgstr "リンクキー"
+
+#: ui/DiagPage.qml:55
+msgctxt "doctor topic"
+msgid "link quality"
+msgstr "接続品質"
+
+#: ui/DiagPage.qml:56
+msgctxt "doctor topic"
+msgid "pairing"
+msgstr "ペアリング"
+
+#: ui/DiagPage.qml:57
+msgctxt "doctor topic"
+msgid "signal"
+msgstr "信号"
+
+#: ui/DiagPage.qml:58
+msgctxt "doctor topic"
+msgid "UPower"
+msgstr "UPower"
+
+#: ui/DiagPage.qml:59
+msgctxt "doctor topic"
+msgid "versions"
+msgstr "バージョン"
+
+#: ui/DiagPage.qml:66
+msgctxt "doctor verdict"
+msgid "the pairing is refused or missing: run `akmctl repair`"
+msgstr ""
+"ペアリングが拒否されたか存在しません: `akmctl repair` を実行してください"
+
+#: ui/DiagPage.qml:67
+msgctxt "doctor verdict"
+msgid "no usable pairing: run `akmctl repair`"
+msgstr "使用できるペアリングがありません: `akmctl repair` を実行してください"
+
+#. i18n: %1 = the doctor topics to check, comma-separated
+#: ui/DiagPage.qml:69
+msgctxt "doctor verdict"
+msgid "Link up; to check: %1 (akmctl doctor)"
+msgstr "接続確立。要確認: %1 (akmctl doctor)"
+
+#: ui/DiagPage.qml:70
+msgctxt "doctor verdict"
+msgid "link up and configuration sound"
+msgstr "接続は確立しており、設定も正常です"
+
+#: ui/DiagPage.qml:71
+msgctxt "doctor verdict"
+msgid ""
+"keyboard not connected: press a key and wait 10 s; the service pages it on "
+"its own. Pair it again only if `akmctl doctor` reports auth-failed"
+msgstr ""
+"キーボードが接続されていません: キーを押して 10 秒待ってください。サービスが"
+"自動的に呼び出します。`akmctl doctor` が auth-failed を報告した場合のみ再ペア"
+"リングしてください"
+
+#: ui/DiagPage.qml:78
+msgctxt "doctor finding"
+msgid "rssi-helper executable, capability cap_net_admin present"
+msgstr "rssi-helper は実行可能、ケーパビリティ cap_net_admin あり"
+
+#: ui/DiagPage.qml:79
+msgctxt "doctor finding"
+msgid "the rssi-helper utility is not installed"
+msgstr "rssi-helper ユーティリティがインストールされていません"
+
+#: ui/DiagPage.qml:80
+msgctxt "doctor finding"
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+"rssi-helper ユーティリティが失敗しました (ケーパビリティ不足、Bluetooth が拒"
+"否)"
+
+#: ui/DiagPage.qml:81
+msgctxt "doctor finding"
+msgid "the rssi-helper utility does not answer in time"
+msgstr "rssi-helper ユーティリティが時間内に応答しません"
+
+#: ui/DiagPage.qml:82
+msgctxt "doctor finding"
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "Bluetooth アダプタがこの接続の測定値を返しません"
+
+#: ui/DiagPage.qml:83
+msgctxt "doctor finding"
+msgid "the signal cannot be measured"
+msgstr "信号を測定できません"
+
+#: ui/DiagPage.qml:84
+msgctxt "doctor finding, %1 = settings"
+msgid "ignored by bluetoothd: %1"
+msgstr "bluetoothd により無視: %1"
+
+#: ui/DiagPage.qml:85
+msgctxt "doctor finding"
+msgid "[Policy] Reconnect* in place"
+msgstr "[Policy] Reconnect* 設定済み"
+
+#: ui/DiagPage.qml:86
+msgctxt "doctor finding"
+msgid "FastConnectable = true"
+msgstr "FastConnectable = true"
+
+#: ui/DiagPage.qml:87
+msgctxt "doctor finding"
+msgid ""
+"FastConnectable off: slower answer to the keyboard's page after a key press"
+msgstr ""
+"FastConnectable オフ: キー入力後のキーボードからの呼び出しへの応答が遅くなり"
+"ます"
+
+#: ui/DiagPage.qml:88
+msgctxt "doctor finding, %1 = file, %2 = error"
+msgid "%1: %2"
+msgstr "%1: %2"
+
+#: ui/DiagPage.qml:89
+msgctxt "doctor finding"
+msgid "NoPollBatteries = true (no 30 s HID polling)"
+msgstr "NoPollBatteries = true (30 秒ごとの HID ポーリングなし)"
+
+#: ui/DiagPage.qml:90
+msgctxt "doctor finding"
+msgid ""
+"UPower reads the keyboard battery every 30 s (2 GET_REPORT over the air): "
+"the keyboard never sleeps"
+msgstr ""
+"UPower が 30 秒ごとにキーボードの電池を読み取っています (無線で GET_REPORT 2 "
+"回): キーボードがスリープしません"
+
+#: ui/DiagPage.qml:91
+msgctxt "doctor finding"
+msgid "adapter is not on USB (or not found)"
+msgstr "アダプタが USB 接続ではありません (または見つかりません)"
+
+#: ui/DiagPage.qml:92
+msgctxt "doctor finding, %1 = USB id"
+msgid "%1 autosuspend off (power/control=on)"
+msgstr "%1 USB 自動サスペンド無効 (power/control=on)"
+
+#: ui/DiagPage.qml:94
+msgctxt "doctor finding"
+msgid ""
+"%1 USB autosuspend active (control=%2, delay %3 ms, now %4, %5 s suspended "
+"since boot)"
+msgstr ""
+"%1 USB 自動サスペンド有効 (control=%2、遅延 %3 ms、現在 %4、起動以降 %5 秒サ"
+"スペンド)"
+
+#: ui/DiagPage.qml:95
+msgctxt "doctor finding, appended"
+msgid "; rule installed but not applied yet"
+msgstr "; ルールはインストール済みだがまだ適用されていません"
+
+#: ui/DiagPage.qml:96
+msgctxt "doctor finding"
+msgid "btusb enable_autosuspend = %1"
+msgstr "btusb enable_autosuspend = %1"
+
+#: ui/DiagPage.qml:97
+msgctxt "doctor finding"
+msgid "Bluetooth adapter powered"
+msgstr "Bluetooth アダプタ電源オン"
+
+#: ui/DiagPage.qml:98
+msgctxt "doctor finding"
+msgid "Bluetooth adapter off"
+msgstr "Bluetooth アダプタ電源オフ"
+
+#: ui/DiagPage.qml:99
+msgctxt "doctor finding"
+msgid "BlueZ unreachable (bluetooth.service stopped?)"
+msgstr "BlueZ に到達できません (bluetooth.service が停止?)"
+
+#: ui/DiagPage.qml:100
+msgctxt "doctor finding"
+msgid "no paired Apple keyboard known to BlueZ"
+msgstr "BlueZ が認識しているペアリング済み Apple キーボードはありません"
+
+#: ui/DiagPage.qml:101
+msgctxt "doctor finding, %1 = address"
+msgid "%1 is not paired"
+msgstr "%1 はペアリングされていません"
+
+#: ui/DiagPage.qml:103
+msgctxt "doctor finding, %1 = address, %2 = name"
+msgid "%1 “%2” paired"
+msgstr "%1「%2」ペアリング済み"
+
+#: ui/DiagPage.qml:104
+msgctxt "doctor finding, appended"
+msgid ", bonded"
+msgstr "、ボンディング済み"
+
+#: ui/DiagPage.qml:105
+msgctxt "doctor finding, appended"
+msgid ", legacy PIN pairing"
+msgstr "、旧式の PIN ペアリング"
+
+#: ui/DiagPage.qml:106
+msgctxt "doctor finding"
+msgid "not trusted: BlueZ may refuse the keyboard's own reconnection"
+msgstr ""
+"信頼されていません: BlueZ がキーボード側からの再接続を拒否する可能性がありま"
+"す"
+
+#: ui/DiagPage.qml:107
+msgctxt "doctor finding"
+msgid "blocked in BlueZ"
+msgstr "BlueZ でブロック中"
+
+#: ui/DiagPage.qml:108
+msgctxt "doctor finding"
+msgid "connected"
+msgstr "接続済み"
+
+#: ui/DiagPage.qml:109
+msgctxt "doctor finding"
+msgid "not connected (asleep? press a key)"
+msgstr "未接続 (スリープ中? キーを押してください)"
+
+#: ui/DiagPage.qml:110
+msgctxt "doctor finding"
+msgid "link key not checked (needs root: sudo akmctl doctor)"
+msgstr "リンクキー未確認 (root が必要: sudo akmctl doctor)"
+
+#: ui/DiagPage.qml:111
+msgctxt "doctor finding"
+msgid "no [LinkKey] stored for the keyboard"
+msgstr "キーボードの [LinkKey] が保存されていません"
+
+#: ui/DiagPage.qml:112
+msgctxt "doctor finding"
+msgid "stored key == kernel key (fingerprint %1)"
+msgstr "保存キー == カーネルのキー (フィンガープリント %1)"
+
+#: ui/DiagPage.qml:113
+msgctxt "doctor finding"
+msgid "stored key %1 != kernel key %2: will change at next restart"
+msgstr "保存キー %1 != カーネルのキー %2: 次回の再起動で変わります"
+
+#: ui/DiagPage.qml:114
+msgctxt "doctor finding"
+msgid "stored key %1; kernel copy not readable (debugfs not mounted?)"
+msgstr "保存キー %1; カーネル側のコピーを読み取れません (debugfs 未マウント?)"
+
+#: ui/DiagPage.qml:116
+msgctxt "doctor finding"
+msgid ""
+"link quality: %1 disconnection in the last hour, %2 in 24 h, %3 in 7 days"
+msgid_plural ""
+"link quality: %1 disconnections in the last hour, %2 in 24 h, %3 in 7 days"
+msgstr[0] "接続品質: 直近 1 時間に %1 回、24 時間に %2 回、7 日間に %3 回切断"
+
+#: ui/DiagPage.qml:117
+msgctxt "doctor finding, appended"
+msgid "; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurement)"
+msgid_plural ""
+"; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurements)"
+msgstr[0] "。7 日間の相対信号: 平均 %2 dB、最小 %3 dB (測定回数: %1)"
+
+#: ui/DiagPage.qml:118
+msgctxt "doctor finding, appended"
+msgid " — UNSTABLE: %1 unexpected within the hour"
+msgstr " — 不安定: 1 時間以内の予期しない切断 %1 回"
+
+#: ui/DiagPage.qml:119
+msgctxt "doctor finding, %1 = device"
+msgid "%1 readable"
+msgstr "%1 読み取り可能"
+
+#: ui/DiagPage.qml:120
+msgctxt "doctor finding, %1 = device"
+msgid "%1 not readable by this user"
+msgstr "%1 はこのユーザーから読み取れません"
+
+#: ui/DiagPage.qml:121
+msgctxt "doctor finding"
+msgid "connected but no hidraw node (uhid not created yet?)"
+msgstr "接続済みだが hidraw ノードなし (uhid がまだ作成されていない?)"
+
+#: ui/DiagPage.qml:122
+msgctxt "doctor finding"
+msgid "no bluetoothd error in the last 6 hours of this boot"
+msgstr "今回の起動の直近 6 時間に bluetoothd のエラーなし"
+
+#: ui/DiagPage.qml:123
+msgctxt "doctor finding"
+msgid ""
+"bluetoothd journal not readable (add yourself to group systemd-journal, or "
+"use sudo)"
+msgstr ""
+"bluetoothd のジャーナルを読み取れません (systemd-journal グループに参加する"
+"か sudo を使用してください)"
+
+#: ui/DiagPage.qml:124
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 page timeout (keyboard asleep or not listening), last %2"
+msgid_plural "%1 page timeouts (keyboard asleep or not listening), last %2"
+msgstr[0] ""
+"ページタイムアウト %1 回 (キーボードがスリープ中か応答待機していない)、最終 "
+"%2"
+
+#: ui/DiagPage.qml:125
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 HIDP GET_REPORT timeout, last %2"
+msgid_plural "%1 HIDP GET_REPORT timeouts, last %2"
+msgstr[0] "HIDP GET_REPORT タイムアウト %1 回、最終 %2"
+
+#: ui/DiagPage.qml:126
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 authentication / key error, last %2"
+msgid_plural "%1 authentication / key errors, last %2"
+msgstr[0] "認証 / キーのエラー %1 回、最終 %2"
+
+#: ui/DiagPage.qml:127
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 connection reset/refused by the keyboard, last %2"
+msgid_plural "%1 connections reset/refused by the keyboard, last %2"
+msgstr[0] "キーボードによる接続のリセット/拒否 %1 回、最終 %2"
+
+#: ui/DiagPage.qml:128
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 main.conf key ignored by bluetoothd at start, last %2"
+msgid_plural "%1 main.conf keys ignored by bluetoothd at start, last %2"
+msgstr[0] "起動時に bluetoothd が無視した main.conf のキー %1 個、最終 %2"
+
+#: ui/DiagPage.qml:129
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid ""
+"%1 BlueZ storage write failure (a new link key may be lost at reboot), last "
+"%2"
+msgid_plural ""
+"%1 BlueZ storage write failures (a new link key may be lost at reboot), last "
+"%2"
+msgstr[0] ""
+"BlueZ ストレージへの書き込み失敗 %1 回 (新しいリンクキーが再起動時に失われる"
+"可能性)、最終 %2"
+
+#: ui/DiagPage.qml:130
+msgctxt "doctor finding"
+msgid "apple-kb-monitord link keeper not reachable (no automatic reconnection)"
+msgstr "apple-kb-monitord の接続監視に到達できません (自動再接続なし)"
+
+#: ui/DiagPage.qml:131
+msgctxt "doctor finding, %1 = state"
+msgid "link health: %1"
+msgstr "接続の状態: %1"
+
+#: ui/DiagPage.qml:132
+msgctxt "doctor finding"
+msgid "keeper running, keyboard not tracked"
+msgstr "監視は動作中、キーボードは追跡されていません"
+
+#: ui/DiagPage.qml:133
+msgctxt "doctor finding, %1 = program, %2 = pid, %3 = path"
+msgid ""
+"%1 (pid %2) still runs the replaced binary %3 (deleted): the old version"
+msgstr ""
+"%1 (pid %2) は置き換えられたバイナリ %3 (削除済み) をまだ実行しています: 旧"
+"バージョンです"
+
+#: ui/DiagPage.qml:134
+msgctxt "doctor finding, %1 = pid"
+msgid ""
+"plasmashell (pid %1) started before the widget was installed: it shows the "
+"old widget"
+msgstr ""
+"plasmashell (pid %1) はウィジェットのインストール前に起動しました: 古いウィ"
+"ジェットを表示しています"
+
+#: ui/DiagPage.qml:141
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package"
+msgstr "apple-kb-monitor パッケージを再インストールしてください"
+
+#: ui/DiagPage.qml:142
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr ""
+"apple-kb-monitor パッケージを再インストールし、akmctl doctor を実行してくださ"
+"い"
+
+#: ui/DiagPage.qml:143
+msgctxt "doctor fix"
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "Bluetooth サービスを確認してください: systemctl status bluetooth"
+
+#: ui/DiagPage.qml:144
+msgctxt "doctor fix"
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "キーボードを近づけるか、再接続してください"
+
+#: ui/DiagPage.qml:145
+msgctxt "doctor fix"
+msgid "run akmctl doctor"
+msgstr "akmctl doctor を実行してください"
+
+#: ui/DiagPage.qml:146
+msgctxt "doctor fix, %1 = command"
+msgid "optional: %1"
+msgstr "任意: %1"
+
+#: ui/DiagPage.qml:147
+msgctxt "doctor fix"
+msgid "akmctl repair (pairing assistant)"
+msgstr "akmctl repair (ペアリングアシスタント)"
+
+#: ui/DiagPage.qml:148
+msgctxt "doctor fix"
+msgid "check disk space, then akmctl repair if the keyboard is refused"
+msgstr ""
+"ディスク容量を確認し、キーボードが拒否される場合は akmctl repair を実行してく"
+"ださい"
+
+#: ui/DiagPage.qml:149
+msgctxt "doctor fix"
+msgid "check the batteries, the distance, USB 3 devices near the adapter"
+msgstr "電池、距離、アダプタ付近の USB 3 機器を確認してください"
+
+#: ui/DiagPage.qml:150
+msgctxt "doctor fix"
+msgid "install udev/70-apple-kb-hidraw.rules (uaccess)"
+msgstr "udev/70-apple-kb-hidraw.rules (uaccess) をインストールしてください"
+
+#: ui/DiagPage.qml:151
+msgctxt "doctor fix"
+msgid ""
+"avoid HID scanning tools while measuring; see docs/RECONNECTION-PAIRING.md "
+"§3.5"
+msgstr ""
+"測定中は HID スキャンツールを使わないでください。docs/RECONNECTION-"
+"PAIRING.md §3.5 を参照"
+
+#: ui/DiagPage.qml:152
+msgctxt "doctor fix"
+msgid ""
+"free disk space (btrfs: check metadata), then verify with sudo akmctl doctor"
+msgstr ""
+"ディスク容量を空けて (btrfs: メタデータを確認)、sudo akmctl doctor で確認して"
+"ください"
+
+#. i18n: %1 = daemon version, %2 = akmctl version, %3 = package version
+#: ui/DiagPage.qml:161
+msgctxt "selftest check"
+msgid ""
+"versions differ: daemon %1, akmctl %2, package %3: restart the daemon after "
+"an upgrade (systemctl --user restart apple-kb-monitord.service)"
+msgstr ""
+"バージョン不一致: サービス %1、akmctl %2、パッケージ %3: アップグレード後は"
+"サービスを再起動してください (systemctl --user restart apple-kb-"
+"monitord.service)"
+
+#. i18n: %1 = daemon version, %2 = package version
+#: ui/DiagPage.qml:163
+msgctxt "selftest check"
+msgid "daemon %1 = akmctl, package %2"
+msgstr "サービス %1 = akmctl、パッケージ %2"
+
+#: ui/DiagPage.qml:164
+msgctxt "selftest check"
+msgid "daemon version unknown (old interface)"
+msgstr "サービスのバージョン不明 (旧インターフェース)"
+
+#: ui/DiagPage.qml:167
+msgctxt "selftest check"
+msgid "keyboard alias as last set through this monitor"
+msgstr "キーボードのエイリアスはこの監視ツールで最後に設定したもののままです"
+
+#. i18n: %1 = current alias, %2 = alias set last, %3 = by whom, %4 = Unix time
+#: ui/DiagPage.qml:169
+msgctxt "selftest check"
+msgid ""
+"keyboard alias is %1, last set to %2 by %3 at %4 (unix): changed elsewhere "
+"(KDE Bluetooth settings, bluetoothctl) or the pairing was removed (akmctl "
+"repair, Plasma Forget); see the daemon journal for \"BlueZ alias\" lines"
+msgstr ""
+"キーボードのエイリアスは %1。最後の設定は %4 (unix) に %3 による %2: 他所で変"
+"更された (KDE の Bluetooth 設定、bluetoothctl) か、ペアリングが削除されまし"
+"た (akmctl repair、Plasma の登録解除)。サービスのジャーナルの \"BlueZ "
+"alias\" 行を参照"
+
+#: ui/DiagPage.qml:170
+msgctxt "selftest check"
+msgid ""
+"apple-kb-monitord restarted %1 time by systemd since the last pass (crash "
+"loop?)"
+msgid_plural ""
+"apple-kb-monitord restarted %1 times by systemd since the last pass (crash "
+"loop?)"
+msgstr[0] ""
+"前回の確認以降、systemd が apple-kb-monitord を %1 回再起動 (クラッシュルー"
+"プ?)"
+
+#. i18n: %1 = old process id, %2 = new process id
+#: ui/DiagPage.qml:172
+msgctxt "selftest check"
+msgid "daemon pid changed %1 -> %2 (restart)"
+msgstr "サービスの pid が変化 %1 -> %2 (再起動)"
+
+#: ui/DiagPage.qml:173
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon answered GetState in %1 ms (> 1 s)"
+msgstr "サービスの GetState 応答に %1 ms (> 1 秒)"
+
+#: ui/DiagPage.qml:174
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon on the bus, GetState in %1 ms"
+msgstr "サービスはバス上、GetState %1 ms"
+
+#. i18n: %1 = error, %2 = systemd unit state
+#: ui/DiagPage.qml:176
+msgctxt "selftest check"
+msgid "daemon unreachable (%1); unit state: %2"
+msgstr "サービスに到達できません (%1)。ユニットの状態: %2"
+
+#: ui/DiagPage.qml:177
+msgctxt "selftest check, %1 = error"
+msgid "daemon last_error: %1"
+msgstr "サービスの last_error: %1"
+
+#: ui/DiagPage.qml:178
+msgctxt "selftest check"
+msgid "keyboard connected but never acquired"
+msgstr "キーボードは接続中ですが、一度も取得されていません"
+
+#: ui/DiagPage.qml:179
+msgctxt "selftest check, %1 = hours"
+msgid "keyboard connected, last acquisition %1 h ago"
+msgstr "キーボード接続中、最終取得 %1 時間前"
+
+#: ui/DiagPage.qml:180
+msgctxt "selftest check, %1 = minutes"
+msgid "last acquisition %1 min ago"
+msgstr "最終取得 %1 分前"
+
+#: ui/DiagPage.qml:181
+msgctxt "selftest check"
+msgid "keyboard not connected (nothing to acquire)"
+msgstr "キーボード未接続 (取得対象なし)"
+
+#: ui/DiagPage.qml:182
+msgctxt "selftest check"
+msgid "no daemon warning since the last pass"
+msgstr "前回の確認以降、サービスの警告なし"
+
+#: ui/DiagPage.qml:183
+msgctxt "selftest check, %2 = journal line"
+msgid "%1 daemon warning/error line since the last pass, last: %2"
+msgid_plural "%1 daemon warning/error lines since the last pass, last: %2"
+msgstr[0] "前回の確認以降、サービスの警告/エラー行 %1 件、最終: %2"
+
+#: ui/DiagPage.qml:184
+msgctxt "selftest check"
+msgid "user journal not readable"
+msgstr "ユーザージャーナルを読み取れません"
+
+#: ui/DiagPage.qml:185
+msgctxt "selftest check"
+msgid "no bluetoothd error since the last pass"
+msgstr "前回の確認以降、bluetoothd のエラーなし"
+
+#: ui/DiagPage.qml:186
+msgctxt "selftest check"
+msgid "%1 bluetoothd error line since the last pass"
+msgid_plural "%1 bluetoothd error lines since the last pass"
+msgstr[0] "前回の確認以降、bluetoothd のエラー行 %1 件"
+
+#: ui/DiagPage.qml:187
+msgctxt "selftest check"
+msgid "system journal not readable (group systemd-journal)"
+msgstr "システムジャーナルを読み取れません (グループ systemd-journal)"
+
+#: ui/DiagPage.qml:188
+msgctxt "selftest check"
+msgid "no crash of our programs since the last pass"
+msgstr "前回の確認以降、当プログラムのクラッシュなし"
+
+#. i18n: %1 = program, %2 = signal, %3 = process id
+#: ui/DiagPage.qml:190
+msgctxt "selftest check"
+msgid "%1 crashed (%2, pid %3): coredumpctl info %3"
+msgstr "%1 がクラッシュしました (%2、pid %3): coredumpctl info %3"
+
+#: ui/DiagPage.qml:191
+msgctxt "selftest check"
+msgid "coredump journal not readable"
+msgstr "coredump ジャーナルを読み取れません"
+
+#. i18n: %1 = directory, %2 = free MiB, %3 = total MiB
+#: ui/DiagPage.qml:193
+msgctxt "selftest check"
+msgid "%1: %2 MiB free of %3 MiB"
+msgstr "%1: 空き %2 MiB / %3 MiB"
+
+#: ui/DiagPage.qml:194
+msgctxt "selftest check, %1 = directory"
+msgid "%1: statvfs failed"
+msgstr "%1: statvfs が失敗しました"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check, history size"
+msgid "%1 line"
+msgid_plural "%1 lines"
+msgstr[0] "%1 行"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check"
+msgid "%2: %3, %4 KiB, %1 unreadable line in the last 1000"
+msgid_plural "%2: %3, %4 KiB, %1 unreadable lines in the last 1000"
+msgstr[0] "%2: %3、%4 KiB、直近 1000 行中 %1 行が読み取り不能"
+
+#: ui/DiagPage.qml:197
+msgctxt "selftest check"
+msgid "no history yet"
+msgstr "履歴はまだありません"
+
+#: ui/DiagPage.qml:198
+msgctxt "selftest check, %1 = doctor verdict"
+msgid "akmctl doctor: %1"
+msgstr "akmctl doctor: %1"
+
+#: ui/DiagPage.qml:199
+msgctxt "selftest check, %1 = seconds"
+msgid ""
+"akmctl doctor did not finish within %1 s (BlueZ or the daemon does not "
+"answer)"
+msgstr ""
+"akmctl doctor が %1 秒以内に終了しませんでした (BlueZ またはサービスが応答し"
+"ません)"
+
+#: ui/DiagPage.qml:208 ui/DiagPage.qml:223
+msgid "no answer within 60 seconds"
+msgstr "60 秒以内に応答がありません"
+
+#: ui/DiagPage.qml:259
+msgid "Check the link"
+msgstr "接続を確認"
+
+#: ui/DiagPage.qml:262
+msgid ""
+"Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. "
+"Reads only."
+msgstr ""
+"akmctl doctor を実行します: Bluetooth、ペアリング、設定、ジャーナル、サービ"
+"ス。読み取りのみ。"
+
+#: ui/DiagPage.qml:266
+msgid "Self-check"
+msgstr "セルフチェック"
+
+#: ui/DiagPage.qml:268
+msgid ""
+"Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
+msgstr ""
+"akmctl selftest を実行します: サービス、接続、ジャーナル、クラッシュ、ディス"
+"ク。読み取りのみ。"
+
+#: ui/DiagPage.qml:273
+msgid "Reconnect"
+msgstr "再接続"
+
+#: ui/DiagPage.qml:276
+msgid ""
+"Asks the service to page the keyboard now (at most once every 20 seconds)"
+msgstr ""
+"今すぐキーボードを呼び出すようサービスに依頼します (最大で 20 秒に 1 回)"
+
+#: ui/DiagPage.qml:282
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr "再接続を要求しました。キーボードがスリープ中ならキーを押してください。"
+
+#: ui/DiagPage.qml:283
+msgid "refused by the service (asleep, too soon, or pairing refused)"
+msgstr ""
+"サービスが拒否しました (スリープ中、間隔が短すぎる、またはペアリング拒否)"
+
+#: ui/DiagPage.qml:283
+msgid "Reconnection not requested: %1"
+msgstr "再接続を要求できませんでした: %1"
+
+#: ui/DiagPage.qml:289
+msgid "Copy the diagnosis"
+msgstr "診断結果をコピー"
+
+#: ui/DiagPage.qml:294
+msgid "Diagnosis copied: paste it into a bug report."
+msgstr "診断結果をコピーしました: バグ報告に貼り付けてください。"
+
+#: ui/DiagPage.qml:299
+msgid "Documentation"
+msgstr "ドキュメント"
+
+#: ui/DiagPage.qml:310
+msgctxt "@title:group"
+msgid "Link check (akmctl doctor)"
+msgstr "接続の確認 (akmctl doctor)"
+
+#: ui/DiagPage.qml:316
+msgid "Link check running"
+msgstr "接続を確認中"
+
+#: ui/DiagPage.qml:327
+msgctxt "level, advice"
+msgid "Verdict: %1 — %2"
+msgstr "判定: %1 — %2"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379 ui/KeysPage.qml:38
+msgid "Failed: %1"
+msgstr "失敗: %1"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379
+msgid "Not run yet."
+msgstr "まだ実行していません。"
+
+#: ui/DiagPage.qml:364
+msgctxt "@title:group"
+msgid "Self-check (akmctl selftest)"
+msgstr "セルフチェック (akmctl selftest)"
+
+#: ui/DiagPage.qml:370
+msgid "Self-check running"
+msgstr "セルフチェック実行中"
+
+#: ui/DiagPage.qml:378
+msgid "Verdict: %1"
+msgstr "判定: %1"
+
+#: ui/KeysPage.qml:33
+msgctxt "result, then the detail"
+msgid "%1 — %2"
+msgstr "%1 — %2"
+
+#: ui/KeysPage.qml:35
+msgid ""
+"No answer in time: nothing was confirmed. Check the state before trying "
+"again."
+msgstr ""
+"時間内に応答がありません: 何も確定していません。もう一度試す前に状態を確認し"
+"てください。"
+
+#: ui/KeysPage.qml:37 ui/main.qml:38
+msgid "unknown error"
+msgstr "不明なエラー"
+
+#: ui/KeysPage.qml:38
+msgctxt "parameter, error"
+msgid "%1: %2"
+msgstr "%1: %2"
+
+#: ui/KeysPage.qml:45
+msgctxt "fnmode 0"
+msgid "0 — Fn key disabled"
+msgstr "0 — Fn キー無効"
+
+#: ui/KeysPage.qml:46
+msgctxt "fnmode 1"
+msgid "1 — special functions first (Apple legend), F1-F12 with fn"
+msgstr "1 — 特殊機能優先 (Apple の刻印)、Fn と組み合わせて F1-F12"
+
+#: ui/KeysPage.qml:47
+msgctxt "fnmode 2"
+msgid "2 — F1-F12 first, special functions with fn"
+msgstr "2 — F1-F12 優先、Fn と組み合わせて特殊機能"
+
+#: ui/KeysPage.qml:48
+msgctxt "fnmode 3"
+msgid "3 — automatic (same as 1 on this keyboard)"
+msgstr "3 — 自動 (このキーボードでは 1 と同じ)"
+
+#: ui/KeysPage.qml:49
+msgctxt "fnmode 4"
+msgid "4 — F1-F12 only, special functions disabled"
+msgstr "4 — F1-F12 のみ、特殊機能無効"
+
+#: ui/KeysPage.qml:50
+msgid "unknown"
+msgstr "不明"
+
+#: ui/KeysPage.qml:60
+msgctxt "KDE shortcut action"
+msgid "KDE: %1"
+msgstr "KDE: %1"
+
+#: ui/KeysPage.qml:61
+msgid "no KDE shortcut"
+msgstr "KDE ショートカットなし"
+
+#: ui/KeysPage.qml:81
+msgid ""
+"The key table could not be read: the keyboard service did not answer in time."
+msgstr ""
+"キーテーブルを読み取れませんでした: キーボードサービスが時間内に応答しません"
+"でした。"
+
+#: ui/KeysPage.qml:82
+msgid "The key table could not be read: %1"
+msgstr "キー表を読み取れませんでした: %1"
+
+#: ui/KeysPage.qml:85 ui/KeysPage.qml:101 ui/StatePage.qml:108
+msgid "Try again"
+msgstr "再試行"
+
+#: ui/KeysPage.qml:98
+msgid "The key mapping could not be read: %1"
+msgstr "キーのマッピングを読み取れませんでした: %1"
+
+#: ui/KeysPage.qml:114
+msgctxt "@title:group"
+msgid "What each key does now"
+msgstr "各キーの現在の動作"
+
+#: ui/KeysPage.qml:123
+msgid ""
+"Fn mode %1. Read from the kernel and the installed mapping; no key press is "
+"read."
+msgstr ""
+"Fn モード %1。カーネルとインストール済みのマッピングから読み取っています。"
+"キー入力は読み取りません。"
+
+#: ui/KeysPage.qml:124
+msgid "Reading the key table…"
+msgstr "キー表を読み取っています…"
+
+#: ui/KeysPage.qml:134
+msgctxt "@title:column"
+msgid "Key"
+msgstr "キー"
+
+#: ui/KeysPage.qml:135
+msgctxt "@title:column"
+msgid "Pressed alone"
+msgstr "単独で押す"
+
+#: ui/KeysPage.qml:136
+msgctxt "@title:column"
+msgid "With fn"
+msgstr "Fn と一緒"
+
+#: ui/KeysPage.qml:149
+msgctxt "key, legend, alone, with fn"
+msgid "%1 (%2): alone %3; with fn %4"
+msgstr "%1 (%2): 単独 %3; Fn と一緒 %4"
+
+#: ui/KeysPage.qml:185
+msgid "* = changed by the installed manual mapping."
+msgstr "* = インストール済みの手動マッピングで変更。"
+
+#: ui/KeysPage.qml:185
+msgid ""
+"The active profile differs from what is installed: use “Install the mapping”."
+msgstr ""
+"アクティブなプロファイルがインストール済みのものと異なります: 「マッピングを"
+"インストール」を使ってください。"
+
+#: ui/KeysPage.qml:193
+msgctxt "@title:group"
+msgid "Fn key and modifier keys"
+msgstr "Fn キーと修飾キー"
+
+#: ui/KeysPage.qml:200
+msgid ""
+"These are parameters of the kernel driver hid_apple: they apply to ALL Apple "
+"keyboards of this computer, are kept after a restart, and each change asks "
+"for the administrator password."
+msgstr ""
+"これはカーネルドライバ hid_apple のパラメータです: このコンピュータのすべて"
+"の Apple キーボードに適用され、再起動後も保持され、変更のたびに管理者パスワー"
+"ドを求めます。"
+
+#: ui/KeysPage.qml:205
+msgid "Fn mode:"
+msgstr "Fn モード:"
+
+#: ui/KeysPage.qml:209
+msgid "Fn mode"
+msgstr "Fn モード"
+
+#: ui/KeysPage.qml:213
+msgid "Option and Command:"
+msgstr "Option と Command:"
+
+#: ui/KeysPage.qml:215
+msgid "Mac order (Option = Alt, Command = Meta)"
+msgstr "Mac の配置 (Option = Alt、Command = Meta)"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on both sides (PC order)"
+msgstr "左右とも入れ替え (PC の配置)"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on the left side only"
+msgstr "左側のみ入れ替え"
+
+#: ui/KeysPage.qml:217
+msgid "Option and Command keys"
+msgstr "Option キーと Command キー"
+
+#: ui/KeysPage.qml:222
+msgid "Control and Command:"
+msgstr "Control と Command:"
+
+#: ui/KeysPage.qml:223
+msgid "Swap Control and Command"
+msgstr "Control と Command を入れ替える"
+
+#: ui/KeysPage.qml:228
+msgid "fn and left Control:"
+msgstr "Fn と左 Control:"
+
+#: ui/KeysPage.qml:229
+msgid "Swap fn and the left Control key"
+msgstr "Fn と左 Control キーを入れ替える"
+
+#: ui/KeysPage.qml:234
+msgid "ISO keys ` and <:"
+msgstr "ISO キー ` と <:"
+
+#: ui/KeysPage.qml:236
+msgid "automatic"
+msgstr "自動"
+
+#: ui/KeysPage.qml:236
+msgid "as engraved"
+msgstr "刻印どおり"
+
+#: ui/KeysPage.qml:236
+msgid "swapped"
+msgstr "入れ替え"
+
+#: ui/KeysPage.qml:238
+msgid "ISO keys"
+msgstr "ISO キー"
+
+#: ui/KeysPage.qml:244
+msgid "Apply these parameters…"
+msgstr "これらのパラメータを適用…"
+
+#: ui/KeysPage.qml:257
+msgid "Asks for the administrator password once per changed parameter"
+msgstr "変更したパラメータごとに管理者パスワードを 1 回求めます"
+
+#: ui/KeysPage.qml:264
+msgid "Parameters applied to every Apple keyboard."
+msgstr "すべての Apple キーボードにパラメータを適用しました。"
+
+#: ui/KeysPage.qml:282
+msgid "Undo changes"
+msgstr "変更を元に戻す"
+
+#: ui/KeysPage.qml:299
+msgid "Waiting for the authentication"
+msgstr "認証を待っています"
+
+#: ui/KeysPage.qml:305
+msgctxt "@title:group"
+msgid "Manual key mapping"
+msgstr "手動キーマッピング"
+
+#: ui/KeysPage.qml:309
+msgid "Profile:"
+msgstr "プロファイル:"
+
+#: ui/KeysPage.qml:313
+msgid "Preset:"
+msgstr "プリセット:"
+
+#: ui/KeysPage.qml:317
+msgid "none (parameters left as they are)"
+msgstr "なし (パラメータはそのまま)"
+
+#: ui/KeysPage.qml:319
+msgid "Preset of the profile"
+msgstr "プロファイルのプリセット"
+
+#: ui/KeysPage.qml:322
+msgid "Use this preset"
+msgstr "このプリセットを使用"
+
+#: ui/KeysPage.qml:328
+msgid "Preset saved in the profile; use “Install the mapping” to apply it."
+msgstr ""
+"プリセットをプロファイルに保存しました。適用するには「マッピングをインストー"
+"ル」を使ってください。"
+
+#: ui/KeysPage.qml:334
+msgid "Remapped keys:"
+msgstr "再割り当てしたキー:"
+
+#: ui/KeysPage.qml:339
+msgid "none"
+msgstr "なし"
+
+#: ui/KeysPage.qml:348
+msgctxt "key -> code"
+msgid "%1 → %2"
+msgstr "%1 → %2"
+
+#: ui/KeysPage.qml:353
+msgid "Remove"
+msgstr "削除"
+
+#: ui/KeysPage.qml:356
+msgid "Remove the mapping of %1"
+msgstr "%1 のマッピングを削除"
+
+#: ui/KeysPage.qml:363
+msgid "Mapping removed from the profile."
+msgstr "プロファイルからマッピングを削除しました。"
+
+#: ui/KeysPage.qml:371
+msgid "Remap:"
+msgstr "再割り当て:"
+
+#: ui/KeysPage.qml:376
+msgid "Key to remap"
+msgstr "再割り当てするキー"
+
+#: ui/KeysPage.qml:382
+msgid "Linux key code (KEY_…)"
+msgstr "Linux のキーコード (KEY_…)"
+
+#: ui/KeysPage.qml:387
+msgid "Add"
+msgstr "追加"
+
+#: ui/KeysPage.qml:395
+msgid "Mapping saved in the profile; use “Install the mapping” to apply it."
+msgstr ""
+"マッピングをプロファイルに保存しました。適用するには「マッピングをインストー"
+"ル」を使ってください。"
+
+#: ui/KeysPage.qml:402
+msgid "Install the mapping…"
+msgstr "マッピングをインストール…"
+
+#: ui/KeysPage.qml:405
+msgid ""
+"Installs the active profile (udev hwdb and its parameters); asks for the "
+"administrator password"
+msgstr ""
+"アクティブなプロファイル (udev hwdb とそのパラメータ) をインストールします。"
+"管理者パスワードを求めます"
+
+#: ui/KeysPage.qml:410
+msgid "Mapping installed."
+msgstr "マッピングをインストールしました。"
+
+#: ui/KeysPage.qml:415
+msgid "Back to the kernel mapping…"
+msgstr "カーネルのマッピングに戻す…"
+
+#: ui/KeysPage.qml:422
+msgid "Kernel mapping restored."
+msgstr "カーネルのマッピングに戻しました。"
+
+#: ui/KeysPage.qml:430
+msgctxt "@title:group"
+msgid "KDE shortcuts"
+msgstr "KDE ショートカット"
+
+#: ui/KeysPage.qml:433
+msgid "F4 (Launchpad):"
+msgstr "F4 (Launchpad):"
+
+#: ui/KeysPage.qml:435
+msgid "Bind F4 to the application launcher"
+msgstr "F4 をアプリケーションランチャーに割り当てる"
+
+#: ui/KeysPage.qml:438
+msgid ""
+"Adds the missing KDE shortcut for the Launch (D) key, never replacing an "
+"existing one"
+msgstr ""
+"Launch (D) キーに不足している KDE ショートカットを追加します。既存のものは置"
+"き換えません"
+
+#: ui/KeysPage.qml:443
+msgid "KDE shortcuts updated."
+msgstr "KDE ショートカットを更新しました。"
+
+#: ui/KeysPage.qml:454
+msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
+msgstr "ターミナルで元に戻す: akmctl keymap kde-apply --undo"
+
+#: ui/NamePage.qml:46
+msgid "akmctl stopped abruptly before giving its verdict (crash or signal)."
+msgstr "akmctl が判定を出す前に突然終了しました (クラッシュまたはシグナル)。"
+
+#: ui/NamePage.qml:49
+msgid ""
+"No answer in time. Nothing more is attempted; look at the stored name above "
+"in a moment."
+msgstr ""
+"時間内に応答がありません。これ以上は試みません。しばらくしてから上の保存名を"
+"確認してください。"
+
+#: ui/NamePage.qml:52
+msgid "Check passed: “%1” can be written. Nothing was written."
+msgstr "確認に合格: 「%1」を書き込めます。何も書き込んでいません。"
+
+#: ui/NamePage.qml:55
+msgid ""
+"“%1” is now stored in the keyboard: written, then read back identical. This "
+"computer may show the old name until a later connection."
+msgstr ""
+"「%1」がキーボードに保存されました: 書き込み後に読み戻して一致しました。次回"
+"接続するまで、このコンピュータには古い名前が表示されることがあります。"
+
+#: ui/NamePage.qml:58
+msgid ""
+"The name was written, but it could not be read back. Look at the stored name "
+"above in a moment.\n"
+"%1"
+msgstr ""
+"名前は書き込みましたが、読み戻せませんでした。しばらくしてから上の保存名を確"
+"認してください。\n"
+"%1"
+
+#: ui/NamePage.qml:61
+msgid ""
+"The name was written, but the keyboard reads back another one.\n"
+"%1"
+msgstr ""
+"名前は書き込みましたが、キーボードは別の名前を返しました。\n"
+"%1"
+
+#: ui/NamePage.qml:64
+msgid ""
+"The write failed on its way: the name may or may not have been written. Look "
+"at the stored name above in a moment.\n"
+"%1"
+msgstr ""
+"書き込みが途中で失敗しました: 名前が書き込まれたかどうかは不明です。しばらく"
+"してから上の保存名を確認してください。\n"
+"%1"
+
+#: ui/NamePage.qml:67
+msgid ""
+"Check failed, nothing was written.\n"
+"%1"
+msgstr ""
+"確認に失敗しました。何も書き込んでいません。\n"
+"%1"
+
+#: ui/NamePage.qml:70
+msgid ""
+"Not written.\n"
+"%1"
+msgstr ""
+"書き込みませんでした。\n"
+"%1"
+
+#: ui/NamePage.qml:81
+msgctxt "@title:window"
+msgid "Write the name into the keyboard"
+msgstr "名前をキーボードに書き込む"
+
+#: ui/NamePage.qml:86
+msgctxt "@action:button"
+msgid "Write"
+msgstr "書き込む"
+
+#: ui/NamePage.qml:97
+msgid "Write “%1” into the keyboard's memory?"
+msgstr "「%1」をキーボードのメモリに書き込みますか?"
+
+#: ui/NamePage.qml:114
+msgctxt "@title:group"
+msgid "Name on this computer"
+msgstr "このコンピュータでの名前"
+
+#: ui/NamePage.qml:118
+msgid "Shown as:"
+msgstr "表示名:"
+
+#: ui/NamePage.qml:125
+msgid "Keyboard's own name:"
+msgstr "キーボード本来の名前:"
+
+#: ui/NamePage.qml:133
+msgid "New name:"
+msgstr "新しい名前:"
+
+#: ui/NamePage.qml:137
+msgid "e.g. Office keyboard"
+msgstr "例: オフィスのキーボード"
+
+#: ui/NamePage.qml:139
+msgid "New name of the keyboard on this computer"
+msgstr "このコンピュータでのキーボードの新しい名前"
+
+#: ui/NamePage.qml:145
+msgid "Rename"
+msgstr "名前を変更"
+
+#: ui/NamePage.qml:153
+msgid "Renamed to “%1” on this computer."
+msgstr "このコンピュータでの名前を「%1」に変更しました。"
+
+#: ui/NamePage.qml:153 ui/NamePage.qml:168
+msgid "Not renamed: %1"
+msgstr "名前を変更できませんでした: %1"
+
+#: ui/NamePage.qml:160
+msgid "Use the keyboard's own name"
+msgstr "キーボード本来の名前を使う"
+
+#: ui/NamePage.qml:168
+msgid "The keyboard's own name is used again."
+msgstr "キーボード本来の名前に戻しました。"
+
+#: ui/NamePage.qml:180
+msgid "Renaming needs the keyboard service."
+msgstr "名前の変更にはキーボードサービスが必要です。"
+
+#: ui/NamePage.qml:181
+msgid "No keyboard is known yet."
+msgstr "まだキーボードが認識されていません。"
+
+#: ui/NamePage.qml:182
+msgid ""
+"Only this computer sees this name (Bluetooth alias); the keyboard itself is "
+"not changed."
+msgstr ""
+"この名前はこのコンピュータでのみ表示されます (Bluetooth エイリアス)。キーボー"
+"ド自体は変更されません。"
+
+#: ui/NamePage.qml:187
+msgctxt "@title:group"
+msgid "Name stored inside the keyboard"
+msgstr "キーボード内に保存された名前"
+
+#: ui/NamePage.qml:191
+msgid "Stored now:"
+msgstr "現在の保存名:"
+
+#: ui/NamePage.qml:192
+msgid "not read yet (the service reads it once per connection)"
+msgstr "まだ読み取っていません (サービスは接続ごとに 1 回読み取ります)"
+
+#: ui/NamePage.qml:199
+msgid "Name to write:"
+msgstr "書き込む名前:"
+
+#: ui/NamePage.qml:203
+msgid "1 to 32 ASCII characters"
+msgstr "ASCII 1〜32 文字"
+
+#: ui/NamePage.qml:205
+msgid "Name to write into the keyboard"
+msgstr "キーボードに書き込む名前"
+
+#: ui/NamePage.qml:206
+msgid ""
+"1 to 32 printable ASCII characters, no leading or trailing space, no "
+"backslash"
+msgstr "印字可能な ASCII 1〜32 文字、先頭・末尾の空白とバックスラッシュは不可"
+
+#: ui/NamePage.qml:212
+msgid "Check (nothing written)"
+msgstr "確認 (書き込みなし)"
+
+#: ui/NamePage.qml:215
+msgid ""
+"Runs every check that precedes the write and saves the current name; nothing "
+"is written"
+msgstr ""
+"書き込み前のすべての確認を行い、現在の名前をバックアップします。何も書き込み"
+"ません"
+
+#: ui/NamePage.qml:221
+msgid "Write the name into the keyboard…"
+msgstr "名前をキーボードに書き込む…"
+
+#: ui/NamePage.qml:224
+msgid ""
+"Asks for a confirmation, then writes the name into the keyboard and reads it "
+"back"
+msgstr "確認を求めてから、名前をキーボードに書き込み、読み戻します"
+
+#: ui/NamePage.qml:244
+msgid ""
+"Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
+"no backslash."
+msgstr ""
+"拒否: 印字可能な ASCII 1〜32 文字、先頭・末尾の空白とバックスラッシュは不可で"
+"す。"
+
+#: ui/NamePage.qml:245
+msgid ""
+"Every computer and phone sees this name. The current name is saved first, "
+"the keyboard is checked, the name is written once and read back at once. Not "
+"measured: whether the name survives a battery change."
+msgstr ""
+"この名前はすべてのコンピュータと電話に表示されます。まず現在の名前をバック"
+"アップし、キーボードを確認してから、名前を 1 回書き込み、すぐに読み戻します。"
+"未測定: 電池交換後も名前が残るかどうか。"
+
+#: ui/NamePage.qml:265
+msgctxt "@title:group"
+msgid "Same operations, to copy into a terminal"
+msgstr "同じ操作 (ターミナルにコピー用)"
+
+#: ui/NamePage.qml:270
+msgid ""
+"Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
+"authentication):"
+msgstr ""
+"キーボード内に保存された名前のプレビュー (バイトを表示、何も書き込まず、認証"
+"なし):"
+
+#: ui/NamePage.qml:272
+msgid "Every check and the backup of the current name (writes nothing):"
+msgstr "すべての確認と現在の名前のバックアップ (何も書き込みません):"
+
+#: ui/NamePage.qml:274
+msgid ""
+"The write itself (checks, backup, one confirmation, one write, read back):"
+msgstr "書き込み本体 (確認、バックアップ、確認 1 回、書き込み 1 回、読み戻し):"
+
+#: ui/NamePage.qml:276
+msgid ""
+"Forget the keyboard cleanly, as macOS does, then pair it again (only after "
+"typing the confirmation word):"
+msgstr ""
+"macOS と同様にキーボードをきれいに削除してから再ペアリングする (確認用の単語"
+"を入力した後のみ):"
+
+#: ui/NamePage.qml:299
+msgid "Type a valid name to write above first"
+msgstr "まず上に有効な名前を入力してください"
+
+#: ui/NamePage.qml:301
+msgid "Command: %1"
+msgstr "コマンド: %1"
+
+#: ui/NamePage.qml:305
+msgid "Copy"
+msgstr "コピー"
+
+#: ui/NamePage.qml:307
+msgid "Copy the command"
+msgstr "コマンドをコピー"
+
+#: ui/NamePage.qml:312
+msgid "Command copied."
+msgstr "コマンドをコピーしました。"
+
+#: ui/StatePage.qml:37
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 日"
+
+#: ui/StatePage.qml:38
+msgid "≈ %1 h"
+msgstr "≈ %1 時間"
+
+#: ui/StatePage.qml:45
+#, no-javascript-format
+msgctxt "percentage"
+msgid "%1%"
+msgstr "%1%"
+
+#: ui/StatePage.qml:49
+msgid "%1 second ago"
+msgid_plural "%1 seconds ago"
+msgstr[0] "%1 秒前"
+
+#: ui/StatePage.qml:50
+msgid "%1 minute ago"
+msgid_plural "%1 minutes ago"
+msgstr[0] "%1 分前"
+
+#: ui/StatePage.qml:51
+msgid "%1 hour ago"
+msgid_plural "%1 hours ago"
+msgstr[0] "%1 時間前"
+
+#: ui/StatePage.qml:52
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "%1 日前"
+
+#: ui/StatePage.qml:67
+msgid "rssi-helper not installed"
+msgstr "rssi-helper 未インストール"
+
+#: ui/StatePage.qml:68
+msgid "see akmctl doctor"
+msgstr "akmctl doctor を参照"
+
+#: ui/StatePage.qml:69
+msgid "not measured (%1)"
+msgstr "未測定 (%1)"
+
+#: ui/StatePage.qml:73 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "excellent"
+msgstr "非常に良好"
+
+#: ui/StatePage.qml:74 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "good"
+msgstr "良好"
+
+#: ui/StatePage.qml:75 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "weak"
+msgstr "弱い"
+
+#: ui/StatePage.qml:78
+msgctxt "signal quality, then the relative value in dB (0 = ideal range)"
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+#: ui/StatePage.qml:82
+msgid "up to date"
+msgstr "最新"
+
+#: ui/StatePage.qml:83
+msgid "a newer version exists (this module never updates the firmware)"
+msgstr ""
+"新しいバージョンがあります (このモジュールはファームウェアを更新しません)"
+
+#: ui/StatePage.qml:84
+msgid "model not in the table"
+msgstr "モデルが表にありません"
+
+#: ui/StatePage.qml:85
+msgid "not assessed yet"
+msgstr "まだ評価されていません"
+
+#: ui/StatePage.qml:94
+msgid "No data: the keyboard service is not running"
+msgstr "データなし: キーボードサービスが動作していません"
+
+#: ui/StatePage.qml:95
+msgid ""
+"Use “Start the service” above, or run: systemctl --user start apple-kb-"
+"monitord.service"
+msgstr ""
+"上の「サービスを起動」を使うか、次を実行してください: systemctl --user start "
+"apple-kb-monitord.service"
+
+#: ui/StatePage.qml:119
+msgid "Loading the keyboard state"
+msgstr "キーボードの状態を読み込んでいます"
+
+#: ui/StatePage.qml:128
+msgctxt "@title:group"
+msgid "Keyboard"
+msgstr "キーボード"
+
+#: ui/StatePage.qml:132
+msgid "Name:"
+msgstr "名前:"
+
+#: ui/StatePage.qml:136
+msgid "Name: %1"
+msgstr "名前: %1"
+
+#: ui/StatePage.qml:140
+msgid "Model:"
+msgstr "モデル:"
+
+#: ui/StatePage.qml:147
+msgid "Address:"
+msgstr "アドレス:"
+
+#: ui/StatePage.qml:161
+msgid "connected"
+msgstr "接続済み"
+
+#: ui/StatePage.qml:161
+msgid "disconnected"
+msgstr "切断"
+
+#: ui/StatePage.qml:162
+msgid "Connection: %1"
+msgstr "接続: %1"
+
+#: ui/StatePage.qml:167
+msgid "Problem:"
+msgstr "問題:"
+
+#: ui/StatePage.qml:176
+msgctxt "@title:group"
+msgid "Battery"
+msgstr "電池"
+
+#: ui/StatePage.qml:180
+msgid "Keyboard indication:"
+msgstr "キーボードの表示:"
+
+#: ui/StatePage.qml:182
+msgid "Keyboard indication: %1"
+msgstr "キーボードの表示: %1"
+
+#: ui/StatePage.qml:186
+msgid "Apple display:"
+msgstr "Apple の表示:"
+
+#: ui/StatePage.qml:188
+msgctxt "percentage as macOS shows it"
+msgid "%1 (as macOS shows it)"
+msgstr "%1 (macOS と同じ表示)"
+
+#: ui/StatePage.qml:192
+msgid "Estimated charge:"
+msgstr "推定充電量:"
+
+#: ui/StatePage.qml:195
+msgid "new batteries: no estimate during the first two days"
+msgstr "新しい電池: 最初の 2 日間は推定なし"
+
+#: ui/StatePage.qml:196
+msgctxt "estimate, low bound, high bound, chemistry"
+msgid "%1 (between %2 and %3, %4 batteries)"
+msgstr "%1 (%2〜%3、電池: %4)"
+
+#: ui/StatePage.qml:198
+msgid "not available"
+msgstr "利用不可"
+
+#: ui/StatePage.qml:201
+msgid "Estimated charge: %1"
+msgstr "推定充電量: %1"
+
+#: ui/StatePage.qml:205
+msgid "Voltage:"
+msgstr "電圧:"
+
+#: ui/StatePage.qml:207
+msgctxt "volts"
+msgid "%1 V"
+msgstr "%1 V"
+
+#: ui/StatePage.qml:211
+msgid "Remaining:"
+msgstr "残り:"
+
+#: ui/StatePage.qml:217
+msgid "Batteries installed:"
+msgstr "電池の装着日:"
+
+#: ui/StatePage.qml:225
+msgctxt "@title:group"
+msgid "Link"
+msgstr "接続"
+
+#: ui/StatePage.qml:229
+msgid "Signal:"
+msgstr "信号:"
+
+#: ui/StatePage.qml:231
+msgid "Signal: %1"
+msgstr "信号: %1"
+
+#: ui/StatePage.qml:236
+msgid "Last measurement:"
+msgstr "最終測定:"
+
+#: ui/StatePage.qml:237
+msgid "never"
+msgstr "なし"
+
+#: ui/StatePage.qml:238
+msgid "Last measurement: %1"
+msgstr "最終測定: %1"
+
+#: ui/StatePage.qml:243
+msgctxt "@title:group"
+msgid "Firmware"
+msgstr "ファームウェア"
+
+#: ui/StatePage.qml:247 ui/StatePage.qml:272
+msgid "Version:"
+msgstr "バージョン:"
+
+#: ui/StatePage.qml:253
+msgid "Latest known:"
+msgstr "既知の最新:"
+
+#: ui/StatePage.qml:260
+msgid "Status:"
+msgstr "状態:"
+
+#: ui/StatePage.qml:268
+msgctxt "@title:group"
+msgid "Service"
+msgstr "サービス"
+
+#: ui/StatePage.qml:277
+msgid "Last error:"
+msgstr "最後のエラー:"
+
+#: ui/Store.qml:158
+msgid "The keyboard service (apple-kb-monitord) is not running"
+msgstr "キーボードサービス (apple-kb-monitord) が実行されていません"
+
+#: ui/Store.qml:159
+msgid "command not allowed"
+msgstr "許可されていないコマンドです"
+
+#: ui/Store.qml:160
+msgid "no answer in time"
+msgstr "時間内に応答なし"
+
+#: ui/Store.qml:161
+msgctxt "%1 is a JSON parser error"
+msgid "unreadable reply: %1"
+msgstr "読み取れない応答: %1"
+
+#: ui/main.qml:26
+msgid "The service could not be started: %1"
+msgstr "サービスを起動できませんでした: %1"
+
+#: ui/main.qml:31
+msgid "Starting…"
+msgstr "起動中…"
+
+#: ui/main.qml:31
+msgid "Start the service"
+msgstr "サービスを起動"
+
+#: ui/main.qml:49
+msgid "Sections of the Apple keyboard settings"
+msgstr "Apple キーボード設定のセクション"
+
+#: ui/main.qml:50
+msgctxt "@title:tab"
+msgid "State"
+msgstr "状態"
+
+#: ui/main.qml:51
+msgctxt "@title:tab"
+msgid "Keys"
+msgstr "キー"
+
+#: ui/main.qml:52
+msgctxt "@title:tab"
+msgid "Notifications"
+msgstr "通知"
+
+#: ui/main.qml:53
+msgctxt "@title:tab"
+msgid "Name"
+msgstr "名前"
+
+#: ui/main.qml:54
+msgctxt "@title:tab"
+msgid "Diagnostics"
+msgstr "診断"

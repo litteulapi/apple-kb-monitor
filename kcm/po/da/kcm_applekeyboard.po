@@ -1,0 +1,2033 @@
+# Danish translation of the System Settings module kcm_applekeyboard.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:57+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Danish\n"
+"Language: da\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: ui/AlertsPage.qml:50 ui/StatePage.qml:104
+msgid ""
+"The keyboard service did not answer within 5 seconds. It is busy or stuck; "
+"the values shown may be old."
+msgstr ""
+"Tastaturtjenesten svarede ikke inden for 5 sekunder. Den er optaget eller "
+"hængt; de viste værdier kan være gamle."
+
+#: ui/AlertsPage.qml:51 ui/StatePage.qml:105
+msgid "The keyboard service answered with an error: %1"
+msgstr "Tastaturtjenesten svarede med en fejl: %1"
+
+#: ui/AlertsPage.qml:230 ui/main.qml:27
+msgid ""
+"The keyboard service (apple-kb-monitord) is not running: every setting is "
+"read and written by it, nothing can be shown or changed until it starts."
+msgstr ""
+"Tastaturtjenesten (apple-kb-monitord) kører ikke: den læser og skriver alle "
+"indstillinger, så intet kan vises eller ændres, før den starter."
+
+#: ui/AlertsPage.qml:235
+msgid ""
+"Not saved: the keyboard service did not answer in time, the settings could "
+"not be read. Try again in a moment."
+msgstr ""
+"Ikke gemt: tastaturtjenesten svarede ikke i tide, indstillingerne kunne ikke "
+"læses. Prøv igen om lidt."
+
+#: ui/AlertsPage.qml:236
+msgid ""
+"Not saved: the keyboard service could not read the settings (%1). Try again "
+"in a moment."
+msgstr ""
+"Ikke gemt: tastaturtjenesten kunne ikke læse indstillingerne (%1). Prøv igen "
+"om lidt."
+
+#: ui/AlertsPage.qml:240
+msgid ""
+"Not saved: the settings file could not be read (%1), so it is not written "
+"over. Fix the file or move it away, then reopen this page."
+msgstr ""
+"Ikke gemt: indstillingsfilen kunne ikke læses (%1), så den overskrives ikke. "
+"Ret eller flyt filen, og åbn derefter siden igen."
+
+#: ui/AlertsPage.qml:245
+msgid ""
+"Not saved: the thresholds must be whole numbers between 1 and 99, separated "
+"by commas."
+msgstr ""
+"Ikke gemt: tærsklerne skal være heltal mellem 1 og 99, adskilt af kommaer."
+
+#: ui/AlertsPage.qml:249
+msgid "Not saved: the critical level must be a whole number between 0 and 99."
+msgstr "Ikke gemt: det kritiske niveau skal være et heltal mellem 0 og 99."
+
+#: ui/AlertsPage.qml:253
+msgid ""
+"Not saved: the re-arm margin must be a number between 1 and 20 (for example "
+"3 or 2.5)."
+msgstr ""
+"Ikke gemt: genaktiveringsmargenen skal være et tal mellem 1 og 20 (for "
+"eksempel 3 eller 2,5)."
+
+#: ui/AlertsPage.qml:278
+msgid ""
+"Saved. The service reads these settings when it starts: restart it to use "
+"them now."
+msgstr ""
+"Gemt. Tjenesten læser indstillingerne, når den starter: genstart den for at "
+"bruge dem nu."
+
+#: ui/AlertsPage.qml:279
+msgid "Saved. They will be used when the service starts."
+msgstr "Gemt. De bruges, når tjenesten starter."
+
+#: ui/AlertsPage.qml:283
+msgid ""
+"Not saved: the settings file was changed by another program since this page "
+"read it. Nothing was written; use Reset to read it again."
+msgstr ""
+"Ikke gemt: indstillingsfilen er ændret af et andet program, siden siden "
+"læste den. Intet blev skrevet; brug Nulstil for at læse den igen."
+
+#: ui/AlertsPage.qml:284
+msgid "Not saved: %1"
+msgstr "Ikke gemt: %1"
+
+#: ui/AlertsPage.qml:307
+msgid "Restart the service"
+msgstr "Genstart tjenesten"
+
+#: ui/AlertsPage.qml:312
+msgid "Service restarted with the new settings."
+msgstr "Tjenesten er genstartet med de nye indstillinger."
+
+#: ui/AlertsPage.qml:312
+msgid "The service could not be restarted: %1"
+msgstr "Tjenesten kunne ikke genstartes: %1"
+
+#: ui/AlertsPage.qml:326
+msgid ""
+"The settings file could not be read (%1): the defaults are shown and nothing "
+"can be saved, so that the file is never written over."
+msgstr ""
+"Indstillingsfilen kunne ikke læses (%1): standardværdierne vises, og intet "
+"kan gemmes, så filen aldrig overskrives."
+
+#: ui/AlertsPage.qml:328
+msgid ""
+"Some lines of the settings file are not understood (%1); they are kept as "
+"they are."
+msgstr ""
+"Nogle linjer i indstillingsfilen forstås ikke (%1); de bevares, som de er."
+
+#: ui/AlertsPage.qml:337
+msgid ""
+"The service does not take these values of the settings file as they are "
+"written: %1. They are shown as written and kept unless you change them."
+msgstr ""
+"Tjenesten accepterer ikke disse værdier i indstillingsfilen, som de er "
+"skrevet: %1. De vises, som de er skrevet, og bevares, så længe du ikke "
+"ændrer dem."
+
+#: ui/AlertsPage.qml:346
+msgctxt "@title:group"
+msgid "Low battery"
+msgstr "Lavt batteri"
+
+#: ui/AlertsPage.qml:351
+msgid "Alerts:"
+msgstr "Advarsler:"
+
+#: ui/AlertsPage.qml:352
+msgid "Notify when the battery is low"
+msgstr "Giv besked, når batteriet er lavt"
+
+#: ui/AlertsPage.qml:358
+msgid "Thresholds (%):"
+msgstr "Tærskler (%):"
+
+#: ui/AlertsPage.qml:362
+msgid "Alert thresholds in percent, separated by commas"
+msgstr "Advarselstærskler i procent, adskilt af kommaer"
+
+#: ui/AlertsPage.qml:365
+msgid "Whole numbers from 1 to 99"
+msgstr "Heltal fra 1 til 99"
+
+#: ui/AlertsPage.qml:373
+msgid "One notification per threshold crossed, on the estimated charge."
+msgstr "Én bekendtgørelse pr. passeret tærskel, ud fra den skønnede opladning."
+
+#: ui/AlertsPage.qml:378
+msgid "With KDE:"
+msgstr "Med KDE:"
+
+#: ui/AlertsPage.qml:380
+msgid "When KDE already warns about this keyboard, send only one reminder"
+msgstr "Når KDE allerede advarer om dette tastatur, send kun én påmindelse"
+
+#: ui/AlertsPage.qml:386
+msgid "Critical at or below (%):"
+msgstr "Kritisk ved eller under (%):"
+
+#: ui/AlertsPage.qml:390
+msgid "Critical threshold in percent"
+msgstr "Kritisk tærskel i procent"
+
+#: ui/AlertsPage.qml:396
+msgid "Re-arm after (points):"
+msgstr "Genaktivér efter (point):"
+
+#: ui/AlertsPage.qml:400
+msgid "Points above a threshold before it can notify again"
+msgstr "Point over en tærskel, før den kan give besked igen"
+
+#: ui/AlertsPage.qml:401
+msgid "A number from 1 to 20, decimals allowed"
+msgstr "Et tal fra 1 til 20, decimaler tilladt"
+
+#: ui/AlertsPage.qml:408
+msgctxt "@title:group"
+msgid "Batteries"
+msgstr "Batterier"
+
+#: ui/AlertsPage.qml:413
+msgid "Battery type:"
+msgstr "Batteritype:"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:56
+msgctxt "battery chemistry"
+msgid "alkaline"
+msgstr "alkaliske"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:57
+msgctxt "battery chemistry"
+msgid "NiMH (rechargeable)"
+msgstr "NiMH (genopladelige)"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:58
+msgctxt "battery chemistry"
+msgid "lithium"
+msgstr "lithium"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:59
+msgctxt "battery chemistry"
+msgid "unknown"
+msgstr "ukendt"
+
+#: ui/AlertsPage.qml:415
+msgid "Battery type"
+msgstr "Batteritype"
+
+#: ui/AlertsPage.qml:424
+msgid ""
+"Used for the estimated charge and its range; the keyboard's own indication "
+"does not depend on it."
+msgstr ""
+"Bruges til den skønnede opladning og dens interval; tastaturets egen værdi "
+"afhænger ikke af den."
+
+#: ui/AlertsPage.qml:429
+msgid "Display:"
+msgstr "Visning:"
+
+#: ui/AlertsPage.qml:430
+msgid "Also show the percentage as macOS shows it"
+msgstr "Vis også procentsatsen, som macOS viser den"
+
+#: ui/AlertsPage.qml:436
+msgctxt "@title:group"
+msgid "Other notifications"
+msgstr "Andre bekendtgørelser"
+
+#: ui/AlertsPage.qml:441 ui/StatePage.qml:152
+msgid "Connection:"
+msgstr "Forbindelse:"
+
+#: ui/AlertsPage.qml:442
+msgid "Notify on disconnection and reconnection"
+msgstr "Giv besked ved afbrydelse og genforbindelse"
+
+#: ui/AlertsPage.qml:448
+msgid "New batteries:"
+msgstr "Nye batterier:"
+
+#: ui/AlertsPage.qml:449
+msgid "Notify when new batteries are detected"
+msgstr "Giv besked, når nye batterier registreres"
+
+#: ui/AlertsPage.qml:455
+msgctxt "@title:group"
+msgid "Shutdown"
+msgstr "Nedlukning"
+
+#: ui/AlertsPage.qml:460
+msgid "WillShutdown:"
+msgstr "WillShutdown:"
+
+#: ui/AlertsPage.qml:461
+msgid "Tell the keyboard when the computer shuts down or restarts"
+msgstr "Fortæl tastaturet, når computeren lukker ned eller genstarter"
+
+#: ui/AlertsPage.qml:470
+msgid ""
+"What macOS sends at every shutdown (one message, nothing else is written). "
+"Off = the keyboard is left untouched."
+msgstr ""
+"Det, macOS sender ved hver nedlukning (én besked, intet andet skrives). Fra "
+"= tastaturet forbliver urørt."
+
+#: ui/AlertsPage.qml:478
+msgid "File:"
+msgstr "Fil:"
+
+#: ui/DiagPage.qml:39
+msgctxt "diagnosis level"
+msgid "OK"
+msgstr "OK"
+
+#: ui/DiagPage.qml:40
+msgctxt "diagnosis level"
+msgid "information"
+msgstr "information"
+
+#: ui/DiagPage.qml:41
+msgctxt "diagnosis level"
+msgid "warning"
+msgstr "advarsel"
+
+#: ui/DiagPage.qml:42
+msgctxt "diagnosis level"
+msgid "problem"
+msgstr "problem"
+
+#: ui/DiagPage.qml:47
+msgctxt "doctor topic"
+msgid "adapter"
+msgstr "adapter"
+
+#: ui/DiagPage.qml:48
+msgctxt "doctor topic"
+msgid "adapter power"
+msgstr "adapterens strøm"
+
+#: ui/DiagPage.qml:49
+msgctxt "doctor topic"
+msgid "BlueZ settings"
+msgstr "BlueZ-indstillinger"
+
+#: ui/DiagPage.qml:50
+msgctxt "doctor topic"
+msgid "service"
+msgstr "tjeneste"
+
+#: ui/DiagPage.qml:51
+msgctxt "doctor topic"
+msgid "HID access"
+msgstr "HID-adgang"
+
+#: ui/DiagPage.qml:52
+msgctxt "doctor topic"
+msgid "journal"
+msgstr "journal"
+
+#: ui/DiagPage.qml:53
+msgctxt "doctor topic"
+msgid "link"
+msgstr "forbindelse"
+
+#: ui/DiagPage.qml:54
+msgctxt "doctor topic"
+msgid "link key"
+msgstr "forbindelsesnøgle"
+
+#: ui/DiagPage.qml:55
+msgctxt "doctor topic"
+msgid "link quality"
+msgstr "forbindelseskvalitet"
+
+#: ui/DiagPage.qml:56
+msgctxt "doctor topic"
+msgid "pairing"
+msgstr "parring"
+
+#: ui/DiagPage.qml:57
+msgctxt "doctor topic"
+msgid "signal"
+msgstr "signal"
+
+#: ui/DiagPage.qml:58
+msgctxt "doctor topic"
+msgid "UPower"
+msgstr "UPower"
+
+#: ui/DiagPage.qml:59
+msgctxt "doctor topic"
+msgid "versions"
+msgstr "versioner"
+
+#: ui/DiagPage.qml:66
+msgctxt "doctor verdict"
+msgid "the pairing is refused or missing: run `akmctl repair`"
+msgstr "parringen afvises eller mangler: kør `akmctl repair`"
+
+#: ui/DiagPage.qml:67
+msgctxt "doctor verdict"
+msgid "no usable pairing: run `akmctl repair`"
+msgstr "ingen brugbar parring: kør `akmctl repair`"
+
+#. i18n: %1 = the doctor topics to check, comma-separated
+#: ui/DiagPage.qml:69
+msgctxt "doctor verdict"
+msgid "Link up; to check: %1 (akmctl doctor)"
+msgstr "Forbindelsen oppe; at kontrollere: %1 (akmctl doctor)"
+
+#: ui/DiagPage.qml:70
+msgctxt "doctor verdict"
+msgid "link up and configuration sound"
+msgstr "forbindelsen er oppe, og konfigurationen er sund"
+
+#: ui/DiagPage.qml:71
+msgctxt "doctor verdict"
+msgid ""
+"keyboard not connected: press a key and wait 10 s; the service pages it on "
+"its own. Pair it again only if `akmctl doctor` reports auth-failed"
+msgstr ""
+"tastaturet er ikke forbundet: tryk på en tast, og vent 10 s; tjenesten "
+"kalder det selv. Par det kun igen, hvis `akmctl doctor` melder auth-failed"
+
+#: ui/DiagPage.qml:78
+msgctxt "doctor finding"
+msgid "rssi-helper executable, capability cap_net_admin present"
+msgstr "rssi-helper eksekverbar, capability cap_net_admin til stede"
+
+#: ui/DiagPage.qml:79
+msgctxt "doctor finding"
+msgid "the rssi-helper utility is not installed"
+msgstr "værktøjet rssi-helper er ikke installeret"
+
+#: ui/DiagPage.qml:80
+msgctxt "doctor finding"
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr "værktøjet rssi-helper fejlede (capability mangler, Bluetooth afvist)"
+
+#: ui/DiagPage.qml:81
+msgctxt "doctor finding"
+msgid "the rssi-helper utility does not answer in time"
+msgstr "værktøjet rssi-helper svarer ikke i tide"
+
+#: ui/DiagPage.qml:82
+msgctxt "doctor finding"
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "Bluetooth-adapteren giver ingen måling for denne forbindelse"
+
+#: ui/DiagPage.qml:83
+msgctxt "doctor finding"
+msgid "the signal cannot be measured"
+msgstr "signalet kan ikke måles"
+
+#: ui/DiagPage.qml:84
+msgctxt "doctor finding, %1 = settings"
+msgid "ignored by bluetoothd: %1"
+msgstr "ignoreret af bluetoothd: %1"
+
+#: ui/DiagPage.qml:85
+msgctxt "doctor finding"
+msgid "[Policy] Reconnect* in place"
+msgstr "[Policy] Reconnect* til stede"
+
+#: ui/DiagPage.qml:86
+msgctxt "doctor finding"
+msgid "FastConnectable = true"
+msgstr "FastConnectable = true"
+
+#: ui/DiagPage.qml:87
+msgctxt "doctor finding"
+msgid ""
+"FastConnectable off: slower answer to the keyboard's page after a key press"
+msgstr ""
+"FastConnectable fra: langsommere svar på tastaturets kald efter et tastetryk"
+
+#: ui/DiagPage.qml:88
+msgctxt "doctor finding, %1 = file, %2 = error"
+msgid "%1: %2"
+msgstr "%1: %2"
+
+#: ui/DiagPage.qml:89
+msgctxt "doctor finding"
+msgid "NoPollBatteries = true (no 30 s HID polling)"
+msgstr "NoPollBatteries = true (ingen HID-forespørgsel hvert 30. s)"
+
+#: ui/DiagPage.qml:90
+msgctxt "doctor finding"
+msgid ""
+"UPower reads the keyboard battery every 30 s (2 GET_REPORT over the air): "
+"the keyboard never sleeps"
+msgstr ""
+"UPower læser tastaturets batteri hvert 30. s (2 GET_REPORT via radio): "
+"tastaturet går aldrig i dvale"
+
+#: ui/DiagPage.qml:91
+msgctxt "doctor finding"
+msgid "adapter is not on USB (or not found)"
+msgstr "adapteren er ikke på USB (eller blev ikke fundet)"
+
+#: ui/DiagPage.qml:92
+msgctxt "doctor finding, %1 = USB id"
+msgid "%1 autosuspend off (power/control=on)"
+msgstr "%1 USB-autosuspend fra (power/control=on)"
+
+#: ui/DiagPage.qml:94
+msgctxt "doctor finding"
+msgid ""
+"%1 USB autosuspend active (control=%2, delay %3 ms, now %4, %5 s suspended "
+"since boot)"
+msgstr ""
+"%1 USB-autosuspend aktiv (control=%2, forsinkelse %3 ms, nu %4, %5 s i dvale "
+"siden opstart)"
+
+#: ui/DiagPage.qml:95
+msgctxt "doctor finding, appended"
+msgid "; rule installed but not applied yet"
+msgstr "; regel installeret, men endnu ikke anvendt"
+
+#: ui/DiagPage.qml:96
+msgctxt "doctor finding"
+msgid "btusb enable_autosuspend = %1"
+msgstr "btusb enable_autosuspend = %1"
+
+#: ui/DiagPage.qml:97
+msgctxt "doctor finding"
+msgid "Bluetooth adapter powered"
+msgstr "Bluetooth-adapteren er tændt"
+
+#: ui/DiagPage.qml:98
+msgctxt "doctor finding"
+msgid "Bluetooth adapter off"
+msgstr "Bluetooth-adapteren er slukket"
+
+#: ui/DiagPage.qml:99
+msgctxt "doctor finding"
+msgid "BlueZ unreachable (bluetooth.service stopped?)"
+msgstr "BlueZ utilgængelig (bluetooth.service stoppet?)"
+
+#: ui/DiagPage.qml:100
+msgctxt "doctor finding"
+msgid "no paired Apple keyboard known to BlueZ"
+msgstr "BlueZ kender intet parret Apple-tastatur"
+
+#: ui/DiagPage.qml:101
+msgctxt "doctor finding, %1 = address"
+msgid "%1 is not paired"
+msgstr "%1 er ikke parret"
+
+#: ui/DiagPage.qml:103
+msgctxt "doctor finding, %1 = address, %2 = name"
+msgid "%1 “%2” paired"
+msgstr "%1 “%2” parret"
+
+#: ui/DiagPage.qml:104
+msgctxt "doctor finding, appended"
+msgid ", bonded"
+msgstr ", bundet"
+
+#: ui/DiagPage.qml:105
+msgctxt "doctor finding, appended"
+msgid ", legacy PIN pairing"
+msgstr ", ældre parring med PIN"
+
+#: ui/DiagPage.qml:106
+msgctxt "doctor finding"
+msgid "not trusted: BlueZ may refuse the keyboard's own reconnection"
+msgstr "ikke betroet: BlueZ kan afvise genforbindelse fra tastaturet selv"
+
+#: ui/DiagPage.qml:107
+msgctxt "doctor finding"
+msgid "blocked in BlueZ"
+msgstr "blokeret i BlueZ"
+
+#: ui/DiagPage.qml:108
+msgctxt "doctor finding"
+msgid "connected"
+msgstr "forbundet"
+
+#: ui/DiagPage.qml:109
+msgctxt "doctor finding"
+msgid "not connected (asleep? press a key)"
+msgstr "ikke forbundet (hviler? tryk på en tast)"
+
+#: ui/DiagPage.qml:110
+msgctxt "doctor finding"
+msgid "link key not checked (needs root: sudo akmctl doctor)"
+msgstr ""
+"forbindelsesnøglen er ikke kontrolleret (kræver root: sudo akmctl doctor)"
+
+#: ui/DiagPage.qml:111
+msgctxt "doctor finding"
+msgid "no [LinkKey] stored for the keyboard"
+msgstr "ingen [LinkKey] gemt for tastaturet"
+
+#: ui/DiagPage.qml:112
+msgctxt "doctor finding"
+msgid "stored key == kernel key (fingerprint %1)"
+msgstr "gemt nøgle == kernens nøgle (fingeraftryk %1)"
+
+#: ui/DiagPage.qml:113
+msgctxt "doctor finding"
+msgid "stored key %1 != kernel key %2: will change at next restart"
+msgstr "gemt nøgle %1 != kernens nøgle %2: ændres ved næste genstart"
+
+#: ui/DiagPage.qml:114
+msgctxt "doctor finding"
+msgid "stored key %1; kernel copy not readable (debugfs not mounted?)"
+msgstr "gemt nøgle %1; kernens kopi kan ikke læses (debugfs ikke monteret?)"
+
+#: ui/DiagPage.qml:116
+msgctxt "doctor finding"
+msgid ""
+"link quality: %1 disconnection in the last hour, %2 in 24 h, %3 in 7 days"
+msgid_plural ""
+"link quality: %1 disconnections in the last hour, %2 in 24 h, %3 in 7 days"
+msgstr[0] ""
+"forbindelseskvalitet: %1 afbrydelse den seneste time, %2 på 24 t, %3 på 7 "
+"dage"
+msgstr[1] ""
+"forbindelseskvalitet: %1 afbrydelser den seneste time, %2 på 24 t, %3 på 7 "
+"dage"
+
+#: ui/DiagPage.qml:117
+msgctxt "doctor finding, appended"
+msgid "; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurement)"
+msgid_plural ""
+"; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurements)"
+msgstr[0] "; relativt signal over 7 dage: middel %2 dB, min %3 dB (%1 måling)"
+msgstr[1] ""
+"; relativt signal over 7 dage: middel %2 dB, min %3 dB (%1 målinger)"
+
+#: ui/DiagPage.qml:118
+msgctxt "doctor finding, appended"
+msgid " — UNSTABLE: %1 unexpected within the hour"
+msgstr " — USTABIL: %1 uventede inden for timen"
+
+#: ui/DiagPage.qml:119
+msgctxt "doctor finding, %1 = device"
+msgid "%1 readable"
+msgstr "%1 kan læses"
+
+#: ui/DiagPage.qml:120
+msgctxt "doctor finding, %1 = device"
+msgid "%1 not readable by this user"
+msgstr "%1 kan ikke læses af denne bruger"
+
+#: ui/DiagPage.qml:121
+msgctxt "doctor finding"
+msgid "connected but no hidraw node (uhid not created yet?)"
+msgstr "forbundet, men ingen hidraw-node (uhid endnu ikke oprettet?)"
+
+#: ui/DiagPage.qml:122
+msgctxt "doctor finding"
+msgid "no bluetoothd error in the last 6 hours of this boot"
+msgstr "ingen bluetoothd-fejl de seneste 6 timer siden denne opstart"
+
+#: ui/DiagPage.qml:123
+msgctxt "doctor finding"
+msgid ""
+"bluetoothd journal not readable (add yourself to group systemd-journal, or "
+"use sudo)"
+msgstr ""
+"bluetoothd-journalen kan ikke læses (tilføj dig selv til gruppen systemd-"
+"journal, eller brug sudo)"
+
+#: ui/DiagPage.qml:124
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 page timeout (keyboard asleep or not listening), last %2"
+msgid_plural "%1 page timeouts (keyboard asleep or not listening), last %2"
+msgstr[0] "%1 page-timeout (tastaturet sover eller lytter ikke), senest %2"
+msgstr[1] "%1 page-timeouts (tastaturet sover eller lytter ikke), senest %2"
+
+#: ui/DiagPage.qml:125
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 HIDP GET_REPORT timeout, last %2"
+msgid_plural "%1 HIDP GET_REPORT timeouts, last %2"
+msgstr[0] "%1 HIDP GET_REPORT-timeout, senest %2"
+msgstr[1] "%1 HIDP GET_REPORT-timeouts, senest %2"
+
+#: ui/DiagPage.qml:126
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 authentication / key error, last %2"
+msgid_plural "%1 authentication / key errors, last %2"
+msgstr[0] "%1 godkendelses-/nøglefejl, senest %2"
+msgstr[1] "%1 godkendelses-/nøglefejl, senest %2"
+
+#: ui/DiagPage.qml:127
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 connection reset/refused by the keyboard, last %2"
+msgid_plural "%1 connections reset/refused by the keyboard, last %2"
+msgstr[0] "%1 forbindelse nulstillet/afvist af tastaturet, senest %2"
+msgstr[1] "%1 forbindelser nulstillet/afvist af tastaturet, senest %2"
+
+#: ui/DiagPage.qml:128
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 main.conf key ignored by bluetoothd at start, last %2"
+msgid_plural "%1 main.conf keys ignored by bluetoothd at start, last %2"
+msgstr[0] "%1 main.conf-nøgle ignoreret af bluetoothd ved start, senest %2"
+msgstr[1] "%1 main.conf-nøgler ignoreret af bluetoothd ved start, senest %2"
+
+#: ui/DiagPage.qml:129
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid ""
+"%1 BlueZ storage write failure (a new link key may be lost at reboot), last "
+"%2"
+msgid_plural ""
+"%1 BlueZ storage write failures (a new link key may be lost at reboot), last "
+"%2"
+msgstr[0] ""
+"%1 skrivefejl i BlueZ-lageret (en ny forbindelsesnøgle kan gå tabt ved "
+"genstart), senest %2"
+msgstr[1] ""
+"%1 skrivefejl i BlueZ-lageret (en ny forbindelsesnøgle kan gå tabt ved "
+"genstart), senest %2"
+
+#: ui/DiagPage.qml:130
+msgctxt "doctor finding"
+msgid "apple-kb-monitord link keeper not reachable (no automatic reconnection)"
+msgstr ""
+"apple-kb-monitords forbindelsesvagt utilgængelig (ingen automatisk "
+"genforbindelse)"
+
+#: ui/DiagPage.qml:131
+msgctxt "doctor finding, %1 = state"
+msgid "link health: %1"
+msgstr "forbindelsens tilstand: %1"
+
+#: ui/DiagPage.qml:132
+msgctxt "doctor finding"
+msgid "keeper running, keyboard not tracked"
+msgstr "vagten kører, tastaturet følges ikke"
+
+#: ui/DiagPage.qml:133
+msgctxt "doctor finding, %1 = program, %2 = pid, %3 = path"
+msgid ""
+"%1 (pid %2) still runs the replaced binary %3 (deleted): the old version"
+msgstr ""
+"%1 (pid %2) kører stadig den erstattede binærfil %3 (slettet): den gamle "
+"version"
+
+#: ui/DiagPage.qml:134
+msgctxt "doctor finding, %1 = pid"
+msgid ""
+"plasmashell (pid %1) started before the widget was installed: it shows the "
+"old widget"
+msgstr ""
+"plasmashell (pid %1) startede, før widgetten blev installeret: den viser den "
+"gamle widget"
+
+#: ui/DiagPage.qml:141
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package"
+msgstr "geninstallér pakken apple-kb-monitor"
+
+#: ui/DiagPage.qml:142
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr "geninstallér pakken apple-kb-monitor, og kør derefter akmctl doctor"
+
+#: ui/DiagPage.qml:143
+msgctxt "doctor fix"
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "kontrollér Bluetooth-tjenesten: systemctl status bluetooth"
+
+#: ui/DiagPage.qml:144
+msgctxt "doctor fix"
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "flyt tastaturet tættere på, eller genforbind det"
+
+#: ui/DiagPage.qml:145
+msgctxt "doctor fix"
+msgid "run akmctl doctor"
+msgstr "kør akmctl doctor"
+
+#: ui/DiagPage.qml:146
+msgctxt "doctor fix, %1 = command"
+msgid "optional: %1"
+msgstr "valgfrit: %1"
+
+#: ui/DiagPage.qml:147
+msgctxt "doctor fix"
+msgid "akmctl repair (pairing assistant)"
+msgstr "akmctl repair (parringsassistent)"
+
+#: ui/DiagPage.qml:148
+msgctxt "doctor fix"
+msgid "check disk space, then akmctl repair if the keyboard is refused"
+msgstr ""
+"kontrollér diskpladsen, og kør derefter akmctl repair, hvis tastaturet "
+"afvises"
+
+#: ui/DiagPage.qml:149
+msgctxt "doctor fix"
+msgid "check the batteries, the distance, USB 3 devices near the adapter"
+msgstr "kontrollér batterierne, afstanden og USB 3-enheder nær adapteren"
+
+#: ui/DiagPage.qml:150
+msgctxt "doctor fix"
+msgid "install udev/70-apple-kb-hidraw.rules (uaccess)"
+msgstr "installér udev/70-apple-kb-hidraw.rules (uaccess)"
+
+#: ui/DiagPage.qml:151
+msgctxt "doctor fix"
+msgid ""
+"avoid HID scanning tools while measuring; see docs/RECONNECTION-PAIRING.md "
+"§3.5"
+msgstr ""
+"undgå HID-scanningsværktøjer under målingen; se docs/RECONNECTION-PAIRING.md "
+"§3.5"
+
+#: ui/DiagPage.qml:152
+msgctxt "doctor fix"
+msgid ""
+"free disk space (btrfs: check metadata), then verify with sudo akmctl doctor"
+msgstr ""
+"frigør diskplads (btrfs: kontrollér metadata), og bekræft derefter med sudo "
+"akmctl doctor"
+
+#. i18n: %1 = daemon version, %2 = akmctl version, %3 = package version
+#: ui/DiagPage.qml:161
+msgctxt "selftest check"
+msgid ""
+"versions differ: daemon %1, akmctl %2, package %3: restart the daemon after "
+"an upgrade (systemctl --user restart apple-kb-monitord.service)"
+msgstr ""
+"versionerne afviger: tjeneste %1, akmctl %2, pakke %3: genstart tjenesten "
+"efter en opgradering (systemctl --user restart apple-kb-monitord.service)"
+
+#. i18n: %1 = daemon version, %2 = package version
+#: ui/DiagPage.qml:163
+msgctxt "selftest check"
+msgid "daemon %1 = akmctl, package %2"
+msgstr "tjeneste %1 = akmctl, pakke %2"
+
+#: ui/DiagPage.qml:164
+msgctxt "selftest check"
+msgid "daemon version unknown (old interface)"
+msgstr "tjenestens version ukendt (gammel grænseflade)"
+
+#: ui/DiagPage.qml:167
+msgctxt "selftest check"
+msgid "keyboard alias as last set through this monitor"
+msgstr "tastaturets alias som senest sat via denne overvågning"
+
+#. i18n: %1 = current alias, %2 = alias set last, %3 = by whom, %4 = Unix time
+#: ui/DiagPage.qml:169
+msgctxt "selftest check"
+msgid ""
+"keyboard alias is %1, last set to %2 by %3 at %4 (unix): changed elsewhere "
+"(KDE Bluetooth settings, bluetoothctl) or the pairing was removed (akmctl "
+"repair, Plasma Forget); see the daemon journal for \"BlueZ alias\" lines"
+msgstr ""
+"tastaturets alias er %1, senest sat til %2 af %3 kl. %4 (unix): ændret "
+"andetsteds (KDE's Bluetooth-indstillinger, bluetoothctl), eller parringen er "
+"fjernet (akmctl repair, Glem i Plasma); se linjerne \"BlueZ alias\" i "
+"tjenestens journal"
+
+#: ui/DiagPage.qml:170
+msgctxt "selftest check"
+msgid ""
+"apple-kb-monitord restarted %1 time by systemd since the last pass (crash "
+"loop?)"
+msgid_plural ""
+"apple-kb-monitord restarted %1 times by systemd since the last pass (crash "
+"loop?)"
+msgstr[0] ""
+"apple-kb-monitord genstartet %1 gang af systemd siden sidste gennemløb "
+"(crash-løkke?)"
+msgstr[1] ""
+"apple-kb-monitord genstartet %1 gange af systemd siden sidste gennemløb "
+"(crash-løkke?)"
+
+#. i18n: %1 = old process id, %2 = new process id
+#: ui/DiagPage.qml:172
+msgctxt "selftest check"
+msgid "daemon pid changed %1 -> %2 (restart)"
+msgstr "tjenestens pid ændret %1 -> %2 (genstart)"
+
+#: ui/DiagPage.qml:173
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon answered GetState in %1 ms (> 1 s)"
+msgstr "tjenesten besvarede GetState på %1 ms (> 1 s)"
+
+#: ui/DiagPage.qml:174
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon on the bus, GetState in %1 ms"
+msgstr "tjenesten på bussen, GetState på %1 ms"
+
+#. i18n: %1 = error, %2 = systemd unit state
+#: ui/DiagPage.qml:176
+msgctxt "selftest check"
+msgid "daemon unreachable (%1); unit state: %2"
+msgstr "tjenesten kan ikke nås (%1); enhedens tilstand: %2"
+
+#: ui/DiagPage.qml:177
+msgctxt "selftest check, %1 = error"
+msgid "daemon last_error: %1"
+msgstr "tjenestens last_error: %1"
+
+#: ui/DiagPage.qml:178
+msgctxt "selftest check"
+msgid "keyboard connected but never acquired"
+msgstr "tastaturet forbundet, men aldrig aflæst"
+
+#: ui/DiagPage.qml:179
+msgctxt "selftest check, %1 = hours"
+msgid "keyboard connected, last acquisition %1 h ago"
+msgstr "tastaturet forbundet, seneste aflæsning for %1 t siden"
+
+#: ui/DiagPage.qml:180
+msgctxt "selftest check, %1 = minutes"
+msgid "last acquisition %1 min ago"
+msgstr "seneste aflæsning for %1 min siden"
+
+#: ui/DiagPage.qml:181
+msgctxt "selftest check"
+msgid "keyboard not connected (nothing to acquire)"
+msgstr "tastaturet ikke forbundet (intet at aflæse)"
+
+#: ui/DiagPage.qml:182
+msgctxt "selftest check"
+msgid "no daemon warning since the last pass"
+msgstr "ingen advarsel fra tjenesten siden sidste gennemløb"
+
+#: ui/DiagPage.qml:183
+msgctxt "selftest check, %2 = journal line"
+msgid "%1 daemon warning/error line since the last pass, last: %2"
+msgid_plural "%1 daemon warning/error lines since the last pass, last: %2"
+msgstr[0] ""
+"%1 advarsels-/fejllinje fra tjenesten siden sidste gennemløb, seneste: %2"
+msgstr[1] ""
+"%1 advarsels-/fejllinjer fra tjenesten siden sidste gennemløb, seneste: %2"
+
+#: ui/DiagPage.qml:184
+msgctxt "selftest check"
+msgid "user journal not readable"
+msgstr "brugerjournalen ikke læsbar"
+
+#: ui/DiagPage.qml:185
+msgctxt "selftest check"
+msgid "no bluetoothd error since the last pass"
+msgstr "ingen bluetoothd-fejl siden sidste gennemløb"
+
+#: ui/DiagPage.qml:186
+msgctxt "selftest check"
+msgid "%1 bluetoothd error line since the last pass"
+msgid_plural "%1 bluetoothd error lines since the last pass"
+msgstr[0] "%1 bluetoothd-fejllinje siden sidste gennemløb"
+msgstr[1] "%1 bluetoothd-fejllinjer siden sidste gennemløb"
+
+#: ui/DiagPage.qml:187
+msgctxt "selftest check"
+msgid "system journal not readable (group systemd-journal)"
+msgstr "systemjournalen ikke læsbar (gruppen systemd-journal)"
+
+#: ui/DiagPage.qml:188
+msgctxt "selftest check"
+msgid "no crash of our programs since the last pass"
+msgstr "intet nedbrud i vores programmer siden sidste gennemløb"
+
+#. i18n: %1 = program, %2 = signal, %3 = process id
+#: ui/DiagPage.qml:190
+msgctxt "selftest check"
+msgid "%1 crashed (%2, pid %3): coredumpctl info %3"
+msgstr "%1 gik ned (%2, pid %3): coredumpctl info %3"
+
+#: ui/DiagPage.qml:191
+msgctxt "selftest check"
+msgid "coredump journal not readable"
+msgstr "coredump-journalen ikke læsbar"
+
+#. i18n: %1 = directory, %2 = free MiB, %3 = total MiB
+#: ui/DiagPage.qml:193
+msgctxt "selftest check"
+msgid "%1: %2 MiB free of %3 MiB"
+msgstr "%1: %2 MiB ledig af %3 MiB"
+
+#: ui/DiagPage.qml:194
+msgctxt "selftest check, %1 = directory"
+msgid "%1: statvfs failed"
+msgstr "%1: statvfs fejlede"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check, history size"
+msgid "%1 line"
+msgid_plural "%1 lines"
+msgstr[0] "%1 linje"
+msgstr[1] "%1 linjer"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check"
+msgid "%2: %3, %4 KiB, %1 unreadable line in the last 1000"
+msgid_plural "%2: %3, %4 KiB, %1 unreadable lines in the last 1000"
+msgstr[0] "%2: %3, %4 KiB, %1 ulæselig linje blandt de seneste 1000"
+msgstr[1] "%2: %3, %4 KiB, %1 ulæselige linjer blandt de seneste 1000"
+
+#: ui/DiagPage.qml:197
+msgctxt "selftest check"
+msgid "no history yet"
+msgstr "ingen historik endnu"
+
+#: ui/DiagPage.qml:198
+msgctxt "selftest check, %1 = doctor verdict"
+msgid "akmctl doctor: %1"
+msgstr "akmctl doctor: %1"
+
+#: ui/DiagPage.qml:199
+msgctxt "selftest check, %1 = seconds"
+msgid ""
+"akmctl doctor did not finish within %1 s (BlueZ or the daemon does not "
+"answer)"
+msgstr ""
+"akmctl doctor blev ikke færdig inden for %1 s (BlueZ eller tjenesten svarer "
+"ikke)"
+
+#: ui/DiagPage.qml:208 ui/DiagPage.qml:223
+msgid "no answer within 60 seconds"
+msgstr "intet svar inden for 60 sekunder"
+
+#: ui/DiagPage.qml:259
+msgid "Check the link"
+msgstr "Kontrollér forbindelsen"
+
+#: ui/DiagPage.qml:262
+msgid ""
+"Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. "
+"Reads only."
+msgstr ""
+"Kører akmctl doctor: Bluetooth, parring, konfiguration, journal, tjeneste. "
+"Læser kun."
+
+#: ui/DiagPage.qml:266
+msgid "Self-check"
+msgstr "Selvtest"
+
+#: ui/DiagPage.qml:268
+msgid ""
+"Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
+msgstr ""
+"Kører akmctl selftest: tjeneste, forbindelse, journal, nedbrud, disk. Læser "
+"kun."
+
+#: ui/DiagPage.qml:273
+msgid "Reconnect"
+msgstr "Genforbind"
+
+#: ui/DiagPage.qml:276
+msgid ""
+"Asks the service to page the keyboard now (at most once every 20 seconds)"
+msgstr ""
+"Beder tjenesten om at kalde tastaturet nu (højst én gang hvert 20. sekund)"
+
+#: ui/DiagPage.qml:282
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+"Genforbindelse anmodet. Tryk på en tast på tastaturet, hvis det hviler."
+
+#: ui/DiagPage.qml:283
+msgid "refused by the service (asleep, too soon, or pairing refused)"
+msgstr "afvist af tjenesten (dvale, for tidligt eller parring afvist)"
+
+#: ui/DiagPage.qml:283
+msgid "Reconnection not requested: %1"
+msgstr "Genforbindelse ikke anmodet: %1"
+
+#: ui/DiagPage.qml:289
+msgid "Copy the diagnosis"
+msgstr "Kopiér diagnosen"
+
+#: ui/DiagPage.qml:294
+msgid "Diagnosis copied: paste it into a bug report."
+msgstr "Diagnosen er kopieret: indsæt den i en fejlrapport."
+
+#: ui/DiagPage.qml:299
+msgid "Documentation"
+msgstr "Dokumentation"
+
+#: ui/DiagPage.qml:310
+msgctxt "@title:group"
+msgid "Link check (akmctl doctor)"
+msgstr "Forbindelseskontrol (akmctl doctor)"
+
+#: ui/DiagPage.qml:316
+msgid "Link check running"
+msgstr "Forbindelseskontrol kører"
+
+#: ui/DiagPage.qml:327
+msgctxt "level, advice"
+msgid "Verdict: %1 — %2"
+msgstr "Resultat: %1 — %2"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379 ui/KeysPage.qml:38
+msgid "Failed: %1"
+msgstr "Mislykkedes: %1"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379
+msgid "Not run yet."
+msgstr "Endnu ikke kørt."
+
+#: ui/DiagPage.qml:364
+msgctxt "@title:group"
+msgid "Self-check (akmctl selftest)"
+msgstr "Selvtest (akmctl selftest)"
+
+#: ui/DiagPage.qml:370
+msgid "Self-check running"
+msgstr "Selvtest kører"
+
+#: ui/DiagPage.qml:378
+msgid "Verdict: %1"
+msgstr "Resultat: %1"
+
+#: ui/KeysPage.qml:33
+msgctxt "result, then the detail"
+msgid "%1 — %2"
+msgstr "%1 — %2"
+
+#: ui/KeysPage.qml:35
+msgid ""
+"No answer in time: nothing was confirmed. Check the state before trying "
+"again."
+msgstr ""
+"Intet svar i tide: intet blev bekræftet. Kontrollér tilstanden, før du "
+"prøver igen."
+
+#: ui/KeysPage.qml:37 ui/main.qml:38
+msgid "unknown error"
+msgstr "ukendt fejl"
+
+#: ui/KeysPage.qml:38
+msgctxt "parameter, error"
+msgid "%1: %2"
+msgstr "%1: %2"
+
+#: ui/KeysPage.qml:45
+msgctxt "fnmode 0"
+msgid "0 — Fn key disabled"
+msgstr "0 — Fn-tasten deaktiveret"
+
+#: ui/KeysPage.qml:46
+msgctxt "fnmode 1"
+msgid "1 — special functions first (Apple legend), F1-F12 with fn"
+msgstr "1 — specialfunktioner først (Apples påtryk), F1-F12 med Fn"
+
+#: ui/KeysPage.qml:47
+msgctxt "fnmode 2"
+msgid "2 — F1-F12 first, special functions with fn"
+msgstr "2 — F1-F12 først, specialfunktioner med Fn"
+
+#: ui/KeysPage.qml:48
+msgctxt "fnmode 3"
+msgid "3 — automatic (same as 1 on this keyboard)"
+msgstr "3 — automatisk (som 1 på dette tastatur)"
+
+#: ui/KeysPage.qml:49
+msgctxt "fnmode 4"
+msgid "4 — F1-F12 only, special functions disabled"
+msgstr "4 — kun F1-F12, specialfunktioner deaktiveret"
+
+#: ui/KeysPage.qml:50
+msgid "unknown"
+msgstr "ukendt"
+
+#: ui/KeysPage.qml:60
+msgctxt "KDE shortcut action"
+msgid "KDE: %1"
+msgstr "KDE: %1"
+
+#: ui/KeysPage.qml:61
+msgid "no KDE shortcut"
+msgstr "ingen KDE-genvej"
+
+#: ui/KeysPage.qml:81
+msgid ""
+"The key table could not be read: the keyboard service did not answer in time."
+msgstr "Tastetabellen kunne ikke læses: tastaturtjenesten svarede ikke i tide."
+
+#: ui/KeysPage.qml:82
+msgid "The key table could not be read: %1"
+msgstr "Tastetabellen kunne ikke læses: %1"
+
+#: ui/KeysPage.qml:85 ui/KeysPage.qml:101 ui/StatePage.qml:108
+msgid "Try again"
+msgstr "Prøv igen"
+
+#: ui/KeysPage.qml:98
+msgid "The key mapping could not be read: %1"
+msgstr "Tastetildelingen kunne ikke læses: %1"
+
+#: ui/KeysPage.qml:114
+msgctxt "@title:group"
+msgid "What each key does now"
+msgstr "Hvad hver tast gør nu"
+
+#: ui/KeysPage.qml:123
+msgid ""
+"Fn mode %1. Read from the kernel and the installed mapping; no key press is "
+"read."
+msgstr ""
+"Fn-tilstand %1. Læst fra kernen og den installerede tastetildeling; ingen "
+"tastetryk læses."
+
+#: ui/KeysPage.qml:124
+msgid "Reading the key table…"
+msgstr "Læser tastetabellen…"
+
+#: ui/KeysPage.qml:134
+msgctxt "@title:column"
+msgid "Key"
+msgstr "Tast"
+
+#: ui/KeysPage.qml:135
+msgctxt "@title:column"
+msgid "Pressed alone"
+msgstr "Trykket alene"
+
+#: ui/KeysPage.qml:136
+msgctxt "@title:column"
+msgid "With fn"
+msgstr "Med Fn"
+
+#: ui/KeysPage.qml:149
+msgctxt "key, legend, alone, with fn"
+msgid "%1 (%2): alone %3; with fn %4"
+msgstr "%1 (%2): alene %3; med Fn %4"
+
+#: ui/KeysPage.qml:185
+msgid "* = changed by the installed manual mapping."
+msgstr "* = ændret af den installerede manuelle tastetildeling."
+
+#: ui/KeysPage.qml:185
+msgid ""
+"The active profile differs from what is installed: use “Install the mapping”."
+msgstr ""
+"Den aktive profil afviger fra det installerede: brug “Installér "
+"tastetildelingen”."
+
+#: ui/KeysPage.qml:193
+msgctxt "@title:group"
+msgid "Fn key and modifier keys"
+msgstr "Fn-tast og ændringstaster"
+
+#: ui/KeysPage.qml:200
+msgid ""
+"These are parameters of the kernel driver hid_apple: they apply to ALL Apple "
+"keyboards of this computer, are kept after a restart, and each change asks "
+"for the administrator password."
+msgstr ""
+"Dette er parametre for kernedriveren hid_apple: de gælder for ALLE Apple-"
+"tastaturer på denne computer, bevares efter en genstart, og hver ændring "
+"beder om administratoradgangskoden."
+
+#: ui/KeysPage.qml:205
+msgid "Fn mode:"
+msgstr "Fn-tilstand:"
+
+#: ui/KeysPage.qml:209
+msgid "Fn mode"
+msgstr "Fn-tilstand"
+
+#: ui/KeysPage.qml:213
+msgid "Option and Command:"
+msgstr "Option og Command:"
+
+#: ui/KeysPage.qml:215
+msgid "Mac order (Option = Alt, Command = Meta)"
+msgstr "Mac-rækkefølge (Option = Alt, Command = Meta)"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on both sides (PC order)"
+msgstr "byttet om i begge sider (pc-rækkefølge)"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on the left side only"
+msgstr "kun byttet om i venstre side"
+
+#: ui/KeysPage.qml:217
+msgid "Option and Command keys"
+msgstr "Option- og Command-taster"
+
+#: ui/KeysPage.qml:222
+msgid "Control and Command:"
+msgstr "Control og Command:"
+
+#: ui/KeysPage.qml:223
+msgid "Swap Control and Command"
+msgstr "Byt om på Control og Command"
+
+#: ui/KeysPage.qml:228
+msgid "fn and left Control:"
+msgstr "Fn og venstre Control:"
+
+#: ui/KeysPage.qml:229
+msgid "Swap fn and the left Control key"
+msgstr "Byt om på Fn og venstre Control-tast"
+
+#: ui/KeysPage.qml:234
+msgid "ISO keys ` and <:"
+msgstr "ISO-tasterne ` og <:"
+
+#: ui/KeysPage.qml:236
+msgid "automatic"
+msgstr "automatisk"
+
+#: ui/KeysPage.qml:236
+msgid "as engraved"
+msgstr "som påtrykt"
+
+#: ui/KeysPage.qml:236
+msgid "swapped"
+msgstr "byttet om"
+
+#: ui/KeysPage.qml:238
+msgid "ISO keys"
+msgstr "ISO-taster"
+
+#: ui/KeysPage.qml:244
+msgid "Apply these parameters…"
+msgstr "Anvend disse parametre…"
+
+#: ui/KeysPage.qml:257
+msgid "Asks for the administrator password once per changed parameter"
+msgstr "Beder om administratoradgangskoden én gang pr. ændret parameter"
+
+#: ui/KeysPage.qml:264
+msgid "Parameters applied to every Apple keyboard."
+msgstr "Parametrene er anvendt på alle Apple-tastaturer."
+
+#: ui/KeysPage.qml:282
+msgid "Undo changes"
+msgstr "Fortryd ændringerne"
+
+#: ui/KeysPage.qml:299
+msgid "Waiting for the authentication"
+msgstr "Venter på godkendelsen"
+
+#: ui/KeysPage.qml:305
+msgctxt "@title:group"
+msgid "Manual key mapping"
+msgstr "Manuel tastetildeling"
+
+#: ui/KeysPage.qml:309
+msgid "Profile:"
+msgstr "Profil:"
+
+#: ui/KeysPage.qml:313
+msgid "Preset:"
+msgstr "Forvalg:"
+
+#: ui/KeysPage.qml:317
+msgid "none (parameters left as they are)"
+msgstr "intet (parametrene bevares, som de er)"
+
+#: ui/KeysPage.qml:319
+msgid "Preset of the profile"
+msgstr "Profilens forvalg"
+
+#: ui/KeysPage.qml:322
+msgid "Use this preset"
+msgstr "Brug dette forvalg"
+
+#: ui/KeysPage.qml:328
+msgid "Preset saved in the profile; use “Install the mapping” to apply it."
+msgstr ""
+"Forvalget er gemt i profilen; brug “Installér tastetildelingen” for at "
+"anvende det."
+
+#: ui/KeysPage.qml:334
+msgid "Remapped keys:"
+msgstr "Omtildelte taster:"
+
+#: ui/KeysPage.qml:339
+msgid "none"
+msgstr "ingen"
+
+#: ui/KeysPage.qml:348
+msgctxt "key -> code"
+msgid "%1 → %2"
+msgstr "%1 → %2"
+
+#: ui/KeysPage.qml:353
+msgid "Remove"
+msgstr "Fjern"
+
+#: ui/KeysPage.qml:356
+msgid "Remove the mapping of %1"
+msgstr "Fjern tildelingen af %1"
+
+#: ui/KeysPage.qml:363
+msgid "Mapping removed from the profile."
+msgstr "Tildelingen er fjernet fra profilen."
+
+#: ui/KeysPage.qml:371
+msgid "Remap:"
+msgstr "Omtildel:"
+
+#: ui/KeysPage.qml:376
+msgid "Key to remap"
+msgstr "Tast der skal omtildeles"
+
+#: ui/KeysPage.qml:382
+msgid "Linux key code (KEY_…)"
+msgstr "Linux-tastekode (KEY_…)"
+
+#: ui/KeysPage.qml:387
+msgid "Add"
+msgstr "Tilføj"
+
+#: ui/KeysPage.qml:395
+msgid "Mapping saved in the profile; use “Install the mapping” to apply it."
+msgstr ""
+"Tildelingen er gemt i profilen; brug “Installér tastetildelingen” for at "
+"anvende den."
+
+#: ui/KeysPage.qml:402
+msgid "Install the mapping…"
+msgstr "Installér tastetildelingen…"
+
+#: ui/KeysPage.qml:405
+msgid ""
+"Installs the active profile (udev hwdb and its parameters); asks for the "
+"administrator password"
+msgstr ""
+"Installerer den aktive profil (udev-hwdb og dens parametre); beder om "
+"administratoradgangskoden"
+
+#: ui/KeysPage.qml:410
+msgid "Mapping installed."
+msgstr "Tastetildelingen er installeret."
+
+#: ui/KeysPage.qml:415
+msgid "Back to the kernel mapping…"
+msgstr "Tilbage til kernens tastetildeling…"
+
+#: ui/KeysPage.qml:422
+msgid "Kernel mapping restored."
+msgstr "Kernens tastetildeling er gendannet."
+
+#: ui/KeysPage.qml:430
+msgctxt "@title:group"
+msgid "KDE shortcuts"
+msgstr "KDE-genveje"
+
+#: ui/KeysPage.qml:433
+msgid "F4 (Launchpad):"
+msgstr "F4 (Launchpad):"
+
+#: ui/KeysPage.qml:435
+msgid "Bind F4 to the application launcher"
+msgstr "Tildel F4 til programstarteren"
+
+#: ui/KeysPage.qml:438
+msgid ""
+"Adds the missing KDE shortcut for the Launch (D) key, never replacing an "
+"existing one"
+msgstr ""
+"Tilføjer den manglende KDE-genvej til tasten Launch (D) og erstatter aldrig "
+"en eksisterende"
+
+#: ui/KeysPage.qml:443
+msgid "KDE shortcuts updated."
+msgstr "KDE-genveje opdateret."
+
+#: ui/KeysPage.qml:454
+msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
+msgstr "Fortryd fra en terminal: akmctl keymap kde-apply --undo"
+
+#: ui/NamePage.qml:46
+msgid "akmctl stopped abruptly before giving its verdict (crash or signal)."
+msgstr "akmctl stoppede brat, før det gav sit resultat (nedbrud eller signal)."
+
+#: ui/NamePage.qml:49
+msgid ""
+"No answer in time. Nothing more is attempted; look at the stored name above "
+"in a moment."
+msgstr ""
+"Intet svar i tide. Der forsøges ikke mere; se det gemte navn ovenfor om et "
+"øjeblik."
+
+#: ui/NamePage.qml:52
+msgid "Check passed: “%1” can be written. Nothing was written."
+msgstr "Kontrol bestået: “%1” kan skrives. Intet blev skrevet."
+
+#: ui/NamePage.qml:55
+msgid ""
+"“%1” is now stored in the keyboard: written, then read back identical. This "
+"computer may show the old name until a later connection."
+msgstr ""
+"“%1” er nu gemt i tastaturet: skrevet og læst tilbage identisk. Denne "
+"computer kan vise det gamle navn indtil en senere forbindelse."
+
+#: ui/NamePage.qml:58
+msgid ""
+"The name was written, but it could not be read back. Look at the stored name "
+"above in a moment.\n"
+"%1"
+msgstr ""
+"Navnet blev skrevet, men kunne ikke læses tilbage. Se det gemte navn ovenfor "
+"om et øjeblik.\n"
+"%1"
+
+#: ui/NamePage.qml:61
+msgid ""
+"The name was written, but the keyboard reads back another one.\n"
+"%1"
+msgstr ""
+"Navnet blev skrevet, men tastaturet læser et andet tilbage.\n"
+"%1"
+
+#: ui/NamePage.qml:64
+msgid ""
+"The write failed on its way: the name may or may not have been written. Look "
+"at the stored name above in a moment.\n"
+"%1"
+msgstr ""
+"Skrivningen mislykkedes undervejs: navnet er måske skrevet, måske ikke. Se "
+"det gemte navn ovenfor om et øjeblik.\n"
+"%1"
+
+#: ui/NamePage.qml:67
+msgid ""
+"Check failed, nothing was written.\n"
+"%1"
+msgstr ""
+"Kontrollen mislykkedes, intet blev skrevet.\n"
+"%1"
+
+#: ui/NamePage.qml:70
+msgid ""
+"Not written.\n"
+"%1"
+msgstr ""
+"Ikke skrevet.\n"
+"%1"
+
+#: ui/NamePage.qml:81
+msgctxt "@title:window"
+msgid "Write the name into the keyboard"
+msgstr "Skriv navnet i tastaturet"
+
+#: ui/NamePage.qml:86
+msgctxt "@action:button"
+msgid "Write"
+msgstr "Skriv"
+
+#: ui/NamePage.qml:97
+msgid "Write “%1” into the keyboard's memory?"
+msgstr "Skriv “%1” i tastaturets hukommelse?"
+
+#: ui/NamePage.qml:114
+msgctxt "@title:group"
+msgid "Name on this computer"
+msgstr "Navn på denne computer"
+
+#: ui/NamePage.qml:118
+msgid "Shown as:"
+msgstr "Vises som:"
+
+#: ui/NamePage.qml:125
+msgid "Keyboard's own name:"
+msgstr "Tastaturets eget navn:"
+
+#: ui/NamePage.qml:133
+msgid "New name:"
+msgstr "Nyt navn:"
+
+#: ui/NamePage.qml:137
+msgid "e.g. Office keyboard"
+msgstr "f.eks. Kontortastatur"
+
+#: ui/NamePage.qml:139
+msgid "New name of the keyboard on this computer"
+msgstr "Tastaturets nye navn på denne computer"
+
+#: ui/NamePage.qml:145
+msgid "Rename"
+msgstr "Omdøb"
+
+#: ui/NamePage.qml:153
+msgid "Renamed to “%1” on this computer."
+msgstr "Omdøbt til “%1” på denne computer."
+
+#: ui/NamePage.qml:153 ui/NamePage.qml:168
+msgid "Not renamed: %1"
+msgstr "Ikke omdøbt: %1"
+
+#: ui/NamePage.qml:160
+msgid "Use the keyboard's own name"
+msgstr "Brug tastaturets eget navn"
+
+#: ui/NamePage.qml:168
+msgid "The keyboard's own name is used again."
+msgstr "Tastaturets eget navn bruges igen."
+
+#: ui/NamePage.qml:180
+msgid "Renaming needs the keyboard service."
+msgstr "Omdøbning kræver tastaturtjenesten."
+
+#: ui/NamePage.qml:181
+msgid "No keyboard is known yet."
+msgstr "Intet tastatur er kendt endnu."
+
+#: ui/NamePage.qml:182
+msgid ""
+"Only this computer sees this name (Bluetooth alias); the keyboard itself is "
+"not changed."
+msgstr ""
+"Kun denne computer ser dette navn (Bluetooth-alias); selve tastaturet ændres "
+"ikke."
+
+#: ui/NamePage.qml:187
+msgctxt "@title:group"
+msgid "Name stored inside the keyboard"
+msgstr "Navn gemt i tastaturet"
+
+#: ui/NamePage.qml:191
+msgid "Stored now:"
+msgstr "Gemt nu:"
+
+#: ui/NamePage.qml:192
+msgid "not read yet (the service reads it once per connection)"
+msgstr "endnu ikke læst (tjenesten læser det én gang pr. forbindelse)"
+
+#: ui/NamePage.qml:199
+msgid "Name to write:"
+msgstr "Navn der skal skrives:"
+
+#: ui/NamePage.qml:203
+msgid "1 to 32 ASCII characters"
+msgstr "1 til 32 ASCII-tegn"
+
+#: ui/NamePage.qml:205
+msgid "Name to write into the keyboard"
+msgstr "Navn der skal skrives i tastaturet"
+
+#: ui/NamePage.qml:206
+msgid ""
+"1 to 32 printable ASCII characters, no leading or trailing space, no "
+"backslash"
+msgstr ""
+"1 til 32 udskrivbare ASCII-tegn, intet mellemrum først eller sidst, ingen "
+"omvendt skråstreg"
+
+#: ui/NamePage.qml:212
+msgid "Check (nothing written)"
+msgstr "Kontrollér (skriv intet)"
+
+#: ui/NamePage.qml:215
+msgid ""
+"Runs every check that precedes the write and saves the current name; nothing "
+"is written"
+msgstr ""
+"Kører alle kontroller, der går forud for skrivningen, og sikkerhedskopierer "
+"det nuværende navn; intet skrives"
+
+#: ui/NamePage.qml:221
+msgid "Write the name into the keyboard…"
+msgstr "Skriv navnet i tastaturet…"
+
+#: ui/NamePage.qml:224
+msgid ""
+"Asks for a confirmation, then writes the name into the keyboard and reads it "
+"back"
+msgstr ""
+"Beder om en bekræftelse, skriver derefter navnet i tastaturet og læser det "
+"tilbage"
+
+#: ui/NamePage.qml:244
+msgid ""
+"Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
+"no backslash."
+msgstr ""
+"Afvist: 1 til 32 udskrivbare ASCII-tegn, intet mellemrum først eller sidst, "
+"ingen omvendt skråstreg."
+
+#: ui/NamePage.qml:245
+msgid ""
+"Every computer and phone sees this name. The current name is saved first, "
+"the keyboard is checked, the name is written once and read back at once. Not "
+"measured: whether the name survives a battery change."
+msgstr ""
+"Alle computere og telefoner ser dette navn. Det nuværende navn "
+"sikkerhedskopieres først, tastaturet kontrolleres, navnet skrives én gang og "
+"læses straks tilbage. Ikke målt: om navnet overlever et batteriskift."
+
+#: ui/NamePage.qml:265
+msgctxt "@title:group"
+msgid "Same operations, to copy into a terminal"
+msgstr "De samme handlinger til at kopiere ind i en terminal"
+
+#: ui/NamePage.qml:270
+msgid ""
+"Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
+"authentication):"
+msgstr ""
+"Navn gemt i tastaturet, forhåndsvisning (viser bytene, skriver intet, ingen "
+"godkendelse):"
+
+#: ui/NamePage.qml:272
+msgid "Every check and the backup of the current name (writes nothing):"
+msgstr ""
+"Alle kontroller og sikkerhedskopien af det nuværende navn (skriver intet):"
+
+#: ui/NamePage.qml:274
+msgid ""
+"The write itself (checks, backup, one confirmation, one write, read back):"
+msgstr ""
+"Selve skrivningen (kontroller, sikkerhedskopi, én bekræftelse, én skrivning, "
+"tilbagelæsning):"
+
+#: ui/NamePage.qml:276
+msgid ""
+"Forget the keyboard cleanly, as macOS does, then pair it again (only after "
+"typing the confirmation word):"
+msgstr ""
+"Glem tastaturet rent, som macOS gør, og par det derefter igen (først efter "
+"at have skrevet bekræftelsesordet):"
+
+#: ui/NamePage.qml:299
+msgid "Type a valid name to write above first"
+msgstr "Skriv først et gyldigt navn ovenfor"
+
+#: ui/NamePage.qml:301
+msgid "Command: %1"
+msgstr "Kommando: %1"
+
+#: ui/NamePage.qml:305
+msgid "Copy"
+msgstr "Kopiér"
+
+#: ui/NamePage.qml:307
+msgid "Copy the command"
+msgstr "Kopiér kommandoen"
+
+#: ui/NamePage.qml:312
+msgid "Command copied."
+msgstr "Kommandoen er kopieret."
+
+#: ui/StatePage.qml:37
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 dag"
+msgstr[1] "≈ %1 dage"
+
+#: ui/StatePage.qml:38
+msgid "≈ %1 h"
+msgstr "≈ %1 t"
+
+#: ui/StatePage.qml:45
+#, no-javascript-format
+msgctxt "percentage"
+msgid "%1%"
+msgstr "%1 %"
+
+#: ui/StatePage.qml:49
+msgid "%1 second ago"
+msgid_plural "%1 seconds ago"
+msgstr[0] "for %1 sekund siden"
+msgstr[1] "for %1 sekunder siden"
+
+#: ui/StatePage.qml:50
+msgid "%1 minute ago"
+msgid_plural "%1 minutes ago"
+msgstr[0] "for %1 minut siden"
+msgstr[1] "for %1 minutter siden"
+
+#: ui/StatePage.qml:51
+msgid "%1 hour ago"
+msgid_plural "%1 hours ago"
+msgstr[0] "for %1 time siden"
+msgstr[1] "for %1 timer siden"
+
+#: ui/StatePage.qml:52
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "for %1 dag siden"
+msgstr[1] "for %1 dage siden"
+
+#: ui/StatePage.qml:67
+msgid "rssi-helper not installed"
+msgstr "rssi-helper ikke installeret"
+
+#: ui/StatePage.qml:68
+msgid "see akmctl doctor"
+msgstr "se akmctl doctor"
+
+#: ui/StatePage.qml:69
+msgid "not measured (%1)"
+msgstr "ikke målt (%1)"
+
+#: ui/StatePage.qml:73 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "excellent"
+msgstr "fremragende"
+
+#: ui/StatePage.qml:74 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "good"
+msgstr "god"
+
+#: ui/StatePage.qml:75 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "weak"
+msgstr "svag"
+
+#: ui/StatePage.qml:78
+msgctxt "signal quality, then the relative value in dB (0 = ideal range)"
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+#: ui/StatePage.qml:82
+msgid "up to date"
+msgstr "opdateret"
+
+#: ui/StatePage.qml:83
+msgid "a newer version exists (this module never updates the firmware)"
+msgstr "der findes en nyere version (dette modul opdaterer aldrig firmwaren)"
+
+#: ui/StatePage.qml:84
+msgid "model not in the table"
+msgstr "modellen findes ikke i tabellen"
+
+#: ui/StatePage.qml:85
+msgid "not assessed yet"
+msgstr "endnu ikke vurderet"
+
+#: ui/StatePage.qml:94
+msgid "No data: the keyboard service is not running"
+msgstr "Ingen data: tastaturtjenesten kører ikke"
+
+#: ui/StatePage.qml:95
+msgid ""
+"Use “Start the service” above, or run: systemctl --user start apple-kb-"
+"monitord.service"
+msgstr ""
+"Brug “Start tjenesten” ovenfor, eller kør: systemctl --user start apple-kb-"
+"monitord.service"
+
+#: ui/StatePage.qml:119
+msgid "Loading the keyboard state"
+msgstr "Indlæser tastaturets tilstand"
+
+#: ui/StatePage.qml:128
+msgctxt "@title:group"
+msgid "Keyboard"
+msgstr "Tastatur"
+
+#: ui/StatePage.qml:132
+msgid "Name:"
+msgstr "Navn:"
+
+#: ui/StatePage.qml:136
+msgid "Name: %1"
+msgstr "Navn: %1"
+
+#: ui/StatePage.qml:140
+msgid "Model:"
+msgstr "Model:"
+
+#: ui/StatePage.qml:147
+msgid "Address:"
+msgstr "Adresse:"
+
+#: ui/StatePage.qml:161
+msgid "connected"
+msgstr "forbundet"
+
+#: ui/StatePage.qml:161
+msgid "disconnected"
+msgstr "afbrudt"
+
+#: ui/StatePage.qml:162
+msgid "Connection: %1"
+msgstr "Forbindelse: %1"
+
+#: ui/StatePage.qml:167
+msgid "Problem:"
+msgstr "Problem:"
+
+#: ui/StatePage.qml:176
+msgctxt "@title:group"
+msgid "Battery"
+msgstr "Batteri"
+
+#: ui/StatePage.qml:180
+msgid "Keyboard indication:"
+msgstr "Tastaturets værdi:"
+
+#: ui/StatePage.qml:182
+msgid "Keyboard indication: %1"
+msgstr "Tastaturets værdi: %1"
+
+#: ui/StatePage.qml:186
+msgid "Apple display:"
+msgstr "Apples visning:"
+
+#: ui/StatePage.qml:188
+msgctxt "percentage as macOS shows it"
+msgid "%1 (as macOS shows it)"
+msgstr "%1 (som macOS viser det)"
+
+#: ui/StatePage.qml:192
+msgid "Estimated charge:"
+msgstr "Skønnet opladning:"
+
+#: ui/StatePage.qml:195
+msgid "new batteries: no estimate during the first two days"
+msgstr "nye batterier: intet skøn de første to dage"
+
+#: ui/StatePage.qml:196
+msgctxt "estimate, low bound, high bound, chemistry"
+msgid "%1 (between %2 and %3, %4 batteries)"
+msgstr "%1 (mellem %2 og %3, batterier: %4)"
+
+#: ui/StatePage.qml:198
+msgid "not available"
+msgstr "ikke tilgængelig"
+
+#: ui/StatePage.qml:201
+msgid "Estimated charge: %1"
+msgstr "Skønnet opladning: %1"
+
+#: ui/StatePage.qml:205
+msgid "Voltage:"
+msgstr "Spænding:"
+
+#: ui/StatePage.qml:207
+msgctxt "volts"
+msgid "%1 V"
+msgstr "%1 V"
+
+#: ui/StatePage.qml:211
+msgid "Remaining:"
+msgstr "Tilbage:"
+
+#: ui/StatePage.qml:217
+msgid "Batteries installed:"
+msgstr "Batterier isat:"
+
+#: ui/StatePage.qml:225
+msgctxt "@title:group"
+msgid "Link"
+msgstr "Forbindelse"
+
+#: ui/StatePage.qml:229
+msgid "Signal:"
+msgstr "Signal:"
+
+#: ui/StatePage.qml:231
+msgid "Signal: %1"
+msgstr "Signal: %1"
+
+#: ui/StatePage.qml:236
+msgid "Last measurement:"
+msgstr "Seneste måling:"
+
+#: ui/StatePage.qml:237
+msgid "never"
+msgstr "aldrig"
+
+#: ui/StatePage.qml:238
+msgid "Last measurement: %1"
+msgstr "Seneste måling: %1"
+
+#: ui/StatePage.qml:243
+msgctxt "@title:group"
+msgid "Firmware"
+msgstr "Firmware"
+
+#: ui/StatePage.qml:247 ui/StatePage.qml:272
+msgid "Version:"
+msgstr "Version:"
+
+#: ui/StatePage.qml:253
+msgid "Latest known:"
+msgstr "Seneste kendte:"
+
+#: ui/StatePage.qml:260
+msgid "Status:"
+msgstr "Status:"
+
+#: ui/StatePage.qml:268
+msgctxt "@title:group"
+msgid "Service"
+msgstr "Tjeneste"
+
+#: ui/StatePage.qml:277
+msgid "Last error:"
+msgstr "Seneste fejl:"
+
+#: ui/Store.qml:158
+msgid "The keyboard service (apple-kb-monitord) is not running"
+msgstr "Tastaturtjenesten (apple-kb-monitord) kører ikke"
+
+#: ui/Store.qml:159
+msgid "command not allowed"
+msgstr "kommandoen er ikke tilladt"
+
+#: ui/Store.qml:160
+msgid "no answer in time"
+msgstr "intet svar i tide"
+
+#: ui/Store.qml:161
+msgctxt "%1 is a JSON parser error"
+msgid "unreadable reply: %1"
+msgstr "ulæseligt svar: %1"
+
+#: ui/main.qml:26
+msgid "The service could not be started: %1"
+msgstr "Tjenesten kunne ikke startes: %1"
+
+#: ui/main.qml:31
+msgid "Starting…"
+msgstr "Starter…"
+
+#: ui/main.qml:31
+msgid "Start the service"
+msgstr "Start tjenesten"
+
+#: ui/main.qml:49
+msgid "Sections of the Apple keyboard settings"
+msgstr "Afsnit i indstillingerne for Apple-tastaturet"
+
+#: ui/main.qml:50
+msgctxt "@title:tab"
+msgid "State"
+msgstr "Tilstand"
+
+#: ui/main.qml:51
+msgctxt "@title:tab"
+msgid "Keys"
+msgstr "Taster"
+
+#: ui/main.qml:52
+msgctxt "@title:tab"
+msgid "Notifications"
+msgstr "Bekendtgørelser"
+
+#: ui/main.qml:53
+msgctxt "@title:tab"
+msgid "Name"
+msgstr "Navn"
+
+#: ui/main.qml:54
+msgctxt "@title:tab"
+msgid "Diagnostics"
+msgstr "Diagnose"

@@ -1,0 +1,10 @@
+# cargo-deny / cargo-audit policy. Run: cargo deny check advisories
+# Every ignored advisory must be justified next to its entry.
+
+[advisories]
+version = 2
+# An ignore that no longer matches anything fails the check instead of outliving its reason.
+unused-ignored-advisory = "deny"
+# rand 0.8.5 (RUSTSEC-2026-0097, unsound) comes through zbus 4: cargo-deny reports unsound
+# advisories of workspace dependencies only, so it needs no ignore.
+ignore = []

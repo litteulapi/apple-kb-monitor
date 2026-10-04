@@ -1,0 +1,2047 @@
+# Czech translation of the System Settings module kcm_applekeyboard.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:57+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: Czech\n"
+"Language: cs\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
+
+#: ui/AlertsPage.qml:50 ui/StatePage.qml:104
+msgid ""
+"The keyboard service did not answer within 5 seconds. It is busy or stuck; "
+"the values shown may be old."
+msgstr ""
+"Služba klávesnice neodpověděla do 5 sekund. Je zaneprázdněná nebo zaseknutá; "
+"zobrazené hodnoty mohou být staré."
+
+#: ui/AlertsPage.qml:51 ui/StatePage.qml:105
+msgid "The keyboard service answered with an error: %1"
+msgstr "Služba klávesnice odpověděla chybou: %1"
+
+#: ui/AlertsPage.qml:230 ui/main.qml:27
+msgid ""
+"The keyboard service (apple-kb-monitord) is not running: every setting is "
+"read and written by it, nothing can be shown or changed until it starts."
+msgstr ""
+"Služba klávesnice (apple-kb-monitord) neběží: čte a zapisuje všechna "
+"nastavení, takže nic nelze zobrazit ani změnit, dokud se nespustí."
+
+#: ui/AlertsPage.qml:235
+msgid ""
+"Not saved: the keyboard service did not answer in time, the settings could "
+"not be read. Try again in a moment."
+msgstr ""
+"Neuloženo: služba klávesnice neodpověděla včas, nastavení nešlo přečíst. "
+"Zkuste to za chvíli znovu."
+
+#: ui/AlertsPage.qml:236
+msgid ""
+"Not saved: the keyboard service could not read the settings (%1). Try again "
+"in a moment."
+msgstr ""
+"Neuloženo: služba klávesnice nemohla přečíst nastavení (%1). Zkuste to za "
+"chvíli znovu."
+
+#: ui/AlertsPage.qml:240
+msgid ""
+"Not saved: the settings file could not be read (%1), so it is not written "
+"over. Fix the file or move it away, then reopen this page."
+msgstr ""
+"Neuloženo: soubor nastavení nelze přečíst (%1), proto se nepřepisuje. "
+"Opravte nebo přesuňte soubor a poté tuto stránku znovu otevřete."
+
+#: ui/AlertsPage.qml:245
+msgid ""
+"Not saved: the thresholds must be whole numbers between 1 and 99, separated "
+"by commas."
+msgstr "Neuloženo: prahy musí být celá čísla od 1 do 99 oddělená čárkami."
+
+#: ui/AlertsPage.qml:249
+msgid "Not saved: the critical level must be a whole number between 0 and 99."
+msgstr "Neuloženo: kritická úroveň musí být celé číslo od 0 do 99."
+
+#: ui/AlertsPage.qml:253
+msgid ""
+"Not saved: the re-arm margin must be a number between 1 and 20 (for example "
+"3 or 2.5)."
+msgstr ""
+"Neuloženo: rozpětí pro opětovné zapnutí musí být číslo od 1 do 20 (například "
+"3 nebo 2,5)."
+
+#: ui/AlertsPage.qml:278
+msgid ""
+"Saved. The service reads these settings when it starts: restart it to use "
+"them now."
+msgstr ""
+"Uloženo. Služba čte tato nastavení při spuštění: restartujte ji, aby se "
+"použila hned."
+
+#: ui/AlertsPage.qml:279
+msgid "Saved. They will be used when the service starts."
+msgstr "Uloženo. Použijí se při spuštění služby."
+
+#: ui/AlertsPage.qml:283
+msgid ""
+"Not saved: the settings file was changed by another program since this page "
+"read it. Nothing was written; use Reset to read it again."
+msgstr ""
+"Neuloženo: soubor nastavení změnil jiný program od chvíle, kdy jej tato "
+"stránka přečetla. Nic nebylo zapsáno; použijte Obnovit pro opětovné načtení."
+
+#: ui/AlertsPage.qml:284
+msgid "Not saved: %1"
+msgstr "Neuloženo: %1"
+
+#: ui/AlertsPage.qml:307
+msgid "Restart the service"
+msgstr "Restartovat službu"
+
+#: ui/AlertsPage.qml:312
+msgid "Service restarted with the new settings."
+msgstr "Služba restartována s novým nastavením."
+
+#: ui/AlertsPage.qml:312
+msgid "The service could not be restarted: %1"
+msgstr "Službu nelze restartovat: %1"
+
+#: ui/AlertsPage.qml:326
+msgid ""
+"The settings file could not be read (%1): the defaults are shown and nothing "
+"can be saved, so that the file is never written over."
+msgstr ""
+"Soubor nastavení nelze přečíst (%1): zobrazují se výchozí hodnoty a nic "
+"nelze uložit, aby se soubor nikdy nepřepsal."
+
+#: ui/AlertsPage.qml:328
+msgid ""
+"Some lines of the settings file are not understood (%1); they are kept as "
+"they are."
+msgstr ""
+"Některým řádkům souboru nastavení nelze porozumět (%1); zůstávají beze změny."
+
+#: ui/AlertsPage.qml:337
+msgid ""
+"The service does not take these values of the settings file as they are "
+"written: %1. They are shown as written and kept unless you change them."
+msgstr ""
+"Služba nepřijímá tyto hodnoty souboru nastavení tak, jak jsou zapsány: %1. "
+"Zobrazují se tak, jak jsou zapsány, a zůstávají zachovány, dokud je "
+"nezměníte."
+
+#: ui/AlertsPage.qml:346
+msgctxt "@title:group"
+msgid "Low battery"
+msgstr "Slabá baterie"
+
+#: ui/AlertsPage.qml:351
+msgid "Alerts:"
+msgstr "Upozornění:"
+
+#: ui/AlertsPage.qml:352
+msgid "Notify when the battery is low"
+msgstr "Upozornit na slabou baterii"
+
+#: ui/AlertsPage.qml:358
+msgid "Thresholds (%):"
+msgstr "Prahy (%):"
+
+#: ui/AlertsPage.qml:362
+msgid "Alert thresholds in percent, separated by commas"
+msgstr "Prahy upozornění v procentech, oddělené čárkami"
+
+#: ui/AlertsPage.qml:365
+msgid "Whole numbers from 1 to 99"
+msgstr "Celá čísla od 1 do 99"
+
+#: ui/AlertsPage.qml:373
+msgid "One notification per threshold crossed, on the estimated charge."
+msgstr "Jedno oznámení za každý překročený práh, podle odhadovaného nabití."
+
+#: ui/AlertsPage.qml:378
+msgid "With KDE:"
+msgstr "S KDE:"
+
+#: ui/AlertsPage.qml:380
+msgid "When KDE already warns about this keyboard, send only one reminder"
+msgstr ""
+"Když KDE již na tuto klávesnici upozorňuje, poslat jen jednu připomínku"
+
+#: ui/AlertsPage.qml:386
+msgid "Critical at or below (%):"
+msgstr "Kritické na nebo pod (%):"
+
+#: ui/AlertsPage.qml:390
+msgid "Critical threshold in percent"
+msgstr "Kritický práh v procentech"
+
+#: ui/AlertsPage.qml:396
+msgid "Re-arm after (points):"
+msgstr "Znovu aktivovat po (bodech):"
+
+#: ui/AlertsPage.qml:400
+msgid "Points above a threshold before it can notify again"
+msgstr "Body nad prahem, než může znovu upozornit"
+
+#: ui/AlertsPage.qml:401
+msgid "A number from 1 to 20, decimals allowed"
+msgstr "Číslo od 1 do 20, desetinná místa povolena"
+
+#: ui/AlertsPage.qml:408
+msgctxt "@title:group"
+msgid "Batteries"
+msgstr "Baterie"
+
+#: ui/AlertsPage.qml:413
+msgid "Battery type:"
+msgstr "Typ baterií:"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:56
+msgctxt "battery chemistry"
+msgid "alkaline"
+msgstr "alkalické"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:57
+msgctxt "battery chemistry"
+msgid "NiMH (rechargeable)"
+msgstr "NiMH (nabíjecí)"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:58
+msgctxt "battery chemistry"
+msgid "lithium"
+msgstr "lithiové"
+
+#: ui/AlertsPage.qml:414 ui/StatePage.qml:59
+msgctxt "battery chemistry"
+msgid "unknown"
+msgstr "neznámé"
+
+#: ui/AlertsPage.qml:415
+msgid "Battery type"
+msgstr "Typ baterií"
+
+#: ui/AlertsPage.qml:424
+msgid ""
+"Used for the estimated charge and its range; the keyboard's own indication "
+"does not depend on it."
+msgstr ""
+"Slouží k odhadu nabití a jeho rozsahu; vlastní údaj klávesnice na tom "
+"nezávisí."
+
+#: ui/AlertsPage.qml:429
+msgid "Display:"
+msgstr "Zobrazení:"
+
+#: ui/AlertsPage.qml:430
+msgid "Also show the percentage as macOS shows it"
+msgstr "Zobrazit také procento tak, jak jej ukazuje macOS"
+
+#: ui/AlertsPage.qml:436
+msgctxt "@title:group"
+msgid "Other notifications"
+msgstr "Další oznámení"
+
+#: ui/AlertsPage.qml:441 ui/StatePage.qml:152
+msgid "Connection:"
+msgstr "Spojení:"
+
+#: ui/AlertsPage.qml:442
+msgid "Notify on disconnection and reconnection"
+msgstr "Upozornit při odpojení a opětovném připojení"
+
+#: ui/AlertsPage.qml:448
+msgid "New batteries:"
+msgstr "Nové baterie:"
+
+#: ui/AlertsPage.qml:449
+msgid "Notify when new batteries are detected"
+msgstr "Upozornit při zjištění nových baterií"
+
+#: ui/AlertsPage.qml:455
+msgctxt "@title:group"
+msgid "Shutdown"
+msgstr "Vypnutí"
+
+#: ui/AlertsPage.qml:460
+msgid "WillShutdown:"
+msgstr "WillShutdown:"
+
+#: ui/AlertsPage.qml:461
+msgid "Tell the keyboard when the computer shuts down or restarts"
+msgstr "Oznámit klávesnici vypnutí nebo restart počítače"
+
+#: ui/AlertsPage.qml:470
+msgid ""
+"What macOS sends at every shutdown (one message, nothing else is written). "
+"Off = the keyboard is left untouched."
+msgstr ""
+"Co macOS posílá při každém vypnutí (jedna zpráva, nic jiného se nezapisuje). "
+"Vypnuto = klávesnice zůstane nedotčena."
+
+#: ui/AlertsPage.qml:478
+msgid "File:"
+msgstr "Soubor:"
+
+#: ui/DiagPage.qml:39
+msgctxt "diagnosis level"
+msgid "OK"
+msgstr "OK"
+
+#: ui/DiagPage.qml:40
+msgctxt "diagnosis level"
+msgid "information"
+msgstr "informace"
+
+#: ui/DiagPage.qml:41
+msgctxt "diagnosis level"
+msgid "warning"
+msgstr "varování"
+
+#: ui/DiagPage.qml:42
+msgctxt "diagnosis level"
+msgid "problem"
+msgstr "problém"
+
+#: ui/DiagPage.qml:47
+msgctxt "doctor topic"
+msgid "adapter"
+msgstr "adaptér"
+
+#: ui/DiagPage.qml:48
+msgctxt "doctor topic"
+msgid "adapter power"
+msgstr "napájení adaptéru"
+
+#: ui/DiagPage.qml:49
+msgctxt "doctor topic"
+msgid "BlueZ settings"
+msgstr "nastavení BlueZ"
+
+#: ui/DiagPage.qml:50
+msgctxt "doctor topic"
+msgid "service"
+msgstr "služba"
+
+#: ui/DiagPage.qml:51
+msgctxt "doctor topic"
+msgid "HID access"
+msgstr "přístup HID"
+
+#: ui/DiagPage.qml:52
+msgctxt "doctor topic"
+msgid "journal"
+msgstr "žurnál"
+
+#: ui/DiagPage.qml:53
+msgctxt "doctor topic"
+msgid "link"
+msgstr "spojení"
+
+#: ui/DiagPage.qml:54
+msgctxt "doctor topic"
+msgid "link key"
+msgstr "klíč spojení"
+
+#: ui/DiagPage.qml:55
+msgctxt "doctor topic"
+msgid "link quality"
+msgstr "kvalita spojení"
+
+#: ui/DiagPage.qml:56
+msgctxt "doctor topic"
+msgid "pairing"
+msgstr "párování"
+
+#: ui/DiagPage.qml:57
+msgctxt "doctor topic"
+msgid "signal"
+msgstr "signál"
+
+#: ui/DiagPage.qml:58
+msgctxt "doctor topic"
+msgid "UPower"
+msgstr "UPower"
+
+#: ui/DiagPage.qml:59
+msgctxt "doctor topic"
+msgid "versions"
+msgstr "verze"
+
+#: ui/DiagPage.qml:66
+msgctxt "doctor verdict"
+msgid "the pairing is refused or missing: run `akmctl repair`"
+msgstr "párování je odmítnuto nebo chybí: spusťte `akmctl repair`"
+
+#: ui/DiagPage.qml:67
+msgctxt "doctor verdict"
+msgid "no usable pairing: run `akmctl repair`"
+msgstr "žádné použitelné párování: spusťte `akmctl repair`"
+
+#. i18n: %1 = the doctor topics to check, comma-separated
+#: ui/DiagPage.qml:69
+msgctxt "doctor verdict"
+msgid "Link up; to check: %1 (akmctl doctor)"
+msgstr "Spojení aktivní; ke kontrole: %1 (akmctl doctor)"
+
+#: ui/DiagPage.qml:70
+msgctxt "doctor verdict"
+msgid "link up and configuration sound"
+msgstr "spojení navázáno, konfigurace v pořádku"
+
+#: ui/DiagPage.qml:71
+msgctxt "doctor verdict"
+msgid ""
+"keyboard not connected: press a key and wait 10 s; the service pages it on "
+"its own. Pair it again only if `akmctl doctor` reports auth-failed"
+msgstr ""
+"klávesnice nepřipojena: stiskněte klávesu a počkejte 10 s; služba ji zavolá "
+"sama. Znovu ji spárujte, jen pokud `akmctl doctor` hlásí auth-failed"
+
+#: ui/DiagPage.qml:78
+msgctxt "doctor finding"
+msgid "rssi-helper executable, capability cap_net_admin present"
+msgstr "rssi-helper spustitelný, capability cap_net_admin přítomna"
+
+#: ui/DiagPage.qml:79
+msgctxt "doctor finding"
+msgid "the rssi-helper utility is not installed"
+msgstr "nástroj rssi-helper není nainstalován"
+
+#: ui/DiagPage.qml:80
+msgctxt "doctor finding"
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr "nástroj rssi-helper selhal (chybí capability, Bluetooth odmítnut)"
+
+#: ui/DiagPage.qml:81
+msgctxt "doctor finding"
+msgid "the rssi-helper utility does not answer in time"
+msgstr "nástroj rssi-helper neodpovídá včas"
+
+#: ui/DiagPage.qml:82
+msgctxt "doctor finding"
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "adaptér Bluetooth pro toto spojení neposkytuje měření"
+
+#: ui/DiagPage.qml:83
+msgctxt "doctor finding"
+msgid "the signal cannot be measured"
+msgstr "signál nelze změřit"
+
+#: ui/DiagPage.qml:84
+msgctxt "doctor finding, %1 = settings"
+msgid "ignored by bluetoothd: %1"
+msgstr "ignorováno démonem bluetoothd: %1"
+
+#: ui/DiagPage.qml:85
+msgctxt "doctor finding"
+msgid "[Policy] Reconnect* in place"
+msgstr "[Policy] Reconnect* nastaveno"
+
+#: ui/DiagPage.qml:86
+msgctxt "doctor finding"
+msgid "FastConnectable = true"
+msgstr "FastConnectable = true"
+
+#: ui/DiagPage.qml:87
+msgctxt "doctor finding"
+msgid ""
+"FastConnectable off: slower answer to the keyboard's page after a key press"
+msgstr ""
+"FastConnectable vypnuto: pomalejší odpověď na volání klávesnice po stisku "
+"klávesy"
+
+#: ui/DiagPage.qml:88
+msgctxt "doctor finding, %1 = file, %2 = error"
+msgid "%1: %2"
+msgstr "%1: %2"
+
+#: ui/DiagPage.qml:89
+msgctxt "doctor finding"
+msgid "NoPollBatteries = true (no 30 s HID polling)"
+msgstr "NoPollBatteries = true (žádné dotazování HID každých 30 s)"
+
+#: ui/DiagPage.qml:90
+msgctxt "doctor finding"
+msgid ""
+"UPower reads the keyboard battery every 30 s (2 GET_REPORT over the air): "
+"the keyboard never sleeps"
+msgstr ""
+"UPower čte baterii klávesnice každých 30 s (2 GET_REPORT rádiem): klávesnice "
+"nikdy neusne"
+
+#: ui/DiagPage.qml:91
+msgctxt "doctor finding"
+msgid "adapter is not on USB (or not found)"
+msgstr "adaptér není na USB (nebo nebyl nalezen)"
+
+#: ui/DiagPage.qml:92
+msgctxt "doctor finding, %1 = USB id"
+msgid "%1 autosuspend off (power/control=on)"
+msgstr "%1 automatické uspání USB vypnuto (power/control=on)"
+
+#: ui/DiagPage.qml:94
+msgctxt "doctor finding"
+msgid ""
+"%1 USB autosuspend active (control=%2, delay %3 ms, now %4, %5 s suspended "
+"since boot)"
+msgstr ""
+"%1 automatické uspání USB aktivní (control=%2, prodleva %3 ms, nyní %4, %5 s "
+"uspáno od spuštění)"
+
+#: ui/DiagPage.qml:95
+msgctxt "doctor finding, appended"
+msgid "; rule installed but not applied yet"
+msgstr "; pravidlo nainstalováno, ale zatím nepoužito"
+
+#: ui/DiagPage.qml:96
+msgctxt "doctor finding"
+msgid "btusb enable_autosuspend = %1"
+msgstr "btusb enable_autosuspend = %1"
+
+#: ui/DiagPage.qml:97
+msgctxt "doctor finding"
+msgid "Bluetooth adapter powered"
+msgstr "adaptér Bluetooth zapnut"
+
+#: ui/DiagPage.qml:98
+msgctxt "doctor finding"
+msgid "Bluetooth adapter off"
+msgstr "adaptér Bluetooth vypnut"
+
+#: ui/DiagPage.qml:99
+msgctxt "doctor finding"
+msgid "BlueZ unreachable (bluetooth.service stopped?)"
+msgstr "BlueZ nedostupné (bluetooth.service zastavena?)"
+
+#: ui/DiagPage.qml:100
+msgctxt "doctor finding"
+msgid "no paired Apple keyboard known to BlueZ"
+msgstr "BlueZ nezná žádnou spárovanou klávesnici Apple"
+
+#: ui/DiagPage.qml:101
+msgctxt "doctor finding, %1 = address"
+msgid "%1 is not paired"
+msgstr "%1 není spárováno"
+
+#: ui/DiagPage.qml:103
+msgctxt "doctor finding, %1 = address, %2 = name"
+msgid "%1 “%2” paired"
+msgstr "%1 „%2“ spárováno"
+
+#: ui/DiagPage.qml:104
+msgctxt "doctor finding, appended"
+msgid ", bonded"
+msgstr ", svázáno"
+
+#: ui/DiagPage.qml:105
+msgctxt "doctor finding, appended"
+msgid ", legacy PIN pairing"
+msgstr ", starší párování PIN"
+
+#: ui/DiagPage.qml:106
+msgctxt "doctor finding"
+msgid "not trusted: BlueZ may refuse the keyboard's own reconnection"
+msgstr "nedůvěryhodné: BlueZ může odmítnout opětovné připojení od klávesnice"
+
+#: ui/DiagPage.qml:107
+msgctxt "doctor finding"
+msgid "blocked in BlueZ"
+msgstr "zablokováno v BlueZ"
+
+#: ui/DiagPage.qml:108
+msgctxt "doctor finding"
+msgid "connected"
+msgstr "připojeno"
+
+#: ui/DiagPage.qml:109
+msgctxt "doctor finding"
+msgid "not connected (asleep? press a key)"
+msgstr "nepřipojeno (spí? stiskněte klávesu)"
+
+#: ui/DiagPage.qml:110
+msgctxt "doctor finding"
+msgid "link key not checked (needs root: sudo akmctl doctor)"
+msgstr "klíč spojení nezkontrolován (vyžaduje root: sudo akmctl doctor)"
+
+#: ui/DiagPage.qml:111
+msgctxt "doctor finding"
+msgid "no [LinkKey] stored for the keyboard"
+msgstr "pro klávesnici není uložen žádný [LinkKey]"
+
+#: ui/DiagPage.qml:112
+msgctxt "doctor finding"
+msgid "stored key == kernel key (fingerprint %1)"
+msgstr "uložený klíč == klíč jádra (otisk %1)"
+
+#: ui/DiagPage.qml:113
+msgctxt "doctor finding"
+msgid "stored key %1 != kernel key %2: will change at next restart"
+msgstr "uložený klíč %1 != klíč jádra %2: změní se při příštím restartu"
+
+#: ui/DiagPage.qml:114
+msgctxt "doctor finding"
+msgid "stored key %1; kernel copy not readable (debugfs not mounted?)"
+msgstr "uložený klíč %1; kopie jádra nečitelná (debugfs nepřipojen?)"
+
+#: ui/DiagPage.qml:116
+msgctxt "doctor finding"
+msgid ""
+"link quality: %1 disconnection in the last hour, %2 in 24 h, %3 in 7 days"
+msgid_plural ""
+"link quality: %1 disconnections in the last hour, %2 in 24 h, %3 in 7 days"
+msgstr[0] ""
+"kvalita spojení: %1 odpojení za poslední hodinu, %2 za 24 h, %3 za 7 dní"
+msgstr[1] ""
+"kvalita spojení: %1 odpojení za poslední hodinu, %2 za 24 h, %3 za 7 dní"
+msgstr[2] ""
+"kvalita spojení: %1 odpojení za poslední hodinu, %2 za 24 h, %3 za 7 dní"
+
+#: ui/DiagPage.qml:117
+msgctxt "doctor finding, appended"
+msgid "; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurement)"
+msgid_plural ""
+"; relative signal over 7 days: mean %2 dB, min %3 dB (%1 measurements)"
+msgstr[0] "; relativní signál za 7 dní: průměr %2 dB, min %3 dB (%1 měření)"
+msgstr[1] "; relativní signál za 7 dní: průměr %2 dB, min %3 dB (%1 měření)"
+msgstr[2] "; relativní signál za 7 dní: průměr %2 dB, min %3 dB (%1 měření)"
+
+#: ui/DiagPage.qml:118
+msgctxt "doctor finding, appended"
+msgid " — UNSTABLE: %1 unexpected within the hour"
+msgstr " — NESTABILNÍ: neočekávaná během hodiny: %1"
+
+#: ui/DiagPage.qml:119
+msgctxt "doctor finding, %1 = device"
+msgid "%1 readable"
+msgstr "%1 čitelné"
+
+#: ui/DiagPage.qml:120
+msgctxt "doctor finding, %1 = device"
+msgid "%1 not readable by this user"
+msgstr "%1 není pro tohoto uživatele čitelné"
+
+#: ui/DiagPage.qml:121
+msgctxt "doctor finding"
+msgid "connected but no hidraw node (uhid not created yet?)"
+msgstr "připojeno, ale bez uzlu hidraw (uhid ještě nevytvořeno?)"
+
+#: ui/DiagPage.qml:122
+msgctxt "doctor finding"
+msgid "no bluetoothd error in the last 6 hours of this boot"
+msgstr "za posledních 6 hodin od tohoto startu žádná chyba bluetoothd"
+
+#: ui/DiagPage.qml:123
+msgctxt "doctor finding"
+msgid ""
+"bluetoothd journal not readable (add yourself to group systemd-journal, or "
+"use sudo)"
+msgstr ""
+"žurnál bluetoothd nečitelný (přidejte se do skupiny systemd-journal nebo "
+"použijte sudo)"
+
+#: ui/DiagPage.qml:124
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 page timeout (keyboard asleep or not listening), last %2"
+msgid_plural "%1 page timeouts (keyboard asleep or not listening), last %2"
+msgstr[0] ""
+"%1 vypršení časového limitu page (klávesnice spí nebo nenaslouchá), poslední "
+"%2"
+msgstr[1] ""
+"%1 vypršení časového limitu page (klávesnice spí nebo nenaslouchá), poslední "
+"%2"
+msgstr[2] ""
+"%1 vypršení časového limitu page (klávesnice spí nebo nenaslouchá), poslední "
+"%2"
+
+#: ui/DiagPage.qml:125
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 HIDP GET_REPORT timeout, last %2"
+msgid_plural "%1 HIDP GET_REPORT timeouts, last %2"
+msgstr[0] "%1 vypršení časového limitu HIDP GET_REPORT, poslední %2"
+msgstr[1] "%1 vypršení časového limitu HIDP GET_REPORT, poslední %2"
+msgstr[2] "%1 vypršení časového limitu HIDP GET_REPORT, poslední %2"
+
+#: ui/DiagPage.qml:126
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 authentication / key error, last %2"
+msgid_plural "%1 authentication / key errors, last %2"
+msgstr[0] "%1 chyba ověření / klíče, poslední %2"
+msgstr[1] "%1 chyby ověření / klíče, poslední %2"
+msgstr[2] "%1 chyb ověření / klíče, poslední %2"
+
+#: ui/DiagPage.qml:127
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 connection reset/refused by the keyboard, last %2"
+msgid_plural "%1 connections reset/refused by the keyboard, last %2"
+msgstr[0] "%1 spojení resetováno/odmítnuto klávesnicí, poslední %2"
+msgstr[1] "%1 spojení resetována/odmítnuta klávesnicí, poslední %2"
+msgstr[2] "%1 spojení resetováno/odmítnuto klávesnicí, poslední %2"
+
+#: ui/DiagPage.qml:128
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid "%1 main.conf key ignored by bluetoothd at start, last %2"
+msgid_plural "%1 main.conf keys ignored by bluetoothd at start, last %2"
+msgstr[0] "%1 klíč main.conf ignorován bluetoothd při startu, poslední %2"
+msgstr[1] "%1 klíče main.conf ignorovány bluetoothd při startu, poslední %2"
+msgstr[2] "%1 klíčů main.conf ignorováno bluetoothd při startu, poslední %2"
+
+#: ui/DiagPage.qml:129
+msgctxt "doctor finding, %1 = count, %2 = time"
+msgid ""
+"%1 BlueZ storage write failure (a new link key may be lost at reboot), last "
+"%2"
+msgid_plural ""
+"%1 BlueZ storage write failures (a new link key may be lost at reboot), last "
+"%2"
+msgstr[0] ""
+"%1 selhání zápisu do úložiště BlueZ (nový klíč spojení se může při restartu "
+"ztratit), poslední %2"
+msgstr[1] ""
+"%1 selhání zápisu do úložiště BlueZ (nový klíč spojení se může při restartu "
+"ztratit), poslední %2"
+msgstr[2] ""
+"%1 selhání zápisu do úložiště BlueZ (nový klíč spojení se může při restartu "
+"ztratit), poslední %2"
+
+#: ui/DiagPage.qml:130
+msgctxt "doctor finding"
+msgid "apple-kb-monitord link keeper not reachable (no automatic reconnection)"
+msgstr ""
+"hlídač spojení apple-kb-monitord nedostupný (žádné automatické opětovné "
+"připojení)"
+
+#: ui/DiagPage.qml:131
+msgctxt "doctor finding, %1 = state"
+msgid "link health: %1"
+msgstr "stav spojení: %1"
+
+#: ui/DiagPage.qml:132
+msgctxt "doctor finding"
+msgid "keeper running, keyboard not tracked"
+msgstr "hlídač běží, klávesnice není sledována"
+
+#: ui/DiagPage.qml:133
+msgctxt "doctor finding, %1 = program, %2 = pid, %3 = path"
+msgid ""
+"%1 (pid %2) still runs the replaced binary %3 (deleted): the old version"
+msgstr ""
+"%1 (pid %2) stále běží z nahrazeného binárního souboru %3 (smazán): stará "
+"verze"
+
+#: ui/DiagPage.qml:134
+msgctxt "doctor finding, %1 = pid"
+msgid ""
+"plasmashell (pid %1) started before the widget was installed: it shows the "
+"old widget"
+msgstr ""
+"plasmashell (pid %1) byl spuštěn před instalací widgetu: zobrazuje starý "
+"widget"
+
+#: ui/DiagPage.qml:141
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package"
+msgstr "přeinstalujte balíček apple-kb-monitor"
+
+#: ui/DiagPage.qml:142
+msgctxt "doctor fix"
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr "přeinstalujte balíček apple-kb-monitor a poté spusťte akmctl doctor"
+
+#: ui/DiagPage.qml:143
+msgctxt "doctor fix"
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "zkontrolujte službu Bluetooth: systemctl status bluetooth"
+
+#: ui/DiagPage.qml:144
+msgctxt "doctor fix"
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "přibližte klávesnici nebo ji znovu připojte"
+
+#: ui/DiagPage.qml:145
+msgctxt "doctor fix"
+msgid "run akmctl doctor"
+msgstr "spusťte akmctl doctor"
+
+#: ui/DiagPage.qml:146
+msgctxt "doctor fix, %1 = command"
+msgid "optional: %1"
+msgstr "volitelně: %1"
+
+#: ui/DiagPage.qml:147
+msgctxt "doctor fix"
+msgid "akmctl repair (pairing assistant)"
+msgstr "akmctl repair (průvodce párováním)"
+
+#: ui/DiagPage.qml:148
+msgctxt "doctor fix"
+msgid "check disk space, then akmctl repair if the keyboard is refused"
+msgstr ""
+"zkontrolujte místo na disku, poté akmctl repair, pokud je klávesnice odmítána"
+
+#: ui/DiagPage.qml:149
+msgctxt "doctor fix"
+msgid "check the batteries, the distance, USB 3 devices near the adapter"
+msgstr "zkontrolujte baterie, vzdálenost a zařízení USB 3 poblíž adaptéru"
+
+#: ui/DiagPage.qml:150
+msgctxt "doctor fix"
+msgid "install udev/70-apple-kb-hidraw.rules (uaccess)"
+msgstr "nainstalujte udev/70-apple-kb-hidraw.rules (uaccess)"
+
+#: ui/DiagPage.qml:151
+msgctxt "doctor fix"
+msgid ""
+"avoid HID scanning tools while measuring; see docs/RECONNECTION-PAIRING.md "
+"§3.5"
+msgstr ""
+"během měření nepoužívejte nástroje pro skenování HID; viz docs/RECONNEXION-"
+"PAIRAGE.md §3.5"
+
+#: ui/DiagPage.qml:152
+msgctxt "doctor fix"
+msgid ""
+"free disk space (btrfs: check metadata), then verify with sudo akmctl doctor"
+msgstr ""
+"uvolněte místo na disku (btrfs: zkontrolujte metadata), poté ověřte pomocí "
+"sudo akmctl doctor"
+
+#. i18n: %1 = daemon version, %2 = akmctl version, %3 = package version
+#: ui/DiagPage.qml:161
+msgctxt "selftest check"
+msgid ""
+"versions differ: daemon %1, akmctl %2, package %3: restart the daemon after "
+"an upgrade (systemctl --user restart apple-kb-monitord.service)"
+msgstr ""
+"verze se liší: služba %1, akmctl %2, balíček %3: po aktualizaci restartujte "
+"službu (systemctl --user restart apple-kb-monitord.service)"
+
+#. i18n: %1 = daemon version, %2 = package version
+#: ui/DiagPage.qml:163
+msgctxt "selftest check"
+msgid "daemon %1 = akmctl, package %2"
+msgstr "služba %1 = akmctl, balíček %2"
+
+#: ui/DiagPage.qml:164
+msgctxt "selftest check"
+msgid "daemon version unknown (old interface)"
+msgstr "verze služby neznámá (staré rozhraní)"
+
+#: ui/DiagPage.qml:167
+msgctxt "selftest check"
+msgid "keyboard alias as last set through this monitor"
+msgstr "alias klávesnice odpovídá poslednímu nastavení tímto monitorem"
+
+#. i18n: %1 = current alias, %2 = alias set last, %3 = by whom, %4 = Unix time
+#: ui/DiagPage.qml:169
+msgctxt "selftest check"
+msgid ""
+"keyboard alias is %1, last set to %2 by %3 at %4 (unix): changed elsewhere "
+"(KDE Bluetooth settings, bluetoothctl) or the pairing was removed (akmctl "
+"repair, Plasma Forget); see the daemon journal for \"BlueZ alias\" lines"
+msgstr ""
+"alias klávesnice je %1, naposledy nastaven na %2 pomocí %3 v %4 (unix): "
+"změněn jinde (nastavení Bluetooth KDE, bluetoothctl) nebo bylo párování "
+"odebráno (akmctl repair, Zapomenout v Plasmě); viz řádky \"BlueZ alias\" v "
+"žurnálu služby"
+
+#: ui/DiagPage.qml:170
+msgctxt "selftest check"
+msgid ""
+"apple-kb-monitord restarted %1 time by systemd since the last pass (crash "
+"loop?)"
+msgid_plural ""
+"apple-kb-monitord restarted %1 times by systemd since the last pass (crash "
+"loop?)"
+msgstr[0] ""
+"apple-kb-monitord restartován systemd %1× od posledního průchodu (smyčka "
+"pádů?)"
+msgstr[1] ""
+"apple-kb-monitord restartován systemd %1× od posledního průchodu (smyčka "
+"pádů?)"
+msgstr[2] ""
+"apple-kb-monitord restartován systemd %1× od posledního průchodu (smyčka "
+"pádů?)"
+
+#. i18n: %1 = old process id, %2 = new process id
+#: ui/DiagPage.qml:172
+msgctxt "selftest check"
+msgid "daemon pid changed %1 -> %2 (restart)"
+msgstr "pid služby se změnil %1 -> %2 (restart)"
+
+#: ui/DiagPage.qml:173
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon answered GetState in %1 ms (> 1 s)"
+msgstr "služba odpověděla na GetState za %1 ms (> 1 s)"
+
+#: ui/DiagPage.qml:174
+msgctxt "selftest check, %1 = milliseconds"
+msgid "daemon on the bus, GetState in %1 ms"
+msgstr "služba na sběrnici, GetState za %1 ms"
+
+#. i18n: %1 = error, %2 = systemd unit state
+#: ui/DiagPage.qml:176
+msgctxt "selftest check"
+msgid "daemon unreachable (%1); unit state: %2"
+msgstr "služba nedostupná (%1); stav jednotky: %2"
+
+#: ui/DiagPage.qml:177
+msgctxt "selftest check, %1 = error"
+msgid "daemon last_error: %1"
+msgstr "last_error služby: %1"
+
+#: ui/DiagPage.qml:178
+msgctxt "selftest check"
+msgid "keyboard connected but never acquired"
+msgstr "klávesnice připojena, ale nikdy nepřečtena"
+
+#: ui/DiagPage.qml:179
+msgctxt "selftest check, %1 = hours"
+msgid "keyboard connected, last acquisition %1 h ago"
+msgstr "klávesnice připojena, poslední čtení před %1 h"
+
+#: ui/DiagPage.qml:180
+msgctxt "selftest check, %1 = minutes"
+msgid "last acquisition %1 min ago"
+msgstr "poslední čtení před %1 min"
+
+#: ui/DiagPage.qml:181
+msgctxt "selftest check"
+msgid "keyboard not connected (nothing to acquire)"
+msgstr "klávesnice nepřipojena (není co číst)"
+
+#: ui/DiagPage.qml:182
+msgctxt "selftest check"
+msgid "no daemon warning since the last pass"
+msgstr "od posledního průchodu žádné varování služby"
+
+#: ui/DiagPage.qml:183
+msgctxt "selftest check, %2 = journal line"
+msgid "%1 daemon warning/error line since the last pass, last: %2"
+msgid_plural "%1 daemon warning/error lines since the last pass, last: %2"
+msgstr[0] "%1 řádek varování/chyb služby od posledního průchodu, poslední: %2"
+msgstr[1] "%1 řádky varování/chyb služby od posledního průchodu, poslední: %2"
+msgstr[2] "%1 řádků varování/chyb služby od posledního průchodu, poslední: %2"
+
+#: ui/DiagPage.qml:184
+msgctxt "selftest check"
+msgid "user journal not readable"
+msgstr "uživatelský žurnál nečitelný"
+
+#: ui/DiagPage.qml:185
+msgctxt "selftest check"
+msgid "no bluetoothd error since the last pass"
+msgstr "od posledního průchodu žádná chyba bluetoothd"
+
+#: ui/DiagPage.qml:186
+msgctxt "selftest check"
+msgid "%1 bluetoothd error line since the last pass"
+msgid_plural "%1 bluetoothd error lines since the last pass"
+msgstr[0] "%1 chybový řádek bluetoothd od posledního průchodu"
+msgstr[1] "%1 chybové řádky bluetoothd od posledního průchodu"
+msgstr[2] "%1 chybových řádků bluetoothd od posledního průchodu"
+
+#: ui/DiagPage.qml:187
+msgctxt "selftest check"
+msgid "system journal not readable (group systemd-journal)"
+msgstr "systémový žurnál nečitelný (skupina systemd-journal)"
+
+#: ui/DiagPage.qml:188
+msgctxt "selftest check"
+msgid "no crash of our programs since the last pass"
+msgstr "od posledního průchodu žádný pád našich programů"
+
+#. i18n: %1 = program, %2 = signal, %3 = process id
+#: ui/DiagPage.qml:190
+msgctxt "selftest check"
+msgid "%1 crashed (%2, pid %3): coredumpctl info %3"
+msgstr "%1 spadl (%2, pid %3): coredumpctl info %3"
+
+#: ui/DiagPage.qml:191
+msgctxt "selftest check"
+msgid "coredump journal not readable"
+msgstr "žurnál výpisů paměti nečitelný"
+
+#. i18n: %1 = directory, %2 = free MiB, %3 = total MiB
+#: ui/DiagPage.qml:193
+msgctxt "selftest check"
+msgid "%1: %2 MiB free of %3 MiB"
+msgstr "%1: volno %2 MiB z %3 MiB"
+
+#: ui/DiagPage.qml:194
+msgctxt "selftest check, %1 = directory"
+msgid "%1: statvfs failed"
+msgstr "%1: statvfs selhalo"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check, history size"
+msgid "%1 line"
+msgid_plural "%1 lines"
+msgstr[0] "%1 řádek"
+msgstr[1] "%1 řádky"
+msgstr[2] "%1 řádků"
+
+#. i18n: %1 = unreadable lines, %2 = file, %3 = "N lines", %4 = size
+#: ui/DiagPage.qml:196
+msgctxt "selftest check"
+msgid "%2: %3, %4 KiB, %1 unreadable line in the last 1000"
+msgid_plural "%2: %3, %4 KiB, %1 unreadable lines in the last 1000"
+msgstr[0] "%2: %3, %4 KiB, %1 nečitelný řádek z posledních 1000"
+msgstr[1] "%2: %3, %4 KiB, %1 nečitelné řádky z posledních 1000"
+msgstr[2] "%2: %3, %4 KiB, %1 nečitelných řádků z posledních 1000"
+
+#: ui/DiagPage.qml:197
+msgctxt "selftest check"
+msgid "no history yet"
+msgstr "zatím žádná historie"
+
+#: ui/DiagPage.qml:198
+msgctxt "selftest check, %1 = doctor verdict"
+msgid "akmctl doctor: %1"
+msgstr "akmctl doctor: %1"
+
+#: ui/DiagPage.qml:199
+msgctxt "selftest check, %1 = seconds"
+msgid ""
+"akmctl doctor did not finish within %1 s (BlueZ or the daemon does not "
+"answer)"
+msgstr "akmctl doctor neskončil do %1 s (BlueZ nebo služba neodpovídá)"
+
+#: ui/DiagPage.qml:208 ui/DiagPage.qml:223
+msgid "no answer within 60 seconds"
+msgstr "žádná odpověď do 60 sekund"
+
+#: ui/DiagPage.qml:259
+msgid "Check the link"
+msgstr "Zkontrolovat spojení"
+
+#: ui/DiagPage.qml:262
+msgid ""
+"Runs akmctl doctor: Bluetooth, pairing, configuration, journal, service. "
+"Reads only."
+msgstr ""
+"Spustí akmctl doctor: Bluetooth, párování, konfigurace, žurnál, služba. "
+"Pouze čtení."
+
+#: ui/DiagPage.qml:266
+msgid "Self-check"
+msgstr "Autotest"
+
+#: ui/DiagPage.qml:268
+msgid ""
+"Runs akmctl selftest: service, link, journal, crashes, disk. Reads only."
+msgstr ""
+"Spustí akmctl selftest: služba, spojení, žurnál, pády, disk. Pouze čtení."
+
+#: ui/DiagPage.qml:273
+msgid "Reconnect"
+msgstr "Znovu připojit"
+
+#: ui/DiagPage.qml:276
+msgid ""
+"Asks the service to page the keyboard now (at most once every 20 seconds)"
+msgstr ""
+"Požádá službu, aby klávesnici zavolala hned (nejvýše jednou za 20 sekund)"
+
+#: ui/DiagPage.qml:282
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+"Opětovné připojení vyžádáno. Stiskněte klávesu na klávesnici, pokud spí."
+
+#: ui/DiagPage.qml:283
+msgid "refused by the service (asleep, too soon, or pairing refused)"
+msgstr "odmítnuto službou (spánek, příliš brzy nebo odmítnuté párování)"
+
+#: ui/DiagPage.qml:283
+msgid "Reconnection not requested: %1"
+msgstr "Opětovné připojení nevyžádáno: %1"
+
+#: ui/DiagPage.qml:289
+msgid "Copy the diagnosis"
+msgstr "Kopírovat diagnózu"
+
+#: ui/DiagPage.qml:294
+msgid "Diagnosis copied: paste it into a bug report."
+msgstr "Diagnóza zkopírována: vložte ji do hlášení chyby."
+
+#: ui/DiagPage.qml:299
+msgid "Documentation"
+msgstr "Dokumentace"
+
+#: ui/DiagPage.qml:310
+msgctxt "@title:group"
+msgid "Link check (akmctl doctor)"
+msgstr "Kontrola spojení (akmctl doctor)"
+
+#: ui/DiagPage.qml:316
+msgid "Link check running"
+msgstr "Probíhá kontrola spojení"
+
+#: ui/DiagPage.qml:327
+msgctxt "level, advice"
+msgid "Verdict: %1 — %2"
+msgstr "Výsledek: %1 — %2"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379 ui/KeysPage.qml:38
+msgid "Failed: %1"
+msgstr "Selhalo: %1"
+
+#: ui/DiagPage.qml:328 ui/DiagPage.qml:379
+msgid "Not run yet."
+msgstr "Zatím nespuštěno."
+
+#: ui/DiagPage.qml:364
+msgctxt "@title:group"
+msgid "Self-check (akmctl selftest)"
+msgstr "Autotest (akmctl selftest)"
+
+#: ui/DiagPage.qml:370
+msgid "Self-check running"
+msgstr "Probíhá autotest"
+
+#: ui/DiagPage.qml:378
+msgid "Verdict: %1"
+msgstr "Výsledek: %1"
+
+#: ui/KeysPage.qml:33
+msgctxt "result, then the detail"
+msgid "%1 — %2"
+msgstr "%1 — %2"
+
+#: ui/KeysPage.qml:35
+msgid ""
+"No answer in time: nothing was confirmed. Check the state before trying "
+"again."
+msgstr ""
+"Žádná odpověď včas: nic nebylo potvrzeno. Před dalším pokusem zkontrolujte "
+"stav."
+
+#: ui/KeysPage.qml:37 ui/main.qml:38
+msgid "unknown error"
+msgstr "neznámá chyba"
+
+#: ui/KeysPage.qml:38
+msgctxt "parameter, error"
+msgid "%1: %2"
+msgstr "%1: %2"
+
+#: ui/KeysPage.qml:45
+msgctxt "fnmode 0"
+msgid "0 — Fn key disabled"
+msgstr "0 — klávesa Fn vypnuta"
+
+#: ui/KeysPage.qml:46
+msgctxt "fnmode 1"
+msgid "1 — special functions first (Apple legend), F1-F12 with fn"
+msgstr "1 — nejprve speciální funkce (popisky Apple), F1-F12 s Fn"
+
+#: ui/KeysPage.qml:47
+msgctxt "fnmode 2"
+msgid "2 — F1-F12 first, special functions with fn"
+msgstr "2 — nejprve F1-F12, speciální funkce s Fn"
+
+#: ui/KeysPage.qml:48
+msgctxt "fnmode 3"
+msgid "3 — automatic (same as 1 on this keyboard)"
+msgstr "3 — automaticky (stejné jako 1 na této klávesnici)"
+
+#: ui/KeysPage.qml:49
+msgctxt "fnmode 4"
+msgid "4 — F1-F12 only, special functions disabled"
+msgstr "4 — pouze F1-F12, speciální funkce vypnuty"
+
+#: ui/KeysPage.qml:50
+msgid "unknown"
+msgstr "neznámé"
+
+#: ui/KeysPage.qml:60
+msgctxt "KDE shortcut action"
+msgid "KDE: %1"
+msgstr "KDE: %1"
+
+#: ui/KeysPage.qml:61
+msgid "no KDE shortcut"
+msgstr "žádná zkratka KDE"
+
+#: ui/KeysPage.qml:81
+msgid ""
+"The key table could not be read: the keyboard service did not answer in time."
+msgstr "Tabulku kláves nešlo přečíst: služba klávesnice neodpověděla včas."
+
+#: ui/KeysPage.qml:82
+msgid "The key table could not be read: %1"
+msgstr "Tabulku kláves nelze přečíst: %1"
+
+#: ui/KeysPage.qml:85 ui/KeysPage.qml:101 ui/StatePage.qml:108
+msgid "Try again"
+msgstr "Zkusit znovu"
+
+#: ui/KeysPage.qml:98
+msgid "The key mapping could not be read: %1"
+msgstr "Mapování kláves nelze přečíst: %1"
+
+#: ui/KeysPage.qml:114
+msgctxt "@title:group"
+msgid "What each key does now"
+msgstr "Co nyní dělá každá klávesa"
+
+#: ui/KeysPage.qml:123
+msgid ""
+"Fn mode %1. Read from the kernel and the installed mapping; no key press is "
+"read."
+msgstr ""
+"Režim Fn %1. Přečteno z jádra a nainstalovaného mapování; žádný stisk "
+"klávesy se nečte."
+
+#: ui/KeysPage.qml:124
+msgid "Reading the key table…"
+msgstr "Čtení tabulky kláves…"
+
+#: ui/KeysPage.qml:134
+msgctxt "@title:column"
+msgid "Key"
+msgstr "Klávesa"
+
+#: ui/KeysPage.qml:135
+msgctxt "@title:column"
+msgid "Pressed alone"
+msgstr "Samotná"
+
+#: ui/KeysPage.qml:136
+msgctxt "@title:column"
+msgid "With fn"
+msgstr "S Fn"
+
+#: ui/KeysPage.qml:149
+msgctxt "key, legend, alone, with fn"
+msgid "%1 (%2): alone %3; with fn %4"
+msgstr "%1 (%2): samotná %3; s Fn %4"
+
+#: ui/KeysPage.qml:185
+msgid "* = changed by the installed manual mapping."
+msgstr "* = změněno nainstalovaným ručním mapováním."
+
+#: ui/KeysPage.qml:185
+msgid ""
+"The active profile differs from what is installed: use “Install the mapping”."
+msgstr ""
+"Aktivní profil se liší od nainstalovaného: použijte „Nainstalovat mapování“."
+
+#: ui/KeysPage.qml:193
+msgctxt "@title:group"
+msgid "Fn key and modifier keys"
+msgstr "Klávesa Fn a modifikátory"
+
+#: ui/KeysPage.qml:200
+msgid ""
+"These are parameters of the kernel driver hid_apple: they apply to ALL Apple "
+"keyboards of this computer, are kept after a restart, and each change asks "
+"for the administrator password."
+msgstr ""
+"Jde o parametry ovladače jádra hid_apple: platí pro VŠECHNY klávesnice Apple "
+"tohoto počítače, zachovají se po restartu a každá změna vyžaduje heslo "
+"správce."
+
+#: ui/KeysPage.qml:205
+msgid "Fn mode:"
+msgstr "Režim Fn:"
+
+#: ui/KeysPage.qml:209
+msgid "Fn mode"
+msgstr "Režim Fn"
+
+#: ui/KeysPage.qml:213
+msgid "Option and Command:"
+msgstr "Option a Command:"
+
+#: ui/KeysPage.qml:215
+msgid "Mac order (Option = Alt, Command = Meta)"
+msgstr "pořadí Mac (Option = Alt, Command = Meta)"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on both sides (PC order)"
+msgstr "prohozeno na obou stranách (pořadí PC)"
+
+#: ui/KeysPage.qml:215
+msgid "swapped on the left side only"
+msgstr "prohozeno jen na levé straně"
+
+#: ui/KeysPage.qml:217
+msgid "Option and Command keys"
+msgstr "Klávesy Option a Command"
+
+#: ui/KeysPage.qml:222
+msgid "Control and Command:"
+msgstr "Control a Command:"
+
+#: ui/KeysPage.qml:223
+msgid "Swap Control and Command"
+msgstr "Prohodit Control a Command"
+
+#: ui/KeysPage.qml:228
+msgid "fn and left Control:"
+msgstr "Fn a levý Control:"
+
+#: ui/KeysPage.qml:229
+msgid "Swap fn and the left Control key"
+msgstr "Prohodit Fn a levou klávesu Control"
+
+#: ui/KeysPage.qml:234
+msgid "ISO keys ` and <:"
+msgstr "Klávesy ISO ` a <:"
+
+#: ui/KeysPage.qml:236
+msgid "automatic"
+msgstr "automaticky"
+
+#: ui/KeysPage.qml:236
+msgid "as engraved"
+msgstr "podle potisku"
+
+#: ui/KeysPage.qml:236
+msgid "swapped"
+msgstr "prohozeno"
+
+#: ui/KeysPage.qml:238
+msgid "ISO keys"
+msgstr "Klávesy ISO"
+
+#: ui/KeysPage.qml:244
+msgid "Apply these parameters…"
+msgstr "Použít tyto parametry…"
+
+#: ui/KeysPage.qml:257
+msgid "Asks for the administrator password once per changed parameter"
+msgstr "Vyžádá heslo správce jednou za každý změněný parametr"
+
+#: ui/KeysPage.qml:264
+msgid "Parameters applied to every Apple keyboard."
+msgstr "Parametry použity na všechny klávesnice Apple."
+
+#: ui/KeysPage.qml:282
+msgid "Undo changes"
+msgstr "Vrátit změny"
+
+#: ui/KeysPage.qml:299
+msgid "Waiting for the authentication"
+msgstr "Čekání na ověření"
+
+#: ui/KeysPage.qml:305
+msgctxt "@title:group"
+msgid "Manual key mapping"
+msgstr "Ruční mapování kláves"
+
+#: ui/KeysPage.qml:309
+msgid "Profile:"
+msgstr "Profil:"
+
+#: ui/KeysPage.qml:313
+msgid "Preset:"
+msgstr "Předvolba:"
+
+#: ui/KeysPage.qml:317
+msgid "none (parameters left as they are)"
+msgstr "žádná (parametry ponechány)"
+
+#: ui/KeysPage.qml:319
+msgid "Preset of the profile"
+msgstr "Předvolba profilu"
+
+#: ui/KeysPage.qml:322
+msgid "Use this preset"
+msgstr "Použít tuto předvolbu"
+
+#: ui/KeysPage.qml:328
+msgid "Preset saved in the profile; use “Install the mapping” to apply it."
+msgstr ""
+"Předvolba uložena do profilu; použijte „Nainstalovat mapování“ pro její "
+"použití."
+
+#: ui/KeysPage.qml:334
+msgid "Remapped keys:"
+msgstr "Přemapované klávesy:"
+
+#: ui/KeysPage.qml:339
+msgid "none"
+msgstr "žádné"
+
+#: ui/KeysPage.qml:348
+msgctxt "key -> code"
+msgid "%1 → %2"
+msgstr "%1 → %2"
+
+#: ui/KeysPage.qml:353
+msgid "Remove"
+msgstr "Odebrat"
+
+#: ui/KeysPage.qml:356
+msgid "Remove the mapping of %1"
+msgstr "Odebrat mapování %1"
+
+#: ui/KeysPage.qml:363
+msgid "Mapping removed from the profile."
+msgstr "Mapování odebráno z profilu."
+
+#: ui/KeysPage.qml:371
+msgid "Remap:"
+msgstr "Přemapovat:"
+
+#: ui/KeysPage.qml:376
+msgid "Key to remap"
+msgstr "Klávesa k přemapování"
+
+#: ui/KeysPage.qml:382
+msgid "Linux key code (KEY_…)"
+msgstr "Kód klávesy Linux (KEY_…)"
+
+#: ui/KeysPage.qml:387
+msgid "Add"
+msgstr "Přidat"
+
+#: ui/KeysPage.qml:395
+msgid "Mapping saved in the profile; use “Install the mapping” to apply it."
+msgstr ""
+"Mapování uloženo do profilu; použijte „Nainstalovat mapování“ pro jeho "
+"použití."
+
+#: ui/KeysPage.qml:402
+msgid "Install the mapping…"
+msgstr "Nainstalovat mapování…"
+
+#: ui/KeysPage.qml:405
+msgid ""
+"Installs the active profile (udev hwdb and its parameters); asks for the "
+"administrator password"
+msgstr ""
+"Nainstaluje aktivní profil (udev hwdb a jeho parametry); vyžádá heslo správce"
+
+#: ui/KeysPage.qml:410
+msgid "Mapping installed."
+msgstr "Mapování nainstalováno."
+
+#: ui/KeysPage.qml:415
+msgid "Back to the kernel mapping…"
+msgstr "Zpět na mapování jádra…"
+
+#: ui/KeysPage.qml:422
+msgid "Kernel mapping restored."
+msgstr "Mapování jádra obnoveno."
+
+#: ui/KeysPage.qml:430
+msgctxt "@title:group"
+msgid "KDE shortcuts"
+msgstr "Zkratky KDE"
+
+#: ui/KeysPage.qml:433
+msgid "F4 (Launchpad):"
+msgstr "F4 (Launchpad):"
+
+#: ui/KeysPage.qml:435
+msgid "Bind F4 to the application launcher"
+msgstr "Přiřadit F4 ke spouštěči aplikací"
+
+#: ui/KeysPage.qml:438
+msgid ""
+"Adds the missing KDE shortcut for the Launch (D) key, never replacing an "
+"existing one"
+msgstr ""
+"Přidá chybějící zkratku KDE pro klávesu Launch (D), nikdy nenahradí "
+"existující"
+
+#: ui/KeysPage.qml:443
+msgid "KDE shortcuts updated."
+msgstr "Zkratky KDE aktualizovány."
+
+#: ui/KeysPage.qml:454
+msgid "Undo from a terminal: akmctl keymap kde-apply --undo"
+msgstr "Vrácení v terminálu: akmctl keymap kde-apply --undo"
+
+#: ui/NamePage.qml:46
+msgid "akmctl stopped abruptly before giving its verdict (crash or signal)."
+msgstr "akmctl se náhle ukončil dříve, než vydal výsledek (pád nebo signál)."
+
+#: ui/NamePage.qml:49
+msgid ""
+"No answer in time. Nothing more is attempted; look at the stored name above "
+"in a moment."
+msgstr ""
+"Žádná odpověď včas. Nic dalšího se nezkouší; za chvíli se podívejte na "
+"uložený název výše."
+
+#: ui/NamePage.qml:52
+msgid "Check passed: “%1” can be written. Nothing was written."
+msgstr "Kontrola úspěšná: „%1“ lze zapsat. Nic nebylo zapsáno."
+
+#: ui/NamePage.qml:55
+msgid ""
+"“%1” is now stored in the keyboard: written, then read back identical. This "
+"computer may show the old name until a later connection."
+msgstr ""
+"„%1“ je nyní uloženo v klávesnici: zapsáno a zpětně přečteno shodně. Tento "
+"počítač může zobrazovat starý název až do dalšího připojení."
+
+#: ui/NamePage.qml:58
+msgid ""
+"The name was written, but it could not be read back. Look at the stored name "
+"above in a moment.\n"
+"%1"
+msgstr ""
+"Název byl zapsán, ale nepodařilo se jej zpětně přečíst. Za chvíli se "
+"podívejte na uložený název výše.\n"
+"%1"
+
+#: ui/NamePage.qml:61
+msgid ""
+"The name was written, but the keyboard reads back another one.\n"
+"%1"
+msgstr ""
+"Název byl zapsán, ale klávesnice vrací jiný.\n"
+"%1"
+
+#: ui/NamePage.qml:64
+msgid ""
+"The write failed on its way: the name may or may not have been written. Look "
+"at the stored name above in a moment.\n"
+"%1"
+msgstr ""
+"Zápis selhal v průběhu: název mohl, ale nemusel být zapsán. Za chvíli se "
+"podívejte na uložený název výše.\n"
+"%1"
+
+#: ui/NamePage.qml:67
+msgid ""
+"Check failed, nothing was written.\n"
+"%1"
+msgstr ""
+"Kontrola selhala, nic nebylo zapsáno.\n"
+"%1"
+
+#: ui/NamePage.qml:70
+msgid ""
+"Not written.\n"
+"%1"
+msgstr ""
+"Nezapsáno.\n"
+"%1"
+
+#: ui/NamePage.qml:81
+msgctxt "@title:window"
+msgid "Write the name into the keyboard"
+msgstr "Zapsat název do klávesnice"
+
+#: ui/NamePage.qml:86
+msgctxt "@action:button"
+msgid "Write"
+msgstr "Zapsat"
+
+#: ui/NamePage.qml:97
+msgid "Write “%1” into the keyboard's memory?"
+msgstr "Zapsat „%1“ do paměti klávesnice?"
+
+#: ui/NamePage.qml:114
+msgctxt "@title:group"
+msgid "Name on this computer"
+msgstr "Název na tomto počítači"
+
+#: ui/NamePage.qml:118
+msgid "Shown as:"
+msgstr "Zobrazeno jako:"
+
+#: ui/NamePage.qml:125
+msgid "Keyboard's own name:"
+msgstr "Vlastní název klávesnice:"
+
+#: ui/NamePage.qml:133
+msgid "New name:"
+msgstr "Nový název:"
+
+#: ui/NamePage.qml:137
+msgid "e.g. Office keyboard"
+msgstr "např. Kancelářská klávesnice"
+
+#: ui/NamePage.qml:139
+msgid "New name of the keyboard on this computer"
+msgstr "Nový název klávesnice na tomto počítači"
+
+#: ui/NamePage.qml:145
+msgid "Rename"
+msgstr "Přejmenovat"
+
+#: ui/NamePage.qml:153
+msgid "Renamed to “%1” on this computer."
+msgstr "Na tomto počítači přejmenováno na „%1“."
+
+#: ui/NamePage.qml:153 ui/NamePage.qml:168
+msgid "Not renamed: %1"
+msgstr "Nepřejmenováno: %1"
+
+#: ui/NamePage.qml:160
+msgid "Use the keyboard's own name"
+msgstr "Použít vlastní název klávesnice"
+
+#: ui/NamePage.qml:168
+msgid "The keyboard's own name is used again."
+msgstr "Opět se používá vlastní název klávesnice."
+
+#: ui/NamePage.qml:180
+msgid "Renaming needs the keyboard service."
+msgstr "Přejmenování vyžaduje službu klávesnice."
+
+#: ui/NamePage.qml:181
+msgid "No keyboard is known yet."
+msgstr "Zatím není známa žádná klávesnice."
+
+#: ui/NamePage.qml:182
+msgid ""
+"Only this computer sees this name (Bluetooth alias); the keyboard itself is "
+"not changed."
+msgstr ""
+"Tento název vidí jen tento počítač (alias Bluetooth); samotná klávesnice se "
+"nemění."
+
+#: ui/NamePage.qml:187
+msgctxt "@title:group"
+msgid "Name stored inside the keyboard"
+msgstr "Název uložený v klávesnici"
+
+#: ui/NamePage.qml:191
+msgid "Stored now:"
+msgstr "Nyní uloženo:"
+
+#: ui/NamePage.qml:192
+msgid "not read yet (the service reads it once per connection)"
+msgstr "zatím nepřečteno (služba jej čte jednou za připojení)"
+
+#: ui/NamePage.qml:199
+msgid "Name to write:"
+msgstr "Název k zápisu:"
+
+#: ui/NamePage.qml:203
+msgid "1 to 32 ASCII characters"
+msgstr "1 až 32 znaků ASCII"
+
+#: ui/NamePage.qml:205
+msgid "Name to write into the keyboard"
+msgstr "Název k zápisu do klávesnice"
+
+#: ui/NamePage.qml:206
+msgid ""
+"1 to 32 printable ASCII characters, no leading or trailing space, no "
+"backslash"
+msgstr ""
+"1 až 32 tisknutelných znaků ASCII, bez mezery na začátku či na konci, bez "
+"zpětného lomítka"
+
+#: ui/NamePage.qml:212
+msgid "Check (nothing written)"
+msgstr "Zkontrolovat (nic nezapisovat)"
+
+#: ui/NamePage.qml:215
+msgid ""
+"Runs every check that precedes the write and saves the current name; nothing "
+"is written"
+msgstr ""
+"Provede všechny kontroly před zápisem a zálohuje současný název; nic se "
+"nezapisuje"
+
+#: ui/NamePage.qml:221
+msgid "Write the name into the keyboard…"
+msgstr "Zapsat název do klávesnice…"
+
+#: ui/NamePage.qml:224
+msgid ""
+"Asks for a confirmation, then writes the name into the keyboard and reads it "
+"back"
+msgstr "Vyžádá potvrzení, poté zapíše název do klávesnice a zpětně jej přečte"
+
+#: ui/NamePage.qml:244
+msgid ""
+"Refused: 1 to 32 printable ASCII characters, no leading or trailing space, "
+"no backslash."
+msgstr ""
+"Odmítnuto: 1 až 32 tisknutelných znaků ASCII, bez mezery na začátku či na "
+"konci, bez zpětného lomítka."
+
+#: ui/NamePage.qml:245
+msgid ""
+"Every computer and phone sees this name. The current name is saved first, "
+"the keyboard is checked, the name is written once and read back at once. Not "
+"measured: whether the name survives a battery change."
+msgstr ""
+"Tento název vidí každý počítač i telefon. Nejprve se zálohuje současný "
+"název, zkontroluje se klávesnice, název se zapíše jednou a hned se zpětně "
+"přečte. Neměřeno: zda název přežije výměnu baterií."
+
+#: ui/NamePage.qml:265
+msgctxt "@title:group"
+msgid "Same operations, to copy into a terminal"
+msgstr "Stejné operace ke zkopírování do terminálu"
+
+#: ui/NamePage.qml:270
+msgid ""
+"Name stored in the keyboard, preview (shows the bytes, writes nothing, no "
+"authentication):"
+msgstr ""
+"Název uložený v klávesnici, náhled (zobrazí bajty, nic nezapisuje, bez "
+"ověření):"
+
+#: ui/NamePage.qml:272
+msgid "Every check and the backup of the current name (writes nothing):"
+msgstr "Všechny kontroly a záloha současného názvu (nic nezapisuje):"
+
+#: ui/NamePage.qml:274
+msgid ""
+"The write itself (checks, backup, one confirmation, one write, read back):"
+msgstr ""
+"Samotný zápis (kontroly, záloha, jedno potvrzení, jeden zápis, zpětné čtení):"
+
+#: ui/NamePage.qml:276
+msgid ""
+"Forget the keyboard cleanly, as macOS does, then pair it again (only after "
+"typing the confirmation word):"
+msgstr ""
+"Čistě zapomenout klávesnici jako macOS a poté ji znovu spárovat (až po "
+"napsání potvrzovacího slova):"
+
+#: ui/NamePage.qml:299
+msgid "Type a valid name to write above first"
+msgstr "Nejprve výše zadejte platný název"
+
+#: ui/NamePage.qml:301
+msgid "Command: %1"
+msgstr "Příkaz: %1"
+
+#: ui/NamePage.qml:305
+msgid "Copy"
+msgstr "Kopírovat"
+
+#: ui/NamePage.qml:307
+msgid "Copy the command"
+msgstr "Kopírovat příkaz"
+
+#: ui/NamePage.qml:312
+msgid "Command copied."
+msgstr "Příkaz zkopírován."
+
+#: ui/StatePage.qml:37
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 den"
+msgstr[1] "≈ %1 dny"
+msgstr[2] "≈ %1 dní"
+
+#: ui/StatePage.qml:38
+msgid "≈ %1 h"
+msgstr "≈ %1 h"
+
+#: ui/StatePage.qml:45
+#, no-javascript-format
+msgctxt "percentage"
+msgid "%1%"
+msgstr "%1 %"
+
+#: ui/StatePage.qml:49
+msgid "%1 second ago"
+msgid_plural "%1 seconds ago"
+msgstr[0] "před %1 sekundou"
+msgstr[1] "před %1 sekundami"
+msgstr[2] "před %1 sekundami"
+
+#: ui/StatePage.qml:50
+msgid "%1 minute ago"
+msgid_plural "%1 minutes ago"
+msgstr[0] "před %1 minutou"
+msgstr[1] "před %1 minutami"
+msgstr[2] "před %1 minutami"
+
+#: ui/StatePage.qml:51
+msgid "%1 hour ago"
+msgid_plural "%1 hours ago"
+msgstr[0] "před %1 hodinou"
+msgstr[1] "před %1 hodinami"
+msgstr[2] "před %1 hodinami"
+
+#: ui/StatePage.qml:52
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "před %1 dnem"
+msgstr[1] "před %1 dny"
+msgstr[2] "před %1 dny"
+
+#: ui/StatePage.qml:67
+msgid "rssi-helper not installed"
+msgstr "rssi-helper není nainstalován"
+
+#: ui/StatePage.qml:68
+msgid "see akmctl doctor"
+msgstr "viz akmctl doctor"
+
+#: ui/StatePage.qml:69
+msgid "not measured (%1)"
+msgstr "neměřeno (%1)"
+
+#: ui/StatePage.qml:73 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "excellent"
+msgstr "výborný"
+
+#: ui/StatePage.qml:74 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "good"
+msgstr "dobrý"
+
+#: ui/StatePage.qml:75 ui/StatePage.qml:76
+msgctxt "signal quality"
+msgid "weak"
+msgstr "slabý"
+
+#: ui/StatePage.qml:78
+msgctxt "signal quality, then the relative value in dB (0 = ideal range)"
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+#: ui/StatePage.qml:82
+msgid "up to date"
+msgstr "aktuální"
+
+#: ui/StatePage.qml:83
+msgid "a newer version exists (this module never updates the firmware)"
+msgstr "existuje novější verze (tento modul firmware nikdy neaktualizuje)"
+
+#: ui/StatePage.qml:84
+msgid "model not in the table"
+msgstr "model není v tabulce"
+
+#: ui/StatePage.qml:85
+msgid "not assessed yet"
+msgstr "zatím nehodnoceno"
+
+#: ui/StatePage.qml:94
+msgid "No data: the keyboard service is not running"
+msgstr "Žádná data: služba klávesnice neběží"
+
+#: ui/StatePage.qml:95
+msgid ""
+"Use “Start the service” above, or run: systemctl --user start apple-kb-"
+"monitord.service"
+msgstr ""
+"Použijte „Spustit službu“ výše nebo spusťte: systemctl --user start apple-kb-"
+"monitord.service"
+
+#: ui/StatePage.qml:119
+msgid "Loading the keyboard state"
+msgstr "Načítání stavu klávesnice"
+
+#: ui/StatePage.qml:128
+msgctxt "@title:group"
+msgid "Keyboard"
+msgstr "Klávesnice"
+
+#: ui/StatePage.qml:132
+msgid "Name:"
+msgstr "Název:"
+
+#: ui/StatePage.qml:136
+msgid "Name: %1"
+msgstr "Název: %1"
+
+#: ui/StatePage.qml:140
+msgid "Model:"
+msgstr "Model:"
+
+#: ui/StatePage.qml:147
+msgid "Address:"
+msgstr "Adresa:"
+
+#: ui/StatePage.qml:161
+msgid "connected"
+msgstr "připojeno"
+
+#: ui/StatePage.qml:161
+msgid "disconnected"
+msgstr "odpojeno"
+
+#: ui/StatePage.qml:162
+msgid "Connection: %1"
+msgstr "Spojení: %1"
+
+#: ui/StatePage.qml:167
+msgid "Problem:"
+msgstr "Problém:"
+
+#: ui/StatePage.qml:176
+msgctxt "@title:group"
+msgid "Battery"
+msgstr "Baterie"
+
+#: ui/StatePage.qml:180
+msgid "Keyboard indication:"
+msgstr "Údaj klávesnice:"
+
+#: ui/StatePage.qml:182
+msgid "Keyboard indication: %1"
+msgstr "Údaj klávesnice: %1"
+
+#: ui/StatePage.qml:186
+msgid "Apple display:"
+msgstr "Údaj Apple:"
+
+#: ui/StatePage.qml:188
+msgctxt "percentage as macOS shows it"
+msgid "%1 (as macOS shows it)"
+msgstr "%1 (jak ukazuje macOS)"
+
+#: ui/StatePage.qml:192
+msgid "Estimated charge:"
+msgstr "Odhadované nabití:"
+
+#: ui/StatePage.qml:195
+msgid "new batteries: no estimate during the first two days"
+msgstr "nové baterie: první dva dny bez odhadu"
+
+#: ui/StatePage.qml:196
+msgctxt "estimate, low bound, high bound, chemistry"
+msgid "%1 (between %2 and %3, %4 batteries)"
+msgstr "%1 (mezi %2 a %3, baterie: %4)"
+
+#: ui/StatePage.qml:198
+msgid "not available"
+msgstr "nedostupné"
+
+#: ui/StatePage.qml:201
+msgid "Estimated charge: %1"
+msgstr "Odhadované nabití: %1"
+
+#: ui/StatePage.qml:205
+msgid "Voltage:"
+msgstr "Napětí:"
+
+#: ui/StatePage.qml:207
+msgctxt "volts"
+msgid "%1 V"
+msgstr "%1 V"
+
+#: ui/StatePage.qml:211
+msgid "Remaining:"
+msgstr "Zbývá:"
+
+#: ui/StatePage.qml:217
+msgid "Batteries installed:"
+msgstr "Baterie vloženy:"
+
+#: ui/StatePage.qml:225
+msgctxt "@title:group"
+msgid "Link"
+msgstr "Spojení"
+
+#: ui/StatePage.qml:229
+msgid "Signal:"
+msgstr "Signál:"
+
+#: ui/StatePage.qml:231
+msgid "Signal: %1"
+msgstr "Signál: %1"
+
+#: ui/StatePage.qml:236
+msgid "Last measurement:"
+msgstr "Poslední měření:"
+
+#: ui/StatePage.qml:237
+msgid "never"
+msgstr "nikdy"
+
+#: ui/StatePage.qml:238
+msgid "Last measurement: %1"
+msgstr "Poslední měření: %1"
+
+#: ui/StatePage.qml:243
+msgctxt "@title:group"
+msgid "Firmware"
+msgstr "Firmware"
+
+#: ui/StatePage.qml:247 ui/StatePage.qml:272
+msgid "Version:"
+msgstr "Verze:"
+
+#: ui/StatePage.qml:253
+msgid "Latest known:"
+msgstr "Nejnovější známá:"
+
+#: ui/StatePage.qml:260
+msgid "Status:"
+msgstr "Stav:"
+
+#: ui/StatePage.qml:268
+msgctxt "@title:group"
+msgid "Service"
+msgstr "Služba"
+
+#: ui/StatePage.qml:277
+msgid "Last error:"
+msgstr "Poslední chyba:"
+
+#: ui/Store.qml:158
+msgid "The keyboard service (apple-kb-monitord) is not running"
+msgstr "Služba klávesnice (apple-kb-monitord) neběží"
+
+#: ui/Store.qml:159
+msgid "command not allowed"
+msgstr "příkaz není povolen"
+
+#: ui/Store.qml:160
+msgid "no answer in time"
+msgstr "žádná odpověď včas"
+
+#: ui/Store.qml:161
+msgctxt "%1 is a JSON parser error"
+msgid "unreadable reply: %1"
+msgstr "nečitelná odpověď: %1"
+
+#: ui/main.qml:26
+msgid "The service could not be started: %1"
+msgstr "Službu nelze spustit: %1"
+
+#: ui/main.qml:31
+msgid "Starting…"
+msgstr "Spouštění…"
+
+#: ui/main.qml:31
+msgid "Start the service"
+msgstr "Spustit službu"
+
+#: ui/main.qml:49
+msgid "Sections of the Apple keyboard settings"
+msgstr "Části nastavení klávesnice Apple"
+
+#: ui/main.qml:50
+msgctxt "@title:tab"
+msgid "State"
+msgstr "Stav"
+
+#: ui/main.qml:51
+msgctxt "@title:tab"
+msgid "Keys"
+msgstr "Klávesy"
+
+#: ui/main.qml:52
+msgctxt "@title:tab"
+msgid "Notifications"
+msgstr "Oznámení"
+
+#: ui/main.qml:53
+msgctxt "@title:tab"
+msgid "Name"
+msgstr "Název"
+
+#: ui/main.qml:54
+msgctxt "@title:tab"
+msgid "Diagnostics"
+msgstr "Diagnostika"

@@ -1,0 +1,78 @@
+# Global shortcuts of the Apple keyboard monitor, read by kglobalacceld
+# from /usr/share/kglobalaccel/. They appear in System Settings > Shortcuts
+# under "Apple Keyboard". No key is bound by default (X-KDE-Shortcuts is
+# empty): nothing happens until the user assigns one.
+[Desktop Entry]
+Type=Application
+Name=Apple Keyboard
+Name[fr]=Clavier Apple
+Name[de]=Apple-Tastatur
+Name[es]=Teclado Apple
+Name[it]=Tastiera Apple
+Name[pt]=Teclado Apple
+Name[pt_BR]=Teclado Apple
+Name[nl]=Apple-toetsenbord
+Name[pl]=Klawiatura Apple
+Name[cs]=Klávesnice Apple
+Name[sv]=Apple-tangentbord
+Name[da]=Apple-tastatur
+Name[nb]=Apple-tastatur
+Name[fi]=Apple-näppäimistö
+Name[ru]=Клавиатура Apple
+Name[uk]=Клавіатура Apple
+Name[ja]=Apple キーボード
+Name[zh_CN]=Apple 键盘
+Name[ko]=Apple 키보드
+Name[tr]=Apple Klavye
+Comment=Open the Apple keyboard widget
+Comment[fr]=Ouvrir le widget du clavier Apple
+Comment[de]=Das Apple-Tastatur-Widget öffnen
+Comment[es]=Abrir el widget del teclado Apple
+Comment[it]=Apri il widget della tastiera Apple
+Comment[pt]=Abrir o widget do teclado Apple
+Comment[pt_BR]=Abrir o widget do teclado Apple
+Comment[nl]=De Apple-toetsenbordwidget openen
+Comment[pl]=Otwórz widżet klawiatury Apple
+Comment[cs]=Otevřít widget klávesnice Apple
+Comment[sv]=Öppna Apple-tangentbordets grafiska komponent
+Comment[da]=Åbn widgetten for Apple-tastaturet
+Comment[nb]=Åpne skjermelementet for Apple-tastaturet
+Comment[fi]=Avaa Apple-näppäimistön sovelma
+Comment[ru]=Открыть виджет клавиатуры Apple
+Comment[uk]=Відкрити віджет клавіатури Apple
+Comment[ja]=Apple キーボードのウィジェットを開く
+Comment[zh_CN]=打开 Apple 键盘小部件
+Comment[ko]=Apple 키보드 위젯 열기
+Comment[tr]=Apple klavye gerecini aç
+Icon=apihub-scarab
+Exec=gdbus call --session --dest com.agenceapi.AppleKbMonitor1 --object-path /com/agenceapi/AppleKbMonitor1/Tray --method com.agenceapi.AppleKbMonitor1.Tray.OpenPanel
+Actions=ToggleFnMode;
+StartupNotify=false
+NoDisplay=true
+X-KDE-GlobalShortcutType=Service
+X-KDE-Shortcuts=
+
+[Desktop Action ToggleFnMode]
+Name=Toggle the function keys (media keys / F1–F12)
+Name[fr]=Basculer les touches de fonction (multimédia / F1–F12)
+Name[de]=Funktionstasten umschalten (Medientasten / F1–F12)
+Name[es]=Alternar las teclas de función (multimedia / F1–F12)
+Name[it]=Commuta i tasti funzione (multimediali / F1–F12)
+Name[pt]=Alternar as teclas de função (multimédia / F1–F12)
+Name[pt_BR]=Alternar as teclas de função (mídia / F1–F12)
+Name[nl]=Functietoetsen omschakelen (mediatoetsen / F1–F12)
+Name[pl]=Przełącz klawisze funkcyjne (multimedialne / F1–F12)
+Name[cs]=Přepnout funkční klávesy (multimediální / F1–F12)
+Name[sv]=Växla funktionstangenterna (medietangenter / F1–F12)
+Name[da]=Skift funktionstasterne (medietaster / F1–F12)
+Name[nb]=Veksle funksjonstastene (medietaster / F1–F12)
+Name[fi]=Vaihda toimintonäppäimet (medianäppäimet / F1–F12)
+Name[ru]=Переключить функциональные клавиши (мультимедийные / F1–F12)
+Name[uk]=Перемкнути функціональні клавіші (мультимедійні / F1–F12)
+Name[ja]=ファンクションキーを切り替え (メディアキー / F1–F12)
+Name[zh_CN]=切换功能键（媒体键 / F1–F12）
+Name[ko]=기능 키 전환(미디어 키 / F1–F12)
+Name[tr]=İşlev tuşlarını değiştir (ortam tuşları / F1–F12)
+Icon=input-keyboard
+Exec=gdbus call --session --dest com.agenceapi.AppleKbMonitor1 --object-path /com/agenceapi/AppleKbMonitor1/Tray --method com.agenceapi.AppleKbMonitor1.Tray.ToggleFnMode
+X-KDE-Shortcuts=

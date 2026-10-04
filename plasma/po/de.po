@@ -1,0 +1,663 @@
+# German translation of the Plasma widget com.agenceapi.devicehub.
+# GPL-2.0-or-later, same license as the project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: apple-kb-monitor\n"
+"Report-Msgid-Bugs-To: https://github.com/litteulapi/apple-kb-monitor/issues\n"
+"POT-Creation-Date: 2026-10-04 23:33+0200\n"
+"PO-Revision-Date: 2026-10-04 12:00+0200\n"
+"Last-Translator: litteulapi\n"
+"Language-Team: German\n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "alkaline"
+msgstr "Alkaline"
+
+msgid "NiMH"
+msgstr "NiMH"
+
+msgid "lithium"
+msgstr "Lithium"
+
+msgid "not declared"
+msgstr "nicht angegeben"
+
+msgid "State"
+msgstr "Status"
+
+msgid "Radio"
+msgstr "Funk"
+
+msgid "Keys"
+msgstr "Tasten"
+
+msgid "Data"
+msgstr "Daten"
+
+msgid "Diag"
+msgstr "Diag"
+
+msgid "Apple keyboard monitor"
+msgstr "Apple-Tastaturmonitor"
+
+msgid "Settings"
+msgstr "Einstellungen"
+
+msgid "READ %1"
+msgstr "GELESEN %1"
+
+msgid "NO DAEMON"
+msgstr "KEIN DIENST"
+
+msgid "ONLINE"
+msgstr "ONLINE"
+
+msgid "OFFLINE"
+msgstr "OFFLINE"
+
+msgid ""
+"The monitor apple-kb-monitord is not on the session bus: nothing can be read."
+msgstr ""
+"Der Monitor apple-kb-monitord ist nicht am Sitzungsbus: Es kann nichts "
+"gelesen werden."
+
+msgid "Reading error: %1"
+msgstr "Lesefehler: %1"
+
+msgid ""
+"Keyboard disconnected. Press a key to wake it up, or reconnect it from RADIO."
+msgstr ""
+"Tastatur getrennt. Drücken Sie eine Taste, um sie aufzuwecken, oder "
+"verbinden Sie sie unter RADIO neu."
+
+msgid "Waiting for the keyboard data…"
+msgstr "Warten auf die Tastaturdaten …"
+
+msgid "Batteries critical: replace them now."
+msgstr "Batterien kritisch: Jetzt austauschen."
+
+msgid "Batteries low: plan to replace them."
+msgstr "Batterien schwach: Austausch einplanen."
+
+msgid "Unstable link: %1 disconnection in the last hour."
+msgid_plural "Unstable link: %1 disconnections in the last hour."
+msgstr[0] "Instabile Verbindung: %1 Trennung in der letzten Stunde."
+msgstr[1] "Instabile Verbindung: %1 Trennungen in der letzten Stunde."
+
+msgid "%1%"
+msgstr "%1 %"
+
+msgid "rssi-helper not installed"
+msgstr "rssi-helper nicht installiert"
+
+msgid "see akmctl doctor"
+msgstr "siehe akmctl doctor"
+
+msgid "not measured (%1)"
+msgstr "nicht gemessen (%1)"
+
+msgid "the rssi-helper utility is not installed"
+msgstr "das Hilfsprogramm rssi-helper ist nicht installiert"
+
+msgid "the rssi-helper utility failed (missing capability, Bluetooth refused)"
+msgstr ""
+"das Hilfsprogramm rssi-helper ist fehlgeschlagen (Capability fehlt, "
+"Bluetooth verweigert)"
+
+msgid "the rssi-helper utility does not answer in time"
+msgstr "das Hilfsprogramm rssi-helper antwortet nicht rechtzeitig"
+
+msgid "the Bluetooth adapter gives no measure for this link"
+msgstr "der Bluetooth-Adapter liefert keinen Messwert für diese Verbindung"
+
+msgid "the signal cannot be measured"
+msgstr "das Signal kann nicht gemessen werden"
+
+msgid "reinstall the apple-kb-monitor package"
+msgstr "installieren Sie das Paket apple-kb-monitor neu"
+
+msgid "reinstall the apple-kb-monitor package, then run akmctl doctor"
+msgstr ""
+"installieren Sie das Paket apple-kb-monitor neu und führen Sie dann akmctl "
+"doctor aus"
+
+msgid "check the Bluetooth service: systemctl status bluetooth"
+msgstr "prüfen Sie den Bluetooth-Dienst: systemctl status bluetooth"
+
+msgid "bring the keyboard closer, or reconnect it"
+msgstr "bringen Sie die Tastatur näher heran oder verbinden Sie sie neu"
+
+msgid "run akmctl doctor"
+msgstr "führen Sie akmctl doctor aus"
+
+msgid "Battery history"
+msgstr "Batterieverlauf"
+
+msgid "24 h"
+msgstr "24 h"
+
+msgid "7 d"
+msgstr "7 T"
+
+msgid "30 d"
+msgstr "30 T"
+
+msgid "90 d"
+msgstr "90 T"
+
+msgid "Refresh"
+msgstr "Aktualisieren"
+
+msgid "LOADING…"
+msgstr "LADEN …"
+
+msgid "Readings: %1"
+msgstr "Messungen: %1"
+
+msgid "%1 V"
+msgstr "%1 V"
+
+msgid "Batteries %"
+msgstr "Batterien %"
+
+msgid "Voltage %1 to %2 V"
+msgstr "Spannung %1 bis %2 V"
+
+msgid "History not available: %1"
+msgstr "Verlauf nicht verfügbar: %1"
+
+msgid "Monitor stopped: no history."
+msgstr "Monitor gestoppt: kein Verlauf."
+
+msgid "Not enough readings over this period to draw a curve."
+msgstr "Zu wenige Messungen in diesem Zeitraum, um eine Kurve zu zeichnen."
+
+msgid "Batteries"
+msgstr "Batterien"
+
+msgid "Voltage"
+msgstr "Spannung"
+
+msgid "EMPTY"
+msgstr "LEER"
+
+msgid "CRITICAL"
+msgstr "KRITISCH"
+
+msgid "LOW"
+msgstr "SCHWACH"
+
+msgid "FULL"
+msgstr "VOLL"
+
+msgid "Thresholds"
+msgstr "Schwellen"
+
+msgid "Estimate"
+msgstr "Schätzung"
+
+msgid "Apple display"
+msgstr "Apple-Anzeige"
+
+msgid "Chemistry"
+msgstr "Chemie"
+
+msgid "Installed on"
+msgstr "Eingelegt am"
+
+msgid "Trend"
+msgstr "Tendenz"
+
+msgid "−%2% per day over %1 day"
+msgid_plural "−%2% per day over %1 days"
+msgstr[0] "−%2 % pro Tag über %1 Tag"
+msgstr[1] "−%2 % pro Tag über %1 Tage"
+
+msgid "Empty around"
+msgstr "Leer um den"
+
+msgid "Last reading"
+msgstr "Letzte Messung"
+
+msgid "The last reading missed a report of the keyboard."
+msgstr "Bei der letzten Messung fehlte ein Bericht der Tastatur."
+
+msgid "Device"
+msgstr "Gerät"
+
+msgid "Model"
+msgstr "Modell"
+
+msgid "Name"
+msgstr "Name"
+
+msgid "Address"
+msgstr "Adresse"
+
+msgid "Chip"
+msgstr "Chip"
+
+msgid "Driver"
+msgstr "Treiber"
+
+msgid "Firmware"
+msgstr "Firmware"
+
+msgid "System diagnostic"
+msgstr "Systemdiagnose"
+
+msgid "Checking…"
+msgstr "Wird geprüft …"
+
+msgid "Run the full check"
+msgstr "Vollständige Prüfung starten"
+
+msgid "%1/%2 PASSED"
+msgstr "%1/%2 BESTANDEN"
+
+msgid "PROBLEMS: %1"
+msgstr "PROBLEME: %1"
+
+msgid "Check not run: %1"
+msgstr "Prüfung nicht gestartet: %1"
+
+msgid "Monitor"
+msgstr "Monitor"
+
+msgid "RUNNING"
+msgstr "LÄUFT"
+
+msgid "STOPPED"
+msgstr "GESTOPPT"
+
+msgid "Version"
+msgstr "Version"
+
+msgid "Keyboard"
+msgstr "Tastatur"
+
+msgid "Link"
+msgstr "Verbindung"
+
+msgid "Last error"
+msgstr "Letzter Fehler"
+
+msgid "Start it with: systemctl --user start apple-kb-monitord"
+msgstr "Starten Sie ihn mit: systemctl --user start apple-kb-monitord"
+
+msgid "Log"
+msgstr "Protokoll"
+
+msgid "[FAIL]"
+msgstr "[FEHLER]"
+
+msgid "The check is run by the monitor (about ten checks, never the keyboard)."
+msgstr ""
+"Die Prüfung führt der Monitor durch (rund zehn Tests, nie an der Tastatur)."
+
+msgid "Function keys"
+msgstr "Funktionstasten"
+
+msgid "Media keys first"
+msgstr "Medientasten zuerst"
+
+msgid "F1–F12 first"
+msgstr "F1–F12 zuerst"
+
+msgid "Current mode: %1"
+msgstr "Aktueller Modus: %1"
+
+msgid "Fn mode not read yet."
+msgstr "Fn-Modus noch nicht gelesen."
+
+msgid "Fn mode unknown: the keyboard is not connected."
+msgstr "Fn-Modus unbekannt: Die Tastatur ist nicht verbunden."
+
+msgid "Administrator authentication requested…"
+msgstr "Administrator-Authentifizierung angefordert …"
+
+msgid "Fn mode not changed: %1"
+msgstr "Fn-Modus nicht geändert: %1"
+
+msgid "hid_apple applies to every Apple keyboard of this computer."
+msgstr "hid_apple gilt für alle Apple-Tastaturen dieses Computers."
+
+msgid "Locks"
+msgstr "Feststellfunktionen"
+
+msgid "Caps Lock"
+msgstr "Feststelltaste"
+
+msgid "Num Lock"
+msgstr "Num-Taste"
+
+msgid "on"
+msgstr "an"
+
+msgid "off"
+msgstr "aus"
+
+msgid "ON"
+msgstr "AN"
+
+msgid "OFF"
+msgstr "AUS"
+
+msgid "Read from the keyboard's LEDs at each reading."
+msgstr "Bei jeder Messung von den LEDs der Tastatur gelesen."
+
+msgid "Special keys"
+msgstr "Sondertasten"
+
+msgid ""
+"The table of the special keys (code and KDE action with and without Fn) and "
+"the key mapping editor are in System Settings, Apple Keyboard module, Keys "
+"page."
+msgstr ""
+"Die Tabelle der Sondertasten (Code und KDE-Aktion mit und ohne Fn) und der "
+"Tastenbelegungs-Editor befinden sich in den Systemeinstellungen, Modul "
+"„Apple-Tastatur“, Seite „Tasten“."
+
+msgid "Edit the keys"
+msgstr "Tasten bearbeiten"
+
+msgid "%1 s ago"
+msgid_plural "%1 s ago"
+msgstr[0] "vor %1 s"
+msgstr[1] "vor %1 s"
+
+msgid "%1 min ago"
+msgid_plural "%1 min ago"
+msgstr[0] "vor %1 min"
+msgstr[1] "vor %1 min"
+
+msgid "%1 h ago"
+msgid_plural "%1 h ago"
+msgstr[0] "vor %1 h"
+msgstr[1] "vor %1 h"
+
+msgid "%1 day ago"
+msgid_plural "%1 days ago"
+msgstr[0] "vor %1 Tag"
+msgstr[1] "vor %1 Tagen"
+
+msgid "EXCELLENT"
+msgstr "AUSGEZEICHNET"
+
+msgid "GOOD"
+msgstr "GUT"
+
+msgid "WEAK"
+msgstr "SCHWACH"
+
+msgid "Signal"
+msgstr "Signal"
+
+msgid "Not measured"
+msgstr "Nicht gemessen"
+
+msgid "Measured"
+msgstr "Gemessen"
+
+msgid "at %1"
+msgstr "um %1"
+
+msgid ""
+"dB relative to the ideal reception range of the adapter (0 = ideal), not dBm."
+msgstr ""
+"dB relativ zum idealen Empfangsbereich des Adapters (0 = ideal), nicht dBm."
+
+msgid "Correction: %1"
+msgstr "Korrektur: %1"
+
+msgid "No measurement: the keyboard is not connected."
+msgstr "Keine Messung: Die Tastatur ist nicht verbunden."
+
+msgid "Connected"
+msgstr "Verbunden"
+
+msgid "Yes"
+msgstr "Ja"
+
+msgid "No"
+msgstr "Nein"
+
+msgid "Paired"
+msgstr "Gekoppelt"
+
+msgid "TX power"
+msgstr "Sendeleistung"
+
+msgid "%1 dBm"
+msgstr "%1 dBm"
+
+msgid "Last wake-up"
+msgstr "Letztes Aufwecken"
+
+msgid "Paired host"
+msgstr "Gekoppelter Host"
+
+msgid "Monitor's link"
+msgstr "Verbindung des Monitors"
+
+msgid "connected"
+msgstr "verbunden"
+
+msgid "asleep"
+msgstr "im Ruhezustand"
+
+msgid "unreachable"
+msgstr "nicht erreichbar"
+
+msgid "Attempts / failures"
+msgstr "Versuche / Fehlschläge"
+
+msgid "%1 / %2"
+msgstr "%1 / %2"
+
+msgid "Link quality"
+msgstr "Verbindungsqualität"
+
+msgid "Disconnections"
+msgstr "Trennungen"
+
+msgid "1 h"
+msgstr "1 h"
+
+msgid "7 days"
+msgstr "7 Tage"
+
+msgid "today"
+msgstr "heute"
+
+msgid "D-%1"
+msgstr "T-%1"
+
+msgid "No disconnection recorded by the monitor yet."
+msgstr "Der Monitor hat noch keine Trennung aufgezeichnet."
+
+msgid "Restore the link"
+msgstr "Verbindung wiederherstellen"
+
+msgid "Reconnect"
+msgstr "Neu verbinden"
+
+msgid ""
+"Pairing lost or refused? Pair it again from a terminal (a confirmation is "
+"asked): akmctl repair"
+msgstr ""
+"Kopplung verloren oder abgelehnt? Koppeln Sie sie in einem Terminal neu (mit "
+"Bestätigung): akmctl repair"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Autonomy"
+msgstr "Laufzeit"
+
+msgid "≈ %1 day"
+msgid_plural "≈ %1 days"
+msgstr[0] "≈ %1 Tag"
+msgstr[1] "≈ %1 Tage"
+
+msgid "≈ %1 h"
+msgstr "≈ %1 h"
+
+msgid ""
+"Keyboard indication: its own percentage, it moves in steps (often at a "
+"reconnection)."
+msgstr ""
+"Anzeige der Tastatur: ihr eigener Prozentwert, er ändert sich in Stufen (oft "
+"bei einer Neuverbindung)."
+
+msgid "not enough history yet"
+msgstr "noch zu wenig Verlauf"
+
+msgid "%1, up to date"
+msgstr "%1, aktuell"
+
+msgid "%1, update %2 at Apple"
+msgstr "%1, Update %2 bei Apple"
+
+msgid "%1, not in the table"
+msgstr "%1, nicht in der Tabelle"
+
+msgid "Keyboard name"
+msgstr "Tastaturname"
+
+msgid "Apply"
+msgstr "Anwenden"
+
+msgid "Keyboard's own name"
+msgstr "Eigener Name der Tastatur"
+
+msgid "Cancel"
+msgstr "Abbrechen"
+
+msgid "Rename refused: %1"
+msgstr "Umbenennen abgelehnt: %1"
+
+msgid "Actions"
+msgstr "Aktionen"
+
+msgid "Fn: waiting for authorisation…"
+msgstr "Fn: Warten auf Autorisierung …"
+
+msgid "Rename"
+msgstr "Umbenennen"
+
+msgid "%1 — up to date (latest public version known to Apple)"
+msgstr "%1 — aktuell (neueste öffentliche Version, die Apple kennt)"
+
+msgid "%1 — update available from Apple (latest known: %2)"
+msgstr "%1 — Update von Apple verfügbar (neueste bekannte: %2)"
+
+msgid "%1 — unknown (model or version not in the table)"
+msgstr "%1 — unbekannt (Modell oder Version nicht in der Tabelle)"
+
+msgid "Autonomy: %1"
+msgstr "Laufzeit: %1"
+
+msgid "media keys first"
+msgstr "Medientasten zuerst"
+
+msgid "Fn key has no effect"
+msgstr "Fn-Taste ohne Wirkung"
+
+msgid "F-keys disabled"
+msgstr "F-Tasten deaktiviert"
+
+msgid "Switch to F1–F12 first"
+msgstr "Zu F1–F12 zuerst wechseln"
+
+msgid "Switch to media keys first"
+msgstr "Zu Medientasten zuerst wechseln"
+
+msgid "%1 (attempts: %2, failures: %3)"
+msgstr "%1 (Versuche: %2, Fehlschläge: %3)"
+
+msgid "%1 (%2)"
+msgstr "%1 (%2)"
+
+msgid "new batteries, no estimate yet"
+msgstr "neue Batterien, noch keine Schätzung"
+
+msgid "≈ %1% (%2 to %3%), %4"
+msgstr "≈ %1 % (%2 bis %3 %), %4"
+
+msgid "Keyboard not connected"
+msgstr "Tastatur nicht verbunden"
+
+msgid "Monitor stopped"
+msgstr "Monitor gestoppt"
+
+msgid "Apple keyboard, battery %1 percent"
+msgstr "Apple-Tastatur, Batterie %1 Prozent"
+
+msgid "Apple keyboard, battery level unknown"
+msgstr "Apple-Tastatur, Batteriestand unbekannt"
+
+msgid "Apple keyboard, %1"
+msgstr "Apple-Tastatur, %1"
+
+msgid "Keyboard indication %1"
+msgstr "Anzeige der Tastatur %1"
+
+msgid "Estimate: %1"
+msgstr "Schätzung: %1"
+
+msgid "Apple display: %1%"
+msgstr "Apple-Anzeige: %1 %"
+
+msgid "Signal: %1"
+msgstr "Signal: %1"
+
+msgid "Firmware: %1"
+msgstr "Firmware: %1"
+
+msgid "Waiting for the Apple keyboard…"
+msgstr "Warten auf die Apple-Tastatur …"
+
+msgid "apple-kb-monitord is not on the session bus"
+msgstr "apple-kb-monitord ist nicht am Sitzungsbus"
+
+msgctxt "@action:inmenu"
+msgid "&Configure Apple Keyboard…"
+msgstr "Apple-Tastatur &einrichten …"
+
+msgid "New reading requested."
+msgstr "Neue Messung angefordert."
+
+msgid "Reading not requested: %1"
+msgstr "Messung nicht angefordert: %1"
+
+msgid "Reconnection requested. Press a key on the keyboard if it is asleep."
+msgstr ""
+"Neuverbindung angefordert. Drücken Sie eine Taste, falls die Tastatur im "
+"Ruhezustand ist."
+
+msgid "refused by the monitor"
+msgstr "vom Monitor abgelehnt"
+
+msgid "Reconnection not requested: %1"
+msgstr "Neuverbindung nicht angefordert: %1"
+
+msgid "excellent"
+msgstr "ausgezeichnet"
+
+msgid "good"
+msgstr "gut"
+
+msgid "weak"
+msgstr "schwach"
+
+msgid "Apple Keyboard"
+msgstr "Apple-Tastatur"
+
+msgid "Full %1 / Low %2 / Critical %3 / Empty %4 mV"
+msgstr "Voll %1 / Schwach %2 / Kritisch %3 / Leer %4 mV"

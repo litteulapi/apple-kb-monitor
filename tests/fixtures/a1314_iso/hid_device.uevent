@@ -1,0 +1,6 @@
+DRIVER=apple
+HID_ID=0005:000005AC:00000256
+HID_NAME=Clavier de alice #1
+HID_PHYS=aa:bb:cc:dd:ee:f2
+HID_UNIQ=aa:bb:cc:dd:ee:f1
+MODALIAS=hid:b0005g0000v000005ACp00000256

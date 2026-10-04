@@ -1,0 +1,99 @@
+{
+ "schema": 1,
+ "title": "Lion 10.7.5 -[AppleBluetoothHIDDevice setDeviceName:] : trame SET Feature 0x55 LongDeviceName (PID 0x0256)",
+ "proof_level": "[disassembly] + [decompiled] IOBluetooth.framework x86_64 of Mac OS X 10.7.5 (MacOSXUpdCombo10.7.5.pkg, product 041-98155); identical in 10.5.8 (i386); see docs/RENAME-KEYBOARD.md",
+ "source": {
+  "package": "http://swcdn.apple.com/content/downloads/30/25/041-98155-A_E2HC6UPBOQ/y8k2fq4q0u2jo4ci8txpxkw96l9dzfsi19/MacOSXUpdCombo10.7.5.pkg",
+  "file": "System/Library/Frameworks/IOBluetooth.framework/Versions/A/IOBluetooth",
+  "sha256_universal": "c41ed5a79251227c36e33d868a78551b5dfe19d4e8dfef3fafb35744f82cdab4",
+  "sha256_x86_64_slice": "db58c4e463bc66f1320328b580c856cb7ecf5660056390fc2e0867c46f5c61c3",
+  "function": "-[AppleBluetoothHIDDevice setDeviceName:]",
+  "function_addr": "0x4d2fe",
+  "function_size": 1211,
+  "helpers": {
+   "-[AppleBluetoothHIDDevice getMaxDeviceNameLength]": "0x4c6e4",
+   "_UTF8StringFromString": "0x4d9be",
+   "-[AppleBluetoothHIDDevice report:info:]": "0x4c8f2",
+   "-[AppleBluetoothHIDDevice setFeatureReport:value:]": "0x4caf0",
+   "-[BluetoothHIDDevice hidDeviceInterface]": "0x491d5"
+  },
+  "caller": "Bluetooth.prefPane -[BluetoothPref handleDeviceRenameOK:] 0xb2a9 (only caller found: neither IOBluetoothUI nor blued)"
+ },
+ "report": {
+  "id": 85,
+  "id_hex": "0x55",
+  "key": "LongDeviceName",
+  "direction": "SET",
+  "type": "Feature (kIOHIDReportType 2)",
+  "data_len": 64,
+  "userland_len": 65,
+  "wire_prefix_hex": "0x53",
+  "wire_len": 66,
+  "encoding": "UTF-8 (-[NSMutableString UTF8String])",
+  "padding": "0x00: calloc(65,1) buffer, nothing else is written",
+  "terminator": "none explicit; strncpy(buf+1, utf8, strlen(utf8)); a 64-byte name has no NUL",
+  "length_prefix": false,
+  "max_name_len_utf16": 64,
+  "max_name_bytes_utf8": 64,
+  "truncation": "trailing characters removed one by one until strlen(utf8) <= 64 (_UTF8StringFromString); NSString length > 64 or == 0 -> kIOReturnBadArgument 0xE00002C2 without writing",
+  "timeout_ms": 1000,
+  "timeout_meaning": "wait for the HANDSHAKE by IOHIDDeviceInterface::setReport (vtable +0x90); not a spacing",
+  "no_op_if_same_name": "-[BluetoothHIDDevice name] isEqualToString: -> retour 0, aucune trame"
+ },
+ "sequence": [
+  {
+   "step": 1,
+   "what": "SET Feature 0x55, 65 bytes (id + 64 data)",
+   "wire": "53 55 <64 octets>",
+   "proof": "0x4d3fe-0x4d4c8"
+  },
+  {
+   "step": 2,
+   "what": "if setReport == 0: HCI Remote Name Request (page timeout 0 = default), asynchronous",
+   "proof": "0x4d4e6-0x4d4f8 ; -[IOBluetoothDevice remoteNameRequest:] 0x17091"
+  },
+  {
+   "step": 3,
+   "what": "-[IOBluetoothDevice setDisplayName:] = cache hote",
+   "proof": "0x4d751-0x4d764"
+  },
+  {
+   "step": 4,
+   "what": "on the HCI return: -[AppleBluetoothHIDDevice remoteNameRequestComplete:status:] sets the ForceReadDeviceName property (IOBluetoothHIDDriver::readDeviceName = no-op in 10.5.8/10.6.8/10.7.5)",
+   "proof": "0x4da65 ; kext 10.7.5 0x344c"
+  }
+ ],
+ "never_sent_on_this_path": [
+  "0x50 DeviceNameChange",
+  "0x51-0x54 DeviceName1..4",
+  "0x44",
+  "0x41",
+  "no read before/after"
+ ],
+ "fragment_path_for_devices_without_0x55": {
+  "frames": "4 x SET Feature 0x51..0x54, 9 bytes (id + 8, strncpy, NUL-padded), then SET Feature 0x50 1 byte (id only, size missing -> 0)",
+  "max_name": 32,
+  "proof": "0x4d525-0x4d6cb"
+ },
+ "examples": [
+  {
+   "name": "alex",
+   "utf8_len": 4,
+   "report_hex": "55616c6578000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "wire_hex": "5355616c6578000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "readback_0x51_0x54_expected_hex": "616c657800000000000000000000000000000000000000000000000000000000"
+  },
+  {
+   "name": "Clavier Apple A1314 du gerant 01",
+   "utf8_len": 32,
+   "report_hex": "55436c6176696572204170706c6520413133313420647520676572616e742030310000000000000000000000000000000000000000000000000000000000000000",
+   "wire_hex": "5355436c6176696572204170706c6520413133313420647520676572616e742030310000000000000000000000000000000000000000000000000000000000000000",
+   "readback_0x51_0x54_expected_hex": "436c6176696572204170706c6520413133313420647520676572616e74203031"
+  }
+ ],
+ "linux_side_unknowns": [
+  "L2CAP MTU of the control channel (PSM 0x11) >= 66: to be measured (btmon), outside this file",
+  "HANDSHAKE answer of firmware 0x0050 to a SET 0x55: not observable without hardware",
+  "persistence across a battery change: not observable without hardware"
+ ]
+}

@@ -1,0 +1,43 @@
+[Unit]
+Description=Apple Wireless Keyboard monitor daemon (single owner of the keyboard, BlueZ battery provider)
+Documentation=https://github.com/litteulapi/apple-kb-monitor
+# bluetooth.target is a system unit, invisible here: BlueZ is awaited in the code.
+# Type=dbus already orders the unit after dbus.socket.
+
+[Service]
+# Ready when com.agenceapi.AppleKbMonitor1 is owned on the session bus;
+# the name is also the single-instance lock on the keyboard.
+Type=dbus
+BusName=com.agenceapi.AppleKbMonitor1
+ExecStart=/usr/bin/apple-kb-monitord
+Environment=RUST_LOG=info
+Restart=on-failure
+RestartSec=10
+# Headless: needs neither Wayland nor X11.
+UnsetEnvironment=WAYLAND_DISPLAY DISPLAY
+# History in $XDG_STATE_HOME/apple-kb-monitor.
+StateDirectory=apple-kb-monitor
+
+# Hardening. The daemon starts two privileged helpers: rssi-helper (file
+# capability cap_net_admin) and pkexec (setuid root). Measured with
+# `systemd-run --user -p ...`:
+#   * NoNewPrivileges= and every seccomp-based option (SystemCallFilter=,
+#     RestrictAddressFamilies=, MemoryDenyWriteExecute=, LockPersonality=,
+#     RestrictRealtime=, SystemCallArchitectures=...) set NoNewPrivs=1: the
+#     file capability and the setuid bit stop working (RSSI and the fnmode
+#     change die silently);
+#   * ProtectSystem=, ProtectHome=, PrivateTmp= make a USER manager create a
+#     user namespace (uid_map "1000 1000 1"): root is unmapped, setuid and file
+#     capabilities are void as well.
+# IPAddressDeny= is deliberately absent: under a user manager systemd ignores it
+# ("unit configures an IP firewall, but not running as root") and warns at each start.
+# Only options that need neither are used here. They are checked by
+# tests/check-security-files.sh.
+UMask=0077
+LimitCORE=0
+KeyringMode=private
+TasksMax=128
+MemoryMax=512M
+
+[Install]
+WantedBy=default.target

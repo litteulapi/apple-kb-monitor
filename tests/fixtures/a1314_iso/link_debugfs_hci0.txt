@@ -1,0 +1,12 @@
+hci_version: 11 
+hci_revision: 12490 
+manufacturer: 2 
+features:  0: bf fe 0f fe db ff 7b 87  1: 0b 00 00 00 00 00 00 00  2: 20 0b 00 00 00 00 00 00 LE: ff 59 00 08 00 00 00 00 
+idle_timeout: 0 
+sniff_min_interval: 80 
+sniff_max_interval: 800 
+supervision_timeout: 42 
+conn_info_min_age: 1000 
+conn_info_max_age: 3000 
+min_encrypt_key_size: 7 
+max_key_size: 16 

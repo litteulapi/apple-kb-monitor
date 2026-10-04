@@ -1,0 +1,66 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security problems: please use SECURITY.md (private report), not this form.
+        The outputs below contain your keyboard's Bluetooth address; replace it with AA:BB:CC:DD:EE:FF if you prefer.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Switch the keyboard off and on
+        2. ...
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `akmctl doctor`
+      description: Run `akmctl doctor` in a terminal and paste the whole output.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: journal
+    attributes:
+      label: Daemon journal (optional)
+      description: "`journalctl --user -u apple-kb-monitord.service -b --no-pager | tail -n 100`"
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: "`pacman -Q apple-kb-monitor`"
+      placeholder: apple-kb-monitor 3.3.0-1
+    validations:
+      required: true
+  - type: dropdown
+    id: distro
+    attributes:
+      label: Distribution
+      options:
+        - Arch Linux
+        - Manjaro
+        - EndeavourOS
+        - Other (say which in "What happened")
+    validations:
+      required: true
+  - type: input
+    id: plasma
+    attributes:
+      label: Plasma version
+      description: "`plasmashell --version`"
+  - type: input
+    id: keyboard
+    attributes:
+      label: Keyboard model
+      description: Model number under the keyboard (e.g. A1314) and layout (ISO, ANSI, JIS).
